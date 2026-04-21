@@ -940,7 +940,7 @@ function allowedTabsForRole(role) {
 
   if (role === "Operations") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "timeline", "doc-index", "case-study", "internal-search"];
 
-  return ["new-case", "history", "action-log", "comm-log", "doc-index"];
+  return ["new-case", "history", "action-log", "comm-log", "doc-index","internal-search"];
 }
 function applyPermissions() {
   const role = currentRole();
