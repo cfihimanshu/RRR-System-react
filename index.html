@@ -34,7 +34,9 @@
   <div class="tab" data-tab="doc-index">📁 Document Index</div>
   <div class="tab" data-tab="case-study">📄 Case Study</div>
   <div class="tab" data-tab="admin-panel">⚙️ Admin Panel</div>
-  <div class="tab" data-tab="internal-search">🔍 Data Search</div>
+  <div class="tab" data-tab="internal-search">Data Search</div>
+  <div class="tab" data-tab="reviewer-panel">Reviewer Dashboard</div>
+  <div class="tab" data-tab="accountant-dashboard">💰 Accountant Dashboard</div>
 </div>
 
 <div class="main">
@@ -83,30 +85,29 @@
     </div>
   </div>
 
-  <div class="card" id="refund-request-card">
-    <div class="card-title"><span class="icon" style="background:#fef7e0">₹</span> Raise Refund Request</div>
-    <div class="form-grid cols3">
-      <div class="field">
-        <label class="required">Case ID</label>
-        <select id="rr-caseid"><option value="">-- Select Case --</option></select>
-      </div>
-      <div class="field">
-        <label class="required">Refund Amount (₹)</label>
-        <input id="rr-amount" type="number" min="1" placeholder="0" />
-      </div>
-      <div class="field">
-        <label>Requested By</label>
-        <input id="rr-requestedby" placeholder="Your name" />
-      </div>
-      <div class="field span3">
-        <label class="required">Refund Summary / Reason</label>
-        <textarea id="rr-summary" placeholder="Write why the refund is being requested..."></textarea>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="submitRefundRequest()">Send Refund Request</button>
+ <div class="card" id="refund-request-card">
+  <div class="card-title"><span class="icon" style="background:#fef7e0"></span>Refund Request</div>
+  <div class="form-grid cols3">
+    <div class="field"><label class="required">Case ID</label><select id="rr-caseid"></select></div>
+    <div class="field"><label class="required"> Amount (₹)</label><input id="rr-amount" type="number"></div>
+    <div class="field"><label>Requested By</label><input id="rr-requestedby" readonly></div>
+    
+    <div class="field span3"><label class="required">Summary</label><textarea id="rr-summary"></textarea></div>
+    
+    <!-- Bank Details Section -->
+    <div class="field"><label class="required">Bank Name</label><input id="rr-bankname"></div>
+    <div class="field"><label class="required">Account Holder Name</label><input id="rr-acc-name"></div>
+    <div class="field"><label class="required">Account Number</label><input id="rr-acc-num"></div>
+    <div class="field"><label class="required">IFSC Code</label><input id="rr-ifsc"></div>
+    <div class="field"><label class="required">Branch Name</label><input id="rr-branch"></div>
+    <div class="field"><label>Account Type</label>
+      <select id="rr-acc-type"><option>Saving</option><option>Current</option></select>
     </div>
   </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="submitRefundRequest()"> Submit </button>
+  </div>
+</div>
 
   <div class="card" id="refund-dashboard-card">
     <div class="card-title"><span class="icon" style="background:#e6f4ea">₹</span> Refund Request Status</div>
@@ -120,6 +121,45 @@
 </div>
 <!-- ══════════════ /DASHBOARD ══════════════ -->
 
+<!-- ══════════════ 2. REVIEWER PANEL ══════════════ -->
+<div id="tab-reviewer-panel" class="section">
+    <div class="card" style="border-top: 4px solid var(--orange);">
+        <div class="card-title"> Pending for My Review</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Case ID</th><th>Amount</th><th>Requested By</th><th>Summary</th><th>Action</th></tr>
+                </thead>
+                <tbody id="reviewer-refund-body">
+                    <tr><td colspan="5" class="empty-state">No requests to review.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ 3. ACCOUNTANT DASHBOARD ══════════════ -->
+<div id="tab-accountant-dashboard" class="section">
+    <div class="card" style="border-top: 4px solid var(--green);">
+        <div class="card-title">💸 Pending Payments (Approved Requests)</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Case ID</th>
+                        <th>Bank Details (Full)</th>
+                        <th>Amount</th>
+                        <th>Reviewer Info</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="accountant-refund-body">
+                    <tr><td colspan="5" class="empty-state">No payments pending.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
 <!-- ══════════════ 2. NEW CASE ══════════════ -->
 <div id="tab-new-case" class="section">
