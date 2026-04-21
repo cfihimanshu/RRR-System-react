@@ -18,7 +18,7 @@ window.addEventListener("pageshow", redirectIfLoggedOut);
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx_xCWWCoBc3wj-trWKYt4wYx18Od6DVOUYCgGYITooQt8d_9Mckv6dJlu_SfjnblugfA/exec";
 const LS_KEY = "RRR_DB_v1";
 const SAMPLE_DATA_KEY = "RRR_SAMPLE_DATA_v1";
-const CLOUD_TIMEOUT_MS = 8000;
+const CLOUD_TIMEOUT_MS = 60000;
 
 let DB = { cases:[], history:[], actions:[], comms:[], docs:[], timeline:[], studyControl:[], sampleData:[], auditLogs:[] };
 
@@ -85,16 +85,59 @@ async function loadDB() {
     }
 }
 
+// Pehle ye constant define karein (Script ke top par ya function se upar)
+
+
 async function saveDB() {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(DB)); persistSampleDataBackup(); } catch(e) {}
+    console.log("🔄 Syncing data...");
+
+    // 1. Pehle Local Storage mein save karein (Safe Local Backup)
+    try { 
+        localStorage.setItem(LS_KEY, JSON.stringify(DB)); 
+        // Agar aapne alag se Sample Data backup function banaya hai toh wo call hoga
+        if (typeof persistSampleDataBackup === "function") {
+            persistSampleDataBackup(); 
+        }
+    } catch(e) {
+        console.warn("Local storage full, saving to cloud only.", e);
+    }
+
+    // 2. Cloud Sync Logic with Timeout
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), CLOUD_TIMEOUT_MS);
-        await fetch(SCRIPT_URL, { method:"POST", body:JSON.stringify(DB), mode:"no-cors", signal:controller.signal });
+
+        await fetch(SCRIPT_URL, { 
+            method: "POST", 
+            body: JSON.stringify(DB), 
+            mode: "no-cors", // Google Apps Script ke liye zaruri
+            signal: controller.signal 
+        });
+
         clearTimeout(timeoutId);
+        console.log("✅ Cloud Sync successfully triggered.");
+        
     } catch(e) {
-        if (e.name === "AbortError") toast("Cloud sync timed out. Data saved locally.", "error");
-        else console.warn("Cloud sync error:", e);
+        if (e.name === "AbortError") {
+            // Timeout hone par user ko inform karein
+            toast("Cloud sync timed out. Data saved locally.", "error");
+            console.warn("Cloud sync took too long (> 60s). Data might still save in backend.");
+        } else {
+            console.warn("Cloud sync error:", e);
+            toast("Sync Error! Check your connection.", "error");
+        }
+    }
+}
+
+// ── EXTRA HELPER (In case if it's missing) ──
+// Agar aapne persistSampleDataBackup function nahi banaya hai toh ye use karein:
+function persistSampleDataBackup() {
+    try {
+        if (DB.sampleData && DB.sampleData.length > 0) {
+            localStorage.setItem("RRR_Sample_Backup", JSON.stringify(DB.sampleData));
+        }
+    } catch(e) {
+        console.warn("Could not backup sample data separately.");
     }
 }
 
