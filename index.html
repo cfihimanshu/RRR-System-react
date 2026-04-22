@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <title>RRR Engine – Live Case Management System</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -17,6 +18,7 @@
     <div class="tagline">Live case Management system</div>
   </div>
   <div class="navbar-right">
+    <button class="btn btn-outline btn-sm" onclick="clearAppCache()">🧹 Clear Cache</button>
     <span class="clock" id="clock">--:--:--</span>
     <span id="navbar-case-count">0 cases</span>
     <button class="btn btn-danger btn-sm" onclick="logout()">🚪 Logout</button>
@@ -357,10 +359,9 @@
     </div>
     <div class="btn-row">
       <label class="btn btn-primary btn-sm" style="cursor:pointer; background:#673ab7; border:none;">
-        📥 IMPORT CSV (BULK)
-        <input type="file" id="import-csv-input" accept=".csv" style="display:none;" onchange="importCasesCSV(event)">
+        📥 IMPORT EXCEL (BULK)
+        <input type="file" id="import-csv-input" accept=".xlsx,.xls" style="display:none;" onchange="importCasesExcel(event)">
       </label>
-      <button class="btn btn-outline btn-sm" onclick="downloadCaseImportTemplate()">🧾 Download Import Template</button>
       <button class="btn btn-outline btn-sm" onclick="exportCaseMaster()">⬇ Export CSV</button>
     </div>
   </div>
@@ -687,6 +688,10 @@
     <div class="col" style="max-width:320px">
       <div class="card">
         <div class="card-title"><span class="icon" style="background:#e8f0fe">📄</span> Generate / Refresh</div>
+        <div class="field" style="margin-bottom:10px">
+          <label>Search Case</label>
+          <input id="cs-search" placeholder="Type Case ID / Client / Company..." oninput="renderCaseStudyOptions()">
+        </div>
         <div class="field" style="margin-bottom:12px">
           <label>Select Case ID</label>
           <select id="cs-caseid"><option value="">-- Select Case --</option></select>

@@ -133,7 +133,7 @@ async function loadDB() {
 }
 
 
-async function saveDB() {
+async function saveDB(syncSampleData = false) {
   console.log("🔄 Syncing to Google Sheets (Cloud Mode)...");
 
   // 1. Local Storage ka bojh khatam karein
@@ -154,9 +154,11 @@ async function saveDB() {
     const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     // Pura DB object (Cases + SampleData) Google Sheet ko bhej rahe hain
+    const payload = { ...DB };
+    if (!syncSampleData) delete payload.sampleData;
     await fetch(SCRIPT_URL, {
       method: "POST",
-      body: JSON.stringify(DB),
+      body: JSON.stringify(payload),
       mode: "no-cors",
       signal: controller.signal
     });
@@ -245,9 +247,9 @@ function getBrandCode(brandInput) {
   return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
 }
 
-function generateCaseId() {
+function generateCaseId(brandOverride = "") {
   const yr = new Date().getFullYear();
-  const brand = document.getElementById("nc-brand") ? document.getElementById("nc-brand").value.trim() : "";
+  const brand = brandOverride || (document.getElementById("nc-brand") ? document.getElementById("nc-brand").value.trim() : "");
   const code = getBrandCode(brand);
   const nums = DB.cases.map(c => {
     const p = (c.caseId + "").split("-");
@@ -287,20 +289,45 @@ function refreshNavCount() {
   if (el) el.textContent = (DB.cases ? DB.cases.length : 0) + " case" + (DB.cases.length !== 1 ? "s" : "");
 }
 
+function visibleCasesForCurrentUser() {
+  const role = currentRole();
+  const email = currentUserEmail();
+  if (role === "Admin") return DB.cases.slice();
+  return DB.cases.filter(c => ((c.assignedTo || c.initiatedBy || "").toLowerCase() === email));
+}
+
 function refreshDropdowns() {
-  const ids = ["hu-caseid", "al-caseid", "cl-caseid", "cs-caseid", "tl-filter", "di-caseid", "rr-caseid"];
+  const ids = ["hu-caseid", "al-caseid", "cl-caseid", "tl-filter", "di-caseid", "rr-caseid"];
+  const visibleCases = visibleCasesForCurrentUser();
   ids.forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     const cur = sel.value;
     sel.innerHTML = id === "tl-filter" ? `<option value="">-- All Cases --</option>` : `<option value="">-- Select Case --</option>`;
-    DB.cases.forEach(c => {
+    visibleCases.forEach(c => {
       const opt = document.createElement("option");
       opt.value = c.caseId;
       opt.textContent = `${c.caseId} - ${c.clientName}`;
       if (c.caseId === cur) opt.selected = true;
       sel.appendChild(opt);
     });
+  });
+  renderCaseStudyOptions();
+}
+
+function renderCaseStudyOptions() {
+  const sel = document.getElementById("cs-caseid");
+  if (!sel) return;
+  const q = (document.getElementById("cs-search") ? document.getElementById("cs-search").value : "").toLowerCase().trim();
+  const current = sel.value;
+  const list = visibleCasesForCurrentUser().filter(c => !q || `${c.caseId} ${c.clientName || ""} ${c.companyName || ""}`.toLowerCase().includes(q));
+  sel.innerHTML = `<option value="">-- Select Case --</option>`;
+  list.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c.caseId;
+    opt.textContent = `${c.caseId} - ${c.clientName || "Unknown"} (${c.companyName || "-"})`;
+    if (c.caseId === current) opt.selected = true;
+    sel.appendChild(opt);
   });
 }
 
@@ -437,8 +464,11 @@ function priorityBadge(p) {
 // ══════════════════════════════════════
 function updateDashboard() {
   normalizeDBShape();
-  // Dashboard shows overall stats; assignment filtering handled in Case Master
-  const visibleCases = DB.cases;
+  const role = currentRole();
+  const email = currentUserEmail();
+  const visibleCases = role === "Admin"
+    ? DB.cases
+    : DB.cases.filter(c => ((c.assignedTo || c.initiatedBy || "").toLowerCase() === email));
   document.getElementById("stat-total").textContent = visibleCases.length;
   document.getElementById("stat-open").textContent = visibleCases.filter(c => c.currentStatus === "Open").length;
   renderRefundDashboard();
@@ -504,7 +534,7 @@ async function submitNewCase() {
     });
     const ackInputs = document.querySelectorAll(".ack-input");
     const capturedAcks = Array.from(ackInputs).map(i => i.value.trim()).filter(v => v).join(", ");
-    const caseId = editingCaseId || generateCaseId();
+    const caseId = editingCaseId || generateCaseId(get("nc-brand"));
     const existing = editingCaseId ? DB.cases.find(c => c.caseId === editingCaseId) : null;
     const createdDate = existing ? existing.createdDate : nowIST();
     const row = {
@@ -601,7 +631,9 @@ function renderCaseMaster() {
   const role = currentRole();
   const email = currentUserEmail();
   let filtered = DB.cases.filter(c => {
-    const roleMatch = role === "Admin" ? true : true;
+    const roleMatch = role === "Admin"
+      ? true
+      : ((c.assignedTo || c.initiatedBy || "").toLowerCase() === email);
     const matchQ = !q || JSON.stringify(c).toLowerCase().includes(q);
     const matchSt = !status || c.currentStatus === status;
     const matchPr = !prio || c.priority === prio;
@@ -617,14 +649,35 @@ function renderCaseMaster() {
         <td>₹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</td>
         <td>${priorityBadge(c.priority)}</td>
         <td>${statusBadge(c.currentStatus)}</td>
-        <td>${c.initiatedBy || "-"}</td>
+        <td>${c.assignedTo || c.initiatedBy || "-"}</td>
         <td>${formatDate(c.lastUpdateDate)}</td>
         <td>${formatDate(c.nextActionDate) || "-"}</td>
         <td>
           <button class="btn btn-outline btn-sm" onclick="showCaseDetail('${c.caseId}')">👁 View</button>
           <button class="btn btn-primary btn-sm" onclick="startCaseEdit('${c.caseId}')">✏ Edit</button>
+          ${currentRole() === "Admin" ? `
+          <div style="display:flex; gap:6px; margin-top:6px;">
+            <input id="assign-${c.caseId}" placeholder="assign email" value="${c.assignedTo || ""}" style="min-width:150px; font-size:11px; padding:5px 7px;">
+            <button class="btn btn-outline btn-sm" onclick="assignCaseToUser('${c.caseId}')">Assign</button>
+          </div>` : ""}
         </td>
     </tr>`).join("");
+}
+
+async function assignCaseToUser(caseId) {
+  if (currentRole() !== "Admin") { toast("Only admin can assign cases.", "error"); return; }
+  const c = DB.cases.find(x => x.caseId === caseId);
+  if (!c) { toast("Case not found.", "error"); return; }
+  const emailInput = document.getElementById(`assign-${caseId}`);
+  const assigned = (emailInput ? emailInput.value : "").trim().toLowerCase();
+  if (!assigned) { toast("Please enter assignee email.", "error"); return; }
+  c.assignedTo = assigned;
+  c.lastUpdateDate = nowIST();
+  c.updatedAtMs = Date.now();
+  addTimelineEntry(caseId, nowIST(), "ACTION", "Case Assigned", `Assigned to ${assigned}`);
+  toast(`Case assigned to ${assigned}`, "success");
+  refreshAllUI();
+  await saveDB();
 }
 
 function exportCaseMaster() {
@@ -656,7 +709,7 @@ function showCaseDetail(caseId) {
           <div><span class="text-muted">Status:</span> ${statusBadge(c.currentStatus)}</div>
           <div><span class="text-muted">Amt Paid:</span> ₹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</div>
           <div><span class="text-muted">Initiated By:</span> ${c.initiatedBy || "-"}</div>
-          <div><span class="text-muted">Assigned To:</span> ${c.initiatedBy || "-"}</div>
+          <div><span class="text-muted">Assigned To:</span> ${c.assignedTo || c.initiatedBy || "-"}</div>
         </div>
         <hr class="divider"/>
         <div style="font-weight:600;margin-bottom:8px">Case Summary</div>
@@ -1335,41 +1388,46 @@ function logActivity(category, description, caseId = "N/A") {
 // ══════════════════════════════════════
 //  BULK IMPORT CSV
 // ══════════════════════════════════════
-async function importCasesCSV(event) {
-  const file = event.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async function (e) {
-    const lines = e.target.result.split(/\r?\n/);
-    if (lines.length < 2) { toast("CSV file is empty.", "error"); return; }
+async function importCasesExcel(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (typeof XLSX === "undefined") { toast("Excel parser not loaded.", "error"); return; }
 
-    const splitCsvLine = (line) => line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-    const clean = (v) => v ? v.replace(/^"|"$/g, "").trim() : "";
-    const normalizeHeader = (h) => clean(h).toLowerCase().replace(/[^a-z0-9]/g, "");
-    const toNumberOrZero = (v) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? String(n) : "0";
-    };
+  const normalizeHeader = (h) => String(h || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  const toNumberOrZero = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? String(n) : "0";
+  };
 
-    const headers = splitCsvLine(lines[0]).map(normalizeHeader);
+  try {
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: "array" });
+    const firstSheet = wb.SheetNames[0];
+    if (!firstSheet) { toast("Excel sheet is empty.", "error"); return; }
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[firstSheet], { header: 1, blankrows: false });
+    if (!rows.length || rows.length < 2) { toast("Excel data rows not found.", "error"); return; }
+
+    const headers = rows[0].map(normalizeHeader);
     const idx = {};
     headers.forEach((h, i) => { idx[h] = i; });
     const getCol = (cols, ...names) => {
       for (const n of names) {
-        if (typeof idx[n] === "number") return clean(cols[idx[n]]);
+        if (typeof idx[n] === "number") return String(cols[idx[n]] ?? "").trim();
       }
       return "";
     };
 
     let count = 0;
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      const col = splitCsvLine(lines[i]);
+    for (let i = 1; i < rows.length; i++) {
+      const col = rows[i];
+      if (!col || !col.length) continue;
       const sourceOfComplaint = getCol(col, "sourceofcomplaint", "source");
       const typeOfComplaint = getCol(col, "typeofcomplaint", "complainttype");
       const companyName = getCol(col, "companyname", "company");
       const brandName = getCol(col, "brandname", "brand");
+      const initiatedBy = getCol(col, "initiatedby") || currentUserEmail();
       const row = {
-        caseId: getCol(col, "caseid") || generateCaseId(),
+        caseId: getCol(col, "caseid") || generateCaseId(brandName),
         createdDate: getCol(col, "createddate") || nowIST(),
         companyName,
         caseTitle: getCol(col, "casetitle") || `${typeOfComplaint || "Case"} - ${companyName || brandName || "Client"}`,
@@ -1396,11 +1454,11 @@ async function importCasesCSV(event) {
         proofWaChat: getCol(col, "proofwachat"),
         proofVideoCall: getCol(col, "proofvideocall"),
         proofFundingEmail: getCol(col, "prooffundingemail"),
-        initiatedBy: getCol(col, "initiatedby") || currentUserEmail(),
+        initiatedBy,
         accountable: getCol(col, "accountable"),
         legalOfficer: getCol(col, "legalofficer"),
         accounts: getCol(col, "accounts"),
-        caseCreatedSource: "CSV",
+        caseCreatedSource: "Excel",
         currentStatus: "New",
         lastUpdateDate: nowIST(),
         nextActionDate: getCol(col, "nextactiondate"),
@@ -1408,18 +1466,25 @@ async function importCasesCSV(event) {
         firNumber: getCol(col, "firnumber"),
         firFileLink: getCol(col, "firfilelink"),
         grievanceNumber: getCol(col, "grievancenumber"),
-        assignedTo: getCol(col, "assignedto") || getCol(col, "initiatedby") || currentUserEmail(),
+        assignedTo: getCol(col, "assignedto") || initiatedBy,
         updatedAtMs: Date.now()
       };
-
       DB.cases.push(row);
-      addTimelineEntry(row.caseId, row.createdDate, "CASE_CREATION", "Imported", "Bulk import via CSV");
+      addTimelineEntry(row.caseId, row.createdDate, "CASE_CREATION", "Imported", "Bulk import via Excel");
       count++;
     }
-    if (count > 0) { refreshAllUI(); toast(`${count} cases imported! Syncing...`, "success"); await saveDB(); }
-    else toast("No valid data in CSV.", "error");
-  };
-  reader.readAsText(file);
+
+    if (count > 0) {
+      refreshAllUI();
+      toast(`${count} cases imported from Excel. Syncing...`, "success");
+      await saveDB();
+    } else {
+      toast("No valid data rows found in Excel.", "error");
+    }
+  } catch (err) {
+    console.error(err);
+    toast("Excel import failed. Check file format.", "error");
+  }
   event.target.value = "";
 }
 
@@ -1520,7 +1585,7 @@ async function importSampleCSV(event) {
 
     // Seedha Cloud par save karein (No localStorage needed)
     try {
-      await saveDB();
+      await saveDB(true);
       console.log("✅ Sample data successfully synced to Cloud");
       toast("✅ Data saved to Cloud successfully!", "success");
     } catch (err) {
@@ -1531,6 +1596,15 @@ async function importSampleCSV(event) {
   reader.readAsText(file);
   event.target.value = ""; // Input clear karein agli file ke liye
 }
+
+window.clearAppCache = function () {
+  const ok = confirm("Clear local cache and reload fresh data from cloud?");
+  if (!ok) return;
+  localStorage.removeItem(LS_KEY);
+  localStorage.removeItem(SAMPLE_DATA_KEY);
+  toast("Cache cleared. Reloading...", "success");
+  setTimeout(() => window.location.reload(), 500);
+};
 function normalizeSampleSearchValue(v) { return (v || "").toString().toLowerCase().replace(/\s+/g, " ").trim(); }
 function renderSampleSearch() {
   const searchInput = document.getElementById("sample-search-input");
