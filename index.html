@@ -15,6 +15,7 @@
     <div class="logo">RRR Engine</div>
     <div class="tagline">Live Case Management System</div>
   </div>
+  <button class="btn btn-outline btn-sm nav-toggle" onclick="toggleSidebar()">☰</button>
   <div class="navbar-right">
     <span class="clock" id="clock">--:--:--</span>
     <span id="navbar-case-count">0 cases</span>
@@ -23,7 +24,7 @@
 </div>
 
 <!-- Tabs -->
-<div class="tabs">
+<div class="tabs" id="sidebar-tabs">
   <div class="tab active" data-tab="dashboard">📊 Dashboard</div>
   <div class="tab" data-tab="new-case">➕ New Case</div>
   <div class="tab" data-tab="case-master">📋 Case Master</div>
@@ -34,10 +35,11 @@
   <div class="tab" data-tab="doc-index">📁 Document Index</div>
   <div class="tab" data-tab="case-study">📄 Case Study</div>
   <div class="tab" data-tab="admin-panel">⚙️ Admin Panel</div>
-  <div class="tab" data-tab="internal-search">Data Search</div>
-  <div class="tab" data-tab="reviewer-panel">Reviewer Dashboard</div>
+  <div class="tab" data-tab="internal-search">🔎 Data Search</div>
+  <div class="tab" data-tab="reviewer-panel">🧾 Reviewer Dashboard</div>
   <div class="tab" data-tab="accountant-dashboard">💰 Accountant Dashboard</div>
 </div>
+<div id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
 
 <div class="main">
 
@@ -48,7 +50,6 @@
       <div class="section-title">Dashboard</div>
       <div class="section-sub" id="dash-last-check">Last checked: never</div>
     </div>
-    <button class="btn btn-primary" onclick="runDailyChecker()">▶ Run Daily Checker</button>
   </div>
 
   <div class="stats-grid">
@@ -124,7 +125,7 @@
 <!-- ══════════════ 2. REVIEWER PANEL ══════════════ -->
 <div id="tab-reviewer-panel" class="section">
     <div class="card" style="border-top: 4px solid var(--orange);">
-        <div class="card-title"> Pending for My Review</div>
+        <div class="card-title">Reviewer Queue - Pending for Review</div>
         <div class="table-wrap">
             <table>
                 <thead>
@@ -141,7 +142,7 @@
 <!-- ══════════════ 3. ACCOUNTANT DASHBOARD ══════════════ -->
 <div id="tab-accountant-dashboard" class="section">
     <div class="card" style="border-top: 4px solid var(--green);">
-        <div class="card-title">💸 Pending Payments (Approved Requests)</div>
+        <div class="card-title">💸 Accountant Queue - Approved Refunds</div>
         <div class="table-wrap">
             <table>
                 <thead>
@@ -149,7 +150,7 @@
                         <th>Case ID</th>
                         <th>Bank Details (Full)</th>
                         <th>Amount</th>
-                        <th>Reviewer Info</th>
+                        <th>Request Details</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -338,7 +339,8 @@
   </div>
 
   <div class="btn-row">
-    <button class="btn btn-success" onclick="submitNewCase()">✅ Create Case & Generate Study</button>
+    <button class="btn btn-success" id="nc-submit-btn" onclick="submitNewCase()">✅ Create Case & Generate Study</button>
+    <button class="btn btn-danger" id="nc-cancel-edit-btn" onclick="cancelCaseEdit()" style="display:none;">❌ Cancel Edit</button>
     <button class="btn btn-outline" onclick="clearNewCaseForm()">🔄 Clear Form</button>
   </div>
 </div>
@@ -733,6 +735,18 @@
     </div>
   </div>
 
+  <div class="card" id="admin-assignment-card">
+    <div class="card-title">🗂️ Case Assignment Control</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Case</th><th>Assigned To (Email)</th><th>Action</th></tr>
+        </thead>
+        <tbody id="assignment-body"><tr><td colspan="5"><div class="empty-state">No cases available for assignment.</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title" id="user-create-title">👤 Create New User</div>
     <div class="form-grid">
@@ -799,6 +813,16 @@
       <button class="close-btn" onclick="closeModal()">✕</button>
     </div>
     <div id="modal-body"></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="file-preview-modal">
+  <div class="modal modal-lg">
+    <div class="modal-title">
+      <span id="file-preview-title">File Preview</span>
+      <button class="close-btn" onclick="closeFilePreview()">✕</button>
+    </div>
+    <div id="file-preview-body"></div>
   </div>
 </div>
 

@@ -20,13 +20,50 @@ const LS_KEY = "RRR_DB_v1";
 const SAMPLE_DATA_KEY = "RRR_SAMPLE_DATA_v1";
 const CLOUD_TIMEOUT_MS = 90000;
 
-let DB = { cases: [], history: [], actions: [], comms: [], docs: [], timeline: [], studyControl: [], sampleData: [], auditLogs: [] };
+let DB = { cases: [], history: [], actions: [], comms: [], docs: [], timeline: [], studyControl: [], sampleData: [], auditLogs: [], refunds: [] };
+let editingCaseId = null;
 
 function normalizeDBShape() {
   DB = DB || {};
-  ["cases", "history", "actions", "comms", "docs", "timeline", "studyControl", "sampleData", "auditLogs"].forEach(key => {
+  ["cases", "history", "actions", "comms", "docs", "timeline", "studyControl", "sampleData", "auditLogs", "refunds"].forEach(key => {
     if (!Array.isArray(DB[key])) DB[key] = [];
   });
+}
+
+function loadLocalBackupDB() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function mergeCollectionByKey(cloudItems, localItems, key) {
+  const map = new Map((Array.isArray(cloudItems) ? cloudItems : []).map(item => [item[key], item]));
+  (Array.isArray(localItems) ? localItems : []).forEach(localItem => {
+    if (!localItem || !localItem[key]) return;
+    const cloudItem = map.get(localItem[key]);
+    if (!cloudItem) {
+      map.set(localItem[key], localItem);
+      return;
+    }
+    const cloudStamp = Number(cloudItem.lastStatusAtMs || cloudItem.updatedAtMs || 0);
+    const localStamp = Number(localItem.lastStatusAtMs || localItem.updatedAtMs || 0);
+    if (localStamp >= cloudStamp) map.set(localItem[key], { ...cloudItem, ...localItem });
+  });
+  return Array.from(map.values());
+}
+
+function mergeCollectionsWithLocalBackup() {
+  const local = loadLocalBackupDB();
+  if (!local) return;
+  DB.history = mergeCollectionByKey(DB.history, local.history, "histId");
+  DB.actions = mergeCollectionByKey(DB.actions, local.actions, "actionId");
+  DB.comms = mergeCollectionByKey(DB.comms, local.comms, "commId");
+  DB.docs = mergeCollectionByKey(DB.docs, local.docs, "docId");
+  DB.refunds = mergeCollectionByKey(DB.refunds, local.refunds, "reqId");
 }
 
 // ══════════════════════════════════════
@@ -55,7 +92,7 @@ function restoreSampleDataFromBackup() {
 // ── 1. LOAD DATA FROM CLOUD ONLY ──
 async function loadDB() {
   console.log("Fetching from Cloud...");
-  toast("Cloud se data load ho raha hai...", "info");
+  toast("Loading data from cloud...", "info");
 
   try {
     const controller = new AbortController();
@@ -73,6 +110,7 @@ async function loadDB() {
       if (data && Array.isArray(data.cases)) {
         DB = data; // Data RAM mein load ho gaya
         normalizeDBShape();
+        mergeCollectionsWithLocalBackup();
         refreshAllUI(); // Saari tables ek saath refresh
         console.log("✅ Cloud Data Loaded Successfully");
       }
@@ -81,9 +119,9 @@ async function loadDB() {
     }
   } catch (e) {
     console.error("Cloud load failed:", e.message);
-    toast("Internet Slow hai! Refresh karein.", "error");
+    toast("Cloud load failed. Using local backup if available.", "error");
 
-    // Fallback: Agar cloud fail ho jaye, tabhi local se uthao (sirf safety ke liye)
+    // Fallback to local backup when cloud fetch fails
     const local = localStorage.getItem(LS_KEY);
     if (local) {
       DB = JSON.parse(local);
@@ -166,7 +204,7 @@ async function saveDB() {
       toast("Syncing large data... Please wait.", "info");
     } else {
       console.error("Cloud sync error:", e);
-      toast("Cloud Sync Fail! Internet check karein.", "error");
+      toast("Cloud sync failed. Please check your internet connection.", "error");
     }
   }
 }
@@ -183,6 +221,9 @@ function refreshAllUI() {
   renderTimeline();
   renderStudyControl();
   renderRefundApprovals();
+  renderAssignmentBoard();
+  renderReviewerDashboard();
+  renderAccountantDashboard();
   renderSampleSearch(); // Sample Data search refresh karein
   renderRefundDashboard();
   applyPermissions();
@@ -310,10 +351,23 @@ document.querySelectorAll(".tab").forEach(tab => {
     else if (tabName === "timeline") safe("renderTimeline");
     else if (tabName === "doc-index") safe("renderDocIndex");
     else if (tabName === "case-study") safe("renderStudyControl");
-    else if (tabName === "admin-panel") { safe("renderRefundApprovals"); safe("setupUserRoleOptions"); }
+    else if (tabName === "admin-panel") { safe("renderRefundApprovals"); safe("renderAssignmentBoard"); safe("setupUserRoleOptions"); }
     else if (tabName === "internal-search") safe("renderSampleSearch");
+    else if (tabName === "reviewer-panel") safe("renderReviewerDashboard");
+    else if (tabName === "accountant-dashboard") safe("renderAccountantDashboard");
+
+    if (window.innerWidth <= 900) toggleSidebar(false);
   });
 });
+
+window.toggleSidebar = function (openState) {
+  const sidebar = document.getElementById("sidebar-tabs");
+  const overlay = document.getElementById("sidebar-overlay");
+  if (!sidebar || !overlay) return;
+  const shouldOpen = typeof openState === "boolean" ? openState : !sidebar.classList.contains("open");
+  sidebar.classList.toggle("open", shouldOpen);
+  overlay.classList.toggle("open", shouldOpen);
+};
 
 // ══════════════════════════════════════
 //  LOGOUT
@@ -333,6 +387,7 @@ window.logout = function () {
 function normalizeRole(role) {
   const r = (role || "").toString().trim().toLowerCase();
   if (r === "admin") return "Admin";
+  if (r === "approver" || r === "approval") return "Admin";
   if (r === "operations" || r === "operation") return "Operations";
    if (r === "reviewer") return "Reviewer"; 
    if (r === "accountant") return "Accountant";
@@ -342,7 +397,23 @@ function currentRole() { return normalizeRole(localStorage.getItem("rrr_user_rol
 function currentUserEmail() { return (localStorage.getItem("rrr_user_email") || "").trim().toLowerCase(); }
 function isAdmin() { return currentRole() === "Admin"; }
 function isOperations() { return currentRole() === "Operations"; }
-function canRaiseRefundRequest() { return isAdmin() || isOperations(); }
+function isStaff() { return currentRole() === "Staff"; }
+function isReviewer() { return currentRole() === "Reviewer"; }
+function canRaiseRefundRequest() { return isAdmin() || isOperations() || isStaff(); }
+
+function getRefundStatusClass(status) {
+  if (status === "Approved" || status === "Refund Completed") return "badge-closed";
+  if (status === "Pending Payment") return "badge-pending";
+  if (status === "Rejected by Reviewer") return "badge-high";
+  return "badge-pending";
+}
+
+function normalizeRefundStatus(status) {
+  const s = (status || "").trim();
+  if (s === "Pending Admin Approval") return "Pending Approval";
+  if (s === "Sent Back by Reviewer") return "Rejected by Reviewer";
+  return s || "Pending Review";
+}
 
 function formatRefundStatus(status) {
   const s = status || "Pending Approval";
@@ -367,12 +438,16 @@ function priorityBadge(p) {
 // ══════════════════════════════════════
 function updateDashboard() {
   normalizeDBShape();
-  document.getElementById("stat-total").textContent = DB.cases.length;
-  document.getElementById("stat-open").textContent = DB.cases.filter(c => c.currentStatus === "Open").length;
+  const role = currentRole();
+  const userEmail = currentUserEmail();
+  let visibleCases = DB.cases;
+  if (role !== "Admin") visibleCases = DB.cases.filter(c => (c.assignedTo || c.assignedOps || c.initiatedBy || "").toLowerCase() === userEmail);
+  document.getElementById("stat-total").textContent = visibleCases.length;
+  document.getElementById("stat-open").textContent = visibleCases.filter(c => c.currentStatus === "Open").length;
   renderRefundDashboard();
   const body = document.getElementById("dash-recent-body");
   if (!body) return;
-  const recent = DB.cases.slice(-5).reverse();
+  const recent = visibleCases.slice(-5).reverse();
   if (!recent.length) { body.innerHTML = `<tr><td colspan="6" class="empty-state">No cases yet</td></tr>`; return; }
   body.innerHTML = recent.map(c => `
         <tr>
@@ -432,8 +507,9 @@ async function submitNewCase() {
     });
     const ackInputs = document.querySelectorAll(".ack-input");
     const capturedAcks = Array.from(ackInputs).map(i => i.value.trim()).filter(v => v).join(", ");
-    const caseId = generateCaseId();
-    const createdDate = nowIST();
+    const caseId = editingCaseId || generateCaseId();
+    const existing = editingCaseId ? DB.cases.find(c => c.caseId === editingCaseId) : null;
+    const createdDate = existing ? existing.createdDate : nowIST();
     const row = {
       caseId, createdDate,
       companyName: get("nc-company"), caseTitle: get("nc-title"), priority: get("nc-priority"),
@@ -451,14 +527,25 @@ async function submitNewCase() {
       proofVideoCall: get("nc-v-call"), proofFundingEmail: get("nc-funding-email"),
       initiatedBy: get("nc-lead"), accountable: get("nc-negotiator"),
       legalOfficer: get("nc-legal"), accounts: get("nc-accounts"),
+      assignedTo: existing ? existing.assignedTo || existing.assignedOps || "" : "",
+      assignedOps: existing ? existing.assignedOps || "" : "",
+      assignedReviewer: existing ? existing.assignedReviewer || "" : "",
+      assignedAccountant: existing ? existing.assignedAccountant || "" : "",
       currentStatus: "Open", lastUpdateDate: createdDate
     };
-    DB.cases.push(row);
-    logActivity("CASE_CREATION", `Created new case for ${row.clientName}`, caseId);
-    addTimelineEntry(caseId, createdDate, "CASE_CREATION", "Case Created", `New Case Registered (${row.typeOfComplaint})`);
+    if (existing) {
+      const idx = DB.cases.findIndex(c => c.caseId === editingCaseId);
+      DB.cases[idx] = { ...existing, ...row };
+      logActivity("CASE_UPDATE", `Updated case for ${row.clientName}`, caseId);
+      addTimelineEntry(caseId, nowIST(), "ACTION", "Case Updated", "Case details edited from New Case form");
+    } else {
+      DB.cases.push(row);
+      logActivity("CASE_CREATION", `Created new case for ${row.clientName}`, caseId);
+      addTimelineEntry(caseId, createdDate, "CASE_CREATION", "Case Created", `New Case Registered (${row.typeOfComplaint})`);
+    }
     refreshAllUI();
     document.querySelector('[data-tab="case-master"]').click();
-    toast("Case Created! Syncing...", "success");
+    toast(existing ? "Case updated! Syncing..." : "Case created! Syncing...", "success");
     clearNewCaseForm();
     await saveDB();
   } catch (error) {
@@ -473,7 +560,31 @@ function clearNewCaseForm() {
   toggleServiceMode();
   const chip = document.getElementById("nc-fir-file-chip"); if (chip) chip.innerHTML = "";
   const fd = document.getElementById("nc-fir-file-data"); if (fd) fd.value = "";
+  editingCaseId = null;
+  const submitBtn = document.getElementById("nc-submit-btn"); if (submitBtn) submitBtn.textContent = "✅ Create Case & Generate Study";
+  const cancelBtn = document.getElementById("nc-cancel-edit-btn"); if (cancelBtn) cancelBtn.style.display = "none";
 }
+
+function startCaseEdit(caseId) {
+  const c = DB.cases.find(x => x.caseId === caseId);
+  if (!c) { toast("Case not found for edit.", "error"); return; }
+  editingCaseId = caseId;
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value || ""; };
+  set("nc-company", c.companyName); set("nc-title", c.caseTitle); set("nc-priority", c.priority);
+  set("nc-business", c.sourceOfComplaint); set("nc-complaint-type", c.typeOfComplaint);
+  set("nc-fir-num", c.firNumber); set("nc-grievance-num", c.grievanceNumber);
+  set("nc-client", c.clientName); set("nc-mobile", c.clientMobile); set("nc-email", c.clientEmail); set("nc-state", c.state);
+  set("nc-amtpaid", c.totalAmtPaid); set("nc-mou", c.mouSigned); set("nc-mouval", c.totalMouValue); set("nc-dispute", c.amtInDispute);
+  set("nc-smrisk", c.smRisk); set("nc-complaint", c.complaint); set("nc-police", c.policeThreat);
+  set("nc-summary", c.caseSummary); set("nc-allegation", c.clientAllegation);
+  set("nc-call-rec", c.proofCallRec); set("nc-wa-chat", c.proofWaChat); set("nc-v-call", c.proofVideoCall); set("nc-funding-email", c.proofFundingEmail);
+  set("nc-lead", c.initiatedBy); set("nc-negotiator", c.accountable); set("nc-legal", c.legalOfficer); set("nc-accounts", c.accounts);
+  handleComplaintTypeChange(c.typeOfComplaint || "");
+  const submitBtn = document.getElementById("nc-submit-btn"); if (submitBtn) submitBtn.textContent = "💾 Update Case";
+  const cancelBtn = document.getElementById("nc-cancel-edit-btn"); if (cancelBtn) cancelBtn.style.display = "inline-flex";
+  document.querySelector('[data-tab="new-case"]').click();
+}
+function cancelCaseEdit() { clearNewCaseForm(); }
 
 // ══════════════════════════════════════
 //  CASE MASTER
@@ -484,11 +595,16 @@ function renderCaseMaster() {
   const prio = document.getElementById("cm-filter-priority") ? document.getElementById("cm-filter-priority").value : "";
   const body = document.getElementById("cm-body");
   if (!body) return;
+  const role = currentRole();
+  const email = currentUserEmail();
   let filtered = DB.cases.filter(c => {
+    const roleMatch = role === "Admin"
+      ? true
+      : ((c.assignedTo || c.assignedOps || c.initiatedBy || "").toLowerCase() === email);
     const matchQ = !q || JSON.stringify(c).toLowerCase().includes(q);
     const matchSt = !status || c.currentStatus === status;
     const matchPr = !prio || c.priority === prio;
-    return matchQ && matchSt && matchPr;
+    return roleMatch && matchQ && matchSt && matchPr;
   }).slice().reverse();
   if (!filtered.length) { body.innerHTML = `<tr><td colspan="12"><div class="empty-state"><span class="emoji">📂</span>No cases match your filter.</div></td></tr>`; return; }
   body.innerHTML = filtered.map(c => `<tr>
@@ -500,10 +616,13 @@ function renderCaseMaster() {
         <td>₹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</td>
         <td>${priorityBadge(c.priority)}</td>
         <td>${statusBadge(c.currentStatus)}</td>
-        <td>${c.initiatedBy || "-"}</td>
+        <td>${c.assignedTo || c.assignedOps || c.initiatedBy || "-"}</td>
         <td>${formatDate(c.lastUpdateDate)}</td>
         <td>${formatDate(c.nextActionDate) || "-"}</td>
-        <td><button class="btn btn-outline btn-sm" onclick="showCaseDetail('${c.caseId}')">👁 View</button></td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="showCaseDetail('${c.caseId}')">👁 View</button>
+          <button class="btn btn-primary btn-sm" onclick="startCaseEdit('${c.caseId}')">✏ Edit</button>
+        </td>
     </tr>`).join("");
 }
 
@@ -536,10 +655,12 @@ function showCaseDetail(caseId) {
           <div><span class="text-muted">Status:</span> ${statusBadge(c.currentStatus)}</div>
           <div><span class="text-muted">Amt Paid:</span> ₹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</div>
           <div><span class="text-muted">Initiated By:</span> ${c.initiatedBy || "-"}</div>
+          <div><span class="text-muted">Assigned To:</span> ${c.assignedTo || c.assignedOps || "-"}</div>
         </div>
         <hr class="divider"/>
         <div style="font-weight:600;margin-bottom:8px">Case Summary</div>
         <div style="font-size:13px;background:#f8f9fa;padding:10px;border-radius:4px;margin-bottom:16px">${c.caseSummary || "No summary available."}</div>
+        ${c.firFileLink ? `<div style="font-weight:600;margin-bottom:8px">Uploaded FIR / Image</div><div style="margin-bottom:16px">${getFilePreviewHTML(c.firFileLink, "FIR Copy")}</div>` : ""}
         <div style="font-weight:600;margin-bottom:8px">Timeline (${tl.length} entries)</div>
         ${tl.length ? `<ul class="timeline">${tl.map(t => `<li><div class="tl-meta">${formatDate(t.logTimestamp)}</div><div class="tl-event">${t.eventType}: ${t.summary}</div></li>`).join("")}</ul>` : `<div class="text-muted" style="font-size:13px">No timeline entries yet.</div>`}
         <hr class="divider"/>
@@ -547,7 +668,10 @@ function showCaseDetail(caseId) {
   document.getElementById("case-modal").classList.add("open");
 }
 function closeModal() { document.getElementById("case-modal").classList.remove("open"); }
-window.onclick = function (e) { if (e.target == document.getElementById("case-modal")) closeModal(); };
+window.onclick = function (e) {
+  if (e.target == document.getElementById("case-modal")) closeModal();
+  if (e.target == document.getElementById("file-preview-modal")) closeFilePreview();
+};
 
 // ══════════════════════════════════════
 //  VALIDATION & FILE HELPERS
@@ -560,15 +684,52 @@ function handleDragOver(e, zoneId) { e.preventDefault(); document.getElementById
 function handleDragLeave(e, zoneId) { document.getElementById(zoneId).classList.remove("dragover"); }
 function handleDrop(e, zoneId, dataId, chipId) { e.preventDefault(); document.getElementById(zoneId).classList.remove("dragover"); const f = e.dataTransfer.files[0]; if (f) processFile(f, zoneId, dataId, chipId); }
 function handleFileSelect(e, zoneId, dataId, chipId) { const f = e.target.files[0]; if (f) processFile(f, zoneId, dataId, chipId); }
-function processFile(file, zoneId, dataId, chipId) {
-  const reader = new FileReader();
-  reader.onload = ev => {
-    document.getElementById(dataId).value = ev.target.result;
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = ev => resolve(ev.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+function compressImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 1600, maxH = 1600;
+        let { width, height } = img;
+        const ratio = Math.min(maxW / width, maxH / height, 1);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+async function processFile(file, zoneId, dataId, chipId) {
+  try {
+    let result = "";
+    if (file.type.startsWith("image/")) result = await compressImageFile(file);
+    else result = await fileToDataUrl(file);
+    document.getElementById(dataId).value = result;
     const chipEl = document.getElementById(chipId);
     const isImg = file.type.startsWith("image/");
     chipEl.innerHTML = `<div class="file-chip"><span>${isImg ? "🖼️" : "📄"} <strong>${file.name}</strong></span><span class="remove-file" onclick="clearFileUpload('${chipId}','${dataId}','${zoneId}')">✕</span></div>`;
-  };
-  reader.readAsDataURL(file);
+    toast(isImg ? "Image optimized and attached." : "File attached.", "success");
+  } catch (e) {
+    console.error(e);
+    toast("File upload process failed.", "error");
+  }
 }
 function clearFileUpload(chipId, dataId, zoneId) {
   document.getElementById(chipId).innerHTML = ""; document.getElementById(dataId).value = "";
@@ -583,15 +744,40 @@ function resolveFileLink(dataId, urlInputId) {
 function updateCaseMasterField(caseId, field, value) {
   const c = DB.cases.find(x => x.caseId === caseId); if (c) { c[field] = value; return true; } return false;
 }
-function getFilePreviewHTML(link) {
+function getDriveFileId(link) {
+  const match = (link || "").match(/[-\w]{25,}/);
+  return match ? match[0] : "";
+}
+function getFilePreviewHTML(link, label = "View") {
   if (!link || link === "-") return '<span style="color:#ccc">No File</span>';
-  if (link.startsWith("http")) return `<a href="${link}" target="_blank" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;">👁️ View</a>`;
-  return `<button onclick="openBase64InNewTab(this.getAttribute('data-b64'))" data-b64="${link}" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;">👁️ View</button>`;
+  const escaped = String(link).replace(/"/g, "&quot;");
+  return `<button onclick="previewStoredFile(this.getAttribute('data-file'))" data-file="${escaped}" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;">👁️ ${label}</button>`;
 }
-function openBase64InNewTab(base64) {
-  try { const w = window.open(); w.document.write(`<iframe src="${base64}" frameborder="0" style="width:100%;height:100%;border:0;"></iframe>`); }
-  catch (e) { alert("Could not preview file."); }
+function previewStoredFile(link) {
+  const modal = document.getElementById("file-preview-modal");
+  const body = document.getElementById("file-preview-body");
+  const title = document.getElementById("file-preview-title");
+  if (!modal || !body) return;
+  title.textContent = "File Preview";
+  let html = `<div class="preview-meta">Secure in-app preview</div>`;
+  if ((link || "").startsWith("data:image/")) {
+    html += `<img class="preview-img" src="${link}" alt="Preview image">`;
+  } else if ((link || "").startsWith("data:")) {
+    html += `<iframe class="preview-media" src="${link}"></iframe>`;
+  } else if ((link || "").includes("drive.google.com")) {
+    const fileId = getDriveFileId(link);
+    html += fileId
+      ? `<img class="preview-img" src="https://drive.google.com/thumbnail?id=${fileId}&sz=w1600" alt="Drive image preview" onerror="this.outerHTML='<iframe class=&quot;preview-media&quot; src=&quot;https://drive.google.com/file/d/${fileId}/preview&quot; allow=&quot;autoplay&quot;></iframe>';">`
+      : `<div class="empty-state">Preview unavailable for this Drive file.</div>`;
+  } else if ((link || "").match(/\.(png|jpg|jpeg|gif|webp|bmp)(\?|$)/i)) {
+    html += `<img class="preview-img" src="${link}" alt="Preview image">`;
+  } else {
+    html += `<iframe class="preview-media" src="${link}"></iframe>`;
+  }
+  body.innerHTML = html;
+  modal.classList.add("open");
 }
+function closeFilePreview() { document.getElementById("file-preview-modal").classList.remove("open"); }
 
 // ══════════════════════════════════════
 //  TIMELINE
@@ -619,7 +805,7 @@ async function submitHistory() {
   const get = id => document.getElementById(id) ? document.getElementById(id).value.trim() : "";
   const caseId = get("hu-caseid"), eventDate = get("hu-date"), summary = get("hu-summary");
   if (!caseId || !eventDate || !summary) { toast("Fill required fields (Case, Date, Summary)", "error"); return; }
-  const row = { histId: uid("HIST"), caseId, eventDate, histType: document.getElementById("hu-type").value, summary, notes: get("hu-notes"), fileLink: resolveFileLink("hu-file-data", "hu-file"), source: get("hu-source"), enteredBy: get("hu-enteredby"), timestamp: nowIST() };
+  const row = { histId: uid("HIST"), caseId, eventDate, histType: document.getElementById("hu-type").value, summary, notes: get("hu-notes"), fileLink: resolveFileLink("hu-file-data", "hu-file"), source: get("hu-source"), enteredBy: get("hu-enteredby"), timestamp: nowIST(), updatedAtMs: Date.now() };
   DB.history.push(row);
   addTimelineEntry(caseId, eventDate, "HISTORY", row.histType, summary);
   renderHistoryTable();
@@ -654,7 +840,7 @@ async function submitAction() {
     actionId: uid("ACT"), caseId, dateTime: nowIST(), dept: document.getElementById("al-dept").value,
     doneBy: get("al-doneby") || currentUserEmail(), actionType, summary, notes: get("al-notes"),
     clientResp: get("al-clientresp"), observation: get("al-obs"), nextAction: get("al-nextaction"),
-    nextActionBy: get("al-nextby"), nextActionDate: get("al-nextdate"), fileLink: resolveFileLink("al-file-data", "al-file")
+    nextActionBy: get("al-nextby"), nextActionDate: get("al-nextdate"), fileLink: resolveFileLink("al-file-data", "al-file"), updatedAtMs: Date.now()
   };
   if (actionType === "Refund Request") {
     row.status = "Pending Approval"; row.refundStatus = "Pending Approval";
@@ -698,7 +884,7 @@ async function submitCommLog() {
   const get = id => document.getElementById(id) ? document.getElementById(id).value.trim() : "";
   const caseId = get("cl-caseid"), summary = get("cl-summary");
   if (!caseId || !summary) { toast("Select Case ID and enter Summary", "error"); return; }
-  const row = { commId: uid("COMM"), caseId, dateTime: get("cl-datetime") || nowIST(), mode: document.getElementById("cl-mode").value, direction: document.getElementById("cl-dir").value, fromTo: get("cl-fromto"), summary, exactDemand: get("cl-exact"), refundDemanded: get("cl-refund"), legalThreat: document.getElementById("cl-legal").value, smMentioned: document.getElementById("cl-sm").value, fileLink: resolveFileLink("cl-file-data", "cl-file"), loggedBy: get("cl-loggedby"), timestamp: nowIST() };
+  const row = { commId: uid("COMM"), caseId, dateTime: get("cl-datetime") || nowIST(), mode: document.getElementById("cl-mode").value, direction: document.getElementById("cl-dir").value, fromTo: get("cl-fromto"), summary, exactDemand: get("cl-exact"), refundDemanded: get("cl-refund"), legalThreat: document.getElementById("cl-legal").value, smMentioned: document.getElementById("cl-sm").value, fileLink: resolveFileLink("cl-file-data", "cl-file"), loggedBy: get("cl-loggedby"), timestamp: nowIST(), updatedAtMs: Date.now() };
   DB.comms.push(row);
   addTimelineEntry(caseId, row.dateTime, "COMMUNICATION", `${row.mode} ${row.direction}`, summary);
   updateCaseMasterField(caseId, "lastUpdateDate", nowIST());
@@ -729,7 +915,7 @@ async function submitDocUpload() {
   const get = id => document.getElementById(id) ? document.getElementById(id).value.trim() : "";
   const caseId = get("di-caseid"), fileLink = resolveFileLink("di-file-data", "di-file-url");
   if (!caseId || !fileLink) { toast("Select Case ID and attach a file!", "error"); return; }
-  const docRow = { docId: uid("DOC"), caseId, uploadDate: nowIST(), sourceForm: "MANUAL_UPLOAD", docType: get("di-doctype"), fileSummary: get("di-summary") || get("di-doctype"), fileLink, uploadedBy: get("di-uploadedby"), remarks: get("di-remarks") };
+  const docRow = { docId: uid("DOC"), caseId, uploadDate: nowIST(), sourceForm: "MANUAL_UPLOAD", docType: get("di-doctype"), fileSummary: get("di-summary") || get("di-doctype"), fileLink, uploadedBy: get("di-uploadedby"), remarks: get("di-remarks"), updatedAtMs: Date.now() };
   DB.docs.push(docRow);
   addTimelineEntry(caseId, nowIST(), "DOCUMENT", docRow.docType, "Manual Upload: " + docRow.fileSummary);
   renderDocIndex();
@@ -757,9 +943,7 @@ function renderDocIndex() {
 }
 function renderDocLink(link, fileName) {
   if (!link) return "-";
-  if (link.startsWith("https://drive.google.com")) return `<a href="${link}" target="_blank" style="color:var(--blue);font-weight:600;">🔗 Drive</a>`;
-  if (link.startsWith("data:")) return `<a href="${link}" download="${fileName || 'file'}" style="color:var(--green);">⬇ Download</a>`;
-  return `<a href="${link}" target="_blank">🔗 View</a>`;
+  return getFilePreviewHTML(link, fileName || "View");
 }
 
 // ══════════════════════════════════════
@@ -940,18 +1124,20 @@ function allowedTabsForRole(role) {
 
   if (role === "Operations") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "timeline", "doc-index", "case-study", "internal-search"];
 
-  return ["new-case", "history", "action-log", "comm-log", "doc-index","internal-search"];
+  return ["dashboard", "new-case", "history", "action-log", "comm-log", "doc-index", "internal-search"];
 }
 function applyPermissions() {
   const role = currentRole();
   const allowed = allowedTabsForRole(role);
   document.querySelectorAll(".tab").forEach(tab => { tab.style.display = allowed.includes(tab.dataset.tab) ? "" : " none"; });
-  const refundCard = document.getElementById("refund-dashboard-card"); if (refundCard) refundCard.style.display = role === "Staff" ? "none" : "";
+  const refundCard = document.getElementById("refund-dashboard-card"); if (refundCard) refundCard.style.display = "";
   const refundRequestCard = document.getElementById("refund-request-card"); if (refundRequestCard) refundRequestCard.style.display = canRaiseRefundRequest() ? "" : " none";
   const adminRefundCard = document.getElementById("admin-refund-card"); if (adminRefundCard) adminRefundCard.style.display = role === "Admin" ? "" : " none";
+  const assignmentCard = document.getElementById("admin-assignment-card"); if (assignmentCard) assignmentCard.style.display = role === "Admin" ? "" : "none";
   const adminTab = document.querySelector('[data-tab="admin-panel"]'); if (adminTab) adminTab.textContent = role === "Admin" ? "⚙️ Admin Panel" : "⚙️ User Panel";
   const adminTitle = document.getElementById("admin-panel-title"); if (adminTitle) adminTitle.textContent = role === "Admin" ? "Admin Panel" : "Operations User Panel";
   const adminSub = document.getElementById("admin-panel-subtitle"); if (adminSub) adminSub.textContent = role === "Admin" ? "Approve refunds and create users" : "Create staff users and track refund requests";
+  const requestedBy = document.getElementById("rr-requestedby"); if (requestedBy) requestedBy.value = currentUserEmail();
   setupUserRoleOptions();
   applyActionTypePermissions();
 }
@@ -966,6 +1152,43 @@ function setupUserRoleOptions() {
   if (!roleSelect) return;
   if (isAdmin()) { roleSelect.innerHTML = `<option>Admin</option><option>Operations</option><option>Reviewer</option><option>Accountant</option><option>Staff</option>`; if (title) title.textContent = "👤 Create New User"; }
   else if (isOperations()) { roleSelect.innerHTML = `<option>Staff</option>`; if (title) title.textContent = "👤 Create New Staff User"; }
+}
+
+function renderAssignmentBoard() {
+  const body = document.getElementById("assignment-body");
+  if (!body) return;
+  normalizeDBShape();
+  if (!isAdmin()) {
+    body.innerHTML = `<tr><td colspan="3"><div class="empty-state">Only admin can manage assignments.</div></td></tr>`;
+    return;
+  }
+  if (!DB.cases.length) {
+    body.innerHTML = `<tr><td colspan="3"><div class="empty-state">No cases available for assignment.</div></td></tr>`;
+    return;
+  }
+  body.innerHTML = DB.cases.slice().reverse().map(c => `
+    <tr>
+      <td><strong>${c.caseId}</strong><br><span class="text-muted">${c.clientName || "-"}</span></td>
+      <td><input class="assignment-input" id="asg-user-${c.caseId}" value="${c.assignedTo || c.assignedOps || c.initiatedBy || ""}" placeholder="user email"></td>
+      <td><button class="btn btn-primary btn-sm" onclick="saveCaseAssignment('${c.caseId}')">Save</button></td>
+    </tr>
+  `).join("");
+}
+
+async function saveCaseAssignment(caseId) {
+  const c = DB.cases.find(x => x.caseId === caseId);
+  if (!c) { toast("Case not found.", "error"); return; }
+  const assignedEmail = (document.getElementById(`asg-user-${caseId}`)?.value || "").trim().toLowerCase();
+  c.assignedTo = assignedEmail;
+  c.assignedOps = assignedEmail; // backward compatibility
+  c.assignedReviewer = "";
+  c.assignedAccountant = "";
+  c.lastUpdateDate = nowIST();
+  addTimelineEntry(caseId, nowIST(), "ACTION", "Assignment Updated", `Assigned to: ${assignedEmail || "-"}`);
+  logActivity("ASSIGNMENT", `Assignments updated for ${caseId}`, caseId);
+  refreshAllUI();
+  toast("Case assignment saved.", "success");
+  await saveDB();
 }
 
 // ══════════════════════════════════════
@@ -1019,6 +1242,7 @@ function refundAmountSummary(action) {
 
 // 1. Submit Detailed Refund Request
 async function submitRefundRequest() {
+  if (!canRaiseRefundRequest()) { toast("You do not have permission to raise refund request.", "error"); return; }
   const get = id => document.getElementById(id).value.trim();
   if (!get("rr-caseid") || !get("rr-amount") || !get("rr-acc-num") || !get("rr-ifsc")) {
     toast("Please fill all mandatory bank details!", "error"); return;
@@ -1028,7 +1252,7 @@ async function submitRefundRequest() {
     reqId: uid("REF"),
     caseId: get("rr-caseid"),
     amount: get("rr-amount"),
-    requestedBy: localStorage.getItem("rrr_user_email"),
+    requestedBy: currentUserEmail(),
     summary: get("rr-summary"),
     ifsc: get("rr-ifsc"),
     accNum: get("rr-acc-num"),
@@ -1039,6 +1263,9 @@ async function submitRefundRequest() {
     status: "Pending Review", // Initial Status
     reviewedBy: "",
     approvedBy: "",
+    reviewerRemark: "",
+    approvedAt: "",
+    lastStatusAtMs: Date.now(),
     timestamp: nowIST()
   };
 
@@ -1049,35 +1276,40 @@ async function submitRefundRequest() {
   logActivity("REFUND_RAISED", `Refund of ₹${row.amount} requested for ${row.caseId}`, row.caseId);
 
   await saveDB();
-  toast("Refund Request sent to Operations for Review!", "success");
-  location.reload(); // UI refresh
+  toast("Refund request sent to reviewer.", "success");
+  ["rr-amount", "rr-summary", "rr-ifsc", "rr-acc-num", "rr-acc-name", "rr-branch", "rr-bankname"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  const caseEl = document.getElementById("rr-caseid");
+  if (caseEl) caseEl.value = "";
+  refreshAllUI();
 }
 
 // 2. Admin/Operations Panel mein Refund List dikhana
 function renderRefundApprovals() {
   const body = document.getElementById("refund-body");
-  if (!body || !DB.refunds) return;
+  if (!body) return;
+  normalizeDBShape();
 
-  const role = currentRole();
-  body.innerHTML = DB.refunds.slice().reverse().map(r => {
-    let actionBtn = "";
+  if (!isAdmin()) {
+    body.innerHTML = `<tr><td colspan="5"><div class="empty-state">Only approver can access this queue.</div></td></tr>`;
+    return;
+  }
+  const pendingForApproval = DB.refunds.filter(r => normalizeRefundStatus(r.status) === "Pending Approval");
+  if (!pendingForApproval.length) {
+    body.innerHTML = `<tr><td colspan="5"><div class="empty-state">No refund pending for approval.</div></td></tr>`;
+    return;
+  }
 
-    // Operations Review Button
-    if (role === "Operations" && r.status === "Pending Review") {
-      actionBtn = `<button class="btn btn-primary btn-sm" onclick="processRefundStep('${r.reqId}', 'review')">✔ Mark Reviewed</button>`;
-    }
-    // Admin Approval Button
-    if (role === "Admin" && r.status === "Pending Approval") {
-      actionBtn = `<button class="btn btn-success btn-sm" onclick="processRefundStep('${r.reqId}', 'approve')">💰 Final Approve</button>`;
-    }
-
+  body.innerHTML = pendingForApproval.slice().reverse().map(r => {
     return `
             <tr>
                 <td>${r.caseId}<br><small>${r.reqId}</small></td>
                 <td>₹${r.amount}<br><small>${r.bankName}</small></td>
-                <td>${r.requestedBy}</td>
-                <td><span class="badge ${r.status === 'Approved' ? 'badge-closed' : 'badge-pending'}">${r.status}</span></td>
-                <td>${actionBtn}</td>
+                <td>${r.requestedBy}<br><small>${r.reviewedBy ? `Reviewed by: ${r.reviewedBy}` : "Waiting review metadata"}</small></td>
+                <td><span class="badge ${getRefundStatusClass(normalizeRefundStatus(r.status))}">${normalizeRefundStatus(r.status)}</span></td>
+                <td><button class="btn btn-success btn-sm" onclick="processRefundStep('${r.reqId}', 'approve')">Final Approve</button></td>
             </tr>
         `;
   }).join("");
@@ -1086,38 +1318,35 @@ function renderRefundApprovals() {
 // 3. Review aur Approve 
 async function processRefundStep(reqId, step) {
   const ref = DB.refunds.find(x => x.reqId === reqId);
-  const forAdmin = DB.refunds.filter(r => r.status === "Pending Admin Approval");
+  if (!ref) { toast("Refund request not found.", "error"); return; }
   const user = localStorage.getItem("rrr_user_email");
 
-  if (step === 'review') {
-    ref.status = "Pending Approval";
-    ref.reviewedBy = user;
-    updateCaseMasterField(ref.caseId, "currentStatus", "Refund Pending Admin");
-    toast("Verified! Now waiting for Admin approval.", "success");
-  } else {
-    ref.status = "Approved";
+  if (step === "approve") {
+    ref.status = "Pending Payment";
     ref.approvedBy = user;
+    ref.approvedAt = nowIST();
+    ref.lastStatusAtMs = Date.now();
     updateCaseMasterField(ref.caseId, "currentStatus", "Refund Processed");
-    toast("Refund Approved & Processed!", "success");
+    addTimelineEntry(ref.caseId, ref.approvedAt, "ACTION", "Refund Approved", `Approved by ${user || "Approver"}`);
+    toast("Refund approved successfully.", "success");
   }
 
   await saveDB();
-  renderRefundApprovals();
+  refreshAllUI();
 }
 function renderRefundDashboard() {
   const body = document.getElementById("refund-dashboard-body"); if (!body) return;
   normalizeDBShape();
   const email = currentUserEmail(), role = currentRole();
-  let rows = DB.actions.filter(a => a.actionType === "Refund Request");
-  if (role === "Staff") rows = [];
-  else if (role === "Operations") rows = rows.filter(a => !a.requestedByEmail || a.requestedByEmail === email);
+  let rows = DB.refunds.slice();
+  if (role === "Staff" || role === "Operations") rows = rows.filter(r => (r.requestedBy || "").toLowerCase() === email);
   if (!rows.length) { body.innerHTML = `<tr><td colspan="5"><div class="empty-state">No refund requests yet.</div></td></tr>`; return; }
-  body.innerHTML = rows.slice().reverse().map(a => `<tr>
-        <td><span class="case-id-display">${a.caseId}</span></td>
-        <td>${refundAmountSummary(a)}</td>
-        <td>${refundRequesterLabel(a)}</td>
-        <td>${formatRefundStatus(a.refundStatus || a.status)}</td>
-        <td>${a.approvedAt ? `Approved by ${a.approvedBy || "Admin"} on ${a.approvedAt}` : "Waiting for Admin approval"}</td>
+  body.innerHTML = rows.slice().reverse().map(r => `<tr>
+        <td><span class="case-id-display">${r.caseId}</span></td>
+        <td>Rs. ${Number(r.amount || 0).toLocaleString("en-IN")}<br><span class="text-muted" style="font-size:11px">${r.summary || "-"}</span></td>
+        <td>${r.requestedBy || "-"}</td>
+        <td><span class="badge ${getRefundStatusClass(normalizeRefundStatus(r.status))}">${normalizeRefundStatus(r.status)}</span></td>
+        <td>${normalizeRefundStatus(r.status) === "Rejected by Reviewer" ? `Remark: ${r.reviewerRemark || "-"}` : (normalizeRefundStatus(r.status) === "Pending Payment" ? "Approved, waiting accountant payment" : (r.approvedAt ? `Approved by ${r.approvedBy || "Approver"} on ${r.approvedAt}` : (r.reviewedBy ? `Reviewed by ${r.reviewedBy}, pending approver` : "Pending reviewer")))}</td>
     </tr>`).join("");
 }
 async function approveRefund(actionId) {
@@ -1227,7 +1456,7 @@ async function importSampleCSV(event) {
     }
 
     if (successCount === 0) {
-      toast("❌ CSV file mein valid data nahi milao!", "error");
+      toast("No valid data found in the CSV file.", "error");
       return;
     }
 
@@ -1319,10 +1548,15 @@ function setupSearchListener() {
 
 function renderReviewerDashboard() {
   const body = document.getElementById("reviewer-refund-body");
-  if (!body || !DB.refunds) return;
+  if (!body) return;
+  normalizeDBShape();
+  if (!isReviewer()) {
+    body.innerHTML = '<tr><td colspan="5" class="empty-state">Only reviewer can access this queue.</td></tr>';
+    return;
+  }
 
   // Sirf wahi dikhao jo "Pending Review" hain
-  const pending = DB.refunds.filter(r => r.status === "Pending Review");
+  const pending = DB.refunds.filter(r => normalizeRefundStatus(r.status) === "Pending Review");
 
   if (pending.length === 0) {
     body.innerHTML = '<tr><td colspan="5" class="empty-state">No pending reviews</td></tr>';
@@ -1345,32 +1579,46 @@ function renderReviewerDashboard() {
 
 async function handleReview(reqId, action) {
   const ref = DB.refunds.find(x => x.reqId === reqId);
+  if (!ref) { toast("Refund request not found.", "error"); return; }
   const user = currentUserEmail();
 
   if (action === 'approve') {
-    ref.status = "Pending Admin Approval";
+    ref.status = "Pending Approval";
     ref.reviewedBy = user;
-    updateCaseMasterField(ref.caseId, "currentStatus", "Reviewed - Waiting for Admin");
-    toast("Verified and sent to Admin!", "success");
+    ref.reviewerRemark = "";
+    ref.lastStatusAtMs = Date.now();
+    updateCaseMasterField(ref.caseId, "currentStatus", "Reviewed - Pending Approval");
+    addTimelineEntry(ref.caseId, nowIST(), "ACTION", "Refund Reviewed", `Reviewed by ${user}`);
+    toast("Reviewed and moved to approver queue.", "success");
   } else {
     const remark = prompt("Enter remark/reason for sending back:");
     if (!remark) return; // Cancel agar remark nahi likha
-    ref.status = "Sent Back by Reviewer";
+    ref.status = "Rejected by Reviewer";
     ref.reviewerRemark = remark;
+    ref.lastStatusAtMs = Date.now();
     updateCaseMasterField(ref.caseId, "currentStatus", "Refund Rejected by Reviewer");
-    toast("Sent back with remark.", "warning");
+    addTimelineEntry(ref.caseId, nowIST(), "ACTION", "Refund Rejected", `Rejected by reviewer: ${remark}`);
+    toast("Rejected and returned to requester with remark.", "info");
   }
 
   await saveDB();
-  renderReviewerDashboard();
+  refreshAllUI();
 }
 
 function renderAccountantDashboard() {
     const body = document.getElementById("accountant-refund-body");
-    if (!body || !DB.refunds) return;
+    if (!body) return;
+    normalizeDBShape();
+    if (currentRole() !== "Accountant") {
+        body.innerHTML = '<tr><td colspan="5" class="empty-state">Only accountant can process payouts.</td></tr>';
+        return;
+    }
 
-    // Sirf wahi dikhao jo Reviewer ne Approve kar diye hain
-    const forPayment = DB.refunds.filter(r => r.status === "Pending Admin Approval" || r.status === "Pending Payment");
+    // Sirf approved requests show
+    const forPayment = DB.refunds.filter(r => {
+        const status = normalizeRefundStatus(r.status);
+        return status === "Pending Payment" || status === "Approved";
+    });
 
     if (forPayment.length === 0) {
         body.innerHTML = '<tr><td colspan="5" class="empty-state">No pending payments</td></tr>';
@@ -1383,11 +1631,17 @@ function renderAccountantDashboard() {
             <td style="font-size:12px; line-height:1.5;">
                 <b>Name:</b> ${r.accHolder}<br>
                 <b>Bank:</b> ${r.bankName} (${r.accType})<br>
+                <b>Branch:</b> ${r.branch || "-"}<br>
                 <b>A/C:</b> ${r.accNum}<br>
                 <b>IFSC:</b> ${r.ifsc}
             </td>
             <td style="color:var(--green); font-weight:bold;">₹${r.amount}</td>
-            <td><small>Reviewed By:<br>${r.reviewedBy}</small></td>
+            <td style="font-size:12px; line-height:1.5;">
+                <b>Requested By:</b> ${r.requestedBy || "-"}<br>
+                <b>Summary:</b> ${r.summary || "-"}<br>
+                <b>Reviewed By:</b> ${r.reviewedBy || "-"}<br>
+                <b>Approved By:</b> ${r.approvedBy || "-"}
+            </td>
             <td>
                 <button class="btn btn-success btn-sm" onclick="markAsPaid('${r.reqId}')">Mark as Paid 💸</button>
             </td>
@@ -1404,6 +1658,7 @@ async function markAsPaid(reqId) {
     ref.transactionId = txnId;
     ref.paymentDate = nowIST();
     ref.paidBy = currentUserEmail();
+    ref.lastStatusAtMs = Date.now();
 
     updateCaseMasterField(ref.caseId, "currentStatus", "Refund Paid");
     addTimelineEntry(ref.caseId, ref.paymentDate, "ACTION", "Payment Processed", `Refund Paid via Txn: ${txnId}`);
@@ -1430,5 +1685,11 @@ window.addEventListener('DOMContentLoaded', () => {
   if (!redirectIfLoggedOut()) {
     loadDB();
     applyPermissions();
+    const requestedBy = document.getElementById("rr-requestedby");
+    if (requestedBy) requestedBy.value = currentUserEmail();
   }
+});
+
+window.addEventListener("resize", () => {
+  if (window.innerWidth > 768) toggleSidebar(false);
 });
