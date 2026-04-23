@@ -479,11 +479,11 @@ function updateDashboard() {
   body.innerHTML = recent.map(c => `
         <tr>
           <td><span class="case-id-display">${c.caseId}</span></td>
+          <td>${c.companyName || "-"}</td>
           <td>${c.clientName}</td>
           <td>${priorityBadge(c.priority)}</td>
           <td>${statusBadge(c.currentStatus)}</td>
           <td>${formatDate(c.lastUpdateDate)}</td>
-          <td>${formatDate(c.nextActionDate) || "-"}</td>
         </tr>`).join("");
 }
 
@@ -639,19 +639,18 @@ function renderCaseMaster() {
     const matchPr = !prio || c.priority === prio;
     return roleMatch && matchQ && matchSt && matchPr;
   }).slice().reverse();
-  if (!filtered.length) { body.innerHTML = `<tr><td colspan="12"><div class="empty-state"><span class="emoji">📂</span>No cases match your filter.</div></td></tr>`; return; }
+  if (!filtered.length) { body.innerHTML = `<tr><td colspan="11"><div class="empty-state"><span class="emoji">📂</span>No cases match your filter.</div></td></tr>`; return; }
   body.innerHTML = filtered.map(c => `<tr>
         <td><span class="case-id-display" style="cursor:pointer;color:var(--blue)" onclick="showCaseDetail('${c.caseId}')">${c.caseId}</span></td>
         <td>${formatDate(c.createdDate)}</td>
-        <td>${c.clientName}<br><span class="text-muted" style="font-size:11px">${c.clientMobile}</span></td>
         <td>${c.companyName}</td>
+        <td>${c.clientName}<br><span class="text-muted" style="font-size:11px">${c.clientMobile}</span></td>
         <td>${c.servicesSold || "-"}</td>
         <td>₹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</td>
         <td>${priorityBadge(c.priority)}</td>
         <td>${statusBadge(c.currentStatus)}</td>
         <td>${c.assignedTo || c.initiatedBy || "-"}</td>
         <td>${formatDate(c.lastUpdateDate)}</td>
-        <td>${formatDate(c.nextActionDate) || "-"}</td>
         <td>
           <button class="btn btn-outline btn-sm" onclick="showCaseDetail('${c.caseId}')">👁 View</button>
           <button class="btn btn-primary btn-sm" onclick="startCaseEdit('${c.caseId}')">✏ Edit</button>
@@ -671,6 +670,8 @@ async function assignCaseToUser(caseId) {
   const emailInput = document.getElementById(`assign-${caseId}`);
   const assigned = (emailInput ? emailInput.value : "").trim().toLowerCase();
   if (!assigned) { toast("Please enter assignee email.", "error"); return; }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(assigned)) { toast("Please enter a valid email address.", "error"); return; }
   c.assignedTo = assigned;
   c.lastUpdateDate = nowIST();
   c.updatedAtMs = Date.now();
