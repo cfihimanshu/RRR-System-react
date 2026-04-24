@@ -182,6 +182,7 @@ async function saveDB(syncSampleData = false) {
 function refreshAllUI() {
   updateDashboard();
   refreshDropdowns();
+  refreshAssigneeFilter();
   refreshNavCount();
   renderCaseMaster();
   renderHistoryTable();
@@ -196,6 +197,9 @@ function refreshAllUI() {
   renderSampleSearch(); // Sample Data search refresh karein
   renderRefundDashboard();
   applyPermissions();
+  
+  // Initialize Lucide Icons
+  if (window.lucide) lucide.createIcons();
 }
 
 // ══════════════════════════════════════
@@ -207,10 +211,10 @@ function todayDate() { return new Date().toLocaleDateString("en-IN", { timeZone:
 // ─ DATE FORMATTER UTILITY ─
 function formatDate(dateInput) {
   if (!dateInput) return "-";
-  
+
   try {
     let date;
-    
+
     // Agar string hai toh parse karein
     if (typeof dateInput === "string") {
       date = new Date(dateInput);
@@ -219,15 +223,15 @@ function formatDate(dateInput) {
     } else {
       return String(dateInput);
     }
-    
+
     // Agar invalid date hai
     if (isNaN(date.getTime())) return String(dateInput);
-    
+
     // Format: DD/MM/YYYY (Simple aur professional)
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const year = date.getFullYear();
-    
+
     return `${day}/${month}/${year}`;
   } catch (e) {
     return String(dateInput);
@@ -279,9 +283,30 @@ function toast(msg, type = "info") {
   const t = document.getElementById("toast");
   const el = document.createElement("div");
   el.className = "toast-msg" + (type === "success" ? " success" : type === "error" ? " error" : "");
-  el.textContent = (type === "success" ? "✅ " : type === "error" ? "❌ " : "ℹ️ ") + msg;
+  
+  const icon = type === "success" ? "check-circle" : type === "error" ? "alert-circle" : "info";
+  el.innerHTML = `<i data-lucide="${icon}" style="width:16px; height:16px; vertical-align: middle; margin-right: 8px;"></i><span>${msg}</span>`;
+  
   t.appendChild(el);
+  if (window.lucide) lucide.createIcons();
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 400); }, 3500);
+}
+
+// ── NOTIFICATION HELPER ──
+const ADMIN_EMAIL = "himanshuakodiya19@gmail.com"; // Replace with actual admin email
+
+async function sendNotification(to, subject, body) {
+  if (!to || !SCRIPT_URL) return;
+  try {
+    await fetch(SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      body: JSON.stringify({ action: "notify", to, subject, body })
+    });
+    console.log(`Notification sent to ${to}: ${subject}`);
+  } catch (e) {
+    console.error("Notification failed:", e);
+  }
 }
 
 function refreshNavCount() {
@@ -298,6 +323,8 @@ function visibleCasesForCurrentUser() {
   return DB.cases.filter(c => ((c.assignedTo || c.initiatedBy || "").toLowerCase() === email));
 }
 
+let tomSelectInstances = {};
+
 function refreshDropdowns() {
   const ids = ["hu-caseid", "al-caseid", "cl-caseid", "tl-filter", "di-caseid", "rr-caseid"];
   const visibleCases = visibleCasesForCurrentUser();
@@ -305,14 +332,27 @@ function refreshDropdowns() {
     const sel = document.getElementById(id);
     if (!sel) return;
     const cur = sel.value;
+
+    if (tomSelectInstances[id]) {
+      tomSelectInstances[id].destroy();
+      tomSelectInstances[id] = null;
+    }
+
     sel.innerHTML = id === "tl-filter" ? `<option value="">-- All Cases --</option>` : `<option value="">-- Select Case --</option>`;
     visibleCases.forEach(c => {
       const opt = document.createElement("option");
       opt.value = c.caseId;
-      opt.textContent = `${c.caseId} - ${c.clientName}`;
+      opt.textContent = `${c.caseId} - ${c.clientName || "Unknown"} (${c.companyName || "-"})`;
       if (c.caseId === cur) opt.selected = true;
       sel.appendChild(opt);
     });
+
+    if (window.TomSelect) {
+      tomSelectInstances[id] = new TomSelect(sel, {
+        create: false,
+        sortField: { field: "text", direction: "asc" }
+      });
+    }
   });
   renderCaseStudyOptions();
 }
@@ -323,6 +363,12 @@ function renderCaseStudyOptions() {
   const q = (document.getElementById("cs-search") ? document.getElementById("cs-search").value : "").toLowerCase().trim();
   const current = sel.value;
   const list = visibleCasesForCurrentUser().filter(c => !q || `${c.caseId} ${c.clientName || ""} ${c.companyName || ""}`.toLowerCase().includes(q));
+
+  if (tomSelectInstances["cs-caseid"]) {
+    tomSelectInstances["cs-caseid"].destroy();
+    tomSelectInstances["cs-caseid"] = null;
+  }
+
   sel.innerHTML = `<option value="">-- Select Case --</option>`;
   list.forEach(c => {
     const opt = document.createElement("option");
@@ -331,6 +377,13 @@ function renderCaseStudyOptions() {
     if (c.caseId === current) opt.selected = true;
     sel.appendChild(opt);
   });
+
+  if (window.TomSelect) {
+    tomSelectInstances["cs-caseid"] = new TomSelect(sel, {
+      create: false,
+      sortField: { field: "text", direction: "asc" }
+    });
+  }
 }
 
 // Clock
@@ -384,17 +437,35 @@ document.querySelectorAll(".tab").forEach(tab => {
     else if (tabName === "reviewer-panel") safe("renderReviewerDashboard");
     else if (tabName === "accountant-dashboard") safe("renderAccountantDashboard");
 
-    if (window.innerWidth <= 900) toggleSidebar(false);
+    if (window.innerWidth <= 1024) toggleSidebar(false);
   });
 });
 
 window.toggleSidebar = function (openState) {
   const sidebar = document.getElementById("sidebar-tabs");
   const overlay = document.getElementById("sidebar-overlay");
-  if (!sidebar || !overlay) return;
-  const shouldOpen = typeof openState === "boolean" ? openState : !sidebar.classList.contains("open");
-  sidebar.classList.toggle("open", shouldOpen);
-  overlay.classList.toggle("open", shouldOpen);
+  const main = document.querySelector(".main");
+  if (!sidebar || !overlay || !main) return;
+
+  if (window.innerWidth > 1024) {
+    // Desktop: Mini Sidebar Toggle
+    // openState true = Expanded, false = Collapsed
+    let shouldCollapse;
+    if (typeof openState === "boolean") {
+      shouldCollapse = !openState;
+    } else {
+      shouldCollapse = !sidebar.classList.contains("collapsed");
+    }
+    
+    sidebar.classList.toggle("collapsed", shouldCollapse);
+    main.classList.toggle("sidebar-collapsed", shouldCollapse);
+    localStorage.setItem("rrr_sidebar_collapsed", shouldCollapse);
+  } else {
+    // Mobile: Drawer Toggle
+    const shouldOpen = typeof openState === "boolean" ? openState : !sidebar.classList.contains("open");
+    sidebar.classList.toggle("open", shouldOpen);
+    overlay.classList.toggle("open", shouldOpen);
+  }
 };
 
 // ══════════════════════════════════════
@@ -409,6 +480,32 @@ window.logout = function () {
   }
 };
 
+// ── QUICK NAV TO CASE MASTER ──
+window.goToCaseMaster = function (caseId) {
+  // 1. Switch active tab class logic
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  const targetTab = document.querySelector('[data-tab="case-master"]');
+  if (targetTab) targetTab.classList.add("active");
+
+  // 2. Hide all sections, show case master
+  document.querySelectorAll(".section").forEach(s => {
+    s.classList.remove("active");
+    s.style.display = "none";
+  });
+  const caseMasterSec = document.getElementById("tab-case-master");
+  if (caseMasterSec) {
+    caseMasterSec.classList.add("active");
+    caseMasterSec.style.display = "block";
+  }
+
+  // 3. Set search query and render
+  const searchInput = document.getElementById("cm-search");
+  if (searchInput) {
+    searchInput.value = caseId;
+    renderCaseMaster();
+  }
+};
+
 // ══════════════════════════════════════
 //  ROLE HELPERS
 // ══════════════════════════════════════
@@ -417,8 +514,8 @@ function normalizeRole(role) {
   if (r === "admin") return "Admin";
   if (r === "approver" || r === "approval") return "Admin";
   if (r === "operations" || r === "operation") return "Operations";
-   if (r === "reviewer") return "Reviewer"; 
-   if (r === "accountant") return "Accountant";
+  if (r === "reviewer") return "Reviewer";
+  if (r === "accountant") return "Accountant";
   return "Staff";
 }
 function currentRole() { return normalizeRole(localStorage.getItem("rrr_user_role")); }
@@ -471,8 +568,41 @@ function updateDashboard() {
   const visibleCases = role === "Admin"
     ? DB.cases
     : DB.cases.filter(c => ((c.assignedTo || c.initiatedBy || "").toLowerCase() === email));
+
   document.getElementById("stat-total").textContent = visibleCases.length;
   document.getElementById("stat-open").textContent = visibleCases.filter(c => c.currentStatus === "Open").length;
+  document.getElementById("stat-settled").textContent = visibleCases.filter(c => c.currentStatus === "Settled" || c.currentStatus === "Closed").length;
+  document.getElementById("stat-high").textContent = visibleCases.filter(c => c.priority === "High").length;
+
+  const today = new Date();
+  const twoDays = new Date(); twoDays.setDate(today.getDate() + 2);
+  let overdue = [], dueSoon = [];
+  visibleCases.forEach(c => {
+    if (!c.nextActionDate || c.currentStatus === "Closed" || c.currentStatus === "Settled") return;
+    const nd = new Date(c.nextActionDate);
+    if (nd < today) overdue.push(c);
+    else if (nd <= twoDays) dueSoon.push(c);
+  });
+  document.getElementById("stat-overdue").textContent = overdue.length;
+  document.getElementById("stat-duesoon").textContent = dueSoon.length;
+
+  const od = document.getElementById("dash-overdue");
+  if (od) {
+    od.innerHTML = overdue.length ? overdue.map(c => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-border); cursor:pointer;" onclick="goToCaseMaster('${c.caseId}')">
+          <span class="case-id-display">${c.caseId}</span> — <strong>${c.clientName}</strong>
+          <span class="overdue" style="float:right">${c.nextActionDate}</span></div>`).join("") :
+      `<div class="empty-state"><i data-lucide="check-circle" style="width:20px; height:20px; color:var(--green);"></i> No overdue actions</div>`;
+  }
+  const ds = document.getElementById("dash-duesoon");
+  if (ds) {
+    ds.innerHTML = dueSoon.length ? dueSoon.map(c => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-border); cursor:pointer;" onclick="goToCaseMaster('${c.caseId}')">
+          <span class="case-id-display">${c.caseId}</span> — <strong>${c.clientName}</strong>
+          <span class="due-soon" style="float:right">${c.nextActionDate}</span></div>`).join("") :
+      `<div class="empty-state"><i data-lucide="check-circle" style="width:20px; height:20px; color:var(--green);"></i> Nothing due soon</div>`;
+  }
+  const lc = document.getElementById("dash-last-check");
+  if (lc) lc.textContent = `${currentRole()} Department | Last checked: ${nowIST()}`;
+
   renderRefundDashboard();
   const body = document.getElementById("dash-recent-body");
   if (!body) return;
@@ -480,7 +610,7 @@ function updateDashboard() {
   if (!recent.length) { body.innerHTML = `<tr><td colspan="6" class="empty-state">No cases yet</td></tr>`; return; }
   body.innerHTML = recent.map(c => `
         <tr>
-          <td><span class="case-id-display">${c.caseId}</span></td>
+          <td><span class="case-id-display" style="cursor:pointer; color:var(--blue); font-weight:bold; text-decoration:underline;" onclick="goToCaseMaster('${c.caseId}')">${c.caseId}</span></td>
           <td>${c.companyName || "-"}</td>
           <td>${c.clientName}</td>
           <td>${priorityBadge(c.priority)}</td>
@@ -513,7 +643,7 @@ function runDailyChecker() {
         <span class="case-id-display">${c.caseId}</span> — <strong>${c.clientName}</strong>
         <span class="due-soon" style="float:right">${c.nextActionDate}</span></div>`).join("") :
     `<div class="empty-state"><span class="emoji">✅</span>Nothing due soon</div>`;
-  document.getElementById("dash-last-check").textContent = "Last checked: " + nowIST();
+  document.getElementById("dash-last-check").textContent = `${currentRole()} Department | Last checked: ${nowIST()}`;
   toast("Daily checker complete!", "success");
 }
 
@@ -572,10 +702,24 @@ async function submitNewCase() {
       DB.cases[idx] = { ...existing, ...row };
       logActivity("CASE_UPDATE", `Updated case for ${row.clientName}`, caseId);
       addTimelineEntry(caseId, nowIST(), "ACTION", "Case Updated", "Case details edited from New Case form");
+
+      // Notify Admin about Case Update
+      sendNotification(ADMIN_EMAIL, "Case Master Updated", `Hello Admin,\n\nA case has been updated.\n\nCase ID: ${caseId}\nUpdated By: ${currentUserEmail()}\nClient: ${row.clientName}\nStatus: ${row.currentStatus}\n\nPlease check the Case Master for latest details.`);
     } else {
       DB.cases.push(row);
       logActivity("CASE_CREATION", `Created new case for ${row.clientName}`, caseId);
       addTimelineEntry(caseId, createdDate, "CASE_CREATION", "Case Created", `New Case Registered (${row.typeOfComplaint})`);
+
+      // Critical Case Alert to Admin
+      const criticalTypes = ["Cyber Complaint", "FIR", "Legal Notice", "Consumer Complaint"];
+      if (criticalTypes.includes(row.typeOfComplaint)) {
+        sendNotification(ADMIN_EMAIL, "⚠️ CRITICAL CASE ALERT", `A new critical case has been registered.\n\nCase ID: ${caseId}\nType: ${row.typeOfComplaint}\nClient: ${row.clientName}\nCompany: ${row.companyName}\n\nPlease review immediately.`);
+      }
+
+      // Assignment Notification
+      if (row.assignedTo && row.assignedTo !== currentUserEmail()) {
+        sendNotification(row.assignedTo, "New Case Assigned", `Hello,\n\nA new case has been assigned to you.\n\nCase ID: ${caseId}\nClient: ${row.clientName}\nPriority: ${row.priority}\n\nPlease check your dashboard for details.`);
+      }
     }
     refreshAllUI();
     document.querySelector('[data-tab="case-master"]').click();
@@ -628,6 +772,7 @@ function renderCaseMaster() {
   const q = (document.getElementById("cm-search") ? document.getElementById("cm-search").value : "").toLowerCase();
   const status = document.getElementById("cm-filter-status") ? document.getElementById("cm-filter-status").value : "";
   const prio = document.getElementById("cm-filter-priority") ? document.getElementById("cm-filter-priority").value : "";
+  const assignee = document.getElementById("cm-filter-assignee") ? document.getElementById("cm-filter-assignee").value : "";
   const body = document.getElementById("cm-body");
   if (!body) return;
   const role = currentRole();
@@ -639,10 +784,12 @@ function renderCaseMaster() {
     const matchQ = !q || JSON.stringify(c).toLowerCase().includes(q);
     const matchSt = !status || c.currentStatus === status;
     const matchPr = !prio || c.priority === prio;
-    return roleMatch && matchQ && matchSt && matchPr;
+    const matchAs = !assignee || (c.assignedTo || c.initiatedBy || "").toLowerCase() === assignee.toLowerCase();
+    return roleMatch && matchQ && matchSt && matchPr && matchAs;
   }).slice().reverse();
-  if (!filtered.length) { body.innerHTML = `<tr><td colspan="11"><div class="empty-state"><span class="emoji">📂</span>No cases match your filter.</div></td></tr>`; return; }
+  if (!filtered.length) { body.innerHTML = `<tr><td colspan="12"><div class="empty-state"><i data-lucide="folder-open" style="width:24px; height:24px; opacity:0.5;"></i> No cases match your filter.</div></td></tr>`; updateBulkActionVisibility(); return; }
   body.innerHTML = filtered.map(c => `<tr>
+        <td><input type="checkbox" class="cm-row-select" data-id="${c.caseId}" onchange="updateBulkActionVisibility()"></td>
         <td><span class="case-id-display" style="cursor:pointer;color:var(--blue)" onclick="showCaseDetail('${c.caseId}')">${c.caseId}</span></td>
         <td>${formatDate(c.createdDate)}</td>
         <td>${c.companyName}</td>
@@ -654,8 +801,8 @@ function renderCaseMaster() {
         <td>${c.assignedTo || c.initiatedBy || "-"}</td>
         <td>${formatDate(c.lastUpdateDate)}</td>
         <td>
-          <button class="btn btn-outline btn-sm" onclick="showCaseDetail('${c.caseId}')">👁 View</button>
-          <button class="btn btn-primary btn-sm" onclick="startCaseEdit('${c.caseId}')">✏ Edit</button>
+          <button class="btn btn-outline btn-sm" onclick="showCaseDetail('${c.caseId}')"><i data-lucide="eye" style="width:12px; height:12px;"></i> View</button>
+          <button class="btn btn-primary btn-sm" onclick="startCaseEdit('${c.caseId}')"><i data-lucide="edit-3" style="width:12px; height:12px;"></i> Edit</button>
           ${currentRole() === "Admin" ? `
           <div style="display:flex; gap:6px; margin-top:6px;">
             <input id="assign-${c.caseId}" placeholder="assign email" value="${c.assignedTo || ""}" style="min-width:150px; font-size:11px; padding:5px 7px;">
@@ -663,6 +810,83 @@ function renderCaseMaster() {
           </div>` : ""}
         </td>
     </tr>`).join("");
+  updateBulkActionVisibility();
+}
+
+function refreshAssigneeFilter() {
+  const el = document.getElementById("cm-filter-assignee");
+  if (!el) return;
+  const emails = new Set();
+  DB.cases.forEach(c => {
+    if (c.assignedTo) emails.add(c.assignedTo.trim().toLowerCase());
+    if (c.initiatedBy) emails.add(c.initiatedBy.trim().toLowerCase());
+  });
+  const currentVal = el.value;
+  el.innerHTML = '<option value="">All Assignees</option>' + Array.from(emails).sort().map(e => `<option value="${e}">${e}</option>`).join("");
+  el.value = currentVal;
+
+  if (window.TomSelect) {
+    if (tomSelectInstances["cm-filter-assignee"]) {
+      tomSelectInstances["cm-filter-assignee"].destroy();
+    }
+    tomSelectInstances["cm-filter-assignee"] = new TomSelect(el, {
+      create: false,
+      sortField: { field: "text", direction: "asc" }
+    });
+  }
+}
+
+function toggleSelectAll(master) {
+  const cbs = document.querySelectorAll(".cm-row-select");
+  cbs.forEach(cb => cb.checked = master.checked);
+  updateBulkActionVisibility();
+}
+
+function updateBulkActionVisibility() {
+  const cbs = document.querySelectorAll(".cm-row-select:checked");
+  const bar = document.getElementById("cm-bulk-bar");
+  const countEl = document.getElementById("cm-selected-count");
+  if (!bar || !countEl) return;
+  if (cbs.length > 0) {
+    bar.style.display = "block";
+    countEl.textContent = `${cbs.length} case${cbs.length > 1 ? "s" : ""} selected`;
+  } else {
+    bar.style.display = "none";
+    const master = document.getElementById("cm-select-all");
+    if (master) master.checked = false;
+  }
+}
+
+async function bulkAssignCases() {
+  if (currentRole() !== "Admin") { toast("Only admin can bulk assign cases.", "error"); return; }
+  const email = document.getElementById("cm-bulk-assign-email").value.trim().toLowerCase();
+  if (!email) { toast("Enter staff email for assignment.", "error"); return; }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) { toast("Enter a valid email.", "error"); return; }
+
+  const cbs = document.querySelectorAll(".cm-row-select:checked");
+  const ids = Array.from(cbs).map(cb => cb.getAttribute("data-id"));
+
+  let count = 0;
+  ids.forEach(id => {
+    const c = DB.cases.find(x => x.caseId === id);
+    if (c) {
+      c.assignedTo = email;
+      c.lastUpdateDate = nowIST();
+      c.updatedAtMs = Date.now();
+      addTimelineEntry(id, nowIST(), "ACTION", "Bulk Assigned", `Case bulk assigned to ${email}`);
+      count++;
+    }
+  });
+
+  toast(`Successfully assigned ${count} cases to ${email}`, "success");
+
+  // Notification for assignment
+  sendNotification(email, "Cases Assigned to You (Bulk)", `Hello,\n\n${count} new cases have been assigned to you via bulk assignment.\n\nPlease check your Case Master register for updates.`);
+
+  document.getElementById("cm-bulk-assign-email").value = "";
+  refreshAllUI();
+  await saveDB();
 }
 
 async function assignCaseToUser(caseId) {
@@ -679,6 +903,10 @@ async function assignCaseToUser(caseId) {
   c.updatedAtMs = Date.now();
   addTimelineEntry(caseId, nowIST(), "ACTION", "Case Assigned", `Assigned to ${assigned}`);
   toast(`Case assigned to ${assigned}`, "success");
+
+  // Notification for assignment
+  sendNotification(assigned, "New Case Assigned", `Hello,\n\nCase ID ${caseId} has been assigned to you.\n\nPlease check your Case Master register for updates.`);
+
   refreshAllUI();
   await saveDB();
 }
@@ -718,8 +946,10 @@ function showCaseDetail(caseId) {
         <div style="font-weight:600;margin-bottom:8px">Case Summary</div>
         <div style="font-size:13px;background:#f8f9fa;padding:10px;border-radius:4px;margin-bottom:16px">${c.caseSummary || "No summary available."}</div>
         ${c.firFileLink ? `<div style="font-weight:600;margin-bottom:8px">Uploaded FIR / Image</div><div style="margin-bottom:16px">${getFilePreviewHTML(c.firFileLink, "FIR Copy")}</div>` : ""}
-        <div style="font-weight:600;margin-bottom:8px">Timeline (${tl.length} entries)</div>
-        ${tl.length ? `<ul class="timeline">${tl.map(t => `<li><div class="tl-meta">${formatDate(t.logTimestamp)}</div><div class="tl-event">${t.eventType}: ${t.summary}</div></li>`).join("")}</ul>` : `<div class="text-muted" style="font-size:13px">No timeline entries yet.</div>`}
+        ${isAdmin() ? `
+          <div style="font-weight:600;margin-bottom:8px">Timeline (${tl.length} entries)</div>
+          ${tl.length ? `<ul class="timeline">${tl.map(t => `<li><div class="tl-meta">${formatDate(t.logTimestamp)}</div><div class="tl-event">${t.eventType}: ${t.summary}</div></li>`).join("")}</ul>` : `<div class="text-muted" style="font-size:13px">No timeline entries yet.</div>`}
+        ` : ""}
         <hr class="divider"/>
         <div class="btn-row"><button class="btn btn-outline btn-sm" onclick="closeModal()">Close</button></div>`;
   document.getElementById("case-modal").classList.add("open");
@@ -781,8 +1011,9 @@ async function processFile(file, zoneId, dataId, chipId) {
     document.getElementById(dataId).value = result;
     const chipEl = document.getElementById(chipId);
     const isImg = file.type.startsWith("image/");
-    chipEl.innerHTML = `<div class="file-chip"><span>${isImg ? "🖼️" : "📄"} <strong>${file.name}</strong></span><span class="remove-file" onclick="clearFileUpload('${chipId}','${dataId}','${zoneId}')">✕</span></div>`;
+    chipEl.innerHTML = `<div class="file-chip"><span><i data-lucide="${isImg ? 'image' : 'file-text'}" style="width:14px; height:14px; vertical-align: middle;"></i> <strong>${file.name}</strong></span><span class="remove-file" onclick="clearFileUpload('${chipId}','${dataId}','${zoneId}')"><i data-lucide="x" style="width:14px; height:14px;"></i></span></div>`;
     toast(isImg ? "Image optimized and attached." : "File attached.", "success");
+    if (window.lucide) lucide.createIcons();
   } catch (e) {
     console.error(e);
     toast("File upload process failed.", "error");
@@ -808,7 +1039,7 @@ function getDriveFileId(link) {
 function getFilePreviewHTML(link, label = "View") {
   if (!link || link === "-") return '<span style="color:#ccc">No File</span>';
   const escaped = String(link).replace(/"/g, "&quot;");
-  return `<button onclick="previewStoredFile(this.getAttribute('data-file'))" data-file="${escaped}" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;">👁️ ${label}</button>`;
+  return `<button onclick="previewStoredFile(this.getAttribute('data-file'))" data-file="${escaped}" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;"><i data-lucide="eye" style="width:11px; height:11px; vertical-align: middle;"></i> ${label}</button>`;
 }
 function previewStoredFile(link) {
   const modal = document.getElementById("file-preview-modal");
@@ -862,7 +1093,7 @@ function renderTimeline() {
   const container = document.getElementById("timeline-container");
   if (!container) return;
   const entries = DB.timeline.filter(e => !filter || e.caseId === filter).sort((a, b) => new Date(b.logTimestamp) - new Date(a.logTimestamp));
-  if (!entries.length) { container.innerHTML = `<div class="empty-state"><span class="emoji">🕒</span>No timeline entries yet.</div>`; return; }
+  if (!entries.length) { container.innerHTML = `<div class="empty-state"><i data-lucide="clock" style="width:24px; height:24px; opacity:0.5;"></i> No timeline entries yet.</div>`; return; }
   const sc = { CASE_CREATION: "background:#e8f0fe;color:#1a73e8", HISTORY: "background:#fef7e0;color:#e65100", ACTION: "background:#e6f4ea;color:#1e7e34", COMMUNICATION: "background:#f3e8ff;color:#7c3aed" };
   container.innerHTML = `<ul class="timeline">${entries.map(e => `<li>
         <div class="tl-meta"><strong>${formatDate(e.logTimestamp)}</strong> | <span class="case-id-display">${e.caseId}</span> | <span class="badge" style="${sc[e.source] || ''}">${e.source}</span></div>
@@ -1006,7 +1237,7 @@ function renderDocIndex() {
   const body = document.getElementById("doc-body");
   if (!body) return;
   const filtered = DB.docs.filter(d => !q || JSON.stringify(d).toLowerCase().includes(q));
-  if (!filtered.length) { body.innerHTML = `<tr><td colspan="8"><div class="empty-state"><span class="emoji">📁</span>No documents indexed yet.</div></td></tr>`; return; }
+  if (!filtered.length) { body.innerHTML = `<tr><td colspan="8"><div class="empty-state"><i data-lucide="folder" style="width:24px; height:24px; opacity:0.5;"></i> No documents indexed yet.</div></td></tr>`; return; }
   body.innerHTML = filtered.slice().reverse().map(d => `<tr>
         <td><span class="case-id-display">${d.docId}</span></td>
         <td><span class="case-id-display">${d.caseId}</span></td>
@@ -1194,13 +1425,13 @@ function autoGenerateTitle() {
 //  PERMISSIONS
 // ══════════════════════════════════════
 function allowedTabsForRole(role) {
-  if (role === "Admin") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "timeline", "doc-index", "case-study", "admin-panel", "internal-search", "reviewer-panel","accountant-dashboard"];
+  if (role === "Admin") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "timeline", "doc-index", "case-study", "admin-panel", "internal-search", "reviewer-panel", "accountant-dashboard"];
 
-  if (role === "Accountant") return ["dashboard", "accountant-dashboard", "internal-search", "doc-index"];
+  if (role === "Accountant") return ["dashboard", "accountant-dashboard", "internal-search",];
 
-  if (role === "Reviewer") return ["dashboard", "reviewer-panel", "internal-search", "doc-index", "timeline"];
+  if (role === "Reviewer") return ["dashboard", "reviewer-panel", "internal-search"];
 
-  if (role === "Operations") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "timeline", "doc-index", "case-study", "internal-search"];
+  if (role === "Operations") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "doc-index", "case-study", "internal-search"];
 
   return ["dashboard", "new-case", "history", "action-log", "comm-log", "doc-index", "internal-search"];
 }
@@ -1211,7 +1442,11 @@ function applyPermissions() {
   const refundCard = document.getElementById("refund-dashboard-card"); if (refundCard) refundCard.style.display = "";
   const refundRequestCard = document.getElementById("refund-request-card"); if (refundRequestCard) refundRequestCard.style.display = canRaiseRefundRequest() ? "" : " none";
   const adminRefundCard = document.getElementById("admin-refund-card"); if (adminRefundCard) adminRefundCard.style.display = role === "Admin" ? "" : " none";
-  const adminTab = document.querySelector('[data-tab="admin-panel"]'); if (adminTab) adminTab.textContent = role === "Admin" ? "⚙️ Admin Panel" : "⚙️ User Panel";
+  const adminTab = document.querySelector('[data-tab="admin-panel"]');
+  if (adminTab) {
+    const span = adminTab.querySelector("span");
+    if (span) span.textContent = role === "Admin" ? "Admin Panel" : "User Panel";
+  }
   const adminTitle = document.getElementById("admin-panel-title"); if (adminTitle) adminTitle.textContent = role === "Admin" ? "Admin Panel" : "Operations User Panel";
   const adminSub = document.getElementById("admin-panel-subtitle"); if (adminSub) adminSub.textContent = role === "Admin" ? "Approve refunds and create users" : "Create staff users and track refund requests";
   const requestedBy = document.getElementById("rr-requestedby"); if (requestedBy) requestedBy.value = currentUserEmail();
@@ -1283,6 +1518,10 @@ async function submitRefundRequest() {
 
   await saveDB();
   toast("Refund request sent to reviewer.", "success");
+
+  // Notify Admin about new refund request
+  sendNotification(ADMIN_EMAIL, "New Refund Request Raised", `Hello Admin,\n\nA new refund request has been raised.\n\nCase ID: ${row.caseId}\nAmount: ₹${row.amount}\nRequested By: ${row.requestedBy}\nSummary: ${row.summary}\n\nPlease review the request in the Admin Panel.`);
+
   ["rr-amount", "rr-summary", "rr-ifsc", "rr-acc-num", "rr-acc-name", "rr-branch", "rr-bankname"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
@@ -1376,6 +1615,11 @@ async function createNewUser() {
   if (!email || !pass) { toast("Email and password are required.", "error"); return; }
   if (isOperations() && role !== "Staff") { toast("Operations can create Staff users only.", "error"); return; }
   await fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify({ action: "createUser", email, pass, role }), mode: "no-cors" });
+
+  // Send Notifications
+  sendNotification(ADMIN_EMAIL, "New User Created - RRR System", `A new user account has been created.\n\nEmail: ${email}\nRole: ${role}\nCreated By: ${currentUserEmail()}`);
+  sendNotification(email, "Welcome to RRR System - Account Created", `Hello,\n\nYour account has been created on RRR System.\n\nRole: ${role}\nTemporary Password: ${pass}\n\nPlease login and change your password if required.\n\nRegards,\nRRR Team`);
+
   document.getElementById("new-user-email").value = ""; document.getElementById("new-user-pass").value = "";
   toast("User Created Successfully!", "success");
 }
@@ -1531,73 +1775,76 @@ function downloadCaseImportTemplate() {
 //  DATA SEARCH (SAMPLE CSV)
 // ══════════════════════════════════════
 // ── 1. IMPORT SAMPLE CSV (Cloud Ready) ──
-async function importSampleCSV(event) {
+// ── 1. IMPORT SAMPLE EXCEL (Cloud Ready) ──
+async function importSampleExcel(event) {
   const file = event.target.files[0];
   if (!file) return;
 
   const reader = new FileReader();
   reader.onload = async function (e) {
-    const text = e.target.result;
-    const lines = text.split(/\r?\n/);
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+      const firstSheet = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheet];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-    // RAM data clear karein aur naya bharo
-    DB.sampleData = [];
+      if (rows.length < 2) {
+        toast("No data found in the Excel file.", "error");
+        return;
+      }
 
-    let successCount = 0;
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
+      // RAM data clear karein aur naya bharo
+      DB.sampleData = [];
+      let successCount = 0;
 
-      try {
-        // Regex use kiya taaki Company Name ke andar wale commas block na karein
-        const col = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-        const clean = (val) => val ? val.replace(/^"|"$/g, "").trim() : "";
+      for (let i = 1; i < rows.length; i++) {
+        const col = rows[i];
+        if (!col || col.length === 0) continue;
 
-        // Mapping (A to L columns)
+        const clean = (val) => val != null ? String(val).trim() : "";
+
         const record = {
-          date: clean(col[0]),  // Date
-          company: clean(col[1]),  // Company Name
-          person: clean(col[2]),  // Contact Person
-          contact: clean(col[3]),  // Phone
-          email: clean(col[4]),  // Email
-          service: clean(col[5]),  // Service
-          bde: clean(col[6]),  // BDE
-          total: clean(col[7]),  // Total Amount
-          net: clean(col[8]),  // Amt without GST
-          status: clean(col[9]),  // Work Status
-          dept: clean(col[10]), // Department
-          mou: clean(col[11])  // MOU Status
+          date: col[0] || "",             // A: Date
+          company: clean(col[1]),        // B: Company Name
+          person: clean(col[2]),         // C: Contact Person
+          contact: clean(col[3]),        // D: Contact
+          email: clean(col[4]),          // E: Email ID
+          service: clean(col[5]),        // F: Service
+          bde: clean(col[6]),            // G: BDE
+          total: clean(col[7]),          // H: Total Amount (With GST)
+          net: clean(col[8]),            // I: Amt. without GST
+          status: clean(col[9]),         // J: Work Status
+          dept: clean(col[10]),          // K: Department
+          mou: clean(col[11]),           // L: MOU Status
+          remarks: clean(col[12]),       // M: Remarks
+          mouSignedAmt: clean(col[13])   // N: MOU Signed Amount
         };
-        
+
         DB.sampleData.push(record);
         successCount++;
-      } catch (err) {
-        console.warn("Row parse error at line " + i, err);
       }
-    }
 
-    if (successCount === 0) {
-      toast("No valid data found in the CSV file.", "error");
-      return;
-    }
+      console.log("✅ Parsed " + successCount + " records from Excel");
+      toast(`✅ ${successCount} Records Uploaded Successfully! Saving to Cloud...`, "success");
 
-    console.log("✅ Parsed " + successCount + " records from CSV");
-    toast(`✅ ${successCount} Records Uploaded Successfully! Saving to Cloud...`, "success");
+      renderSampleSearch();
 
-    // Frontend refresh karein
-    renderSampleSearch();
-
-    // Seedha Cloud par save karein (No localStorage needed)
-    try {
-      await saveDB(true);
-      console.log("✅ Sample data successfully synced to Cloud");
-      toast("✅ Data saved to Cloud successfully!", "success");
+      try {
+        await saveDB(true);
+        console.log("✅ Sample data successfully synced to Cloud");
+        toast("✅ Data saved to Cloud successfully!", "success");
+      } catch (err) {
+        console.error("❌ Cloud save failed:", err);
+        toast("⚠️ Local save successful but cloud sync failed.", "error");
+      }
     } catch (err) {
-      console.error("❌ Cloud save failed:", err);
-      toast("⚠️ Local save successful but cloud sync failed. Please check internet.", "error");
+      console.error(err);
+      toast("Excel parse failed. Check file format.", "error");
     }
   };
-  reader.readAsText(file);
-  event.target.value = ""; // Input clear karein agli file ke liye
+  reader.readAsArrayBuffer(file);
+  event.target.value = "";
 }
 
 window.clearAppCache = function () {
@@ -1621,12 +1868,12 @@ function renderSampleSearch() {
   // Data check
   if (!DB || !DB.sampleData || !Array.isArray(DB.sampleData)) {
     console.warn("DB.sampleData is not initialized:", DB ? DB.sampleData : "DB missing");
-    body.innerHTML = `<tr><td colspan="12" class="empty-state">❌ No data available. Please upload CSV first.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14" class="empty-state"><i data-lucide="alert-circle" style="width:24px; height:24px; color:var(--red);"></i> No data available. Please upload Excel first.</td></tr>`;
     return;
   }
 
   if (!DB.sampleData.length) {
-    body.innerHTML = `<tr><td colspan="12" class="empty-state">📁 No records uploaded yet. Click 'Upload Sample CSV' to add data.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14" class="empty-state"><i data-lucide="file-spreadsheet" style="width:24px; height:24px; opacity:0.5;"></i> No records uploaded yet. Click 'Upload Sample Excel' to add data.</td></tr>`;
     return;
   }
 
@@ -1641,7 +1888,7 @@ function renderSampleSearch() {
   });
 
   if (!filtered.length) {
-    body.innerHTML = `<tr><td colspan="12" class="empty-state">🔍 No matching results found for "${query}"</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14" class="empty-state">🔍 No matching results found for "${query}"</td></tr>`;
     return;
   }
 
@@ -1662,6 +1909,8 @@ function renderSampleSearch() {
             <td><span class="badge ${d.status === 'Completed' ? 'badge-closed' : 'badge-pending'}">${d.status || "Pending"}</span></td>
             <td>${d.dept || "-"}</td>
             <td>${d.mou || "No"}</td>
+            <td>${d.remarks || "-"}</td>
+            <td>₹${d.mouSignedAmt || "0"}</td>
         </tr>
     `).join("");
 }
@@ -1735,26 +1984,26 @@ async function handleReview(reqId, action) {
 }
 
 function renderAccountantDashboard() {
-    const body = document.getElementById("accountant-refund-body");
-    if (!body) return;
-    normalizeDBShape();
-    if (currentRole() !== "Accountant") {
-        body.innerHTML = '<tr><td colspan="5" class="empty-state">Only accountant can process payouts.</td></tr>';
-        return;
-    }
+  const body = document.getElementById("accountant-refund-body");
+  if (!body) return;
+  normalizeDBShape();
+  if (currentRole() !== "Accountant") {
+    body.innerHTML = '<tr><td colspan="5" class="empty-state">Only accountant can process payouts.</td></tr>';
+    return;
+  }
 
-    // Sirf approved requests show
-    const forPayment = DB.refunds.filter(r => {
-        const status = normalizeRefundStatus(r.status);
-        return status === "Pending Payment" || status === "Approved";
-    });
+  // Sirf approved requests show
+  const forPayment = DB.refunds.filter(r => {
+    const status = normalizeRefundStatus(r.status);
+    return status === "Pending Payment" || status === "Approved";
+  });
 
-    if (forPayment.length === 0) {
-        body.innerHTML = '<tr><td colspan="5" class="empty-state">No pending payments</td></tr>';
-        return;
-    }
+  if (forPayment.length === 0) {
+    body.innerHTML = '<tr><td colspan="5" class="empty-state">No pending payments</td></tr>';
+    return;
+  }
 
-    body.innerHTML = forPayment.map(r => `
+  body.innerHTML = forPayment.map(r => `
         <tr>
             <td><strong>${r.caseId}</strong><br><small>${r.reqId}</small></td>
             <td style="font-size:12px; line-height:1.5;">
@@ -1779,22 +2028,22 @@ function renderAccountantDashboard() {
 }
 
 async function markAsPaid(reqId) {
-    const txnId = prompt("Enter Transaction ID / UTR Number:");
-    if (!txnId) return;
+  const txnId = prompt("Enter Transaction ID / UTR Number:");
+  if (!txnId) return;
 
-    const ref = DB.refunds.find(x => x.reqId === reqId);
-    ref.status = "Refund Completed";
-    ref.transactionId = txnId;
-    ref.paymentDate = nowIST();
-    ref.paidBy = currentUserEmail();
-    ref.lastStatusAtMs = Date.now();
+  const ref = DB.refunds.find(x => x.reqId === reqId);
+  ref.status = "Refund Completed";
+  ref.transactionId = txnId;
+  ref.paymentDate = nowIST();
+  ref.paidBy = currentUserEmail();
+  ref.lastStatusAtMs = Date.now();
 
-    updateCaseMasterField(ref.caseId, "currentStatus", "Refund Paid");
-    addTimelineEntry(ref.caseId, ref.paymentDate, "ACTION", "Payment Processed", `Refund Paid via Txn: ${txnId}`);
-    
-    toast("Payment recorded successfully!", "success");
-    await saveDB();
-    renderAccountantDashboard();
+  updateCaseMasterField(ref.caseId, "currentStatus", "Refund Paid");
+  addTimelineEntry(ref.caseId, ref.paymentDate, "ACTION", "Payment Processed", `Refund Paid via Txn: ${txnId}`);
+
+  toast("Payment recorded successfully!", "success");
+  await saveDB();
+  renderAccountantDashboard();
 }
 
 // ══════════════════════════════════════
@@ -1816,9 +2065,20 @@ window.addEventListener('DOMContentLoaded', () => {
     applyPermissions();
     const requestedBy = document.getElementById("rr-requestedby");
     if (requestedBy) requestedBy.value = currentUserEmail();
+
+    // Restore Sidebar State
+    if (window.innerWidth > 1024) {
+      const isCollapsed = localStorage.getItem("rrr_sidebar_collapsed") === "true";
+      if (isCollapsed) {
+        const sidebar = document.getElementById("sidebar-tabs");
+        const main = document.querySelector(".main");
+        if (sidebar) sidebar.classList.add("collapsed");
+        if (main) main.classList.add("sidebar-collapsed");
+      }
+    }
   }
 });
 
 window.addEventListener("resize", () => {
-  if (window.innerWidth > 768) toggleSidebar(false);
+  if (window.innerWidth > 1024) toggleSidebar(false);
 });
