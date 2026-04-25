@@ -29,15 +29,18 @@
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.2);
   border-radius: 10px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0,0,0,0.3);
+  background: rgba(0, 0, 0, 0.3);
 }
 
 
@@ -81,7 +84,8 @@ body {
   justify-content: center;
 }
 
-.navbar .logo-text, .navbar .logo-engine {
+.navbar .logo-text,
+.navbar .logo-engine {
   font-size: 16px;
   font-weight: 700;
   line-height: 1;
@@ -247,6 +251,14 @@ body {
   width: calc(100% - 72px);
 }
 
+/* Global Icon Sizing in Buttons */
+.btn-sm i,
+.btn-sm svg {
+  width: 14px !important;
+  height: 14px !important;
+  vertical-align: middle;
+}
+
 #sidebar-overlay {
   display: none;
 }
@@ -303,52 +315,107 @@ body {
   font-size: 15px;
 }
 
-/* ── Stat tiles ── */
+/* ── Modern Stat Cards ── */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* ── Modern Compact Stat Cards ── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
-.stat {
-  background: linear-gradient(160deg, #ffffff 0%, #f6f9ff 100%);
-  border: 1px solid #d9e3f7;
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  text-align: center;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, .06);
+.stat-card {
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
 }
 
-.stat .val {
-  font-size: 28px;
-  font-weight: 700;
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon i {
+  width: 16px;
+  height: 16px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1e293b;
   line-height: 1;
 }
 
-.stat .lbl {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 4px;
-  text-transform: uppercase;
-  letter-spacing: .5px;
+.stat-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.stat.blue .val {
-  color: var(--blue);
+
+/* Icon Background Colors */
+.icon-blue {
+  background: #eff6ff;
+  color: #3b82f6;
 }
 
-.stat.green .val {
-  color: var(--green);
+.icon-green {
+  background: #ecfdf5;
+  color: #10b981;
 }
 
-.stat.red .val {
-  color: var(--red);
+.icon-red {
+  background: #fef2f2;
+  color: #ef4444;
 }
 
-.stat.orange .val {
-  color: #e65100;
+.icon-orange {
+  background: #fff7ed;
+  color: #f97316;
 }
+
+.icon-purple {
+  background: #f5f3ff;
+  color: #8b5cf6;
+}
+
+.icon-indigo {
+  background: #eef2ff;
+  color: #6366f1;
+}
+
+.icon-cyan {
+  background: #ecfeff;
+  color: #06b6d4;
+}
+
 
 /* ── Forms ── */
 .form-grid {
@@ -1180,41 +1247,78 @@ gap: 4px;
   #sidebar-overlay.open {
     display: block;
     position: fixed;
-    top: 56px; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.4);
+    top: 56px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
     z-index: 150;
   }
 
   /* Compact spacing for mobile */
-  .card { padding: 14px; }
-  .section-title { font-size: 16px; }
-  th, td { padding: 8px 9px; font-size: 12px; }
-  .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card {
+    padding: 14px;
+  }
+
+  .section-title {
+    font-size: 16px;
+  }
+
+  th,
+  td {
+    padding: 8px 9px;
+    font-size: 12px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
 
   /* Forms & Grids single column */
-  .form-grid, .form-grid.cols3,
+  .form-grid,
+  .form-grid.cols3,
   #refund-request-card .form-grid,
-  #tab-history .form-grid, #tab-action-log .form-grid,
-  #tab-comm-log .form-grid, #tab-doc-index .form-grid {
+  #tab-history .form-grid,
+  #tab-action-log .form-grid,
+  #tab-comm-log .form-grid,
+  #tab-doc-index .form-grid {
     grid-template-columns: 1fr !important;
   }
 
-  .field.span2, .field.span3,
-  #refund-request-card .field.span2, #refund-request-card .field.span3,
-  #tab-history .field.span2, #tab-history .field.span3 {
+  .field.span2,
+  .field.span3,
+  #refund-request-card .field.span2,
+  #refund-request-card .field.span3,
+  #tab-history .field.span2,
+  #tab-history .field.span3 {
     grid-column: span 1 !important;
   }
 
   /* Row/Col stacking */
-  #tab-history .row, #tab-action-log .row, #tab-comm-log .row, #tab-case-study .row {
+  #tab-history .row,
+  #tab-action-log .row,
+  #tab-comm-log .row,
+  #tab-case-study .row {
     flex-direction: column;
   }
-  #tab-history .col, #tab-action-log .col, #tab-comm-log .col, #tab-case-study .col {
+
+  #tab-history .col,
+  #tab-action-log .col,
+  #tab-comm-log .col,
+  #tab-case-study .col {
     min-width: 100%;
     max-width: 100% !important;
   }
 
   /* Spacing for mobile inputs */
-  input, select, textarea { min-height: 40px; }
-  textarea { min-height: 80px; }
+  input,
+  select,
+  textarea {
+    min-height: 40px;
+  }
+
+  textarea {
+    min-height: 80px;
+  }
 }

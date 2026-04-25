@@ -197,7 +197,7 @@ function refreshAllUI() {
   renderSampleSearch(); // Sample Data search refresh karein
   renderRefundDashboard();
   applyPermissions();
-  
+
   // Initialize Lucide Icons
   if (window.lucide) lucide.createIcons();
 }
@@ -283,10 +283,10 @@ function toast(msg, type = "info") {
   const t = document.getElementById("toast");
   const el = document.createElement("div");
   el.className = "toast-msg" + (type === "success" ? " success" : type === "error" ? " error" : "");
-  
+
   const icon = type === "success" ? "check-circle" : type === "error" ? "alert-circle" : "info";
   el.innerHTML = `<i data-lucide="${icon}" style="width:16px; height:16px; vertical-align: middle; margin-right: 8px;"></i><span>${msg}</span>`;
-  
+
   t.appendChild(el);
   if (window.lucide) lucide.createIcons();
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 400); }, 3500);
@@ -390,54 +390,76 @@ function renderCaseStudyOptions() {
 setInterval(() => { const el = document.getElementById("clock"); if (el) el.textContent = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }); }, 1000);
 
 // ══════════════════════════════════════
-//  *** TAB SWITCHER — THE CORE FIX ***
+//  *** TAB SWITCHER & HISTORY ***
 // ══════════════════════════════════════
+let tabHistory = ["dashboard"];
+
+window.switchTab = function (tabName, skipHistory = false) {
+  const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (!tab) return;
+
+  // Track History
+  const currentTab = document.querySelector(".tab.active")?.dataset.tab || "dashboard";
+  if (!skipHistory && currentTab !== tabName) {
+    tabHistory.push(currentTab);
+  }
+
+  // Show/Hide Back Button
+  const backBtn = document.getElementById("nav-back-btn");
+  if (backBtn) backBtn.style.display = tabHistory.length > 1 ? "flex" : "none";
+
+  // Step 1: Remove active from all tabs
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+
+  // Step 2: FORCE HIDE all sections
+  document.querySelectorAll(".section").forEach(s => {
+    s.classList.remove("active");
+    s.style.setProperty("display", "none", "important");
+  });
+
+  // Step 3: Activate clicked tab
+  tab.classList.add("active");
+
+  // Step 4: FORCE SHOW target section
+  const target = document.getElementById("tab-" + tabName);
+  if (target) {
+    target.classList.add("active");
+    target.style.setProperty("display", "block", "important");
+    window.scrollTo(0, 0);
+  }
+
+  // Step 5: Refresh dropdowns
+  refreshDropdowns();
+
+  // Step 6: Tab-specific render
+  const safe = (fn) => { try { if (typeof window[fn] === "function") window[fn](); } catch (e) { console.error(fn + ":", e); } };
+  if (tabName === "dashboard") safe("updateDashboard");
+  else if (tabName === "case-master") safe("renderCaseMaster");
+  else if (tabName === "history") safe("renderHistoryTable");
+  else if (tabName === "action-log") safe("renderActionTable");
+  else if (tabName === "comm-log") safe("renderCommTable");
+  else if (tabName === "timeline") safe("renderTimeline");
+  else if (tabName === "doc-index") safe("renderDocIndex");
+  else if (tabName === "case-study") safe("renderStudyControl");
+  else if (tabName === "admin-panel") { safe("renderRefundApprovals"); safe("setupUserRoleOptions"); }
+  else if (tabName === "internal-search") safe("renderSampleSearch");
+  else if (tabName === "reviewer-panel") safe("renderReviewerDashboard");
+  else if (tabName === "accountant-dashboard") safe("renderAccountantDashboard");
+
+  if (window.innerWidth <= 1024) toggleSidebar(false);
+  if (window.lucide) lucide.createIcons();
+};
+
+window.goBackTab = function () {
+  if (tabHistory.length > 1) {
+    const prev = tabHistory.pop();
+    switchTab(prev, true);
+  }
+};
+
 document.querySelectorAll(".tab").forEach(tab => {
   tab.addEventListener("click", () => {
-    const tabName = tab.dataset.tab;
-
-    // Step 1: Remove active from all tabs
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-
-    // Step 2: FORCE HIDE all sections (override any CSS)
-    document.querySelectorAll(".section").forEach(s => {
-      s.classList.remove("active");
-      s.style.setProperty("display", "none", "important");
-    });
-
-    // Step 3: Activate clicked tab
-    tab.classList.add("active");
-
-    // Step 4: FORCE SHOW target section
-    const target = document.getElementById("tab-" + tabName);
-    if (target) {
-      target.classList.add("active");
-      target.style.setProperty("display", "block", "important");
-      window.scrollTo(0, 0);
-    } else {
-      console.error("Section not found: tab-" + tabName);
-      return;
-    }
-
-    // Step 5: Refresh dropdowns always
-    refreshDropdowns();
-
-    // Step 6: Tab-specific render
-    const safe = (fn) => { try { if (typeof window[fn] === "function") window[fn](); } catch (e) { console.error(fn + ":", e); } };
-    if (tabName === "dashboard") safe("updateDashboard");
-    else if (tabName === "case-master") safe("renderCaseMaster");
-    else if (tabName === "history") safe("renderHistoryTable");
-    else if (tabName === "action-log") safe("renderActionTable");
-    else if (tabName === "comm-log") safe("renderCommTable");
-    else if (tabName === "timeline") safe("renderTimeline");
-    else if (tabName === "doc-index") safe("renderDocIndex");
-    else if (tabName === "case-study") safe("renderStudyControl");
-    else if (tabName === "admin-panel") { safe("renderRefundApprovals"); safe("setupUserRoleOptions"); }
-    else if (tabName === "internal-search") safe("renderSampleSearch");
-    else if (tabName === "reviewer-panel") safe("renderReviewerDashboard");
-    else if (tabName === "accountant-dashboard") safe("renderAccountantDashboard");
-
-    if (window.innerWidth <= 1024) toggleSidebar(false);
+    switchTab(tab.dataset.tab);
   });
 });
 
@@ -456,7 +478,7 @@ window.toggleSidebar = function (openState) {
     } else {
       shouldCollapse = !sidebar.classList.contains("collapsed");
     }
-    
+
     sidebar.classList.toggle("collapsed", shouldCollapse);
     main.classList.toggle("sidebar-collapsed", shouldCollapse);
     localStorage.setItem("rrr_sidebar_collapsed", shouldCollapse);
@@ -570,9 +592,19 @@ function updateDashboard() {
     : DB.cases.filter(c => ((c.assignedTo || c.initiatedBy || "").toLowerCase() === email));
 
   document.getElementById("stat-total").textContent = visibleCases.length;
+
+  // Status Stats based on Action Log dropdown
+  document.getElementById("stat-new").textContent = visibleCases.filter(c => c.currentStatus === "New").length;
   document.getElementById("stat-open").textContent = visibleCases.filter(c => c.currentStatus === "Open").length;
-  document.getElementById("stat-settled").textContent = visibleCases.filter(c => c.currentStatus === "Settled" || c.currentStatus === "Closed").length;
+  document.getElementById("stat-inprogress").textContent = visibleCases.filter(c => c.currentStatus === "In Progress").length;
+  document.getElementById("stat-pendingresp").textContent = visibleCases.filter(c => c.currentStatus === "Pending Response").length;
+  document.getElementById("stat-settled").textContent = visibleCases.filter(c => c.currentStatus === "Settled").length;
+  document.getElementById("stat-closed").textContent = visibleCases.filter(c => c.currentStatus === "Closed").length;
+
+  // Priority Stats
   document.getElementById("stat-high").textContent = visibleCases.filter(c => c.priority === "High").length;
+  document.getElementById("stat-medium").textContent = visibleCases.filter(c => c.priority === "Medium").length;
+  document.getElementById("stat-low").textContent = visibleCases.filter(c => c.priority === "Low").length;
 
   const today = new Date();
   const twoDays = new Date(); twoDays.setDate(today.getDate() + 2);
@@ -583,8 +615,8 @@ function updateDashboard() {
     if (nd < today) overdue.push(c);
     else if (nd <= twoDays) dueSoon.push(c);
   });
-  document.getElementById("stat-overdue").textContent = overdue.length;
-  document.getElementById("stat-duesoon").textContent = dueSoon.length;
+  const elOverdue = document.getElementById("stat-overdue"); if (elOverdue) elOverdue.textContent = overdue.length;
+  const elDueSoon = document.getElementById("stat-duesoon"); if (elDueSoon) elDueSoon.textContent = dueSoon.length;
 
   const od = document.getElementById("dash-overdue");
   if (od) {
@@ -741,6 +773,8 @@ function clearNewCaseForm() {
   editingCaseId = null;
   const submitBtn = document.getElementById("nc-submit-btn"); if (submitBtn) submitBtn.textContent = "✅ Create Case & Generate Study";
   const cancelBtn = document.getElementById("nc-cancel-edit-btn"); if (cancelBtn) cancelBtn.style.display = "none";
+  const titleEl = document.getElementById("new-case-section-title");
+  if (titleEl) titleEl.textContent = "New Case Creation";
 }
 
 function startCaseEdit(caseId) {
@@ -758,10 +792,114 @@ function startCaseEdit(caseId) {
   set("nc-summary", c.caseSummary); set("nc-allegation", c.clientAllegation);
   set("nc-call-rec", c.proofCallRec); set("nc-wa-chat", c.proofWaChat); set("nc-v-call", c.proofVideoCall); set("nc-funding-email", c.proofFundingEmail);
   set("nc-lead", c.initiatedBy); set("nc-negotiator", c.accountable); set("nc-legal", c.legalOfficer); set("nc-accounts", c.accounts);
+  set("nc-engagement-note", c.engagementNote);
+
+  // Pre-fill File Link
+  const firData = document.getElementById("nc-fir-file-data");
+  if (firData) firData.value = c.firFileLink || "";
+  const firChip = document.getElementById("nc-fir-file-chip");
+  if (firChip && c.firFileLink) firChip.innerHTML = `<div class="file-chip"><span><i data-lucide="file-text"></i> Attached File</span></div>`;
+
   handleComplaintTypeChange(c.typeOfComplaint || "");
+
+  // Pre-fill Cyber Acks
+  const ackContainer = document.getElementById("ack-container");
+  if (ackContainer && c.cyberAckNumbers) {
+    ackContainer.innerHTML = "";
+    c.cyberAckNumbers.split(",").forEach(ack => {
+      const val = ack.trim();
+      if (!val) return;
+      const div = document.createElement("div");
+      div.style = "display:flex;gap:10px;margin-bottom:5px;";
+      div.innerHTML = `<input class="ack-input" value="${val}" placeholder="Enter Acknowledgment Number" style="flex:1;"><button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+      ackContainer.appendChild(div);
+    });
+    if (!ackContainer.children.length) addAckField();
+  }
+
+  // Pre-fill Services
+  const servContainer = document.getElementById("services-container");
+  if (servContainer) {
+    servContainer.innerHTML = "";
+    const items = (c.servicesSold || "").split(", ").filter(x => x.trim());
+
+    if (items.length === 0) {
+      // Fallback for cases with no services but have a total amount
+      addServiceRow();
+      const firstAmt = servContainer.querySelector(".s-amt");
+      if (firstAmt) firstAmt.value = c.totalAmtPaid || "0";
+    } else {
+      items.forEach((item, idx) => {
+        const match = item.match(/^(.*?)\s*\[₹([\d.]+)\]\s*\((.*?)\)$/);
+        const mode = document.getElementById("nc-service-mode") ? document.getElementById("nc-service-mode").value : "single";
+        const row = document.createElement("div");
+        row.className = "service-row";
+
+        let name = item, amt = "0", status = "Not Initiated";
+        if (match) { name = match[1]; amt = match[2]; status = match[3]; }
+
+        // CRITICAL: If this is the only service and amount is 0, but we have a payment, use it!
+        if (items.length === 1 && (amt === "0" || !amt || amt === "undefined")) {
+          amt = c.totalAmtPaid || c.totalMouValue || "0";
+        }
+
+        row.innerHTML = `
+            ${mode === "multiple" && idx > 0 ? `<div class="remove-service" onclick="this.parentElement.remove(); calculateTotalServiceAmount();">✕</div>` : ""}
+            <div class="field"><label>Service Name</label><input class="s-name" value="${name}" placeholder="Enter service"></div>
+            <div class="field"><label>Service Amount</label><input type="number" class="s-amt" value="${amt}" placeholder="0" oninput="calculateTotalServiceAmount()"></div>
+            <div class="field"><label>MOU Signed</label><select class="s-mou"><option ${c.mouSigned === "No" ? "selected" : ""}>No</option><option ${c.mouSigned === "Yes" ? "selected" : ""}>Yes</option></select></div>
+            <div class="field"><label>Signed MOU Amount</label><input type="number" class="s-mou-amt" value="${c.mouSigned === "Yes" ? amt : "0"}" placeholder="0"></div>
+            <div class="field"><label>Work Status</label>
+                <select class="s-status">
+                    <option ${status === "Not Initiated" ? "selected" : ""}>Not Initiated</option>
+                    <option ${status === "In Progress" ? "selected" : ""}>In Progress</option>
+                    <option ${status === "Work in Progress" ? "selected" : ""}>Work in Progress</option>
+                    <option ${status === "Completed" ? "selected" : ""}>Completed</option>
+                    <option ${status === "Escalated" ? "selected" : ""}>Escalated</option>
+                    <option ${status === "Hold" ? "selected" : ""}>Hold</option>
+                    <option ${status === "File Not Eligible" ? "selected" : ""}>File Not Eligible</option>
+                    <option ${status === "QA Not Approved" ? "selected" : ""}>QA Not Approved</option>
+                    <option ${status === "Service Converted" ? "selected" : ""}>Service Converted</option>
+                    <option ${status === "NA" ? "selected" : ""}>NA</option>
+                </select>
+            </div>
+            <div class="field"><label>BDA</label><input class="s-bda" placeholder="Name"></div>
+            <div class="field"><label>Department</label>
+                <select class="s-dept"><option>Operations</option><option>Loan</option><option>Digital Marketing</option></select>
+            </div>`;
+        servContainer.appendChild(row);
+      });
+    }
+  }
+
+  // Final fix: If MOU Signed is No, Total MOU Value must be 0
+  if (c.mouSigned === "No") set("nc-mouval", "0");
+
   const submitBtn = document.getElementById("nc-submit-btn"); if (submitBtn) submitBtn.textContent = "💾 Update Case";
   const cancelBtn = document.getElementById("nc-cancel-edit-btn"); if (cancelBtn) cancelBtn.style.display = "inline-flex";
-  document.querySelector('[data-tab="new-case"]').click();
+
+  const titleEl = document.getElementById("new-case-section-title");
+  if (titleEl) titleEl.innerHTML = `<i data-lucide="pencil" style="width:18px;height:18px;vertical-align:middle;"></i> Editing Case: <span style="color:var(--blue)">${caseId}</span>`;
+
+  switchTab("new-case");
+  calculateTotalServiceAmount();
+
+  // FINAL FORCE: If MOU Signed is No, Total MOU Value must be 0
+  if (c.mouSigned === "No" || document.getElementById("nc-mou").value === "No") {
+    set("nc-mouval", "0");
+  }
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function calculateTotalServiceAmount() {
+  const amts = document.querySelectorAll(".s-amt");
+  let total = 0;
+  amts.forEach(input => {
+    total += parseFloat(input.value) || 0;
+  });
+  const totalField = document.getElementById("nc-amtpaid");
+  if (totalField) totalField.value = total;
 }
 function cancelCaseEdit() { clearNewCaseForm(); }
 
@@ -801,8 +939,8 @@ function renderCaseMaster() {
         <td>${c.assignedTo || c.initiatedBy || "-"}</td>
         <td>${formatDate(c.lastUpdateDate)}</td>
         <td>
-          <button class="btn btn-outline btn-sm" onclick="showCaseDetail('${c.caseId}')"><i data-lucide="eye" style="width:12px; height:12px;"></i> View</button>
-          <button class="btn btn-primary btn-sm" onclick="startCaseEdit('${c.caseId}')"><i data-lucide="edit-3" style="width:12px; height:12px;"></i> Edit</button>
+          <button class="btn btn-outline btn-sm" onclick="showCaseDetail('${c.caseId}')" title="View"><i data-lucide="eye"></i></button>
+          <button class="btn btn-primary btn-sm" onclick="startCaseEdit('${c.caseId}')" title="Edit"><i data-lucide="pencil"></i></button>
           ${currentRole() === "Admin" ? `
           <div style="display:flex; gap:6px; margin-top:6px;">
             <input id="assign-${c.caseId}" placeholder="assign email" value="${c.assignedTo || ""}" style="min-width:150px; font-size:11px; padding:5px 7px;">
@@ -1373,9 +1511,9 @@ function addServiceRow() {
   const row = document.createElement("div");
   row.className = "service-row";
   row.innerHTML = `
-        ${mode === "multiple" && rowCount > 0 ? `<div class="remove-service" onclick="this.parentElement.remove()">✕</div>` : ""}
+        ${mode === "multiple" && rowCount > 0 ? `<div class="remove-service" onclick="this.parentElement.remove(); calculateTotalServiceAmount();">✕</div>` : ""}
         <div class="field"><label>Service Name</label><input class="s-name" placeholder="Enter service"></div>
-        <div class="field"><label>Service Amount</label><input type="number" class="s-amt" placeholder="0"></div>
+        <div class="field"><label>Service Amount</label><input type="number" class="s-amt" placeholder="0" oninput="calculateTotalServiceAmount()"></div>
         <div class="field"><label>MOU Signed</label><select class="s-mou"><option>No</option><option>Yes</option></select></div>
         <div class="field"><label>Signed MOU Amount</label><input type="number" class="s-mou-amt" placeholder="0"></div>
         <div class="field"><label>Work Status</label>
@@ -1425,15 +1563,15 @@ function autoGenerateTitle() {
 //  PERMISSIONS
 // ══════════════════════════════════════
 function allowedTabsForRole(role) {
-  if (role === "Admin") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "timeline", "doc-index", "case-study", "admin-panel", "internal-search", "reviewer-panel", "accountant-dashboard"];
+  if (role === "Admin") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "timeline", "doc-index", "case-study", "admin-panel", "internal-search", "reviewer-panel", "accountant-dashboard", "agreement-module"];
 
   if (role === "Accountant") return ["dashboard", "accountant-dashboard", "internal-search",];
 
   if (role === "Reviewer") return ["dashboard", "reviewer-panel", "internal-search"];
 
-  if (role === "Operations") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "doc-index", "case-study", "internal-search"];
+  if (role === "Operations") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "doc-index", "case-study", "internal-search", "agreement-module"];
 
-  return ["dashboard", "new-case", "history", "action-log", "comm-log", "doc-index", "internal-search"];
+  return ["dashboard", "new-case", "history", "action-log", "comm-log", "doc-index", "internal-search", "agreement-module"];
 }
 function applyPermissions() {
   const role = currentRole();
@@ -1442,6 +1580,11 @@ function applyPermissions() {
   const refundCard = document.getElementById("refund-dashboard-card"); if (refundCard) refundCard.style.display = "";
   const refundRequestCard = document.getElementById("refund-request-card"); if (refundRequestCard) refundRequestCard.style.display = canRaiseRefundRequest() ? "" : " none";
   const adminRefundCard = document.getElementById("admin-refund-card"); if (adminRefundCard) adminRefundCard.style.display = role === "Admin" ? "" : " none";
+  
+  document.querySelectorAll(".admin-only").forEach(el => {
+    el.style.display = role === "Admin" ? "" : "none";
+  });
+
   const adminTab = document.querySelector('[data-tab="admin-panel"]');
   if (adminTab) {
     const span = adminTab.querySelector("span");
@@ -2044,6 +2187,131 @@ async function markAsPaid(reqId) {
   toast("Payment recorded successfully!", "success");
   await saveDB();
   renderAccountantDashboard();
+}
+
+// ══════════════════════════════════════
+//  AGREEMENT MODULE
+// ══════════════════════════════════════
+function addAgreementInstallment() {
+  const container = document.getElementById("am-installments-container");
+  const div = document.createElement("div");
+  div.className = "am-installment-row";
+  div.style.cssText = "display:flex; gap:10px; margin-bottom:10px; align-items:center;";
+  div.innerHTML = `
+    <input type="number" class="am-inst-amount" placeholder="Amount (₹)" style="flex:1;">
+    <input type="date" class="am-inst-date" style="flex:1;">
+    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="padding:8px 12px;"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
+  `;
+  container.appendChild(div);
+  if (window.lucide) lucide.createIcons();
+}
+
+function clearAgreementForm() {
+  document.querySelectorAll("#tab-agreement-module input:not(#am-template-id), #tab-agreement-module textarea").forEach(el => el.value = "");
+  document.getElementById("am-installments-container").innerHTML = "";
+  document.getElementById("am-result-container").style.display = "none";
+}
+
+async function generateAgreement() {
+  const btn = document.getElementById("am-generate-btn");
+  const origText = btn.innerHTML;
+  
+  const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+  
+  const templateId = get("am-template-id");
+  const date = get("am-date");
+  const company = get("am-company");
+  const clientName = get("am-client-name");
+  const address = get("am-address");
+  const pincode = get("am-pincode");
+  const amount = get("am-amount");
+  const amountWords = get("am-amount-words");
+  const firstSig = get("am-first-signatory");
+  const secondCompany = get("am-second-company");
+  const secondSig = get("am-second-signatory");
+
+  if (!templateId || !date || !company || !clientName || !amount || !amountWords || !firstSig || !secondCompany || !secondSig) {
+    toast("Please fill all required fields", "error");
+    return;
+  }
+
+  // Compile installments
+  const instRows = document.querySelectorAll(".am-installment-row");
+  let installmentsArr = [];
+  instRows.forEach(row => {
+    const amt = row.querySelector(".am-inst-amount").value.trim();
+    const d = row.querySelector(".am-inst-date").value.trim();
+    if (amt && d) {
+      const dObj = new Date(d);
+      const dStr = isNaN(dObj.getTime()) ? d : `${String(dObj.getDate()).padStart(2, '0')}/${String(dObj.getMonth()+1).padStart(2,'0')}/${dObj.getFullYear()}`;
+      installmentsArr.push(`₹${Number(amt).toLocaleString('en-IN')} on ${dStr}`);
+    }
+  });
+  
+  const installmentsText = installmentsArr.length > 0 ? installmentsArr.join(", ") : "N/A";
+
+  const payload = {
+    date: formatDate(date),
+    firstPartyCompany: company,
+    secondPartyCompany: secondCompany,
+    name: clientName,
+    address: address,
+    pincode: pincode,
+    settleAmt: amount,
+    amtWords: amountWords,
+    installmentsText: installmentsText,
+    firstPartySignatory: firstSig,
+    secondPartySignatory: secondSig
+  };
+
+  btn.innerHTML = `<i data-lucide="loader" class="spin" style="width:16px;height:16px;vertical-align:middle;"></i> Generating...`;
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "generateDoc", templateId: templateId, payload: payload })
+    });
+    
+    const rawText = await res.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      console.error("Backend error:", rawText);
+      toast(rawText.substring(0, 100), "error"); // Show the actual backend error
+      throw new Error(rawText);
+    }
+    
+    if (data.status === "success") {
+      document.getElementById("am-result-container").style.display = "block";
+      
+      // We expect the backend to return data.docId for the newly created document
+      // If not, we fallback to the templateId (old behavior)
+      const targetDocId = data.docId || templateId;
+      
+      const previewUrl = `https://docs.google.com/document/d/${targetDocId}/preview?t=${Date.now()}`;
+      const pdfUrl = `https://docs.google.com/document/d/${targetDocId}/export?format=pdf`;
+      
+      document.getElementById("am-preview-frame").src = previewUrl;
+      document.getElementById("am-result-download-pdf").href = pdfUrl;
+      
+      toast("Agreement generated successfully! Preview it below.", "success");
+    } else {
+      toast("Error generating agreement.", "error");
+    }
+  } catch (error) {
+    console.error("Error generating doc:", error);
+    if (error.message && error.message.startsWith("Error")) {
+      // already handled
+    } else {
+      toast("Failed to generate document. It may have generated but the response was blocked by CORS.", "error");
+    }
+  } finally {
+    btn.innerHTML = origText;
+    btn.disabled = false;
+    if (window.lucide) lucide.createIcons();
+  }
 }
 
 // ══════════════════════════════════════
