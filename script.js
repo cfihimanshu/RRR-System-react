@@ -1,6 +1,6 @@
-// ══════════════════════════════════════
+﻿// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  1. LOGIN SECURITY CHECK
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function redirectIfLoggedOut() {
   const isLoggedIn = localStorage.getItem("rrr_logged_in");
   if (isLoggedIn !== "true") {
@@ -12,9 +12,9 @@ function redirectIfLoggedOut() {
 redirectIfLoggedOut();
 window.addEventListener("pageshow", redirectIfLoggedOut);
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CONFIG & STATE
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx_xCWWCoBc3wj-trWKYt4wYx18Od6DVOUYCgGYITooQt8d_9Mckv6dJlu_SfjnblugfA/exec";
 const LS_KEY = "RRR_DB_v1";
 const SAMPLE_DATA_KEY = "RRR_SAMPLE_DATA_v1";
@@ -67,9 +67,9 @@ function mergeCollectionsWithLocalBackup() {
   DB.refunds = mergeCollectionByKey(DB.refunds, local.refunds, "reqId");
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  SAMPLE DATA BACKUP
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function loadSampleDataBackup() {
   try {
     const raw = localStorage.getItem(SAMPLE_DATA_KEY);
@@ -87,10 +87,10 @@ function restoreSampleDataFromBackup() {
   if (backup.length) DB.sampleData = backup;
 }
 
-// ══════════════════════════════════════
-//  DB LOAD — non-blocking
-// ══════════════════════════════════════
-// ── 1. LOAD DATA FROM CLOUD ONLY ──
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  DB LOAD â€” non-blocking
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â”€â”€ 1. LOAD DATA FROM CLOUD ONLY â”€â”€
 async function loadDB() {
   console.log("Fetching from Cloud...");
   toast("Loading data from cloud...", "info");
@@ -113,7 +113,7 @@ async function loadDB() {
         normalizeDBShape();
         mergeCollectionsWithLocalBackup();
         refreshAllUI(); // Saari tables ek saath refresh
-        console.log("✅ Cloud Data Loaded Successfully");
+        console.log("âœ… Cloud Data Loaded Successfully");
       }
     } else {
       throw new Error("Server response not ok");
@@ -134,7 +134,7 @@ async function loadDB() {
 
 
 async function saveDB(syncSampleData = false) {
-  console.log("🔄 Syncing to Google Sheets (Cloud Mode)...");
+  console.log("ðŸ”„ Syncing to Google Sheets (Cloud Mode)...");
 
   // 1. Local Storage ka bojh khatam karein
   // Hum sirf ek chota sa backup rakhenge bina 'sampleData' ke 
@@ -164,7 +164,7 @@ async function saveDB(syncSampleData = false) {
     });
 
     clearTimeout(timeoutId);
-    console.log("✅ Data successfully pushed to Google Sheet tabs.");
+    console.log("âœ… Data successfully pushed to Google Sheet tabs.");
     toast("Cloud Sync Success!", "success");
 
   } catch (e) {
@@ -206,13 +206,13 @@ function refreshAllUI() {
   if (window.lucide) lucide.createIcons();
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  HELPERS
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function nowIST() { return new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }); }
 function todayDate() { return new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }); }
 
-// ─ DATE FORMATTER UTILITY ─
+// â”€ DATE FORMATTER UTILITY â”€
 function formatDate(dateInput) {
   if (!dateInput) return "-";
 
@@ -296,8 +296,8 @@ function toast(msg, type = "info") {
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 400); }, 3500);
 }
 
-// ── NOTIFICATION HELPER ──
-const ADMIN_EMAIL = "himanshuakodiya19@gmail.com"; // Replace with actual admin email
+// â”€â”€ NOTIFICATION HELPER â”€â”€
+const ADMIN_EMAIL = "deepesh@startupflora.com"; // Replace with actual admin email
 
 async function sendNotification(to, subject, body) {
   if (!to || !SCRIPT_URL) return;
@@ -414,9 +414,9 @@ function renderCaseStudyOptions() {
 // Clock
 setInterval(() => { const el = document.getElementById("clock"); if (el) el.textContent = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }); }, 1000);
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  *** TAB SWITCHER & HISTORY ***
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let tabHistory = ["dashboard"];
 
 window.switchTab = function (tabName, skipHistory = false) {
@@ -518,9 +518,9 @@ window.toggleSidebar = function (openState) {
   }
 };
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  LOGOUT
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 window.logout = function () {
   if (confirm("Are you sure you want to logout?")) {
     localStorage.removeItem("rrr_logged_in");
@@ -530,7 +530,7 @@ window.logout = function () {
   }
 };
 
-// ── QUICK NAV TO CASE MASTER ──
+// â”€â”€ QUICK NAV TO CASE MASTER â”€â”€
 window.goToCaseMaster = function (caseId) {
   // 1. Switch active tab class logic
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -556,9 +556,9 @@ window.goToCaseMaster = function (caseId) {
   }
 };
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  ROLE HELPERS
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function normalizeRole(role) {
   const r = (role || "").toString().trim().toLowerCase();
   if (r === "admin") return "Admin";
@@ -596,9 +596,9 @@ function formatRefundStatus(status) {
   return `<span class="badge ${cls}">${s}</span>`;
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  BADGE HELPERS
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function statusBadge(s) {
   const map = { "New": "pending", "Open": "open", "Closed": "closed", "Settled": "settled", "In Progress": "pending", "Pending Response": "pending", "Refund Pending Approval": "pending", "Refund Approved": "closed" };
   return `<span class="badge badge-${map[s] || 'open'}">${s || 'Open'}</span>`;
@@ -608,9 +608,9 @@ function priorityBadge(p) {
   return `<span class="badge badge-${map[p] || 'medium'}">${p || 'Medium'}</span>`;
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  DASHBOARD
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function updateDashboard() {
   normalizeDBShape();
   const role = currentRole();
@@ -620,12 +620,23 @@ function updateDashboard() {
     : DB.cases.filter(c => ((c.assignedTo || c.initiatedBy || "").toLowerCase() === email));
 
   document.getElementById("stat-total").textContent = visibleCases.length;
+  
+  const myTasks = DB.tasks.filter(t => (t.assignee || "").toLowerCase() === email && t.status !== 'done');
+  const taskStat = document.getElementById("stat-total-tasks");
+  if (taskStat) taskStat.textContent = myTasks.length;
 
   // Status Stats based on Action Log dropdown
-  document.getElementById("stat-new").textContent = visibleCases.filter(c => c.currentStatus === "New").length;
-  document.getElementById("stat-open").textContent = visibleCases.filter(c => c.currentStatus === "Open").length;
+  const statNew = document.getElementById("stat-new");
+  if (statNew) statNew.textContent = visibleCases.filter(c => c.currentStatus === "New").length;
+  
+  const statOpen = document.getElementById("stat-open");
+  if (statOpen) statOpen.textContent = visibleCases.filter(c => c.currentStatus === "Open").length;
+  
   document.getElementById("stat-inprogress").textContent = visibleCases.filter(c => c.currentStatus === "In Progress").length;
-  document.getElementById("stat-pendingresp").textContent = visibleCases.filter(c => c.currentStatus === "Pending Response").length;
+  
+  const statPR = document.getElementById("stat-pendingresp");
+  if (statPR) statPR.textContent = visibleCases.filter(c => c.currentStatus === "Pending Response").length;
+  
   document.getElementById("stat-settled").textContent = visibleCases.filter(c => c.currentStatus === "Settled").length;
   document.getElementById("stat-closed").textContent = visibleCases.filter(c => c.currentStatus === "Closed").length;
 
@@ -649,14 +660,14 @@ function updateDashboard() {
   const od = document.getElementById("dash-overdue");
   if (od) {
     od.innerHTML = overdue.length ? overdue.map(c => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-border); cursor:pointer;" onclick="goToCaseMaster('${c.caseId}')">
-          <span class="case-id-display">${c.caseId}</span> — <strong>${c.clientName}</strong>
+          <span class="case-id-display">${c.caseId}</span> â€” <strong>${c.clientName}</strong>
           <span class="overdue" style="float:right">${c.nextActionDate}</span></div>`).join("") :
       `<div class="empty-state"><i data-lucide="check-circle" style="width:20px; height:20px; color:var(--green);"></i> No overdue actions</div>`;
   }
   const ds = document.getElementById("dash-duesoon");
   if (ds) {
     ds.innerHTML = dueSoon.length ? dueSoon.map(c => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-border); cursor:pointer;" onclick="goToCaseMaster('${c.caseId}')">
-          <span class="case-id-display">${c.caseId}</span> — <strong>${c.clientName}</strong>
+          <span class="case-id-display">${c.caseId}</span> â€” <strong>${c.clientName}</strong>
           <span class="due-soon" style="float:right">${c.nextActionDate}</span></div>`).join("") :
       `<div class="empty-state"><i data-lucide="check-circle" style="width:20px; height:20px; color:var(--green);"></i> Nothing due soon</div>`;
   }
@@ -695,21 +706,21 @@ function runDailyChecker() {
   document.getElementById("stat-high").textContent = DB.cases.filter(c => c.priority === "High").length;
   const od = document.getElementById("dash-overdue");
   od.innerHTML = overdue.length ? overdue.map(c => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-border)">
-        <span class="case-id-display">${c.caseId}</span> — <strong>${c.clientName}</strong>
+        <span class="case-id-display">${c.caseId}</span> â€” <strong>${c.clientName}</strong>
         <span class="overdue" style="float:right">${c.nextActionDate}</span></div>`).join("") :
-    `<div class="empty-state"><span class="emoji">✅</span>No overdue actions</div>`;
+    `<div class="empty-state"><span class="emoji">âœ…</span>No overdue actions</div>`;
   const ds = document.getElementById("dash-duesoon");
   ds.innerHTML = dueSoon.length ? dueSoon.map(c => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-border)">
-        <span class="case-id-display">${c.caseId}</span> — <strong>${c.clientName}</strong>
+        <span class="case-id-display">${c.caseId}</span> â€” <strong>${c.clientName}</strong>
         <span class="due-soon" style="float:right">${c.nextActionDate}</span></div>`).join("") :
-    `<div class="empty-state"><span class="emoji">✅</span>Nothing due soon</div>`;
+    `<div class="empty-state"><span class="emoji">âœ…</span>Nothing due soon</div>`;
   document.getElementById("dash-last-check").textContent = `${currentRole()} Department | Last checked: ${nowIST()}`;
   toast("Daily checker complete!", "success");
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  NEW CASE
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function submitNewCase() {
   const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
   if (!get("nc-company") || !get("nc-title") || !get("nc-client") || !get("nc-summary") || !get("nc-brand")) {
@@ -722,7 +733,7 @@ async function submitNewCase() {
       const name = row.querySelector(".s-name") ? row.querySelector(".s-name").value : "";
       const status = row.querySelector(".s-status") ? row.querySelector(".s-status").value : "";
       const amt = row.querySelector(".s-amt") ? row.querySelector(".s-amt").value : "0";
-      if (name) servicesData.push(`${name} [₹${amt}] (${status})`);
+      if (name) servicesData.push(`${name} [â‚¹${amt}] (${status})`);
     });
     const ackInputs = document.querySelectorAll(".ack-input");
     const capturedAcks = Array.from(ackInputs).map(i => i.value.trim()).filter(v => v).join(", ");
@@ -786,7 +797,7 @@ async function submitNewCase() {
       // Critical Case Alert to Admin
       const criticalTypes = ["Cyber Complaint", "FIR", "Legal Notice", "Consumer Complaint"];
       if (criticalTypes.includes(row.typeOfComplaint)) {
-        sendNotification(ADMIN_EMAIL, "⚠️ CRITICAL CASE ALERT", `A new critical case has been registered.\n\nCase ID: ${caseId}\nType: ${row.typeOfComplaint}\nClient: ${row.clientName}\nCompany: ${row.companyName}\n\nPlease review immediately.`);
+        sendNotification(ADMIN_EMAIL, "âš ï¸ CRITICAL CASE ALERT", `A new critical case has been registered.\n\nCase ID: ${caseId}\nType: ${row.typeOfComplaint}\nClient: ${row.clientName}\nCompany: ${row.companyName}\n\nPlease review immediately.`);
       }
 
       // Assignment Notification
@@ -812,7 +823,7 @@ function clearNewCaseForm() {
   const chip = document.getElementById("nc-fir-file-chip"); if (chip) chip.innerHTML = "";
   const fd = document.getElementById("nc-fir-file-data"); if (fd) fd.value = "";
   editingCaseId = null;
-  const submitBtn = document.getElementById("nc-submit-btn"); if (submitBtn) submitBtn.textContent = "✅ Create Case & Generate Study";
+  const submitBtn = document.getElementById("nc-submit-btn"); if (submitBtn) submitBtn.textContent = "âœ… Create Case & Generate Study";
   const cancelBtn = document.getElementById("nc-cancel-edit-btn"); if (cancelBtn) cancelBtn.style.display = "none";
   const titleEl = document.getElementById("new-case-section-title");
   if (titleEl) titleEl.textContent = "New Case Creation";
@@ -852,7 +863,7 @@ function startCaseEdit(caseId) {
       if (!val) return;
       const div = document.createElement("div");
       div.style = "display:flex;gap:10px;margin-bottom:5px;";
-      div.innerHTML = `<input class="ack-input" value="${val}" placeholder="Enter Acknowledgment Number" style="flex:1;"><button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+      div.innerHTML = `<input class="ack-input" value="${val}" placeholder="Enter Acknowledgment Number" style="flex:1;"><button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">âœ•</button>`;
       ackContainer.appendChild(div);
     });
     if (!ackContainer.children.length) addAckField();
@@ -871,7 +882,7 @@ function startCaseEdit(caseId) {
       if (firstAmt) firstAmt.value = c.totalAmtPaid || "0";
     } else {
       items.forEach((item, idx) => {
-        const match = item.match(/^(.*?)\s*\[₹([\d.]+)\]\s*\((.*?)\)$/);
+        const match = item.match(/^(.*?)\s*\[â‚¹([\d.]+)\]\s*\((.*?)\)$/);
         const mode = document.getElementById("nc-service-mode") ? document.getElementById("nc-service-mode").value : "single";
         const row = document.createElement("div");
         row.className = "service-row";
@@ -885,7 +896,7 @@ function startCaseEdit(caseId) {
         }
 
         row.innerHTML = `
-            ${mode === "multiple" && idx > 0 ? `<div class="remove-service" onclick="this.parentElement.remove(); calculateTotalServiceAmount();">✕</div>` : ""}
+            ${mode === "multiple" && idx > 0 ? `<div class="remove-service" onclick="this.parentElement.remove(); calculateTotalServiceAmount();">âœ•</div>` : ""}
             <div class="field"><label>Service Name</label><input class="s-name" value="${name}" placeholder="Enter service"></div>
             <div class="field"><label>Service Amount</label><input type="number" class="s-amt" value="${amt}" placeholder="0" oninput="calculateTotalServiceAmount()"></div>
             <div class="field"><label>MOU Signed</label><select class="s-mou"><option ${c.mouSigned === "No" ? "selected" : ""}>No</option><option ${c.mouSigned === "Yes" ? "selected" : ""}>Yes</option></select></div>
@@ -916,7 +927,7 @@ function startCaseEdit(caseId) {
   // Final fix: If MOU Signed is No, Total MOU Value must be 0
   if (c.mouSigned === "No") set("nc-mouval", "0");
 
-  const submitBtn = document.getElementById("nc-submit-btn"); if (submitBtn) submitBtn.textContent = "💾 Update Case";
+  const submitBtn = document.getElementById("nc-submit-btn"); if (submitBtn) submitBtn.textContent = "ðŸ’¾ Update Case";
   const cancelBtn = document.getElementById("nc-cancel-edit-btn"); if (cancelBtn) cancelBtn.style.display = "inline-flex";
 
   const titleEl = document.getElementById("new-case-section-title");
@@ -944,9 +955,9 @@ function calculateTotalServiceAmount() {
 }
 function cancelCaseEdit() { clearNewCaseForm(); }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CASE MASTER
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function renderCaseMaster() {
   const q = (document.getElementById("cm-search") ? document.getElementById("cm-search").value : "").toLowerCase();
   const status = document.getElementById("cm-filter-status") ? document.getElementById("cm-filter-status").value : "";
@@ -974,7 +985,7 @@ function renderCaseMaster() {
         <td>${c.companyName}</td>
         <td>${c.clientName}<br><span class="text-muted" style="font-size:11px">${c.clientMobile}</span></td>
         <td>${c.servicesSold || "-"}</td>
-        <td>₹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</td>
+        <td>â‚¹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</td>
         <td>${priorityBadge(c.priority)}</td>
         <td>${statusBadge(c.currentStatus)}</td>
         <td>${c.assignedTo || c.initiatedBy || "-"}</td>
@@ -1160,14 +1171,14 @@ window.deleteCasePermanently = async function(caseId) {
   await saveDB();
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CASE DETAIL MODAL
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function showCaseDetail(caseId) {
   const c = DB.cases.find(x => x.caseId === caseId);
   if (!c) { toast("Case not found!", "error"); return; }
   const tl = DB.timeline.filter(t => t.caseId === caseId).sort((a, b) => new Date(b.logTimestamp) - new Date(a.logTimestamp));
-  document.getElementById("modal-case-id-title").textContent = "📋 " + caseId + " — " + c.clientName;
+  document.getElementById("modal-case-id-title").textContent = "ðŸ“‹ " + caseId + " â€” " + c.clientName;
   document.getElementById("modal-body").innerHTML = `
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;margin-bottom:16px">
           <div><span class="text-muted">Company:</span> <strong>${c.companyName}</strong></div>
@@ -1176,7 +1187,7 @@ function showCaseDetail(caseId) {
           <div><span class="text-muted">Email:</span> ${c.clientEmail || "-"}</div>
           <div><span class="text-muted">Priority:</span> ${priorityBadge(c.priority)}</div>
           <div><span class="text-muted">Status:</span> ${statusBadge(c.currentStatus)}</div>
-          <div><span class="text-muted">Amt Paid:</span> ₹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</div>
+          <div><span class="text-muted">Amt Paid:</span> â‚¹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</div>
           <div><span class="text-muted">Initiated By:</span> ${c.initiatedBy || "-"}</div>
           <div><span class="text-muted">Assigned To:</span> ${c.assignedTo || c.initiatedBy || "-"}</div>
         </div>
@@ -1198,9 +1209,9 @@ window.onclick = function (e) {
   if (e.target == document.getElementById("file-preview-modal")) closeFilePreview();
 };
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  VALIDATION & FILE HELPERS
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function validateCaseId(id) {
   const val = document.getElementById(id).value;
   if (val && !DB.cases.find(c => c.caseId === val)) { toast("Invalid Case ID!", "error"); document.getElementById(id).value = ""; }
@@ -1320,9 +1331,9 @@ function previewStoredFile(link) {
 }
 function closeFilePreview() { document.getElementById("file-preview-modal").classList.remove("open"); }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  TIMELINE
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function addTimelineEntry(caseId, eventDate, source, eventType, summary) {
   DB.timeline.push({ id: uid("TL"), caseId, eventDate, source, eventType, summary, logTimestamp: nowIST() });
 }
@@ -1339,9 +1350,9 @@ function renderTimeline() {
     </li>`).join("")}</ul>`;
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  HISTORY
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function submitHistory() {
   const get = id => document.getElementById(id) ? document.getElementById(id).value.trim() : "";
   const caseId = get("hu-caseid"), eventDate = get("hu-date"), summary = get("hu-summary");
@@ -1368,9 +1379,9 @@ function renderHistoryTable() {
     </tr>`).join("");
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  ACTION LOG
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function submitAction() {
   const get = id => document.getElementById(id) ? document.getElementById(id).value.trim() : "";
   const caseId = get("al-caseid"), summary = get("al-summary");
@@ -1406,8 +1417,19 @@ async function submitAction() {
 function renderActionTable() {
   const body = document.getElementById("action-body");
   if (!body) return;
-  if (!DB.actions.length) { body.innerHTML = `<tr><td colspan="10"><div class="empty-state">No actions logged yet.</div></td></tr>`; return; }
-  body.innerHTML = DB.actions.slice().reverse().map(a => `<tr>
+  const role = currentRole();
+  const email = currentUserEmail();
+  
+  // Data Isolation: Filter by assigned cases for Staff
+  const myCaseIds = role === "Admin" ? null : DB.cases.filter(c => (c.assignedTo || c.initiatedBy || "").toLowerCase() === email).map(c => c.caseId);
+  
+  let filtered = DB.actions;
+  if (myCaseIds) {
+    filtered = DB.actions.filter(a => myCaseIds.includes(a.caseId));
+  }
+
+  if (!filtered.length) { body.innerHTML = `<tr><td colspan="10"><div class="empty-state">No actions logged yet.</div></td></tr>`; return; }
+  body.innerHTML = filtered.slice().reverse().map(a => `<tr>
         <td><span class="case-id-display">${a.actionId}</span></td>
         <td><span class="case-id-display">${a.caseId}</span></td>
         <td>${formatDate(a.dateTime)}</td><td>${a.actionType}</td><td>${a.dept}</td>
@@ -1418,9 +1440,9 @@ function renderActionTable() {
     </tr>`).join("");
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  COMM LOG
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function submitCommLog() {
   const get = id => document.getElementById(id) ? document.getElementById(id).value.trim() : "";
   const caseId = get("cl-caseid"), summary = get("cl-summary");
@@ -1441,20 +1463,30 @@ async function submitCommLog() {
 function renderCommTable() {
   const body = document.getElementById("comm-body");
   if (!body) return;
-  if (!DB.comms.length) { body.innerHTML = `<tr><td colspan="9"><div class="empty-state">No communications logged yet.</div></td></tr>`; return; }
-  body.innerHTML = DB.comms.slice().reverse().map(c => `<tr>
+  const role = currentRole();
+  const email = currentUserEmail();
+  
+  const myCaseIds = role === "Admin" ? null : DB.cases.filter(c => (c.assignedTo || c.initiatedBy || "").toLowerCase() === email).map(c => c.caseId);
+  
+  let filtered = DB.comms;
+  if (myCaseIds) {
+    filtered = DB.comms.filter(c => myCaseIds.includes(c.caseId));
+  }
+
+  if (!filtered.length) { body.innerHTML = `<tr><td colspan="9"><div class="empty-state">No communications logged yet.</div></td></tr>`; return; }
+  body.innerHTML = filtered.slice().reverse().map(c => `<tr>
         <td><span class="case-id-display">${c.commId}</span></td>
         <td><span class="case-id-display">${c.caseId}</span></td>
         <td>${formatDate(c.dateTime)}</td><td>${c.mode}</td><td>${c.direction}</td>
         <td>${c.fromTo || "-"}</td><td>${c.summary}</td>
         <td>${getFilePreviewHTML(c.fileLink)}</td>
-        <td>${c.legalThreat !== "No" ? "⚠️ Yes" : "No"}</td>
+        <td>${c.legalThreat !== "No" ? "âš ï¸ Yes" : "No"}</td>
     </tr>`).join("");
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  DOCUMENT INDEX
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function submitDocUpload() {
   const get = id => document.getElementById(id) ? document.getElementById(id).value.trim() : "";
   const caseId = get("di-caseid"), fileLink = resolveFileLink("di-file-data", "di-file-url");
@@ -1474,7 +1506,16 @@ function renderDocIndex() {
   const q = (document.getElementById("di-search") ? document.getElementById("di-search").value : "").toLowerCase();
   const body = document.getElementById("doc-body");
   if (!body) return;
-  const filtered = DB.docs.filter(d => !q || JSON.stringify(d).toLowerCase().includes(q));
+  const role = currentRole();
+  const email = currentUserEmail();
+  
+  const myCaseIds = role === "Admin" ? null : DB.cases.filter(c => (c.assignedTo || c.initiatedBy || "").toLowerCase() === email).map(c => c.caseId);
+  
+  let filtered = DB.docs.filter(d => !q || JSON.stringify(d).toLowerCase().includes(q));
+  if (myCaseIds) {
+    filtered = filtered.filter(d => myCaseIds.includes(d.caseId));
+  }
+
   if (!filtered.length) { body.innerHTML = `<tr><td colspan="8"><div class="empty-state"><i data-lucide="folder" style="width:24px; height:24px; opacity:0.5;"></i> No documents indexed yet.</div></td></tr>`; return; }
   body.innerHTML = filtered.slice().reverse().map(d => `<tr>
         <td><span class="case-id-display">${d.docId}</span></td>
@@ -1491,9 +1532,9 @@ function renderDocLink(link, fileName) {
   return getFilePreviewHTML(link, fileName || "View");
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CASE STUDY
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function renderStudyControl() {
   const body = document.getElementById("study-control-body");
   if (!body) return;
@@ -1519,7 +1560,7 @@ async function generateCaseStudy() {
   const comms = DB.comms.filter(cm => cm.caseId === caseId).sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
   document.getElementById("cs-empty").style.display = "none";
   const preview = document.getElementById("case-study-preview"); preview.style.display = "block";
-  document.getElementById("cs-preview-title").textContent = "📄 Case Study – " + caseId;
+  document.getElementById("cs-preview-title").textContent = "ðŸ“„ Case Study â€“ " + caseId;
   const css = `<style>.cs-table{width:100%;border-collapse:collapse;margin-bottom:20px}.cs-table th{background:#1a73e8;color:white;padding:10px;text-align:left;text-transform:uppercase;font-size:13px}.cs-table td{padding:8px 12px;border:1px solid #dadce0;font-size:13px;color:#3c4043}.cs-label{font-weight:600;background:#f8f9fa;width:30%}</style>`;
   document.getElementById("cs-preview-content").innerHTML = css + `
         <table class="cs-table"><tr><th colspan="2">CASE OVERVIEW</th></tr>
@@ -1534,8 +1575,8 @@ async function generateCaseStudy() {
           <tr><td class="cs-label">State</td><td>${c.state || "-"}</td></tr>
           <tr><td class="cs-label">Services</td><td>${c.servicesSold || "-"}</td></tr>
           <tr><td class="cs-label">Engagement Note</td><td>${c.engagementNote || "-"}</td></tr>
-          <tr><td class="cs-label">Amount Paid</td><td>₹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</td></tr>
-          <tr><td class="cs-label">Amount in Dispute</td><td>₹${Number(c.amtInDispute || 0).toLocaleString("en-IN")}</td></tr>
+          <tr><td class="cs-label">Amount Paid</td><td>â‚¹${Number(c.totalAmtPaid || 0).toLocaleString("en-IN")}</td></tr>
+          <tr><td class="cs-label">Amount in Dispute</td><td>â‚¹${Number(c.amtInDispute || 0).toLocaleString("en-IN")}</td></tr>
           <tr><td class="cs-label">MOU Signed</td><td>${c.mouSigned}</td></tr>
           <tr><td class="cs-label">Priority</td><td>${c.priority}</td></tr>
           <tr><td class="cs-label">Status</td><td>${c.currentStatus}</td></tr>
@@ -1582,16 +1623,16 @@ function downloadPDF() {
   html2pdf().set(opt).from(element).save().then(() => toast("PDF Downloaded!", "success"));
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  SERVICES DYNAMIC
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function updateEngagementNote() {
   const mouAmtInput = document.getElementById("nc-mouval");
   const noteArea = document.getElementById("nc-engagement-note");
   if (!mouAmtInput || !noteArea) return;
   const val = mouAmtInput.value || "0";
   const formattedAmt = Number(val).toLocaleString('en-IN');
-  noteArea.value = `This is a multi-stage consultancy and execution support engagement. ₹${formattedAmt} was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.`;
+  noteArea.value = `This is a multi-stage consultancy and execution support engagement. â‚¹${formattedAmt} was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.`;
 }
 function toggleServiceMode() {
   const mode = document.getElementById("nc-service-mode") ? document.getElementById("nc-service-mode").value : "single";
@@ -1611,7 +1652,7 @@ function addServiceRow() {
   const row = document.createElement("div");
   row.className = "service-row";
   row.innerHTML = `
-        ${mode === "multiple" && rowCount > 0 ? `<div class="remove-service" onclick="this.parentElement.remove(); calculateTotalServiceAmount();">✕</div>` : ""}
+        ${mode === "multiple" && rowCount > 0 ? `<div class="remove-service" onclick="this.parentElement.remove(); calculateTotalServiceAmount();">âœ•</div>` : ""}
         <div class="field"><label>Service Name</label><input class="s-name" placeholder="Enter service"></div>
         <div class="field"><label>Service Amount</label><input type="number" class="s-amt" placeholder="0" oninput="calculateTotalServiceAmount()"></div>
         <div class="field"><label>MOU Signed</label><select class="s-mou"><option>No</option><option>Yes</option></select></div>
@@ -1630,9 +1671,9 @@ function addServiceRow() {
   container.appendChild(row);
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CONDITIONAL COMPLAINT FIELDS
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function handleComplaintTypeChange(val) {
   document.getElementById("cyber-extra").style.display = val === "Cyber Complaint" ? "block" : "none";
   document.getElementById("fir-extra").style.display = val === "FIR" ? "block" : "none";
@@ -1643,13 +1684,13 @@ function addAckField() {
   if (!container) return;
   const div = document.createElement("div");
   div.style = "display:flex;gap:10px;margin-bottom:5px;";
-  div.innerHTML = `<input class="ack-input" placeholder="Enter Acknowledgment Number" style="flex:1;"><button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+  div.innerHTML = `<input class="ack-input" placeholder="Enter Acknowledgment Number" style="flex:1;"><button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">âœ•</button>`;
   container.appendChild(div);
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  AUTO TITLE GENERATOR
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function autoGenerateTitle() {
   const company = document.getElementById("nc-company").value.trim();
   const complaintType = document.getElementById("nc-complaint-type").value;
@@ -1659,9 +1700,9 @@ function autoGenerateTitle() {
   else titleField.value = "";
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  PERMISSIONS
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function allowedTabsForRole(role) {
   if (role === "Admin") return ["dashboard", "new-case", "case-master", "history", "action-log", "comm-log", "timeline", "doc-index", "case-study", "admin-panel", "internal-search", "reviewer-panel", "accountant-dashboard", "agreement-module", "my-tasks", "reports-log", "work-report"];
 
@@ -1705,15 +1746,15 @@ function setupUserRoleOptions() {
   const roleSelect = document.getElementById("new-user-role");
   const title = document.getElementById("user-create-title");
   if (!roleSelect) return;
-  if (isAdmin()) { roleSelect.innerHTML = `<option>Admin</option><option>Operations</option><option>Reviewer</option><option>Accountant</option><option>Staff</option>`; if (title) title.textContent = "👤 Create New User"; }
-  else if (isOperations()) { roleSelect.innerHTML = `<option>Staff</option>`; if (title) title.textContent = "👤 Create New Staff User"; }
+  if (isAdmin()) { roleSelect.innerHTML = `<option>Admin</option><option>Operations</option><option>Reviewer</option><option>Accountant</option><option>Staff</option>`; if (title) title.textContent = "ðŸ‘¤ Create New User"; }
+  else if (isOperations()) { roleSelect.innerHTML = `<option>Staff</option>`; if (title) title.textContent = "ðŸ‘¤ Create New Staff User"; }
 }
 
 // Case Assignment Control removed (assignment shown via Initiated By in Case Master)
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  REFUND SYSTEM
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function refundRequesterLabel(action) { return action.doneBy || action.requestedByEmail || action.requestedByRole || "-"; }
 function refundAmountSummary(action) {
   const amount = Number(action.refundAmount || 0);
@@ -1744,6 +1785,7 @@ async function submitRefundRequest() {
     branch: get("rr-branch"),
     accType: get("rr-acc-type"),
     bankName: get("rr-bankname"),
+    fileLink: document.getElementById("rr-file-data").value || "",
     status: "Pending Review", // Initial Status
     reviewedBy: "",
     approvedBy: "",
@@ -1757,18 +1799,20 @@ async function submitRefundRequest() {
   DB.refunds.push(row);
 
   updateCaseMasterField(row.caseId, "currentStatus", "Refund Under Review");
-  logActivity("REFUND_RAISED", `Refund of ₹${row.amount} requested for ${row.caseId}`, row.caseId);
+  logActivity("REFUND_RAISED", `Refund of â‚¹${row.amount} requested for ${row.caseId}`, row.caseId);
 
   await saveDB();
   toast("Refund request sent to reviewer.", "success");
 
   // Notify Admin about new refund request
-  sendNotification(ADMIN_EMAIL, "New Refund Request Raised", `Hello Admin,\n\nA new refund request has been raised.\n\nCase ID: ${row.caseId}\nAmount: ₹${row.amount}\nRequested By: ${row.requestedBy}\nSummary: ${row.summary}\n\nPlease review the request in the Admin Panel.`);
+  sendNotification(ADMIN_EMAIL, "New Refund Request Raised", `Hello Admin,\n\nA new refund request has been raised.\n\nCase ID: ${row.caseId}\nAmount: â‚¹${row.amount}\nRequested By: ${row.requestedBy}\nSummary: ${row.summary}\n\nPlease review the request in the Admin Panel.`);
 
-  ["rr-amount", "rr-summary", "rr-ifsc", "rr-acc-num", "rr-acc-name", "rr-branch", "rr-bankname"].forEach(id => {
+  ["rr-amount", "rr-summary", "rr-ifsc", "rr-acc-num", "rr-acc-name", "rr-branch", "rr-bankname", "rr-file-data"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
+  const chip = document.getElementById("rr-file-chip");
+  if (chip) chip.innerHTML = "";
   const caseEl = document.getElementById("rr-caseid");
   if (caseEl) caseEl.value = "";
   refreshAllUI();
@@ -1781,12 +1825,12 @@ function renderRefundApprovals() {
   normalizeDBShape();
 
   if (!isAdmin()) {
-    body.innerHTML = `<tr><td colspan="5"><div class="empty-state">Only approver can access this queue.</div></td></tr>`;
+    body.innerHTML = `<tr><td colspan="6"><div class="empty-state">Only approver can access this queue.</div></td></tr>`;
     return;
   }
   const pendingForApproval = DB.refunds.filter(r => normalizeRefundStatus(r.status) === "Pending Approval");
   if (!pendingForApproval.length) {
-    body.innerHTML = `<tr><td colspan="5"><div class="empty-state">No refund pending for approval.</div></td></tr>`;
+    body.innerHTML = `<tr><td colspan="6"><div class="empty-state">No refund pending for approval.</div></td></tr>`;
     return;
   }
 
@@ -1794,10 +1838,17 @@ function renderRefundApprovals() {
     return `
             <tr>
                 <td>${r.caseId}<br><small>${r.reqId}</small></td>
-                <td>₹${r.amount}<br><small>${r.bankName}</small></td>
+                <td>â‚¹${r.amount}<br><small>${r.bankName}</small></td>
                 <td>${r.requestedBy}<br><small>${r.reviewedBy ? `Reviewed by: ${r.reviewedBy}` : "Waiting review metadata"}</small></td>
+                <td>${r.timestamp || "-"}</td>
+                <td>${getFilePreviewHTML(r.fileLink, "Doc")}</td>
                 <td><span class="badge ${getRefundStatusClass(normalizeRefundStatus(r.status))}">${normalizeRefundStatus(r.status)}</span></td>
-                <td><button class="btn btn-success btn-sm" onclick="processRefundStep('${r.reqId}', 'approve')">Final Approve</button></td>
+                <td>
+                    <div style="display:flex; gap:5px;">
+                        <button class="btn btn-success btn-sm" onclick="processRefundStep('${r.reqId}', 'approve')">Approve âœ…</button>
+                        <button class="btn btn-danger btn-sm" onclick="processRefundStep('${r.reqId}', 'reject')">Reject âŒ</button>
+                    </div>
+                </td>
             </tr>
         `;
   }).join("");
@@ -1816,7 +1867,23 @@ async function processRefundStep(reqId, step) {
     ref.lastStatusAtMs = Date.now();
     updateCaseMasterField(ref.caseId, "currentStatus", "Refund Processed");
     addTimelineEntry(ref.caseId, ref.approvedAt, "ACTION", "Refund Approved", `Approved by ${user || "Approver"}`);
+    
+    // Final Approval Notification
+    sendNotification(ADMIN_EMAIL, "âœ… Refund Final Approval Processed", `Hello Admin,\n\nA refund request has been given FINAL APPROVAL.\n\nCase ID: ${ref.caseId}\nAmount: â‚¹${ref.amount}\nApproved By: ${user}\n\nThe request has been moved to the Accountant for payout.`);
+    
     toast("Refund approved successfully.", "success");
+  } else if (step === "reject") {
+    const remark = prompt("Enter rejection remark:");
+    if (!remark) return;
+    ref.status = "Rejected by Admin";
+    ref.lastStatusAtMs = Date.now();
+    updateCaseMasterField(ref.caseId, "currentStatus", "Refund Rejected by Admin");
+    addTimelineEntry(ref.caseId, nowIST(), "ACTION", "Refund Rejected", `Rejected by Admin: ${remark}`);
+    
+    // Admin Rejection Notification
+    sendNotification(ADMIN_EMAIL, "âŒ Refund Request Rejected by Admin", `Hello Admin,\n\nA refund request has been REJECTED in the final stage.\n\nCase ID: ${ref.caseId}\nAmount: â‚¹${ref.amount}\nRejected By: ${user}\nRemark: ${remark}`);
+    
+    toast("Refund rejected and requester notified.", "info");
   }
 
   await saveDB();
@@ -1826,14 +1893,19 @@ function renderRefundDashboard() {
   const body = document.getElementById("refund-dashboard-body"); if (!body) return;
   normalizeDBShape();
   const email = currentUserEmail(), role = currentRole();
+  const myCaseIds = role === "Admin" || role === "Reviewer" || role === "Accountant" ? null : DB.cases.filter(c => (c.assignedTo || c.initiatedBy || "").toLowerCase() === email).map(c => c.caseId);
+  
   let rows = DB.refunds.slice();
-  if (role === "Staff" || role === "Operations") rows = rows.filter(r => (r.requestedBy || "").toLowerCase() === email);
-  if (!rows.length) { body.innerHTML = `<tr><td colspan="5"><div class="empty-state">No refund requests yet.</div></td></tr>`; return; }
+  if (myCaseIds) {
+    rows = rows.filter(r => myCaseIds.includes(r.caseId));
+  }
+  if (!rows.length) { body.innerHTML = `<tr><td colspan="10"><div class="empty-state">No refund requests yet.</div></td></tr>`; return; }
   body.innerHTML = rows.slice().reverse().map(r => `<tr>
         <td><span class="case-id-display">${r.caseId}</span></td>
         <td>Rs. ${Number(r.amount || 0).toLocaleString("en-IN")}<br><span class="text-muted" style="font-size:11px">${r.summary || "-"}</span></td>
         <td>${r.requestedBy || "-"}</td>
         <td><span class="badge ${getRefundStatusClass(normalizeRefundStatus(r.status))}">${normalizeRefundStatus(r.status)}</span></td>
+        <td>${getFilePreviewHTML(r.fileLink, "Request")}${r.txnProof ? ` | ${getFilePreviewHTML(r.txnProof, "Paid")}` : ""}</td>
         <td>${normalizeRefundStatus(r.status) === "Rejected by Reviewer" ? `Remark: ${r.reviewerRemark || "-"}` : (normalizeRefundStatus(r.status) === "Pending Payment" ? "Approved, waiting accountant payment" : (r.approvedAt ? `Approved by ${r.approvedBy || "Approver"} on ${r.approvedAt}` : (r.reviewedBy ? `Reviewed by ${r.reviewedBy}, pending approver` : "Pending reviewer")))}</td>
     </tr>`).join("");
 }
@@ -1867,17 +1939,17 @@ async function createNewUser() {
   toast("User Created Successfully!", "success");
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  AUDIT LOG
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function logActivity(category, description, caseId = "N/A") {
   if (!DB.auditLogs) DB.auditLogs = [];
   DB.auditLogs.push({ id: uid("LOG"), timestamp: nowIST(), user: localStorage.getItem("rrr_user_email") || "Unknown", role: localStorage.getItem("rrr_user_role") || "Unknown", category, description, caseId });
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  BULK IMPORT CSV
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function importCasesExcel(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -2014,11 +2086,11 @@ function downloadCaseImportTemplate() {
   toast("CSV template downloaded.", "success");
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  DATA SEARCH (SAMPLE CSV)
-// ══════════════════════════════════════
-// ── 1. IMPORT SAMPLE CSV (Cloud Ready) ──
-// ── 1. IMPORT SAMPLE EXCEL (Cloud Ready) ──
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â”€â”€ 1. IMPORT SAMPLE CSV (Cloud Ready) â”€â”€
+// â”€â”€ 1. IMPORT SAMPLE EXCEL (Cloud Ready) â”€â”€
 async function importSampleExcel(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -2068,18 +2140,18 @@ async function importSampleExcel(event) {
         successCount++;
       }
 
-      console.log("✅ Parsed " + successCount + " records from Excel");
-      toast(`✅ ${successCount} Records Uploaded Successfully! Saving to Cloud...`, "success");
+      console.log("âœ… Parsed " + successCount + " records from Excel");
+      toast(`âœ… ${successCount} Records Uploaded Successfully! Saving to Cloud...`, "success");
 
       renderSampleSearch();
 
       try {
         await saveDB(true);
-        console.log("✅ Sample data successfully synced to Cloud");
-        toast("✅ Data saved to Cloud successfully!", "success");
+        console.log("âœ… Sample data successfully synced to Cloud");
+        toast("âœ… Data saved to Cloud successfully!", "success");
       } catch (err) {
-        console.error("❌ Cloud save failed:", err);
-        toast("⚠️ Local save successful but cloud sync failed.", "error");
+        console.error("âŒ Cloud save failed:", err);
+        toast("âš ï¸ Local save successful but cloud sync failed.", "error");
       }
     } catch (err) {
       console.error(err);
@@ -2131,7 +2203,7 @@ function renderSampleSearch() {
   });
 
   if (!filtered.length) {
-    body.innerHTML = `<tr><td colspan="14" class="empty-state">🔍 No matching results found for "${query}"</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14" class="empty-state">ðŸ” No matching results found for "${query}"</td></tr>`;
     return;
   }
 
@@ -2147,18 +2219,18 @@ function renderSampleSearch() {
             <td>${d.email || "-"}</td>
             <td>${d.service || "-"}</td>
             <td>${d.bde || "-"}</td>
-            <td style="font-weight:bold; color:var(--green)">₹${d.total || "0"}</td>
-            <td>₹${d.net || "0"}</td>
+            <td style="font-weight:bold; color:var(--green)">â‚¹${d.total || "0"}</td>
+            <td>â‚¹${d.net || "0"}</td>
             <td><span class="badge ${d.status === 'Completed' ? 'badge-closed' : 'badge-pending'}">${d.status || "Pending"}</span></td>
             <td>${d.dept || "-"}</td>
             <td>${d.mou || "No"}</td>
             <td>${d.remarks || "-"}</td>
-            <td>₹${d.mouSignedAmt || "0"}</td>
+            <td>â‚¹${d.mouSignedAmt || "0"}</td>
         </tr>
     `).join("");
 }
 
-// ── 3. SEARCH INPUT HELPER (Optional but recommended) ──
+// â”€â”€ 3. SEARCH INPUT HELPER (Optional but recommended) â”€â”€
 // Ise Tab Switcher ya Initializer mein add karein
 function setupSearchListener() {
   const input = document.getElementById("sample-search-input");
@@ -2172,7 +2244,7 @@ function renderReviewerDashboard() {
   if (!body) return;
   normalizeDBShape();
   if (!isReviewer()) {
-    body.innerHTML = '<tr><td colspan="5" class="empty-state">Only reviewer can access this queue.</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="empty-state">Only reviewer can access this queue.</td></tr>';
     return;
   }
 
@@ -2180,19 +2252,19 @@ function renderReviewerDashboard() {
   const pending = DB.refunds.filter(r => normalizeRefundStatus(r.status) === "Pending Review");
 
   if (pending.length === 0) {
-    body.innerHTML = '<tr><td colspan="5" class="empty-state">No pending reviews</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="empty-state">No pending reviews</td></tr>';
     return;
   }
 
   body.innerHTML = pending.map(r => `
         <tr>
-            <td><strong>${r.caseId}</strong></td>
-            <td>₹${r.amount}</td>
+            <td>â‚¹${r.amount}</td>
             <td>${r.requestedBy}</td>
+            <td>${getFilePreviewHTML(r.fileLink, "Proof")}</td>
             <td>${r.summary}</td>
             <td>
-                <button class="btn btn-success btn-sm" onclick="handleReview('${r.reqId}', 'approve')">Review ✅</button>
-                <button class="btn btn-danger btn-sm" onclick="handleReview('${r.reqId}', 'reject')">Send Back ↩</button>
+                <button class="btn btn-success btn-sm" onclick="handleReview('${r.reqId}', 'approve')">Review âœ…</button>
+                <button class="btn btn-danger btn-sm" onclick="handleReview('${r.reqId}', 'reject')">Send Back â†©</button>
             </td>
         </tr>
     `).join("");
@@ -2210,6 +2282,10 @@ async function handleReview(reqId, action) {
     ref.lastStatusAtMs = Date.now();
     updateCaseMasterField(ref.caseId, "currentStatus", "Reviewed - Pending Approval");
     addTimelineEntry(ref.caseId, nowIST(), "ACTION", "Refund Reviewed", `Reviewed by ${user}`);
+    
+    // Reviewer Approval Notification
+    sendNotification(ADMIN_EMAIL, "ðŸ” Refund Request Reviewed (Approved)", `Hello Admin,\n\nA refund request has been REVIEWED and PASSED by the Reviewer.\n\nCase ID: ${ref.caseId}\nAmount: â‚¹${ref.amount}\nReviewed By: ${user}\n\nThis is now waiting for your Final Approval in the Approver Queue.`);
+    
     toast("Reviewed and moved to approver queue.", "success");
   } else {
     const remark = prompt("Enter remark/reason for sending back:");
@@ -2217,8 +2293,11 @@ async function handleReview(reqId, action) {
     ref.status = "Rejected by Reviewer";
     ref.reviewerRemark = remark;
     ref.lastStatusAtMs = Date.now();
-    updateCaseMasterField(ref.caseId, "currentStatus", "Refund Rejected by Reviewer");
     addTimelineEntry(ref.caseId, nowIST(), "ACTION", "Refund Rejected", `Rejected by reviewer: ${remark}`);
+    
+    // Reviewer Rejection Notification
+    sendNotification(ADMIN_EMAIL, "âŒ Refund Request Rejected by Reviewer", `Hello Admin,\n\nA refund request has been REJECTED by the Reviewer.\n\nCase ID: ${ref.caseId}\nAmount: â‚¹${ref.amount}\nRejected By: ${user}\nRemark: ${remark}\n\nThe request has been sent back to the staff.`);
+    
     toast("Rejected and returned to requester with remark.", "info");
   }
 
@@ -2231,7 +2310,7 @@ function renderAccountantDashboard() {
   if (!body) return;
   normalizeDBShape();
   if (currentRole() !== "Accountant") {
-    body.innerHTML = '<tr><td colspan="5" class="empty-state">Only accountant can process payouts.</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="empty-state">Only accountant can process payouts.</td></tr>';
     return;
   }
 
@@ -2242,7 +2321,7 @@ function renderAccountantDashboard() {
   });
 
   if (forPayment.length === 0) {
-    body.innerHTML = '<tr><td colspan="5" class="empty-state">No pending payments</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="empty-state">No pending payments</td></tr>';
     return;
   }
 
@@ -2256,7 +2335,7 @@ function renderAccountantDashboard() {
                 <b>A/C:</b> ${r.accNum}<br>
                 <b>IFSC:</b> ${r.ifsc}
             </td>
-            <td style="color:var(--green); font-weight:bold;">₹${r.amount}</td>
+            <td style="color:var(--green); font-weight:bold;">â‚¹${r.amount}</td>
             <td style="font-size:12px; line-height:1.5;">
                 <b>Requested By:</b> ${r.requestedBy || "-"}<br>
                 <b>Summary:</b> ${r.summary || "-"}<br>
@@ -2264,47 +2343,88 @@ function renderAccountantDashboard() {
                 <b>Approved By:</b> ${r.approvedBy || "-"}
             </td>
             <td>
-                <button class="btn btn-success btn-sm" onclick="markAsPaid('${r.reqId}')">Mark as Paid 💸</button>
+                <button class="btn btn-success btn-sm" onclick="openAccPaymentModal('${r.reqId}')">Mark as Paid ðŸ’¸</button>
             </td>
         </tr>
     `).join("");
 }
 
-async function markAsPaid(reqId) {
-  const txnId = prompt("Enter Transaction ID / UTR Number:");
-  if (!txnId) return;
+let currentRefundReqId = null;
+function openAccPaymentModal(reqId) {
+  currentRefundReqId = reqId;
+  document.getElementById("ap-utr").value = "";
+  document.getElementById("ap-file-data").value = "";
+  const chip = document.getElementById("ap-file-chip");
+  if (chip) chip.innerHTML = "";
+  document.getElementById("accPaymentModal").classList.remove("hidden");
+  if (window.lucide) lucide.createIcons();
+}
 
-  const ref = DB.refunds.find(x => x.reqId === reqId);
+function closeAccPaymentModal() {
+  document.getElementById("accPaymentModal").classList.add("hidden");
+  currentRefundReqId = null;
+}
+
+async function submitAccountantPayment() {
+  const utr = document.getElementById("ap-utr").value.trim();
+  const proof = document.getElementById("ap-file-data").value;
+  
+  if (!utr) { toast("Please enter UTR/Transaction ID", "error"); return; }
+  if (!proof) { toast("Please upload payment screenshot proof", "error"); return; }
+
+  const ref = DB.refunds.find(x => x.reqId === currentRefundReqId);
+  if (!ref) return;
+
   ref.status = "Refund Completed";
-  ref.transactionId = txnId;
+  ref.transactionId = utr;
+  ref.txnProof = proof;
   ref.paymentDate = nowIST();
   ref.paidBy = currentUserEmail();
   ref.lastStatusAtMs = Date.now();
 
   updateCaseMasterField(ref.caseId, "currentStatus", "Refund Paid");
-  addTimelineEntry(ref.caseId, ref.paymentDate, "ACTION", "Payment Processed", `Refund Paid via Txn: ${txnId}`);
+  addTimelineEntry(ref.caseId, ref.paymentDate, "ACTION", "Payment Processed", `Refund Paid via Txn: ${utr}`);
+
+  // Accountant Payment Notification
+  sendNotification(ADMIN_EMAIL, "ðŸ’° Refund Payment Completed", `Hello Admin,\n\nA refund payment has been COMPLETED by the Accountant.\n\nCase ID: ${ref.caseId}\nAmount: â‚¹${ref.amount}\nUTR/Txn ID: ${utr}\nPaid By: ${ref.paidBy}\n\nThe refund cycle for this case is now finished.`);
 
   toast("Payment recorded successfully!", "success");
+  closeAccPaymentModal();
   await saveDB();
-  renderAccountantDashboard();
+  refreshAllUI();
 }
 
-// ══════════════════════════════════════
+async function markAsPaid(reqId) {
+  openAccPaymentModal(reqId);
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  AGREEMENT MODULE
-// ══════════════════════════════════════
-function addAgreementInstallment() {
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+window.addAgreementInstallmentRow = function() {
   const container = document.getElementById("am-installments-container");
+  const rowCount = container.children.length;
+  if (rowCount >= 10) { toast("Maximum 10 installments allowed", "info"); return; }
+
   const div = document.createElement("div");
   div.className = "am-installment-row";
-  div.style.cssText = "display:flex; gap:10px; margin-bottom:10px; align-items:center;";
+  div.style.cssText = "display:grid; grid-template-columns: 40px 1fr 1fr 40px; gap:10px; align-items:center; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #e2e8f0; margin-bottom:8px;";
   div.innerHTML = `
-    <input type="number" class="am-inst-amount" placeholder="Amount (₹)" style="flex:1;">
-    <input type="date" class="am-inst-date" style="flex:1;">
-    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="padding:8px 12px;"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
+    <div style="font-weight:700; color:var(--muted); font-size:13px;">#${rowCount + 1}</div>
+    <input type="number" class="am-inst-amount" placeholder="Amount (â‚¹)" style="padding:6px; font-size:13px; border:1px solid #ccc; border-radius:4px;">
+    <input type="date" class="am-inst-date" style="padding:6px; font-size:13px; border:1px solid #ccc; border-radius:4px;">
+    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); renumberInstallments();" style="padding:4px;"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
   `;
   container.appendChild(div);
   if (window.lucide) lucide.createIcons();
-}
+};
+
+window.renumberInstallments = function() {
+  const container = document.getElementById("am-installments-container");
+  Array.from(container.children).forEach((row, idx) => {
+    row.children[0].textContent = `#${idx + 1}`;
+  });
+};
 
 function clearAgreementForm() {
   document.querySelectorAll("#tab-agreement-module input:not(#am-template-id), #tab-agreement-module textarea").forEach(el => el.value = "");
@@ -2338,17 +2458,17 @@ async function generateAgreement() {
   // Compile installments
   const instRows = document.querySelectorAll(".am-installment-row");
   let installmentsArr = [];
-  instRows.forEach(row => {
+  instRows.forEach((row, idx) => {
     const amt = row.querySelector(".am-inst-amount").value.trim();
     const d = row.querySelector(".am-inst-date").value.trim();
     if (amt && d) {
-      const dObj = new Date(d);
-      const dStr = isNaN(dObj.getTime()) ? d : `${String(dObj.getDate()).padStart(2, '0')}/${String(dObj.getMonth()+1).padStart(2,'0')}/${dObj.getFullYear()}`;
-      installmentsArr.push(`₹${Number(amt).toLocaleString('en-IN')} on ${dStr}`);
+      const dStr = formatDate(d);
+      // Format as "Installment X: â‚¹ Amount payable on date DD/MM/YYYY"
+      installmentsArr.push(`Installment ${idx + 1}: â‚¹ ${Number(amt).toLocaleString('en-IN')} payable on date ${dStr}`);
     }
   });
   
-  const installmentsText = installmentsArr.length > 0 ? installmentsArr.join(", ") : "N/A";
+  const installmentsText = installmentsArr.length > 0 ? installmentsArr.join("\n") : "N/A";
 
   const payload = {
     date: formatDate(date),
@@ -2414,9 +2534,9 @@ async function generateAgreement() {
   }
 }
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  INIT
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 window.addEventListener('DOMContentLoaded', () => {
   toggleServiceMode();
   updateEngagementNote();
@@ -2452,9 +2572,9 @@ window.addEventListener("resize", () => {
   if (window.innerWidth > 1024) toggleSidebar(false);
 });
 
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  TASK MANAGEMENT & SOD/EOD LOGIC
-// ══════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 window.checkSODOnLogin = function() {
   const email = currentUserEmail();
@@ -2823,3 +2943,4 @@ window.renderWorkReport = function() {
     }).join("");
   }).join("");
 };
+window.toggleTaskCol = function(colId) { const col = document.getElementById("col-" + colId); if (col) col.classList.toggle("open"); };
