@@ -4,62 +4,27 @@ const Task = require('../models/Task');
 const Case = require('../models/Case');
 const { verifyToken } = require('../middleware/auth');
 
-// Get all tasks (Admin can filter, Staff sees theirs)
+// Get all tasks - only from Task collection (no case merging)
 router.get('/', verifyToken, async (req, res) => {
   try {
     const { assignee } = req.query;
-    console.log('Fetching tasks. Query assignee:', assignee, 'User Role:', req.user.role);
     
     let query = {};
-
     if (req.user.role === 'Admin') {
       if (assignee && assignee !== 'All Users' && assignee !== 'undefined') {
-        query.assignee = new RegExp(`^${assignee.trim()}$`, 'i');
-      }
-      // If 'All Users' or no assignee filter, return everything
-    } else {
-      // Non-admins only see tasks assigned to them
-      query.assignee = req.user.fullName;
-    }
-
-    console.log('Mongoose Query:', query);
-    
-    // Fetch manual tasks
-    const manualTasks = await Task.find(query).sort({ createdAt: -1 });
-
-    // Fetch cases and map them to task format
-    // Map Case Query: assignedTo instead of assignee
-    let caseQuery = {};
-    if (req.user.role === 'Admin') {
-      if (assignee && assignee !== 'All Users' && assignee !== 'undefined') {
-        caseQuery.assignedTo = new RegExp(`^${assignee.trim()}$`, 'i');
+        // Use \s* to ignore any leading/trailing spaces saved in the database
+        query.assignee = new RegExp(`^\\s*${assignee.trim()}\\s*$`, 'i');
       }
     } else {
-      caseQuery.assignedTo = req.user.fullName;
+      // Non-admins see tasks assigned to them OR created by them
+      query.$or = [
+        { assignee: req.user.fullName },
+        { createdBy: req.user.email }
+      ];
     }
 
-    const cases = await Case.find(caseQuery);
-    const mappedCases = cases.map(c => {
-      // Map status
-      let kanbanStatus = 'To Do';
-      if (c.currentStatus === 'Closed' || c.currentStatus === 'Settled') kanbanStatus = 'Completed';
-      else if (c.currentStatus === 'Action Logged' || c.currentStatus === 'In Progress') kanbanStatus = 'In Progress';
-
-      return {
-        _id: c._id,
-        title: `Case: ${c.companyName || 'Untitled'}`,
-        priority: c.priority || 'Medium',
-        assignee: c.assignedTo || c.initiatedBy || 'Unassigned',
-        dueDate: c.nextActionDate || '',
-        caseId: c.caseId,
-        details: c.caseSummary || '',
-        status: kanbanStatus,
-        isCase: true // To distinguish in UI
-      };
-    });
-
-    // Combine and return
-    res.json([...manualTasks, ...mappedCases]);
+    const tasks = await Task.find(query).sort({ createdAt: -1 });
+    res.json(tasks);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -68,8 +33,12 @@ router.get('/', verifyToken, async (req, res) => {
 // Create new task
 router.post('/', verifyToken, async (req, res) => {
   try {
+    const count = await Task.countDocuments({ source: 'Manual' });
+    const taskId = `TASK-${String(count + 1).padStart(3, '0')}`;
     const newTask = new Task({
       ...req.body,
+      taskId,
+      source: 'Manual',
       createdBy: req.user.email
     });
     await newTask.save();
@@ -87,20 +56,25 @@ router.put('/:id', verifyToken, async (req, res) => {
     // 1. Try updating as a manual Task
     let updated = await Task.findByIdAndUpdate(
       req.params.id, 
-      { status },
+      { ...req.body },
       { new: true }
     );
 
     // 2. If not found in Task, it might be a Case
     if (!updated) {
-      let caseStatus = 'New';
-      if (status === 'Completed') caseStatus = 'Closed';
-      else if (status === 'In Progress') caseStatus = 'In Progress';
-      else if (status === 'To Do') caseStatus = 'New';
+      let updatePayload = { ...req.body };
+      if (req.body.status) {
+        let caseStatus = 'New';
+        if (req.body.status === 'Completed') caseStatus = 'Closed';
+        else if (req.body.status === 'In Progress') caseStatus = 'In Progress';
+        else if (req.body.status === 'To Do') caseStatus = 'New';
+        updatePayload.currentStatus = caseStatus;
+        delete updatePayload.status;
+      }
 
       updated = await Case.findByIdAndUpdate(
         req.params.id,
-        { currentStatus: caseStatus },
+        updatePayload,
         { new: true }
       );
       

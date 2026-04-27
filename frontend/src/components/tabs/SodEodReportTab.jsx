@@ -17,7 +17,8 @@ import {
   Target,
   Smile,
   X,
-  History
+  History,
+  Download
 } from 'lucide-react';
 
 const SodEodReportTab = () => {
@@ -53,6 +54,33 @@ const SodEodReportTab = () => {
     return matchesFilter && matchesSearch;
   });
 
+  const handleExportReports = () => {
+    const headers = ['Date', 'Type', 'Submitted By', 'Check-In', 'Check-Out', 'Duration', 'Planned Tasks', 'Work Summary', 'Completion', 'Progress Score', 'Mood'];
+    const rows = filteredReports.map(r => [
+      r.date || '',
+      r.type || '',
+      r.userName || '',
+      r.checkInTime || '',
+      r.checkOutTime || '',
+      r.workDuration || '',
+      (r.plannedTasks || '').replace(/,/g, ';').replace(/\n/g, ' '),
+      (r.workSummary || '').replace(/,/g, ';').replace(/\n/g, ' '),
+      r.completionStatus || '',
+      r.progressScore || '',
+      r.moodEnergy || ''
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.map(v => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `SOD_EOD_Reports_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleOpenDetails = (report) => {
     setSelectedReport(report);
     setIsModalOpen(true);
@@ -70,20 +98,28 @@ const SodEodReportTab = () => {
           <p className="text-sm text-gray-500 ml-10 font-medium">View your daily progress logs</p>
         </div>
         
-        <div className="flex bg-gray-100 p-1.5 rounded-2xl border-2 border-gray-200">
-          {['All', 'SOD', 'EOD'].map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilter(type)}
-              className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${
-                filter === type 
-                ? 'bg-white text-blue-600 shadow-md border border-blue-100' 
-                : 'text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              {type} Reports
-            </button>
-          ))}
+        <div className="flex items-center gap-4">
+          <div className="flex bg-gray-100 p-1.5 rounded-2xl border-2 border-gray-200">
+            {['All', 'SOD', 'EOD'].map((type) => (
+              <button
+                key={type}
+                onClick={() => setFilter(type)}
+                className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${
+                  filter === type 
+                  ? 'bg-white text-blue-600 shadow-md border border-blue-100' 
+                  : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                {type} Reports
+              </button>
+            ))}
+          </div>
+          <button 
+            onClick={handleExportReports}
+            className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
+          >
+            <Download size={18} /> Export
+          </button>
         </div>
       </div>
 

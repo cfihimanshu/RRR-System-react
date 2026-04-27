@@ -12,6 +12,8 @@ const reportSchema = new mongoose.Schema({
   plannedTasks: String,
   priorityArea: String,
   myTasksToday: Array,
+  sodCaseIds: [String],
+  sodTaskIds: [String],
   
   // EOD Fields
   checkOutTime: String,
@@ -20,6 +22,7 @@ const reportSchema = new mongoose.Schema({
   workSummary: String,
   progressScore: Number,
   moodEnergy: String,
+  workingHours: Number,
   
   status: { type: String, default: 'Submitted' }
 }, { timestamps: true });

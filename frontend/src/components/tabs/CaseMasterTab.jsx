@@ -17,7 +17,8 @@ import {
   Check, 
   X,
   ExternalLink,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 
 const CaseMasterTab = () => {
@@ -80,7 +81,10 @@ const CaseMasterTab = () => {
     }
     if (location.state?.priorityFilter) {
       setPriorityFilter(location.state.priorityFilter);
-      // Clear state after applying
+      window.history.replaceState({}, document.title);
+    }
+    if (location.state?.searchId) {
+      setSearchTerm(location.state.searchId);
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
@@ -145,6 +149,18 @@ const CaseMasterTab = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDeleteCase = async (caseId) => {
+    if (!window.confirm(`Are you sure you want to delete case ${caseId}? This action cannot be undone.`)) return;
+    
+    try {
+      await api.delete(`/cases/${caseId}`);
+      toast.success('Case deleted successfully');
+      fetchCases();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete case');
+    }
   };
 
   const filteredCases = cases.filter(c => {
@@ -396,6 +412,8 @@ const CaseMasterTab = () => {
                     handleAssignmentInputChange={handleAssignmentInputChange}
                     opsUsers={opsUsers}
                     handleAssign={handleAssign}
+                    handleDeleteCase={handleDeleteCase}
+                    user={user}
                   />
                 ))
               )}
@@ -511,7 +529,9 @@ const CaseRow = memo(({
   assignmentInput, 
   handleAssignmentInputChange, 
   opsUsers, 
-  handleAssign 
+  handleAssign,
+  handleDeleteCase,
+  user
 }) => {
   const svcs = Array.isArray(c.servicesSold)
     ? c.servicesSold.map(s => s.serviceName).join(', ')
@@ -586,6 +606,15 @@ const CaseRow = memo(({
             >
               <Edit3 size={12} />
             </button>
+            {user?.role === 'Admin' && (
+              <button
+                onClick={() => handleDeleteCase(c.caseId)}
+                className="bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-[9px] border border-red-200 py-1 px-1.5 rounded shadow-sm transition-colors flex items-center justify-center gap-1"
+                title="Delete Case"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
           </div>
           <div className="flex gap-1 w-full mt-0.5">
             <select 

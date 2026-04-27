@@ -5,6 +5,12 @@ const xlsx = require('xlsx');
 const Case = require('../models/Case');
 const AuditLog = require('../models/AuditLog');
 const Timeline = require('../models/Timeline');
+const Task = require('../models/Task');
+const Communication = require('../models/Communication');
+const Action = require('../models/Action');
+const Refund = require('../models/Refund');
+const Document = require('../models/Document');
+const History = require('../models/History');
 const { verifyToken } = require('../middleware/auth');
 const { roleGuard } = require('../middleware/roleGuard');
 
@@ -48,11 +54,27 @@ function generateCaseId(brandName, companyName, existingCases) {
   return `RRR-${code}-${year}-${String(next).padStart(4, "0")}`;
 }
 
+async function updateRelatedModels(oldId, newId) {
+  if (!oldId || !newId || oldId === newId) return;
+  
+  await Promise.all([
+    Timeline.updateMany({ caseId: oldId }, { $set: { caseId: newId } }),
+    Task.updateMany({ caseId: oldId }, { $set: { caseId: newId } }),
+    Communication.updateMany({ caseId: oldId }, { $set: { caseId: newId } }),
+    Action.updateMany({ caseId: oldId }, { $set: { caseId: newId } }),
+    Refund.updateMany({ caseId: oldId }, { $set: { caseId: newId } }),
+    Document.updateMany({ caseId: oldId }, { $set: { caseId: newId } }),
+    History.updateMany({ caseId: oldId }, { $set: { caseId: newId } }),
+    AuditLog.updateMany({ caseId: oldId }, { $set: { caseId: newId } })
+  ]);
+}
+
 // --- BULK ADMIN ROUTES (Must be before standard routes to avoid overlap) ---
 router.delete('/bulk/delete-all', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     await Case.deleteMany({});
-    res.json({ message: 'All cases deleted successfully' });
+    await Timeline.deleteMany({});
+    res.json({ message: 'All cases and timelines deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -72,6 +94,7 @@ router.post('/bulk/sync-ids', verifyToken, roleGuard(['Admin']), async (req, res
       const correctId = generateCaseId(c.brandName, c.companyName, processedCases);
       
       if (currentId !== correctId) {
+        await updateRelatedModels(currentId, correctId);
         c.caseId = correctId;
         if (c.get('caseid')) c.set('caseid', undefined);
         await c.save();
@@ -172,6 +195,39 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       description: `Created new case: ${caseId}`,
       caseId: caseId
     });
+
+    // Auto-generate Task for the user who initiated the case
+    const initiatedUser = req.body.initiatedBy || req.user.fullName;
+    if (initiatedUser) {
+      try {
+        const autoTask = new Task({
+          taskId: `TASK-${caseId}-${Date.now().toString().slice(-4)}`,
+          title: 'Make call on this case',
+          details: `Auto-generated task for new case ${caseId}. Please make an initial call regarding this case.`,
+          priority: req.body.priority || 'Medium',
+          assignee: initiatedUser,
+          dueDate: new Date().toISOString().split('T')[0], // Today's date
+          caseId: caseId,
+          status: 'To Do',
+          createdBy: req.user.email,
+          source: 'Auto (Case Generation)'
+        });
+        await autoTask.save();
+      } catch (err) {
+        console.error('Error auto-generating task:', err);
+      }
+    }
+
+    // Create initial timeline entry
+    const timelineEntry = new Timeline({
+      id: Date.now().toString() + Math.random().toString(36).substring(7),
+      caseId: caseId,
+      eventDate: new Date().toISOString(),
+      source: 'System',
+      eventType: 'Case Created',
+      summary: 'Manual Case Creation'
+    });
+    await timelineEntry.save();
 
     res.status(201).json(newCase);
   } catch (error) {
@@ -324,8 +380,10 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
 
 router.delete('/:caseId', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
-    await Case.findOneAndDelete({ caseId: req.params.caseId });
-    res.json({ message: 'Deleted' });
+    const { caseId } = req.params;
+    await Case.findOneAndDelete({ caseId });
+    await Timeline.deleteMany({ caseId });
+    res.json({ message: 'Case and associated timeline deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -397,15 +455,25 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
 
     await Case.insertMany(finalCases);
 
-    const timelineEntries = finalCases.map(c => ({
-      id: Date.now().toString() + Math.random().toString(36).substring(7),
-      caseId: c.caseId,
-      eventDate: new Date().toISOString(),
-      source: 'System',
-      eventType: 'Case Created',
-      summary: 'Imported: Bulk Import via File'
-    }));
-    await Timeline.insertMany(timelineEntries);
+    // Create timeline entries only if they don't already exist for these caseIds
+    const timelineEntries = [];
+    for (const c of finalCases) {
+       const exists = await Timeline.findOne({ caseId: c.caseId, eventType: 'Case Created' });
+       if (!exists) {
+         timelineEntries.push({
+           id: Date.now().toString() + Math.random().toString(36).substring(7),
+           caseId: c.caseId,
+           eventDate: new Date(c.createdDate || new Date()).toISOString(),
+           source: 'System',
+           eventType: 'Case Created',
+           summary: 'Imported: Bulk Import via File'
+         });
+       }
+    }
+    
+    if (timelineEntries.length > 0) {
+      await Timeline.insertMany(timelineEntries);
+    }
 
     fs.unlinkSync(req.file.path);
     res.status(201).json({ message: `Successfully imported ${finalCases.length} cases.` });

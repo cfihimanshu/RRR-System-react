@@ -65,6 +65,18 @@ router.get('/stats', verifyToken, async (req, res) => {
     const sodToday = await Report.countDocuments({ ...query, type: 'SOD', createdAt: { $gte: today } });
     const eodToday = await Report.countDocuments({ ...query, type: 'EOD', createdAt: { $gte: today } });
 
+    let workingHours = 0;
+    if (!isAdmin) {
+      const firstSod = await Report.findOne({ ...query, type: 'SOD', createdAt: { $gte: today } }).sort({ createdAt: 1 });
+      const lastEod = await Report.findOne({ ...query, type: 'EOD', createdAt: { $gte: today } }).sort({ createdAt: -1 });
+      
+      if (firstSod) {
+        const startTime = new Date(firstSod.createdAt);
+        const endTime = lastEod ? new Date(lastEod.createdAt) : new Date();
+        workingHours = (endTime - startTime) / (1000 * 60 * 60);
+      }
+    }
+
     res.json({
       tasksAssigned: manualTasksCount + totalCasesCount,
       tasksCompleted: manualCompletedCount + completedCasesCount,
@@ -72,6 +84,7 @@ router.get('/stats', verifyToken, async (req, res) => {
       eodToday,
       totalCases: totalCasesCount,
       settledCases: completedCasesCount,
+      workingHours: workingHours.toFixed(2),
       role: req.user.role
     });
   } catch (error) {

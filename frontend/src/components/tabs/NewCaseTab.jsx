@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import FileUpload from '../shared/FileUpload';
+import SearchableSelect from '../shared/SearchableSelect';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Building2, 
@@ -31,6 +32,16 @@ const initialService = {
   department: 'Operations'
 };
 
+const indianStates = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
+  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
+  "Uttarakhand", "West Bengal", "Andaman and Nicobar Islands", "Chandigarh", 
+  "Dadra and Nagar Haveli and Daman and Diu", "Lakshadweep", "Delhi", "Puducherry", 
+  "Ladakh", "Jammu and Kashmir"
+];
+
 const NewCaseTab = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -47,6 +58,11 @@ const NewCaseTab = () => {
     initiatedBy: '', accountable: '', legalOfficer: '', accounts: '',
     firNumber: '', firFileLink: '', grievanceNumber: '',
     assignedTo: '' // New field
+  });
+  
+  const [errors, setErrors] = useState({
+    clientEmail: '',
+    clientMobile: ''
   });
   
   const [userList, setUserList] = useState([]); // List of users for dropdown
@@ -125,6 +141,28 @@ const NewCaseTab = () => {
     fetchUsers();
   }, []);
 
+  // Auto-calculate financial details from services
+  useEffect(() => {
+    const totalPaid = services.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0);
+    const totalMou = services.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0);
+    const dispute = totalPaid - totalMou;
+
+    setFormData(prev => ({
+      ...prev,
+      totalAmtPaid: totalPaid || '',
+      totalMouValue: totalMou || '',
+      amtInDispute: dispute || ''
+    }));
+    
+    // Also update engagement note if MOU value changes
+    if (totalMou >= 0) {
+       setFormData(prev => ({
+         ...prev,
+         engagementNote: `This is a multi-stage consultancy and execution support engagement. ₹${totalMou} was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.`
+       }));
+    }
+  }, [services]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     let updates = { [name]: value };
@@ -137,6 +175,24 @@ const NewCaseTab = () => {
 
     if (name === 'totalMouValue') {
       updates.engagementNote = `This is a multi-stage consultancy and execution support engagement. ₹${value || '0'} was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.`;
+    }
+
+    // Inline Validations
+    if (name === 'clientEmail') {
+      if (value && !value.toLowerCase().endsWith('@gmail.com')) {
+        setErrors(prev => ({ ...prev, clientEmail: 'Pattern not valid! Must end with @gmail.com' }));
+      } else {
+        setErrors(prev => ({ ...prev, clientEmail: '' }));
+      }
+    }
+
+    if (name === 'clientMobile') {
+      const clean = value.replace(/\s+/g, '');
+      if (clean && !/^\d{10}$/.test(clean)) {
+        setErrors(prev => ({ ...prev, clientMobile: 'Pattern not valid! Must be 10 digits' }));
+      } else {
+        setErrors(prev => ({ ...prev, clientMobile: '' }));
+      }
     }
 
     setFormData(prev => ({ ...prev, ...updates }));
@@ -162,6 +218,17 @@ const NewCaseTab = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validations
+    if (formData.clientEmail && !formData.clientEmail.toLowerCase().endsWith('@gmail.com')) {
+      return toast.error('Email must be a @gmail.com address', { icon: '📧' });
+    }
+    
+    const cleanMobile = formData.clientMobile.replace(/\s+/g, '');
+    if (cleanMobile && !/^\d{10}$/.test(cleanMobile)) {
+      return toast.error('Mobile number must be exactly 10 digits', { icon: '📱' });
+    }
+
     try {
       const payload = {
         ...formData,
@@ -403,23 +470,24 @@ const NewCaseTab = () => {
               <input type="text" className={inputClass} name="clientName" value={formData.clientName} onChange={handleChange} placeholder="Full name" required />
             </div>
             <div>
-              <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Mobile</label>
-              <input type="text" className={inputClass} name="clientMobile" value={formData.clientMobile} onChange={handleChange} placeholder="+91 XXXXX XXXXX" required />
+              <label className={labelClass}>Mobile</label>
+              <input type="text" className={`${inputClass} ${errors.clientMobile ? 'border-red-500 bg-red-50' : ''}`} name="clientMobile" value={formData.clientMobile} onChange={handleChange} placeholder="10 Digit Number" required />
+              {errors.clientMobile && <p className="text-[9px] text-red-500 font-bold mt-1 uppercase tracking-tighter">{errors.clientMobile}</p>}
             </div>
             <div>
               <label className={labelClass}>Email</label>
-              <input type="email" className={inputClass} name="clientEmail" value={formData.clientEmail || ''} onChange={handleChange} placeholder="client@example.com" />
+              <input type="email" className={`${inputClass} ${errors.clientEmail ? 'border-red-500 bg-red-50' : ''}`} name="clientEmail" value={formData.clientEmail || ''} onChange={handleChange} placeholder="example@gmail.com" />
+              {errors.clientEmail && <p className="text-[9px] text-red-500 font-bold mt-1 uppercase tracking-tighter">{errors.clientEmail}</p>}
             </div>
             <div>
               <label className={labelClass}>State</label>
-              <select className={inputClass} name="state" value={formData.state || ''} onChange={handleChange}>
-                <option value="">-- Select State --</option>
-                <option value="Maharashtra">Maharashtra</option>
-                <option value="Delhi">Delhi</option>
-                <option value="Karnataka">Karnataka</option>
-                <option value="Gujarat">Gujarat</option>
-                <option value="Other">Other</option>
-              </select>
+              <SearchableSelect 
+                name="state"
+                options={indianStates}
+                value={formData.state}
+                onChange={handleChange}
+                placeholder="Search state..."
+              />
             </div>
           </div>
         </div>
@@ -430,7 +498,7 @@ const NewCaseTab = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div>
               <label className={labelClass}>Total Amount Paid (₹)</label>
-              <input type="text" className={inputClass} name="totalAmtPaid" value={formData.totalAmtPaid || ''} onChange={handleChange} placeholder="₹" />
+              <input type="text" className={`${inputClass} bg-gray-50 font-bold`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" />
             </div>
             <div>
               <label className={labelClass}>MOU Signed?</label>
@@ -441,11 +509,11 @@ const NewCaseTab = () => {
             </div>
             <div>
               <label className={labelClass}>Total MOU Value (₹)</label>
-              <input type="text" className={inputClass} name="totalMouValue" value={formData.totalMouValue || ''} onChange={handleChange} placeholder="₹" />
+              <input type="text" className={`${inputClass} bg-gray-50 font-bold`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" />
             </div>
             <div>
               <label className={labelClass}>Amount In Dispute (₹)</label>
-              <input type="text" className={inputClass} name="amtInDispute" value={formData.amtInDispute || ''} onChange={handleChange} placeholder="₹" />
+              <input type="text" className={`${inputClass} bg-blue-50 font-bold text-blue-700`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" />
             </div>
           </div>
         </div>

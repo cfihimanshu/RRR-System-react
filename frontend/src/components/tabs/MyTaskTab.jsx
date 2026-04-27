@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Layout,
   X,
+  Download,
   FileText,
   Zap,
   Info,
@@ -26,7 +27,8 @@ import {
   Building2,
   DollarSign,
   History,
-  UserCheck
+  UserCheck,
+  Trash2
 } from 'lucide-react';
 
 const MyTaskTab = () => {
@@ -38,6 +40,7 @@ const MyTaskTab = () => {
   const [selectedUser, setSelectedUser] = useState('All Users');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [linkedCase, setLinkedCase] = useState(null);
@@ -49,7 +52,9 @@ const MyTaskTab = () => {
     priority: 'Medium',
     assignee: '',
     dueDate: '',
-    caseId: ''
+    caseId: '',
+    reminderDateTime: '',
+    status: 'To Do'
   });
 
   const fetchTasks = async (showToast = false) => {
@@ -104,12 +109,37 @@ const MyTaskTab = () => {
     }
   };
 
-  const handleOpenViewModal = (task) => {
+  const handleOpenTaskPanel = (task) => {
     setSelectedTask(task);
     setLinkedCase(null);
-    setIsViewModalOpen(true);
+    setIsSidePanelOpen(true);
     if (task.caseId && task.caseId !== 'Manual Task') {
       fetchCaseDetails(task.caseId);
+    }
+  };
+
+  const handleUpdateTask = async (taskId, updates) => {
+    try {
+      const res = await api.put(`/tasks/${taskId}`, updates);
+      setTasks(prev => prev.map(t => t._id === taskId ? { ...t, ...res.data } : t));
+      if (selectedTask?._id === taskId) {
+        setSelectedTask(prev => ({ ...prev, ...res.data }));
+      }
+      toast.success('Task updated');
+    } catch (err) {
+      toast.error('Update failed');
+    }
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    if (!window.confirm('Delete this task?')) return;
+    try {
+      await api.delete(`/tasks/${taskId}`);
+      setTasks(prev => prev.filter(t => t._id !== taskId));
+      setIsSidePanelOpen(false);
+      toast.success('Task deleted');
+    } catch (err) {
+      toast.error('Delete failed');
     }
   };
 
@@ -141,6 +171,30 @@ const MyTaskTab = () => {
     t.assignee?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleExportTasks = () => {
+    const headers = ['Task ID', 'Title', 'Priority', 'Assignee', 'Case ID', 'Due Date', 'Status', 'Notes'];
+    const rows = filteredTasks.map(t => [
+      t.taskId || '',
+      (t.title || '').replace(/,/g, ';').replace(/\n/g, ' '),
+      t.priority || '',
+      t.assignee || '',
+      t.caseId || '',
+      t.dueDate || '',
+      t.status || '',
+      (t.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.map(v => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `My_Tasks_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const columns = [
     { id: 'To Do', label: 'To Do', color: 'blue', icon: <Clock size={16} /> },
     { id: 'In Progress', label: 'In Progress', color: 'orange', icon: <Zap size={16} /> },
@@ -159,7 +213,9 @@ const MyTaskTab = () => {
         priority: 'Medium',
         assignee: '',
         dueDate: '',
-        caseId: ''
+        caseId: '',
+        reminderDateTime: '',
+        status: 'To Do'
       });
       fetchTasks();
     } catch (err) {
@@ -192,8 +248,8 @@ const MyTaskTab = () => {
               ))}
             </select>
           )}
-          <button onClick={() => fetchTasks(true)} className="flex items-center gap-2 bg-white border-2 border-gray-300 text-gray-700 px-5 py-2 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm active:scale-95 disabled:opacity-50">
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} /> Import My Cases
+          <button onClick={handleExportTasks} className="flex items-center gap-2 bg-white border-2 border-gray-300 text-gray-700 px-5 py-2 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm active:scale-95 disabled:opacity-50">
+            <Download size={18} /> Export
           </button>
           <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95">
             <Plus size={20} /> New Task
@@ -233,26 +289,32 @@ const MyTaskTab = () => {
                   filteredTasks.filter(t => t.status === col.id).map(task => (
                     <div 
                       key={task._id} draggable onDragStart={(e) => onDragStart(e, task._id)}
-                      onClick={() => handleOpenViewModal(task)}
+                      onClick={() => handleOpenTaskPanel(task)}
                       className="bg-white rounded-2xl border-2 border-gray-300 p-5 shadow-sm hover:shadow-xl hover:border-blue-400 transition-all group cursor-pointer relative overflow-hidden"
                     >
                       <div className={`absolute left-0 top-0 bottom-0 w-1 ${task.priority === 'High' ? 'bg-red-500' : task.priority === 'Medium' ? 'bg-orange-500' : 'bg-blue-500'}`} />
                       <div className="flex justify-between items-start mb-3">
                         <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter bg-gray-50 px-2 py-0.5 rounded border border-gray-200 group-hover:text-blue-600 transition-colors">
-                          {task.caseId || 'Manual Task'}
+                          {task.taskId || 'TASK-NEW'}
                         </span>
-                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${task.priority === 'High' ? 'bg-red-50 text-red-600 border border-red-100' : task.priority === 'Medium' ? 'bg-orange-50 text-orange-600 border border-orange-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
-                          {task.priority}
-                        </span>
+                        <div className="flex gap-1 items-center">
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${task.priority === 'High' ? 'bg-red-50 text-red-600 border border-red-100' : task.priority === 'Medium' ? 'bg-orange-50 text-orange-600 border border-orange-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
+                            {task.priority}
+                          </span>
+                          {task.source === 'Auto (Case)' && <Zap size={10} className="text-orange-500" title="Auto-generated" />}
+                        </div>
                       </div>
                       <h3 className="font-bold text-gray-800 text-sm mb-2 leading-tight group-hover:text-blue-600 transition-colors">{task.title}</h3>
-                      <p className="text-[11px] text-gray-500 line-clamp-2 mb-4 font-medium leading-relaxed">{task.description}</p>
+                      <p className="text-[11px] text-gray-500 line-clamp-2 mb-4 font-medium leading-relaxed">{task.details || task.description}</p>
                       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center text-white text-[8px] font-black shadow-sm">{task.assignee?.charAt(0)}</div>
                           <span className="text-[10px] font-bold text-gray-600">{task.assignee}</span>
                         </div>
-                        <ArrowRight size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
+                        <div className="flex items-center gap-2">
+                           {task.dueDate && <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1"><Calendar size={10} /> {task.dueDate}</span>}
+                           <ArrowRight size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
+                        </div>
                       </div>
                     </div>
                   ))
@@ -263,130 +325,142 @@ const MyTaskTab = () => {
         </div>
       </div>
 
-      {/* VIEW MODAL: Enhanced Case/Task Details */}
-      {isViewModalOpen && selectedTask && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in duration-300 my-8">
-            {/* Header Area */}
-            <div className="p-8 border-b border-gray-100 flex justify-between items-start relative">
-               <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest border-2 border-blue-100">
-                      {selectedTask.caseId || 'Task Detail'}
-                    </span>
-                    <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest ${selectedTask.priority === 'High' ? 'bg-red-50 text-red-600 border-2 border-red-100' : 'bg-orange-50 text-orange-600 border-2 border-orange-100'}`}>
-                      {selectedTask.priority} Priority
-                    </span>
-                  </div>
-                  <h2 className="text-3xl font-black text-gray-800 leading-tight tracking-tight max-w-2xl">{selectedTask.title}</h2>
-               </div>
-               <button onClick={() => setIsViewModalOpen(false)} className="bg-gray-100 hover:bg-red-50 hover:text-red-600 p-3 rounded-2xl transition-all text-gray-500">
-                <X size={24} />
-               </button>
-            </div>
+      {/* TASK DETAILS SIDE PANEL */}
+      <div className={`fixed top-0 right-0 h-full w-full sm:w-[450px] bg-white shadow-2xl z-[300] transform transition-transform duration-300 ease-in-out border-l border-gray-200 flex flex-col ${isSidePanelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+         {selectedTask && (
+           <>
+             {/* Side Panel Header */}
+             <div className="p-6 bg-gray-900 text-white flex flex-col gap-4 relative">
+                <button onClick={() => setIsSidePanelOpen(false)} className="absolute top-4 right-4 text-white/50 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                   <span>{selectedTask.taskId}</span>
+                   <span>•</span>
+                   <span>Case: {selectedTask.caseId || 'Manual'}</span>
+                   <span>•</span>
+                   <span>Source: {selectedTask.source}</span>
+                </div>
+                <h2 className="text-xl font-bold leading-tight">{selectedTask.title}</h2>
+                <div className="flex gap-2">
+                   {['To Do', 'In Progress', 'Completed'].map(s => (
+                     <button 
+                       key={s}
+                       onClick={() => handleUpdateTask(selectedTask._id, { status: s })}
+                       className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${selectedTask.status === s ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20'}`}
+                     >
+                       {s}
+                     </button>
+                   ))}
+                </div>
+             </div>
 
-            <div className="p-8 grid grid-cols-1 lg:grid-cols-3 gap-8 overflow-y-auto max-h-[70vh] hide-scrollbar">
-               {/* Left Column: Core Info Cards */}
-               <div className="lg:col-span-2 space-y-6">
-                  {/* Detailed Stats Grid */}
-                  <div className="grid grid-cols-2 gap-4">
-                     <div className="bg-gray-50 border-2 border-gray-100 rounded-3xl p-5 group hover:border-blue-200 transition-all">
-                        <div className="flex items-center gap-3 mb-3 text-gray-400">
-                           <Building2 size={18} className="group-hover:text-blue-500 transition-colors" />
-                           <span className="text-[10px] font-black uppercase tracking-widest">Company</span>
-                        </div>
-                        <div className="font-bold text-gray-800 text-sm">{linkedCase?.companyName || '---'}</div>
-                     </div>
-                     <div className="bg-gray-50 border-2 border-gray-100 rounded-3xl p-5 group hover:border-blue-200 transition-all">
-                        <div className="flex items-center gap-3 mb-3 text-gray-400">
-                           <Phone size={18} className="group-hover:text-blue-500 transition-colors" />
-                           <span className="text-[10px] font-black uppercase tracking-widest">Mobile</span>
-                        </div>
-                        <div className="font-bold text-gray-800 text-sm">{linkedCase?.mobile || '---'}</div>
-                     </div>
-                     <div className="bg-gray-50 border-2 border-gray-100 rounded-3xl p-5 group hover:border-blue-200 transition-all">
-                        <div className="flex items-center gap-3 mb-3 text-gray-400">
-                           <Mail size={18} className="group-hover:text-blue-500 transition-colors" />
-                           <span className="text-[10px] font-black uppercase tracking-widest">Email</span>
-                        </div>
-                        <div className="font-bold text-gray-800 text-sm truncate">{linkedCase?.email || '---'}</div>
-                     </div>
-                     <div className="bg-gray-50 border-2 border-gray-100 rounded-3xl p-5 group hover:border-blue-200 transition-all">
-                        <div className="flex items-center gap-3 mb-3 text-gray-400">
-                           <DollarSign size={18} className="group-hover:text-blue-500 transition-colors" />
-                           <span className="text-[10px] font-black uppercase tracking-widest">Amt Paid</span>
-                        </div>
-                        <div className="font-bold text-gray-800 text-sm">₹{linkedCase?.totalAmount || '0'}</div>
-                     </div>
-                  </div>
+             {/* Side Panel Content */}
+             <div className="flex-1 overflow-y-auto p-8 space-y-10 bg-white">
+                {/* Core Details Table */}
+                <div className="space-y-6">
+                   <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                      <div className="w-1.5 h-4 bg-blue-600 rounded-full" />
+                      Task Information
+                   </h3>
+                   <div className="grid grid-cols-1 gap-4">
+                      <div className="flex justify-between items-center p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+                         <span className="text-gray-500 font-bold text-xs">Priority</span>
+                         <span className={`font-black uppercase text-[10px] px-3 py-1 rounded-full ${selectedTask.priority === 'High' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>{selectedTask.priority}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+                         <span className="text-gray-500 font-bold text-xs">Assigned To</span>
+                         <span className="font-bold text-gray-800 flex items-center gap-2 text-sm"><User size={14} className="text-blue-500" /> {selectedTask.assignee}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+                         <span className="text-gray-500 font-bold text-xs">Due Date</span>
+                         <span className="font-bold text-gray-800 text-sm flex items-center gap-2"><Calendar size={14} className="text-gray-400" /> {selectedTask.dueDate || 'Not set'}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+                         <span className="text-gray-500 font-bold text-xs">Case ID</span>
+                         <span className="font-bold text-blue-600 text-sm">{selectedTask.caseId || '---'}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+                         <span className="text-gray-500 font-bold text-xs">Creation Source</span>
+                         <span className="font-bold text-gray-700 text-[10px] flex items-center gap-1.5 uppercase tracking-wide px-3 py-1 bg-white rounded-lg border border-gray-200">
+                            {selectedTask.source === 'Manual' ? <Plus size={12} className="text-green-500" /> : <Zap size={12} className="text-orange-500" />} 
+                            {selectedTask.source}
+                         </span>
+                      </div>
+                   </div>
+                </div>
 
-                  {/* Summary/Description Area */}
-                  <div className="bg-white border-2 border-gray-100 rounded-[2rem] p-8 space-y-4">
-                     <div className="flex items-center gap-2 text-gray-400">
-                        <FileText size={18} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Case Summary</span>
-                     </div>
-                     <p className="text-gray-600 text-sm font-medium leading-relaxed whitespace-pre-wrap italic">
-                        {linkedCase?.summary || selectedTask.description || "No specific summary details provided for this entry."}
-                     </p>
-                  </div>
-               </div>
+                {/* Brief Section */}
+                <div className="space-y-4">
+                   <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                      <div className="w-1.5 h-4 bg-blue-600 rounded-full" />
+                      Task Brief
+                   </h3>
+                   <div className="text-[13px] text-gray-600 font-medium leading-relaxed bg-blue-50/30 p-5 rounded-3xl border border-blue-100/50 shadow-inner min-h-[100px]">
+                      {selectedTask.details || selectedTask.description || 'No detailed description provided.'}
+                   </div>
+                </div>
 
-               {/* Right Column: Ownership & Timeline */}
-               <div className="space-y-6">
-                  <div className="bg-blue-600 text-white rounded-[2rem] p-6 shadow-xl shadow-blue-100">
-                     <div className="text-[9px] font-black uppercase tracking-[0.2em] opacity-60 mb-6">Execution Team</div>
-                     <div className="space-y-4">
-                        <div className="flex items-center gap-4">
-                           <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center border border-white/30"><UserCheck size={20} /></div>
-                           <div>
-                              <div className="text-[9px] font-black uppercase opacity-60">Assigned To</div>
-                              <div className="text-sm font-black">{linkedCase?.assignedTo || selectedTask.assignee}</div>
-                           </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                           <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center border border-white/30"><Plus size={20} /></div>
-                           <div>
-                              <div className="text-[9px] font-black uppercase opacity-60">Initiated By</div>
-                              <div className="text-sm font-black">{linkedCase?.initiatedBy || 'System/Admin'}</div>
-                           </div>
-                        </div>
+                {/* Reminder Section */}
+                <div className="space-y-4">
+                   <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                      <div className="w-1.5 h-4 bg-blue-600 rounded-full" />
+                      Reminders
+                   </h3>
+                   <div className="flex gap-2">
+                      <input 
+                        type="datetime-local" 
+                        className="flex-1 bg-white border-2 border-gray-100 rounded-2xl px-5 py-3 text-xs font-black text-gray-800 outline-none focus:border-blue-500 transition-all shadow-sm"
+                        value={selectedTask.reminderDateTime || ''}
+                        onChange={(e) => handleUpdateTask(selectedTask._id, { reminderDateTime: e.target.value })}
+                      />
+                      <button className="bg-gray-900 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">Set</button>
+                   </div>
+                   {selectedTask.reminderDateTime && (
+                     <div className="flex items-center gap-2 text-green-600 font-bold text-[10px] bg-green-50 px-3 py-2 rounded-xl border border-green-100 w-fit">
+                        <CheckCircle2 size={12} /> Reminder active for {new Date(selectedTask.reminderDateTime).toLocaleString()}
                      </div>
-                  </div>
+                   )}
+                </div>
 
-                  {/* Micro Timeline Preview */}
-                  <div className="bg-gray-50 border-2 border-gray-100 rounded-[2rem] p-6">
-                     <div className="flex items-center gap-2 mb-4 text-gray-400">
-                        <History size={16} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Recent Activity</span>
-                     </div>
-                     <div className="space-y-4">
-                        {!linkedCase?.timeline || linkedCase.timeline.length === 0 ? (
-                           <p className="text-[10px] font-bold text-gray-400 italic">No activity logs found</p>
-                        ) : (
-                           linkedCase.timeline.slice(0, 3).map((log, idx) => (
-                              <div key={idx} className="flex gap-3 relative pb-2 last:pb-0">
-                                 {idx !== 2 && <div className="absolute left-1.5 top-4 bottom-0 w-0.5 bg-gray-200" />}
-                                 <div className="w-3 h-3 rounded-full bg-blue-500 border-2 border-white relative z-10 mt-1" />
-                                 <div>
-                                    <div className="text-[10px] font-black text-gray-800 line-clamp-1 uppercase tracking-tight">{log.status || 'Updated'}</div>
-                                    <div className="text-[9px] font-bold text-gray-400">{new Date(log.date).toLocaleDateString()}</div>
-                                 </div>
-                              </div>
-                           ))
-                        )}
-                     </div>
-                  </div>
-               </div>
-            </div>
+                {/* Notes Section */}
+                <div className="space-y-4">
+                   <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                      <div className="w-1.5 h-4 bg-blue-600 rounded-full" />
+                      Progress Notes
+                   </h3>
+                   <textarea 
+                     className="w-full bg-gray-50 border-2 border-gray-100 rounded-[2rem] p-6 text-sm font-medium text-gray-700 outline-none focus:border-blue-500 focus:bg-white transition-all min-h-[150px] shadow-sm placeholder:text-gray-300"
+                     placeholder="Add progress notes, observations, or next steps..."
+                     value={selectedTask.notes || ''}
+                     onChange={(e) => handleUpdateTask(selectedTask._id, { notes: e.target.value })}
+                   />
+                </div>
+             </div>
 
-            <div className="p-8 bg-gray-50 border-t border-gray-100 flex justify-end">
-              <button onClick={() => setIsViewModalOpen(false)} className="px-12 py-4 bg-blue-600 text-white rounded-[1.5rem] text-sm font-black shadow-xl shadow-blue-100 hover:bg-blue-700 hover:-translate-y-0.5 active:translate-y-0 transition-all">
-                Close Detailed View
-              </button>
-            </div>
-          </div>
-        </div>
+             {/* Side Panel Footer */}
+             <div className="p-8 bg-white border-t border-gray-100 flex gap-4">
+                <button 
+                  onClick={() => setIsSidePanelOpen(false)}
+                  className="flex-1 py-4 bg-blue-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-blue-100 hover:bg-blue-700 hover:-translate-y-1 active:translate-y-0 transition-all"
+                >
+                  Save & Exit
+                </button>
+                <button 
+                   onClick={() => handleDeleteTask(selectedTask._id)}
+                   className="p-4 bg-red-50 text-red-600 rounded-2xl hover:bg-red-100 hover:text-red-700 transition-all border border-red-100"
+                   title="Delete Task"
+                >
+                   <Trash2 size={22} />
+                </button>
+             </div>
+           </>
+         )}
+      </div>
+
+      {/* OVERLAY for Side Panel */}
+      {isSidePanelOpen && (
+        <div onClick={() => setIsSidePanelOpen(false)} className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[290] animate-in fade-in duration-300" />
       )}
 
       {/* New Task Modal */}
@@ -459,13 +533,36 @@ const MyTaskTab = () => {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2">Task Description</label>
+              <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2">Task Details / Brief</label>
               <textarea 
-                className="w-full bg-white border-2 border-gray-300 rounded-2xl px-5 py-3 text-sm font-medium text-gray-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all min-h-[120px]"
-                placeholder="Write detailed task description here..."
+                className="w-full bg-white border-2 border-gray-300 rounded-2xl px-5 py-3 text-sm font-medium text-gray-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all min-h-[100px]"
+                placeholder="Describe the task in detail..."
                 value={newTask.description}
                 onChange={(e) => setNewTask({...newTask, description: e.target.value})}
               />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2">Reminder Date & Time</label>
+              <input 
+                type="datetime-local" 
+                className="w-full bg-white border-2 border-gray-300 rounded-2xl px-5 py-3 text-sm font-bold text-gray-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all"
+                value={newTask.reminderDateTime}
+                onChange={(e) => setNewTask({...newTask, reminderDateTime: e.target.value})}
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2">Initial Status</label>
+              <select 
+                className="w-full bg-white border-2 border-gray-300 rounded-2xl px-5 py-3 text-sm font-bold text-gray-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer"
+                value={newTask.status}
+                onChange={(e) => setNewTask({...newTask, status: e.target.value})}
+              >
+                <option value="To Do">To Do</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Completed">Completed</option>
+              </select>
             </div>
           </div>
 
@@ -481,7 +578,7 @@ const MyTaskTab = () => {
               type="submit"
               className="px-12 py-3.5 bg-blue-600 text-white rounded-2xl text-sm font-black shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95"
             >
-              Create New Task
+              Create Task
             </button>
           </div>
         </form>

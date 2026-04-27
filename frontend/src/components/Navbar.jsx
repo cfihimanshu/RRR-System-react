@@ -32,7 +32,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
         </div>
         <span className="opacity-80 hidden md:inline-block">
           {user?.fullName && <b className="mr-2">{user.fullName}</b>}
-          {user?.email} ({user?.role})
+          ({user?.role})
         </span>
         <button onClick={logout} className="ml-2 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors shadow-sm">
           Logout
