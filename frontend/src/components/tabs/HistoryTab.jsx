@@ -58,8 +58,8 @@ const HistoryTab = () => {
 
   const getDownloadUrl = (url) => {
     if (!url) return '#';
-    // Use the backend proxy to force download seamlessly
-    return `http://localhost:5000/api/upload/download?url=${encodeURIComponent(url)}`;
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    return `${baseUrl}/api/upload/download?url=${encodeURIComponent(url)}`;
   };
 
   const inputClass = "w-full border border-gray-300 rounded p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all bg-white";
