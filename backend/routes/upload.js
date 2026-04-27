@@ -46,22 +46,22 @@ router.get('/download', (req, res) => {
   try {
     const fileUrl = req.query.url;
     if (!fileUrl) return res.status(400).json({ error: 'No URL provided' });
-    
+
     // Clean up url if it has query params for filename parsing
     const cleanUrl = fileUrl.split('?')[0];
     let filename = cleanUrl.split('/').pop() || 'download';
-    
+
     const https = require('https');
     const http = require('http');
     const client = fileUrl.startsWith('https') ? https : http;
-    
+
     client.get(fileUrl, (response) => {
       if (response.statusCode !== 200) {
         return res.status(response.statusCode).json({ error: 'Failed to fetch file from source' });
       }
-      
+
       let contentType = response.headers['content-type'] || 'application/octet-stream';
-      
+
       // Ensure the filename has the correct extension based on content-type if missing
       if (!filename.includes('.')) {
         if (contentType.includes('pdf')) filename += '.pdf';
@@ -74,10 +74,10 @@ router.get('/download', (req, res) => {
         else if (contentType.includes('text/plain')) filename += '.txt';
         else if (contentType.includes('csv')) filename += '.csv';
       }
-      
+
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.setHeader('Content-Type', contentType);
-      
+
       response.pipe(res);
     }).on('error', (err) => {
       console.error('Download proxy error:', err.message);

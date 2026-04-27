@@ -238,8 +238,8 @@ const DashboardTab = () => {
         toast.success('Refund request updated successfully');
         setEditingRefund(null);
       } else {
-        await api.post('/refunds', data);
-        toast.success('Refund request submitted successfully');
+      await api.post('/refunds', data);
+      toast.success('Refund request submitted successfully');
       }
       e.target.reset();
       setSelectedCaseId('');
@@ -731,8 +731,8 @@ const DashboardTab = () => {
           <div>
             <div className="val" style={{ color: '#111827' }}>{stats.mediumPriority}</div>
             <div className="lbl">Medium Priority</div>
-          </div>
         </div>
+      </div>
 
         <div className="stat">
           <div className="stat-icon" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}>

@@ -14,7 +14,8 @@ const actionSchema = new mongoose.Schema({
   nextAction: String,
   nextActionBy: String,
   nextActionDate: String,
-  fileLink: String
+  fileLink: String,
+  remarks: String
 });
 
 module.exports = mongoose.model('Action', actionSchema);

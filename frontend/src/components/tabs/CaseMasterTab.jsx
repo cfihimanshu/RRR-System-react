@@ -276,9 +276,11 @@ const CaseMasterTab = () => {
             </div>
           )}
 
-          <button onClick={handleExportCSV} className="bg-white hover:bg-gray-50 text-gray-600 border border-gray-300 font-semibold py-2 px-3 rounded shadow-sm text-sm transition-colors flex items-center gap-2">
-            <FileDown size={16} /> Export CSV
-          </button>
+          {user.role === 'Admin' && (
+            <button onClick={handleExportCSV} className="bg-white hover:bg-gray-50 text-gray-600 border border-gray-300 font-semibold py-2 px-3 rounded shadow-sm text-sm transition-colors flex items-center gap-2">
+              <FileDown size={16} /> Export CSV
+            </button>
+          )}
         </div>
       </div>
 
@@ -302,9 +304,10 @@ const CaseMasterTab = () => {
           onChange={(e) => setStatusFilter(e.target.value)}
         >
           <option value="All Status">All Status</option>
-          <option value="Active">Active</option>
-          <option value="Pending">Pending</option>
-          <option value="Closed">Closed</option>
+          <option value="New">New</option>
+          <option value="In-progress">In-progress</option>
+          <option value="Settled">Settled</option>
+          <option value="Stucked">Stucked</option>
         </select>
         <select
           className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 outline-none shadow-sm min-w-[150px] bg-white"
@@ -329,34 +332,35 @@ const CaseMasterTab = () => {
           </select>
         )}
 
-        {/* Bulk Assign Controls */}
-        <div className="ml-auto flex items-center gap-2">
-          <select
-            className={`border rounded-md px-3 py-2 text-sm outline-none shadow-sm min-w-[150px] transition-colors ${bulkAssignUser ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-300 bg-white'}`}
-            value={bulkAssignUser}
-            onChange={(e) => {
-              setBulkAssignUser(e.target.value);
-              // Clear selected cases if they cancel bulk assign mode
-              if (!e.target.value) {
-                setSelectedCases([]);
-              }
-            }}
-          >
-            <option value="">Bulk Assign Mode...</option>
-            {opsUsers.map(u => (
-              <option key={`bulk-${u._id}`} value={u.fullName}>Assign to: {u.fullName}</option>
-            ))}
-          </select>
-          
-          {bulkAssignUser && selectedCases.length > 0 && (
-            <button 
-              onClick={() => handleBulkAssign(bulkAssignUser)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded shadow-sm text-sm transition-colors flex items-center gap-2 whitespace-nowrap"
+        {user.role === 'Admin' && (
+          <div className="ml-auto flex items-center gap-2">
+            <select
+              className={`border rounded-md px-3 py-2 text-sm outline-none shadow-sm min-w-[150px] transition-colors ${bulkAssignUser ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-300 bg-white'}`}
+              value={bulkAssignUser}
+              onChange={(e) => {
+                setBulkAssignUser(e.target.value);
+                // Clear selected cases if they cancel bulk assign mode
+                if (!e.target.value) {
+                  setSelectedCases([]);
+                }
+              }}
             >
-              <Check size={16} /> Confirm ({selectedCases.length})
-            </button>
-          )}
-        </div>
+              <option value="">Bulk Assign Mode...</option>
+              {opsUsers.map(u => (
+                <option key={`bulk-${u._id}`} value={u.fullName}>Assign to: {u.fullName}</option>
+              ))}
+            </select>
+            
+            {bulkAssignUser && selectedCases.length > 0 && (
+              <button 
+                onClick={() => handleBulkAssign(bulkAssignUser)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded shadow-sm text-sm transition-colors flex items-center gap-2 whitespace-nowrap"
+              >
+                <Check size={16} /> Confirm ({selectedCases.length})
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Table Area */}

@@ -11,7 +11,7 @@ const DocIndexTab = () => {
   const [selectedCase, setSelectedCase] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const { user } = useContext(AuthContext);
-  
+
   const [formData, setFormData] = useState({
     docType: 'Legal Notice',
     uploadedBy: user?.name || user?.email || '',
@@ -41,7 +41,7 @@ const DocIndexTab = () => {
     if (!selectedCase) return toast.error('Select a case first');
     if (!formData.fileLink && !formData.fileUrlStr) return toast.error('Please attach a file or provide a URL');
     if (!formData.fileSummary) return toast.error('File summary is required');
-    
+
     try {
       const finalFileLink = formData.fileUrlStr || formData.fileLink;
 
@@ -53,12 +53,12 @@ const DocIndexTab = () => {
         sourceForm: 'Manual Upload'
       });
       toast.success('Document saved to index');
-      
-      setFormData({ 
-        docType: 'Legal Notice', 
-        uploadedBy: user?.name || user?.email || '', 
-        fileSummary: '', 
-        fileLink: '', 
+
+      setFormData({
+        docType: 'Legal Notice',
+        uploadedBy: user?.name || user?.email || '',
+        fileSummary: '',
+        fileLink: '',
         fileUrlStr: '',
         remarks: ''
       });
@@ -85,7 +85,7 @@ const DocIndexTab = () => {
 
   return (
     <div className="h-full bg-gray-50 p-6 overflow-y-auto">
-      
+
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-800">Document Index</h1>
@@ -98,22 +98,22 @@ const DocIndexTab = () => {
           <span className="text-blue-500 font-bold">⬆</span>
           <h2 className="text-[14px] font-bold text-gray-800">Upload Document Manually</h2>
         </div>
-        
+
         <form className="p-5 flex flex-col gap-5" onSubmit={handleSubmit}>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
               <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Case ID</label>
-              <SearchableCaseSelect 
-                cases={cases} 
-                value={selectedCase} 
-                onChange={setSelectedCase} 
-                required 
+              <SearchableCaseSelect
+                cases={cases}
+                value={selectedCase}
+                onChange={setSelectedCase}
+                required
               />
             </div>
             <div>
               <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Document Type</label>
-              <select className={inputClass} value={formData.docType} onChange={e => setFormData({...formData, docType: e.target.value})} required>
+              <select className={inputClass} value={formData.docType} onChange={e => setFormData({ ...formData, docType: e.target.value })} required>
                 <option value="Legal Notice">Legal Notice</option>
                 <option value="MOU / Agreement">MOU / Agreement</option>
                 <option value="Payment Receipt">Payment Receipt</option>
@@ -127,26 +127,26 @@ const DocIndexTab = () => {
             </div>
             <div>
               <label className={labelClass}>Uploaded By</label>
-              <input type="text" className={inputClass} placeholder="Your name" value={formData.uploadedBy} onChange={e => setFormData({...formData, uploadedBy: e.target.value})} />
+              <input type="text" className={inputClass} placeholder="Your name" value={formData.uploadedBy} onChange={e => setFormData({ ...formData, uploadedBy: e.target.value })} />
             </div>
           </div>
 
           <div>
             <label className={`${labelClass} after:content-['*'] after:text-red-500`}>File Description / Summary</label>
-            <input type="text" className={inputClass} placeholder="Brief description of this document..." value={formData.fileSummary} onChange={e => setFormData({...formData, fileSummary: e.target.value})} required />
+            <input type="text" className={inputClass} placeholder="Brief description of this document..." value={formData.fileSummary} onChange={e => setFormData({ ...formData, fileSummary: e.target.value })} required />
           </div>
 
           <div>
             <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Attach File</label>
             <div className="bg-gray-50 border border-gray-200 border-dashed rounded-lg p-6 mb-2 text-center transition-colors hover:bg-gray-100">
-              <FileUpload onUploadSuccess={(url) => setFormData({...formData, fileLink: url})} label="Click to browse or drag & drop any file here" />
+              <FileUpload onUploadSuccess={(url) => setFormData({ ...formData, fileLink: url })} label="Click to browse or drag & drop any file here" />
             </div>
-            <input type="text" className={inputClass} placeholder="Or paste a Google Drive / external URL instead..." value={formData.fileUrlStr} onChange={e => setFormData({...formData, fileUrlStr: e.target.value})} />
+            <input type="text" className={inputClass} placeholder="Or paste a Google Drive / external URL instead..." value={formData.fileUrlStr} onChange={e => setFormData({ ...formData, fileUrlStr: e.target.value })} />
           </div>
 
           <div>
             <label className={labelClass}>Remarks</label>
-            <input type="text" className={inputClass} placeholder="Optional notes..." value={formData.remarks} onChange={e => setFormData({...formData, remarks: e.target.value})} />
+            <input type="text" className={inputClass} placeholder="Optional notes..." value={formData.remarks} onChange={e => setFormData({ ...formData, remarks: e.target.value })} />
           </div>
 
           <div>
@@ -159,18 +159,18 @@ const DocIndexTab = () => {
 
       {/* Search & Table */}
       <div className="mb-4 max-w-5xl">
-         <div className="relative w-64 mb-4">
-           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-500">🔍</span>
-           <input 
-             type="text" 
-             placeholder="Search documents..." 
-             className="w-full border border-gray-300 rounded-full py-1.5 pl-9 pr-4 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none shadow-sm"
-             value={searchTerm}
-             onChange={e => setSearchTerm(e.target.value)}
-           />
-         </div>
-         
-         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="relative w-64 mb-4">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-500">🔍</span>
+          <input
+            type="text"
+            placeholder="Search documents..."
+            className="w-full border border-gray-300 rounded-full py-1.5 pl-9 pr-4 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none shadow-sm"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="table-wrap">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -227,7 +227,7 @@ const DocIndexTab = () => {
               </tbody>
             </table>
           </div>
-         </div>
+        </div>
       </div>
 
     </div>

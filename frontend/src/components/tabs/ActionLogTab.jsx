@@ -4,27 +4,23 @@ import toast from 'react-hot-toast';
 import FileUpload from '../shared/FileUpload';
 import { AuthContext } from '../../context/AuthContext';
 import SearchableCaseSelect from '../shared/SearchableCaseSelect';
+import Modal from '../shared/Modal';
 
 const ActionLogTab = () => {
   const [cases, setCases] = useState([]);
   const [actions, setActions] = useState([]);
   const [selectedCase, setSelectedCase] = useState('');
   const [updateStatus, setUpdateStatus] = useState('');
+  const [previewFileUrl, setPreviewFileUrl] = useState(null);
   const { user } = useContext(AuthContext);
   
   const [formData, setFormData] = useState({
     actionType: 'Negotiation Call',
-    dept: 'Negotiation',
     doneBy: user?.name || user?.email || '',
-    nextActionBy: '',
-    summary: '',
-    notes: '',
-    clientResp: '',
-    observation: '',
-    nextAction: '',
+    remarks: '',
     nextActionDate: '',
     fileLink: '',
-    fileUrlStr: '' // For manual URL pasting
+    fileUrlStr: ''
   });
 
   useEffect(() => {
@@ -43,11 +39,10 @@ const ActionLogTab = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedCase) return toast.error('Please select a case first');
-    if (!formData.summary) return toast.error('Action summary is required');
+    if (!formData.remarks) return toast.error('Remarks are required');
 
     try {
       const finalFileLink = formData.fileUrlStr || formData.fileLink;
-      
       const payload = {
         ...formData,
         caseId: selectedCase,
@@ -66,9 +61,8 @@ const ActionLogTab = () => {
       
       // Reset form
       setFormData({ 
-        actionType: 'Negotiation Call', dept: 'Negotiation', doneBy: user?.name || user?.email || '', 
-        nextActionBy: '', summary: '', notes: '', clientResp: '', observation: '', 
-        nextAction: '', nextActionDate: '', fileLink: '', fileUrlStr: '' 
+        actionType: 'Negotiation Call', doneBy: user?.name || user?.email || '', 
+        remarks: '', nextActionDate: '', fileLink: '', fileUrlStr: '' 
       });
       setUpdateStatus('');
       fetchActions();
@@ -127,51 +121,20 @@ const ActionLogTab = () => {
               </select>
             </div>
             <div>
-              <label className={labelClass}>Department</label>
-              <select className={inputClass} value={formData.dept} onChange={e => setFormData({...formData, dept: e.target.value})}>
-                <option value="Negotiation">Negotiation</option>
-                <option value="Legal">Legal</option>
-                <option value="Accounts">Accounts</option>
-                <option value="Tech">Tech</option>
-                <option value="Management">Management</option>
-              </select>
-            </div>
-            <div>
               <label className={labelClass}>Done By</label>
               <input type="text" className={inputClass} placeholder="Name" value={formData.doneBy} onChange={e => setFormData({...formData, doneBy: e.target.value})} />
             </div>
-            <div>
-              <label className={labelClass}>Next Action By</label>
-              <input type="text" className={inputClass} placeholder="Name" value={formData.nextActionBy} onChange={e => setFormData({...formData, nextActionBy: e.target.value})} />
-            </div>
           </div>
 
           <div>
-            <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Action Summary</label>
-            <input type="text" className={inputClass} placeholder="Brief summary" value={formData.summary} onChange={e => setFormData({...formData, summary: e.target.value})} required />
+            <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Remarks / Observations</label>
+            <textarea className={`${inputClass} h-24 resize-none`} placeholder="Enter action details, observations or notes here..." value={formData.remarks} onChange={e => setFormData({...formData, remarks: e.target.value})} required></textarea>
           </div>
 
-          <div>
-            <label className={labelClass}>Detailed Notes</label>
-            <textarea className={`${inputClass} h-16 resize-none`} placeholder="Detailed notes..." value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})}></textarea>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div>
-              <label className={labelClass}>Client Response</label>
-              <textarea className={`${inputClass} h-16 resize-none`} placeholder="How client responded..." value={formData.clientResp} onChange={e => setFormData({...formData, clientResp: e.target.value})}></textarea>
-            </div>
-            <div>
-              <label className={labelClass}>Internal Observation</label>
-              <textarea className={`${inputClass} h-16 resize-none`} placeholder="Internal notes..." value={formData.observation} onChange={e => setFormData({...formData, observation: e.target.value})}></textarea>
-            </div>
-            <div className="col-span-2 sm:col-span-1">
-              <label className={labelClass}>Next Action Required</label>
-              <input type="text" className={inputClass} placeholder="What needs to happen next" value={formData.nextAction} onChange={e => setFormData({...formData, nextAction: e.target.value})} />
-            </div>
-            <div className="col-span-2 sm:col-span-1">
-              <label className={labelClass}>Next Action Date</label>
-              <input type="date" className={inputClass} value={formData.nextActionDate} onChange={e => setFormData({...formData, nextActionDate: e.target.value})} />
+              <label className={labelClass}>Next Action Date & Time</label>
+              <input type="datetime-local" className={inputClass} value={formData.nextActionDate} onChange={e => setFormData({...formData, nextActionDate: e.target.value})} />
             </div>
           </div>
 
@@ -183,16 +146,16 @@ const ActionLogTab = () => {
             <input type="text" className={inputClass} placeholder="Or paste Google Drive / URL link..." value={formData.fileUrlStr} onChange={e => setFormData({...formData, fileUrlStr: e.target.value})} />
           </div>
 
+
+
           <div className="mt-1">
             <label className={labelClass}>Update Case Status To</label>
             <select className={inputClass} value={updateStatus} onChange={(e) => setUpdateStatus(e.target.value)}>
               <option value="">-- No change --</option>
               <option value="New">New</option>
-              <option value="Open">Open</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Pending Response">Pending Response</option>
+              <option value="In-progress">In-progress</option>
               <option value="Settled">Settled</option>
-              <option value="Closed">Closed</option>
+              <option value="Stucked">Stucked</option>
             </select>
           </div>
 
@@ -217,12 +180,10 @@ const ActionLogTab = () => {
                 <th className="px-1.5 py-3 w-[10%]">Case ID</th>
                 <th className="px-1.5 py-3 w-[10%]">Date</th>
                 <th className="px-1.5 py-3 w-[10%]">Type</th>
-                <th className="px-1.5 py-3 w-[8%]">Dept</th>
                 <th className="px-1.5 py-3 w-[12%]">Done By</th>
-                <th className="px-1.5 py-3 w-[18%]">Summary</th>
-                <th className="px-1.5 py-3 w-[6%] text-center">File</th>
-                <th className="px-1.5 py-3 w-[9%] text-center">Refund</th>
-                <th className="px-1.5 py-3 w-[9%]">Next Dt</th>
+                <th className="px-1.5 py-3 w-[36%]">Remarks / Observations</th>
+                <th className="px-1.5 py-3 w-[12%] text-center">Document</th>
+                <th className="px-1.5 py-3 w-[14%]">Next Action Dt \u0026 Tm</th>
               </tr>
             </thead>
             <tbody className="text-[10px] sm:text-[11px] text-gray-700 divide-y divide-gray-100">
@@ -243,21 +204,22 @@ const ActionLogTab = () => {
                       {a.dateTime ? new Date(a.dateTime).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '-'}
                     </td>
                     <td className="px-1.5 py-2 align-top break-words">{a.actionType}</td>
-                    <td className="px-1.5 py-2 align-top break-words">{a.dept || '-'}</td>
                     <td className="px-1.5 py-2 align-top break-words">{a.doneBy || '-'}</td>
                     <td className="px-1.5 py-2 align-top">
-                      <div className="line-clamp-2 leading-tight" title={a.summary}>{a.summary}</div>
+                      <div className="line-clamp-3 leading-tight" title={a.remarks}>{a.remarks || a.summary || '-'}</div>
                     </td>
                     <td className="px-1.5 py-2 text-center align-top">
                       {a.fileLink ? (
-                        <a href={a.fileLink} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline font-bold text-[9px]">
+                        <button 
+                          onClick={() => setPreviewFileUrl(a.fileLink)} 
+                          className="text-blue-600 hover:text-blue-800 font-bold text-[9px] bg-blue-50 px-2 py-0.5 rounded"
+                        >
                           View
-                        </a>
+                        </button>
                       ) : '-'}
                     </td>
-                    <td className="px-1.5 py-2 text-center text-gray-400 align-top">-</td>
                     <td className="px-1.5 py-2 text-gray-600 align-top leading-tight">
-                      {a.nextActionDate ? new Date(a.nextActionDate).toLocaleDateString('en-IN') : '-'}
+                      {a.nextActionDate ? new Date(a.nextActionDate).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
                     </td>
                   </tr>
                 ))
@@ -268,6 +230,30 @@ const ActionLogTab = () => {
       </div>
       
       </div>
+
+      <Modal 
+        isOpen={!!previewFileUrl} 
+        onClose={() => setPreviewFileUrl(null)}
+        title="Document Preview"
+      >
+        <div className="flex flex-col h-full min-h-[500px]">
+          <div className="flex justify-end mb-2">
+            <a 
+              href={`${api.defaults.baseURL}/upload/download?url=${encodeURIComponent(previewFileUrl)}`}
+              target="_blank" 
+              rel="noreferrer"
+              className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-bold flex items-center gap-1 hover:bg-blue-700 transition-colors"
+            >
+              ⬇️ Download
+            </a>
+          </div>
+          <iframe
+            src={`https://docs.google.com/viewer?url=${encodeURIComponent(previewFileUrl)}&embedded=true`}
+            className="w-full flex-1 border border-gray-200 rounded"
+            title="File Preview"
+          />
+        </div>
+      </Modal>
     </div>
   );
 };
