@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
-const connectDB = require('../db');
+
 
 const { verifyToken } = require('../middleware/auth');
 const { roleGuard } = require('../middleware/roleGuard');
@@ -11,7 +11,7 @@ const { roleGuard } = require('../middleware/roleGuard');
 const router = express.Router();
 
 router.post('/login', async (req, res) => {
-  await connectDB(); // 🔥 MUST be here
+ 
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
