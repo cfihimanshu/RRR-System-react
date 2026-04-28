@@ -114,7 +114,7 @@ const SodEodReportTab = () => {
               </button>
             ))}
           </div>
-          {user.role === 'Admin' && (
+          {user?.role === 'Admin' && (
             <button 
               onClick={handleExportReports}
               className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"

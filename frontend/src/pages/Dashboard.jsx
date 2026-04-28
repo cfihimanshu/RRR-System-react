@@ -47,7 +47,7 @@ const ProtectedRoute = ({ children, allowedRoles, id }) => {
   };
 
   if (!user) return <Navigate to="/login" />;
-  if (!tabAccess[id]?.includes(user.role)) return <Navigate to="/" />;
+  if (!tabAccess[id]?.includes(user?.role)) return <Navigate to="/" />;
   
   return children;
 };

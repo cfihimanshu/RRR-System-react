@@ -72,7 +72,7 @@ const DataSearchTab = () => {
           </div>
         </div>
         
-        {user.role === 'Admin' && (
+        {user?.role === 'Admin' && (
           <div className="relative">
             <input 
               type="file" 

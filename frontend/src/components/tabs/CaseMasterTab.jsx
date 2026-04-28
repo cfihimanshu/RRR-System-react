@@ -260,7 +260,7 @@ const CaseMasterTab = () => {
           <p className="text-sm text-gray-500">All cases with current status</p>
         </div>
         <div className="flex gap-2 mt-3 md:mt-0">
-          {user.role === 'Admin' && (
+          {user?.role === 'Admin' && (
             <div className="relative overflow-hidden cursor-pointer">
               <button className={`bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded shadow-sm text-sm transition-colors flex items-center gap-2 ${importing ? 'opacity-70 cursor-wait' : ''}`} disabled={importing}>
                 {importing ? '⏳ IMPORTING...' : <><UploadCloud size={16} /> IMPORT CSV (BULK)</>}
@@ -276,7 +276,7 @@ const CaseMasterTab = () => {
             </div>
           )}
 
-          {user.role === 'Admin' && (
+          {user?.role === 'Admin' && (
             <button onClick={handleExportCSV} className="bg-white hover:bg-gray-50 text-gray-600 border border-gray-300 font-semibold py-2 px-3 rounded shadow-sm text-sm transition-colors flex items-center gap-2">
               <FileDown size={16} /> Export CSV
             </button>
@@ -319,7 +319,7 @@ const CaseMasterTab = () => {
           <option value="Medium">Medium</option>
           <option value="Low">Low</option>
         </select>
-        {user.role === 'Admin' && (
+        {user?.role === 'Admin' && (
           <select
             className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 outline-none shadow-sm min-w-[150px] bg-white"
             value={assigneeFilter}
@@ -332,7 +332,7 @@ const CaseMasterTab = () => {
           </select>
         )}
 
-        {user.role === 'Admin' && (
+        {user?.role === 'Admin' && (
           <div className="ml-auto flex items-center gap-2">
             <select
               className={`border rounded-md px-3 py-2 text-sm outline-none shadow-sm min-w-[150px] transition-colors ${bulkAssignUser ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-300 bg-white'}`}
@@ -387,7 +387,7 @@ const CaseMasterTab = () => {
                 <th className="px-2 py-3 w-[7%]">Amount Paid</th>
                 <th className="px-2 py-3 w-[5%]">Priority</th>
                 <th className="px-2 py-3 w-[5%]">Status</th>
-                {user.role === 'Admin' && <th className="px-2 py-3 w-[10%]">Assigned To</th>}
+                {user?.role === 'Admin' && <th className="px-2 py-3 w-[10%]">Assigned To</th>}
                 <th className="px-2 py-3 w-[8%]">Last Update</th>
                 <th className="px-2 py-3 w-[15%] text-center">Actions</th>
               </tr>

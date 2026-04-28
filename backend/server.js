@@ -9,7 +9,6 @@ app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URI, {
   serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds instead of waiting forever
-  bufferCommands: false,         // Fail immediately if not connected
 })
   .then(() => console.log('MongoDB Connected'))
   .catch(err => {

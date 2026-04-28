@@ -87,7 +87,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed }) => {
   };
 
   const visibleTabs = tabsConfig.filter(tab =>
-    user && tabAccess[tab.id]?.includes(user.role)
+    user && tabAccess[tab.id]?.includes(user?.role)
   );
 
   return (
