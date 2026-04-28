@@ -33,8 +33,13 @@ router.get('/', verifyToken, async (req, res) => {
 // Create new task
 router.post('/', verifyToken, async (req, res) => {
   try {
-    const count = await Task.countDocuments({ source: 'Manual' });
-    const taskId = `TASK-${String(count + 1).padStart(3, '0')}`;
+    const linkedCaseId = req.body.caseId || '';
+    // Count existing tasks for this specific case to generate sequential number
+    const existingCount = linkedCaseId
+      ? await Task.countDocuments({ caseId: linkedCaseId })
+      : await Task.countDocuments({ source: 'Manual' });
+    const basePart = linkedCaseId || 'MAN';
+    const taskId = `TSK-${basePart}-${String(existingCount + 1).padStart(3, '0')}`;
     const newTask = new Task({
       ...req.body,
       taskId,

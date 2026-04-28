@@ -150,41 +150,47 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
     });
     await newCase.save();
 
-    // Critical Case Alert to Admin
-    const criticalTypes = ['Cyber Complaint', 'FIR', 'Legal Notice', 'Consumer Complaint'];
-    if (criticalTypes.includes(req.body.typeOfComplaint)) {
-      try {
-        const admins = await User.find({ role: 'Admin' });
-        const emails = admins.map(u => u.email).join(',');
-        if (emails) {
-          const subject = `🚨 CRITICAL CASE ALERT: ${req.body.typeOfComplaint}`;
-          const html = `
-            <div style="font-family: sans-serif; border: 2px solid #ea4335; border-radius: 12px; padding: 25px; max-width: 600px;">
-              <h2 style="color: #ea4335; margin-top: 0;">Critical Case Notification</h2>
-              <p>A new high-priority complaint has been registered in the system.</p>
-              
-              <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Case ID:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #1a73e8;">${caseId}</td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Type:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><span style="background: #fce8e6; color: #ea4335; padding: 2px 8px; border-radius: 4px; font-weight: bold;">${req.body.typeOfComplaint}</span></td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Client:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${req.body.clientName}</td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Company:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${req.body.companyName}</td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Mobile:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${req.body.clientMobile}</td></tr>
-                <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Priority:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${req.body.priority || 'High'}</td></tr>
-              </table>
+    // Send New Case Alert Email to Admin (for ALL cases)
+    try {
+      const admins = await User.find({ role: 'Admin' });
+      const emails = admins.map(u => u.email).join(',');
+      if (emails) {
+        const criticalTypes = ['Cyber Complaint', 'FIR', 'Legal Notice', 'Consumer Complaint'];
+        const isCritical = criticalTypes.includes(req.body.typeOfComplaint);
+        const borderColor = isCritical ? '#ea4335' : '#1a73e8';
+        const headerColor = isCritical ? '#ea4335' : '#1a73e8';
+        const headerText = isCritical ? '🚨 Critical Case Created' : '📋 New Case Created';
+        const subject = isCritical 
+          ? `🚨 CRITICAL CASE: ${caseId} — ${req.body.typeOfComplaint}`
+          : `📋 New Case Created: ${caseId}`;
 
-              <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; font-style: italic; color: #555;">
-                <strong>Summary:</strong><br>${req.body.caseSummary || 'No summary provided.'}
-              </div>
+        const html = `
+          <div style="font-family: sans-serif; border: 2px solid ${borderColor}; border-radius: 12px; padding: 25px; max-width: 600px;">
+            <h2 style="color: ${headerColor}; margin-top: 0;">${headerText}</h2>
+            <p>A new case has been registered in the RRR System.</p>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Case ID:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #1a73e8; font-weight: bold;">${caseId}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Type:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><span style="background: ${isCritical ? '#fce8e6' : '#e8f0fe'}; color: ${headerColor}; padding: 2px 8px; border-radius: 4px; font-weight: bold;">${req.body.typeOfComplaint}</span></td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Company:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${req.body.companyName}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Client:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${req.body.clientName}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Mobile:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${req.body.clientMobile || '-'}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Priority:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${req.body.priority || 'Medium'}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Created By:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${req.body.initiatedBy || req.user.fullName}</td></tr>
+            </table>
 
-              <div style="margin-top: 25px; text-align: center;">
-                <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}" style="background: #1a73e8; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Case in Dashboard</a>
-              </div>
+            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; font-style: italic; color: #555;">
+              <strong>Summary:</strong><br>${req.body.caseSummary || 'No summary provided.'}
             </div>
-          `;
-          sendEmail(emails, subject, '', html).catch(err => console.error('Admin Alert Error:', err));
-        }
-      } catch (err) { console.error('Admin Alert Error:', err); }
-    }
+
+            <div style="margin-top: 25px; text-align: center;">
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}" style="background: #1a73e8; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Case in Dashboard</a>
+            </div>
+          </div>
+        `;
+        sendEmail(emails, subject, '', html).catch(err => console.error('Admin Case Alert Error:', err));
+      }
+    } catch (err) { console.error('Admin Case Alert Error:', err); }
 
     await AuditLog.create({
       id: Date.now().toString(),
@@ -200,8 +206,9 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
     const initiatedUser = req.body.initiatedBy || req.user.fullName;
     if (initiatedUser) {
       try {
+        const existingTaskCount = await Task.countDocuments({ caseId: caseId });
         const autoTask = new Task({
-          taskId: `TASK-${caseId}-${Date.now().toString().slice(-4)}`,
+          taskId: `TSK-${caseId}-${String(existingTaskCount + 1).padStart(3, '0')}`,
           title: 'Make call on this case',
           details: `Auto-generated task for new case ${caseId}. Please make an initial call regarding this case.`,
           priority: req.body.priority || 'Medium',

@@ -121,8 +121,8 @@ const CommLogTab = () => {
               </select>
             </div>
             <div>
-              <label className={labelClass}>From / To</label>
-              <input type="text" className={inputClass} placeholder="Person name / number" value={formData.fromTo} onChange={e => setFormData({...formData, fromTo: e.target.value})} />
+              <label className={labelClass}>{formData.direction === 'Incoming' ? 'From' : 'To'}</label>
+              <input type="text" className={inputClass} placeholder={formData.direction === 'Incoming' ? 'Received from (name / number)' : 'Sent to (name / number)'} value={formData.fromTo} onChange={e => setFormData({...formData, fromTo: e.target.value})} />
             </div>
           </div>
 
@@ -209,7 +209,7 @@ const CommLogTab = () => {
                 comms.map(c => (
                   <tr key={c._id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-3 py-3 font-mono text-[10px] text-gray-500 align-top">
-                      #{c._id.substring(c._id.length - 6).toUpperCase()}
+                      {c.commId || `#${c._id.substring(c._id.length - 6).toUpperCase()}`}
                     </td>
                     <td className="px-3 py-3 font-semibold text-blue-600 whitespace-nowrap align-top">{c.caseId}</td>
                     <td className="px-3 py-3 whitespace-nowrap align-top">
@@ -221,7 +221,10 @@ const CommLogTab = () => {
                         {c.direction}
                       </span>
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap align-top">{c.fromTo || '-'}</td>
+                    <td className="px-3 py-3 whitespace-nowrap align-top">
+                      <span className="text-[9px] font-bold text-gray-400 uppercase mr-1">{c.direction === 'Incoming' ? 'From:' : 'To:'}</span>
+                      {c.fromTo || '-'}
+                    </td>
                     <td className="px-3 py-3 break-words leading-tight align-top max-w-[250px]">
                       <div className="font-semibold text-gray-800">{c.summary}</div>
                       {c.exactDemand && <div className="text-[10px] text-gray-500 mt-1 italic">"{c.exactDemand}"</div>}

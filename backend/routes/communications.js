@@ -17,7 +17,7 @@ router.get('/', verifyToken, async (req, res) => {
 router.post('/', verifyToken, async (req, res) => {
   try {
     const existingCount = await Communication.countDocuments({ caseId: req.body.caseId });
-    const commId = `COMM-${req.body.mode || 'NA'}-${req.body.caseId}-${String(existingCount + 1).padStart(3, '0')}`;
+    const commId = `COM-${req.body.mode || 'NA'}-${req.body.caseId}-${String(existingCount + 1).padStart(3, '0')}`;
     const doc = new Communication({ ...req.body, commId });
     await doc.save();
     

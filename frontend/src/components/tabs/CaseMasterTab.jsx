@@ -387,7 +387,7 @@ const CaseMasterTab = () => {
                 <th className="px-2 py-3 w-[7%]">Amount Paid</th>
                 <th className="px-2 py-3 w-[5%]">Priority</th>
                 <th className="px-2 py-3 w-[5%]">Status</th>
-                <th className="px-2 py-3 w-[10%]">Assigned To</th>
+                {user.role === 'Admin' && <th className="px-2 py-3 w-[10%]">Assigned To</th>}
                 <th className="px-2 py-3 w-[8%]">Last Update</th>
                 <th className="px-2 py-3 w-[15%] text-center">Actions</th>
               </tr>
@@ -584,7 +584,7 @@ const CaseRow = memo(({
           {c.currentStatus || 'New'}
         </span>
       </td>
-      <td className="px-2 py-3 break-words max-w-[120px] leading-tight text-gray-600 font-medium">{c.assignedTo || c.initiatedBy || '-'}</td>
+      {user?.role === 'Admin' && <td className="px-2 py-3 break-words max-w-[120px] leading-tight text-gray-600 font-medium">{c.assignedTo || c.initiatedBy || '-'}</td>}
       <td className="px-2 py-3 text-gray-600">
         {c.lastUpdateDate ? (
           <>
@@ -620,6 +620,7 @@ const CaseRow = memo(({
               </button>
             )}
           </div>
+          {user?.role === 'Admin' && (
           <div className="flex gap-1 w-full mt-0.5">
             <select 
               className="flex-1 border border-gray-300 rounded text-[9px] px-1.5 py-1 outline-none focus:border-blue-500 shadow-sm min-w-0 bg-white"
@@ -639,6 +640,7 @@ const CaseRow = memo(({
               <Check size={12} />
             </button>
           </div>
+          )}
         </div>
       </td>
     </tr>

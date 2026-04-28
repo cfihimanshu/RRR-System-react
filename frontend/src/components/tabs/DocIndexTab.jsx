@@ -199,7 +199,7 @@ const DocIndexTab = () => {
                   filteredDocs.map(d => (
                     <tr key={d._id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-mono text-[10px] text-gray-500 align-top">
-                        #{d._id.substring(d._id.length - 6).toUpperCase()}
+                        {d.docId || `#${d._id.substring(d._id.length - 6).toUpperCase()}`}
                       </td>
                       <td className="px-4 py-3 font-semibold text-blue-600 whitespace-nowrap align-top">{d.caseId}</td>
                       <td className="px-4 py-3 whitespace-nowrap align-top">

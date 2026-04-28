@@ -35,6 +35,7 @@ const MyTaskTab = () => {
   const { user } = useContext(AuthContext);
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
+  const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [selectedUser, setSelectedUser] = useState('All Users');
@@ -142,6 +143,20 @@ const MyTaskTab = () => {
       toast.error('Delete failed');
     }
   };
+
+  const fetchCases = async () => {
+    try {
+      const res = await api.get('/cases');
+      console.log('Fetched cases for task dropdown:', res.data.length);
+      setCases(res.data);
+    } catch (err) {
+      console.error('Failed to fetch cases:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCases();
+  }, []);
 
   useEffect(() => {
     fetchTasks();
@@ -295,7 +310,7 @@ const MyTaskTab = () => {
                       <div className={`absolute left-0 top-0 bottom-0 w-1 ${task.priority === 'High' ? 'bg-red-500' : task.priority === 'Medium' ? 'bg-orange-500' : 'bg-blue-500'}`} />
                       <div className="flex justify-between items-start mb-3">
                         <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter bg-gray-50 px-2 py-0.5 rounded border border-gray-200 group-hover:text-blue-600 transition-colors">
-                          {task.taskId || 'TASK-NEW'}
+                          {task.taskId || 'TSK-NEW'}
                         </span>
                         <div className="flex gap-1 items-center">
                           <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${task.priority === 'High' ? 'bg-red-50 text-red-600 border border-red-100' : task.priority === 'Medium' ? 'bg-orange-50 text-orange-600 border border-orange-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
@@ -487,7 +502,7 @@ const MyTaskTab = () => {
             <div>
               <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2">Link Case ID</label>
               <SearchableCaseSelect 
-                cases={tasks.filter(t => t.isCase).map(t => ({ caseId: t.caseId, companyName: t.title.replace('Case: ', '') }))}
+                cases={cases}
                 value={newTask.caseId}
                 onChange={(val) => setNewTask({...newTask, caseId: val})}
                 placeholder="Search case ID..."
