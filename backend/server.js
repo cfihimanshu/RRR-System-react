@@ -4,7 +4,31 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
+
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'https://www.cfi247.com',
+  'https://cfi247.com',
+  'http://localhost:5173',
+  'http://localhost:3000'
+].filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin not allowed by CORS: ${origin}`));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 const connectToDatabase = async () => {
@@ -14,7 +38,9 @@ const connectToDatabase = async () => {
       bufferTimeoutMS: 30000,
       keepAlive: true,
       socketTimeoutMS: 45000,
+      connectTimeoutMS: 15000,
       maxPoolSize: 10,
+      retryWrites: true,
     });
     console.log('MongoDB Connected');
   } catch (err) {
@@ -98,6 +124,15 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err);
+  if (res.headersSent) return next(err);
+  if (err instanceof Error && err.message.startsWith('Origin not allowed by CORS')) {
+    return res.status(403).json({ error: err.message });
+  }
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 const PORT = process.env.PORT || 5000;
