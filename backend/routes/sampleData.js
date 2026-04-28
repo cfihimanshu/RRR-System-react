@@ -6,7 +6,7 @@ const SampleData = require('../models/SampleData');
 const { verifyToken } = require('../middleware/auth');
 const router = express.Router();
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.get('/', verifyToken, async (req, res) => {
   try {
@@ -40,7 +40,7 @@ router.post('/import', verifyToken, upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No Excel file provided' });
     }
 
-    const workbook = xlsx.readFile(req.file.path);
+    const workbook = xlsx.read(req.file.buffer);
     const sheetName = workbook.SheetNames[0];
     const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { cellDates: true });
 
@@ -87,16 +87,8 @@ router.post('/import', verifyToken, upload.single('file'), async (req, res) => {
     });
 
     await SampleData.insertMany(results);
-    fs.unlinkSync(req.file.path); // remove temp file
     res.status(201).json({ message: `Successfully imported ${results.length} records.` });
   } catch (error) {
-    if (req.file) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (e) {
-        // ignore unlink error
-      }
-    }
     res.status(500).json({ error: error.message });
   }
 });

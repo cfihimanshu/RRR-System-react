@@ -15,7 +15,7 @@ const { verifyToken } = require('../middleware/auth');
 const { roleGuard } = require('../middleware/roleGuard');
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ storage: multer.memoryStorage() });
 
 function generateCaseId(brandName, companyName, existingCases) {
   const year = new Date().getFullYear();
@@ -400,7 +400,7 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
-    const workbook = xlsx.readFile(req.file.path);
+    const workbook = xlsx.read(req.file.buffer);
     const sheetName = workbook.SheetNames[0];
     const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { cellDates: true });
 
@@ -482,10 +482,8 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
       await Timeline.insertMany(timelineEntries);
     }
 
-    fs.unlinkSync(req.file.path);
     res.status(201).json({ message: `Successfully imported ${finalCases.length} cases.` });
   } catch (error) {
-    if (req.file) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: error.message });
   }
 });
