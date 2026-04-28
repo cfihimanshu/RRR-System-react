@@ -8,7 +8,8 @@ app.use(cors());
 app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URI, {
-  serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds instead of waiting forever
+  serverSelectionTimeoutMS: 10000, // Timeout after 10 seconds instead of waiting forever
+  bufferTimeoutMS: 30000, // Increase buffer timeout to 30 seconds
 })
   .then(() => console.log('MongoDB Connected'))
   .catch(err => {
