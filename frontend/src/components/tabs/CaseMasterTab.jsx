@@ -18,23 +18,40 @@ import {
   X,
   ExternalLink,
   FileText,
-  Trash2
+  Trash2,
+  Filter,
+  Calendar as CalendarIcon,
+  ChevronRight
 } from 'lucide-react';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
 
 const CaseMasterTab = () => {
   const [cases, setCases] = useState([]);
   const navigate = useNavigate();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All Status');
-  const [priorityFilter, setPriorityFilter] = useState('All Priority');
-  const [assigneeFilter, setAssigneeFilter] = useState('All Assignees');
   const [selectedCases, setSelectedCases] = useState([]);
   const [bulkAssignUser, setBulkAssignUser] = useState('');
   const [importing, setImporting] = useState(false);
   const [viewCase, setViewCase] = useState(null);
   const [timelineLogs, setTimelineLogs] = useState([]);
   const [opsUsers, setOpsUsers] = useState([]);
+  const [availableDates, setAvailableDates] = useState([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [activeFilterType, setActiveFilterType] = useState('Status');
+  const [tempFilters, setTempFilters] = useState({
+    status: 'All Status',
+    priority: 'All Priority',
+    assignee: 'All Assignees',
+    date: null
+  });
+  const [appliedFilters, setAppliedFilters] = useState({
+    status: 'All Status',
+    priority: 'All Priority',
+    assignee: 'All Assignees',
+    date: null
+  });
   const { user } = useContext(AuthContext);
 
   const fetchCases = async () => {
@@ -70,17 +87,29 @@ const CaseMasterTab = () => {
     }
   };
 
+  const fetchAvailableDates = async () => {
+    try {
+      const res = await api.get('/cases/available-dates');
+      setAvailableDates(res.data);
+    } catch (err) {
+      console.error('Failed to fetch available dates', err);
+    }
+  };
+
   useEffect(() => {
     fetchCases();
     fetchOpsUsers();
+    fetchAvailableDates();
     // Check for auto-filter from Dashboard
     if (location.state?.statusFilter) {
-      setStatusFilter(location.state.statusFilter);
+      setAppliedFilters(prev => ({ ...prev, status: location.state.statusFilter }));
+      setTempFilters(prev => ({ ...prev, status: location.state.statusFilter }));
       // Clear state after applying so it doesn't persist on refresh
       window.history.replaceState({}, document.title);
     }
     if (location.state?.priorityFilter) {
-      setPriorityFilter(location.state.priorityFilter);
+      setAppliedFilters(prev => ({ ...prev, priority: location.state.priorityFilter }));
+      setTempFilters(prev => ({ ...prev, priority: location.state.priorityFilter }));
       window.history.replaceState({}, document.title);
     }
     if (location.state?.searchId) {
@@ -169,24 +198,47 @@ const CaseMasterTab = () => {
       (c.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
       
     let matchStatus = false;
-    if (statusFilter === 'All Status') {
+    if (appliedFilters.status === 'All Status') {
       matchStatus = true;
-    } else if (statusFilter === 'Active') {
+    } else if (appliedFilters.status === 'Active') {
       matchStatus = c.currentStatus !== 'Closed' && c.currentStatus !== 'Settled';
-    } else if (statusFilter === 'Closed') {
+    } else if (appliedFilters.status === 'Closed') {
       matchStatus = c.currentStatus === 'Closed' || c.currentStatus === 'Settled';
     } else {
-      matchStatus = c.status === statusFilter || c.currentStatus === statusFilter;
+      matchStatus = c.status === appliedFilters.status || c.currentStatus === appliedFilters.status;
     }
 
-    const matchPriority = priorityFilter === 'All Priority' || c.priority === priorityFilter;
+    const matchPriority = appliedFilters.priority === 'All Priority' || c.priority === appliedFilters.priority;
     
     const assignedPerson = c.assignedTo || c.initiatedBy || '';
-    const matchAssignee = assigneeFilter === 'All Assignees' || 
-      assignedPerson.toLowerCase() === assigneeFilter.toLowerCase();
+    const matchAssignee = appliedFilters.assignee === 'All Assignees' || 
+      assignedPerson.toLowerCase() === appliedFilters.assignee.toLowerCase();
 
-    return matchSearch && matchStatus && matchPriority && matchAssignee;
+    let matchDate = true;
+    if (appliedFilters.date) {
+      const caseDate = c.createdDate ? new Date(c.createdDate).toISOString().split('T')[0] : null;
+      matchDate = caseDate === appliedFilters.date;
+    }
+
+    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate;
   });
+
+  const handleApplyFilters = () => {
+    setAppliedFilters(tempFilters);
+    setIsFilterOpen(false);
+  };
+
+  const handleResetFilters = () => {
+    const reset = {
+      status: 'All Status',
+      priority: 'All Priority',
+      assignee: 'All Assignees',
+      date: null
+    };
+    setTempFilters(reset);
+    setAppliedFilters(reset);
+    setIsFilterOpen(false);
+  };
 
   const handleViewCase = async (c) => {
     setViewCase(c);
@@ -257,7 +309,6 @@ const CaseMasterTab = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
         <div>
           <h2 className="text-xl font-bold text-gray-800">Case Master Register</h2>
-          <p className="text-sm text-gray-500">All cases with current status</p>
         </div>
         <div className="flex gap-2 mt-3 md:mt-0">
           {user?.role === 'Admin' && (
@@ -298,39 +349,175 @@ const CaseMasterTab = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <select
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 outline-none shadow-sm min-w-[150px] bg-white"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="All Status">All Status</option>
-          <option value="New">New</option>
-          <option value="In-progress">In-progress</option>
-          <option value="Settled">Settled</option>
-          <option value="Stucked">Stucked</option>
-        </select>
-        <select
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 outline-none shadow-sm min-w-[150px] bg-white"
-          value={priorityFilter}
-          onChange={(e) => setPriorityFilter(e.target.value)}
-        >
-          <option value="All Priority">All Priority</option>
-          <option value="High">High</option>
-          <option value="Medium">Medium</option>
-          <option value="Low">Low</option>
-        </select>
-        {user?.role === 'Admin' && (
-          <select
-            className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 outline-none shadow-sm min-w-[150px] bg-white"
-            value={assigneeFilter}
-            onChange={(e) => setAssigneeFilter(e.target.value)}
+        <div className="relative">
+          <button 
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            className={`flex items-center gap-2 px-4 py-2 border rounded-md text-sm font-medium transition-all shadow-sm ${
+              isFilterOpen || appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.date
+              ? 'bg-blue-600 text-white border-blue-600' 
+              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
           >
-            <option value="All Assignees">All Assignees</option>
-            {opsUsers.map(u => (
-              <option key={`filter-${u._id}`} value={u.fullName}>{u.fullName}</option>
-            ))}
-          </select>
-        )}
+            <Filter size={16} />
+            Filters
+            {(appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.date) && (
+              <span className="bg-white text-blue-600 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold">
+                {[appliedFilters.status !== 'All Status', appliedFilters.priority !== 'All Priority', appliedFilters.assignee !== 'All Assignees', !!appliedFilters.date].filter(Boolean).length}
+              </span>
+            )}
+          </button>
+
+          {isFilterOpen && (
+            <>
+              <div className="fixed inset-0 z-[90]" onClick={() => setIsFilterOpen(false)}></div>
+              <div className="absolute top-full right-0 mt-2 w-[450px] max-w-[90vw] md:max-w-none bg-white rounded-lg shadow-2xl border border-gray-200 z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex flex-1 min-h-[350px]">
+                {/* Left Sidebar */}
+                <div className="w-1/3 bg-gray-50 border-r border-gray-200 py-2">
+                  {['Status', 'Priority', 'Assignees', 'Date'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setActiveFilterType(type)}
+                      className={`w-full text-left px-4 py-3 text-sm font-medium flex items-center justify-between transition-colors ${
+                        activeFilterType === type 
+                        ? 'bg-white text-blue-600 border-l-4 border-blue-600' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {type}
+                      <ChevronRight size={14} className={activeFilterType === type ? 'opacity-100' : 'opacity-0'} />
+                    </button>
+                  ))}
+                </div>
+
+                {/* Right Content */}
+                <div className="w-2/3 p-4 overflow-y-auto max-h-[400px]">
+                  {activeFilterType === 'Status' && (
+                    <div className="space-y-2">
+                      {['All Status', 'New', 'In-progress', 'Settled', 'Stucked'].map((s) => (
+                        <label key={s} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-md cursor-pointer group">
+                          <input 
+                            type="radio" 
+                            name="status" 
+                            checked={tempFilters.status === s}
+                            onChange={() => setTempFilters({...tempFilters, status: s})}
+                            className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                          />
+                          <span className={`text-sm ${tempFilters.status === s ? 'text-blue-600 font-semibold' : 'text-gray-700'}`}>{s}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeFilterType === 'Priority' && (
+                    <div className="space-y-2">
+                      {['All Priority', 'High', 'Medium', 'Low'].map((p) => (
+                        <label key={p} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-md cursor-pointer group">
+                          <input 
+                            type="radio" 
+                            name="priority" 
+                            checked={tempFilters.priority === p}
+                            onChange={() => setTempFilters({...tempFilters, priority: p})}
+                            className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                          />
+                          <span className={`text-sm ${tempFilters.priority === p ? 'text-blue-600 font-semibold' : 'text-gray-700'}`}>{p}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeFilterType === 'Assignees' && (
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-md cursor-pointer group">
+                        <input 
+                          type="radio" 
+                          name="assignee" 
+                          checked={tempFilters.assignee === 'All Assignees'}
+                          onChange={() => setTempFilters({...tempFilters, assignee: 'All Assignees'})}
+                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                        />
+                        <span className={`text-sm ${tempFilters.assignee === 'All Assignees' ? 'text-blue-600 font-semibold' : 'text-gray-700'}`}>All Assignees</span>
+                      </label>
+                      {opsUsers.map((u) => (
+                        <label key={u._id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-md cursor-pointer group">
+                          <input 
+                            type="radio" 
+                            name="assignee" 
+                            checked={tempFilters.assignee === u.fullName}
+                            onChange={() => setTempFilters({...tempFilters, assignee: u.fullName})}
+                            className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                          />
+                          <span className={`text-sm ${tempFilters.assignee === u.fullName ? 'text-blue-600 font-semibold' : 'text-gray-700'}`}>{u.fullName}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeFilterType === 'Date' && (
+                    <div className="calendar-container">
+                      <Calendar 
+                        onChange={(val) => setTempFilters({...tempFilters, date: format(val, 'yyyy-MM-dd')})}
+                        value={tempFilters.date ? new Date(tempFilters.date) : null}
+                        tileClassName={({ date, view }) => {
+                          if (view === 'month') {
+                            const dateStr = format(date, 'yyyy-MM-dd');
+                            if (availableDates.includes(dateStr)) {
+                              return 'has-cases';
+                            }
+                          }
+                          return null;
+                        }}
+                        tileDisabled={({ date, view }) => {
+                          if (view === 'month') {
+                            const dateStr = format(date, 'yyyy-MM-dd');
+                            return !availableDates.includes(dateStr);
+                          }
+                          return false;
+                        }}
+                        className="border-none shadow-none text-sm"
+                      />
+                      {tempFilters.date && (
+                        <div className="mt-2 text-center">
+                          <button 
+                            onClick={() => setTempFilters({...tempFilters, date: null})}
+                            className="text-xs text-red-500 hover:underline font-medium"
+                          >
+                            Clear Date Selection
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
+                <button 
+                  onClick={handleResetFilters}
+                  className="text-sm text-gray-600 hover:text-gray-800 font-medium"
+                >
+                  Reset All
+                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setIsFilterOpen(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleApplyFilters}
+                    className="px-6 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-md transition-all active:scale-95"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+          )}
+        </div>
 
         {user?.role === 'Admin' && (
           <div className="ml-auto flex items-center gap-2">

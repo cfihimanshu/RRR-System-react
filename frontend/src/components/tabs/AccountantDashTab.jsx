@@ -55,7 +55,7 @@ const AccountantDashTab = () => {
       <div className="section-header flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Accountant Dashboard</h2>
-          <div className="section-sub text-green-600 font-semibold">Approved refunds awaiting payment dispatch</div>
+      
         </div>
       </div>
 

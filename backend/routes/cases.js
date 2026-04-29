@@ -134,6 +134,28 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
+router.get('/available-dates', verifyToken, async (req, res) => {
+  try {
+    const dates = await Case.distinct('createdDate');
+    const formattedDates = dates
+      .filter(d => d)
+      .map(d => {
+        try {
+          const date = new Date(d);
+          if (isNaN(date.getTime())) return null;
+          return date.toISOString().split('T')[0];
+        } catch (e) {
+          return null;
+        }
+      })
+      .filter(d => d);
+    
+    res.json([...new Set(formattedDates)]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const { sendEmail } = require('../utils/mailer');
 const User = require('../models/User');
 

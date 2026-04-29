@@ -87,66 +87,70 @@ const SodEodReportTab = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#F8FAFC]">
+    <div className="flex flex-col h-full bg-[#F8FAFC] overflow-hidden">
       {/* Header */}
-      <div className="bg-white border-b border-gray-300 px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
-            <Activity className="text-blue-600" size={28} />
-            SOD/EOD Report Center
-          </h1>
-          <p className="text-sm text-gray-500 ml-10 font-medium">View your daily progress logs</p>
+      <div className="bg-white border-b border-gray-300 px-4 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-blue-100 rounded-2xl text-blue-600">
+             <Activity size={24} />
+          </div>
+          <div>
+            <h1 className="text-xl md:text-2xl font-black text-gray-800 tracking-tight">
+              SOD/EOD Report Center
+            </h1>
+            <p className="text-xs md:text-sm text-gray-500 font-medium">View your daily progress logs</p>
+          </div>
         </div>
         
-        <div className="flex items-center gap-4">
-          <div className="flex bg-gray-100 p-1.5 rounded-2xl border-2 border-gray-200">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+          <div className="flex bg-gray-100 p-1 rounded-2xl border-2 border-gray-200 shadow-inner">
             {['All', 'SOD', 'EOD'].map((type) => (
               <button
                 key={type}
                 onClick={() => setFilter(type)}
-                className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${
+                className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-[10px] md:text-xs font-black transition-all ${
                   filter === type 
                   ? 'bg-white text-blue-600 shadow-md border border-blue-100' 
                   : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
-                {type} Reports
+                {type}
               </button>
             ))}
           </div>
           {user?.role === 'Admin' && (
             <button 
               onClick={handleExportReports}
-              className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
+              className="flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
             >
-              <Download size={18} /> Export
+              <Download size={18} /> Export CSV
             </button>
           )}
         </div>
       </div>
 
-      <div className="p-8 flex flex-col h-full overflow-hidden">
+      <div className="p-4 md:p-8 flex flex-col h-full overflow-hidden">
         {/* Table Container */}
-        <div className="bg-white rounded-[2.5rem] border-2 border-gray-300 shadow-sm overflow-hidden flex flex-col flex-1">
-          <div className="p-6 border-b border-gray-100 flex items-center justify-between gap-4">
+        <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] border-2 border-gray-300 shadow-sm overflow-hidden flex flex-col flex-1">
+          <div className="p-4 md:p-6 border-b border-gray-100 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-               <History className="text-blue-500" size={20} />
-               <h2 className="text-lg font-black text-gray-800">Recent Submission Logs</h2>
+               <div className="p-2 bg-blue-50 rounded-lg text-blue-500"><History size={20} /></div>
+               <h2 className="text-base md:text-lg font-black text-gray-800 uppercase tracking-tight">Recent Submission Logs</h2>
             </div>
-            <div className="relative max-w-sm w-full">
+            <div className="relative w-full lg:max-w-sm">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               <input 
                 type="text"
-                placeholder="Search by name or summary..."
-                className="w-full pl-12 pr-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-blue-500 transition-all"
+                placeholder="Search logs..."
+                className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all shadow-inner"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto flex-1 hide-scrollbar">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
                 <tr className="bg-blue-600 text-white">
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest">Date & Time</th>

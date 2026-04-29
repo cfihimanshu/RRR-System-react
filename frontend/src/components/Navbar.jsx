@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { format } from 'date-fns';
 import { Menu, ChevronLeft, ChevronRight } from 'lucide-react';
+import logo from '../assets/logo.png';
 
 const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
   const { user, logout } = useContext(AuthContext);
@@ -22,9 +23,8 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
         <Menu size={22} />
       </button>
 
-      <div className="flex flex-col leading-tight cursor-pointer" onClick={toggleCollapse}>
-        <div className="text-lg font-bold tracking-tight">RRR Engine</div>
-        <div className="text-[10px] opacity-80 uppercase font-bold tracking-wider">Live Case Management</div>
+      <div className="flex items-center gap-2 cursor-pointer transition-transform hover:scale-105 active:scale-95" onClick={toggleCollapse}>
+        <img src={logo} alt="RRR Engine Logo" className="h-12 md:h-13 w-auto object-contain" />
       </div>
       <div className="ml-auto flex items-center gap-3 text-sm">
         <div className="bg-white/15 px-3 py-1 rounded-full text-xs hidden sm:block">

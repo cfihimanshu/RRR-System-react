@@ -39,7 +39,7 @@ const DataSearchTab = () => {
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -61,29 +61,28 @@ const DataSearchTab = () => {
   const inputClass = "w-full border border-gray-300 rounded-lg p-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none shadow-sm transition-all bg-white";
 
   return (
-    <div className="h-full bg-gray-50 p-6 flex flex-col overflow-hidden">
+    <div className="h-full bg-gray-50 p-4 md:p-6 flex flex-col overflow-hidden">
       {/* Header Section */}
-      <div className="flex justify-between items-start mb-6 flex-shrink-0">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">Internal Master Data Search</h1>
-          <p className="text-xs text-gray-500 mt-1">Full database search across all master records</p>
-          <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+          <h1 className="text-xl font-bold text-gray-800"> Data Search</h1>
+          <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 uppercase tracking-tight">
             {totalCount} {totalCount === 1000 ? ' (Limit reached)' : 'Records found'}
           </div>
         </div>
-        
+
         {user?.role === 'Admin' && (
-          <div className="relative">
-            <input 
-              type="file" 
-              id="sample-excel-upload" 
-              className="hidden" 
-              accept=".xlsx, .xls" 
-              onChange={handleFileUpload} 
+          <div className="relative w-full md:w-auto">
+            <input
+              type="file"
+              id="sample-excel-upload"
+              className="hidden"
+              accept=".xlsx, .xls"
+              onChange={handleFileUpload}
             />
-            <label 
-              htmlFor="sample-excel-upload" 
-              className={`cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded shadow flex items-center gap-2 transition-all text-xs uppercase tracking-wider ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}
+            <label
+              htmlFor="sample-excel-upload"
+              className={`cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all text-[10px] uppercase tracking-wider ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <FileSpreadsheet size={16} />
               {importing ? 'Uploading...' : 'Upload Sample Excel'}
@@ -95,8 +94,8 @@ const DataSearchTab = () => {
       {/* Search Bar */}
       <div className="mb-6 max-w-4xl mx-auto w-full flex-shrink-0">
         <div className="relative">
-          <input 
-            type="text" 
+          <input
+            type="text"
             className={inputClass}
             placeholder="Type Company Name, Contact, BDE or Email to search..."
             value={searchTerm}
@@ -111,9 +110,9 @@ const DataSearchTab = () => {
       </div>
 
       {/* Results Table - Scrollable Container */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
-        <div className="table-wrap">
-          <table className="w-full text-left border-collapse table-auto">
+      <div className="bg-white rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
+        <div className="overflow-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+          <table className="w-full text-left border-collapse table-auto min-w-[1200px]">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-800 text-white text-[10px] font-bold tracking-wider uppercase">
                 <th className="px-2 py-3 whitespace-nowrap w-[80px]">Date</th>

@@ -8,11 +8,16 @@ const app = express();
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'https://cfi247.com',
   'https://www.cfi247.com',
+  'http://localhost:5175',
+  'http://127.0.0.1:5175',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
   'http://localhost:5173',
+  'http://127.0.0.1:5173',
   'http://localhost:3000',
 ].filter(Boolean);
 
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -22,7 +27,9 @@ app.use(cors({
   },
   credentials: true,
   optionsSuccessStatus: 200,
-}));
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

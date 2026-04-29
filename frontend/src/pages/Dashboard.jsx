@@ -57,21 +57,21 @@ const Dashboard = () => {
   const [isCollapsed, setIsCollapsed] = useState(true);
 
   return (
-    <div className="app-container min-h-screen bg-gray-50">
+    <div className="app-container h-screen bg-gray-50 flex flex-col overflow-hidden">
       <Navbar 
         toggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
         toggleCollapse={() => setIsCollapsed(!isCollapsed)}
         isCollapsed={isCollapsed}
       />
-      <div className="flex">
+      <div className="flex flex-1 overflow-hidden">
         <Sidebar 
           isOpen={sidebarOpen} 
           setSidebarOpen={setSidebarOpen} 
           isCollapsed={isCollapsed}
           setIsCollapsed={setIsCollapsed}
         />
-        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'md:ml-[70px]' : 'md:ml-[250px]'}`}>
-          <div className="main p-0">
+        <div className={`flex-1 overflow-auto transition-all duration-300 ${isCollapsed ? 'md:ml-[70px]' : 'md:ml-[250px]'}`}>
+          <div className="main h-full p-0 flex flex-col">
           <Routes>
             <Route path="/" element={<DashboardTab />} />
             

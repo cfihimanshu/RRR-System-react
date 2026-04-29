@@ -53,6 +53,16 @@ const WorkReportTab = () => {
     return typeMatch && dateMatch;
   });
 
+  // Get completion status: FULLY COMPLETED only when both SOD and EOD exist for same date
+  const getCompletionStatus = (date, userEmail) => {
+    const hasSod = reports.some(r => r.date === date && r.type === 'SOD' && r.userEmail === userEmail);
+    const hasEod = reports.some(r => r.date === date && r.type === 'EOD' && r.userEmail === userEmail);
+    
+    if (hasSod && hasEod) return 'Fully Completed';
+    if (hasSod || hasEod) return 'Incomplete';
+    return 'Pending';
+  };
+
   // ── Download as CSV ──
   const handleDownload = () => {
     const headers = ['Date', 'Type', 'Submitted By', 'Check-In', 'Check-Out', 'Duration', 'Planned Tasks', 'Work Summary', 'Completion', 'Progress Score', 'Mood'];
@@ -65,7 +75,7 @@ const WorkReportTab = () => {
       r.workDuration || '',
       (r.plannedTasks || '').replace(/,/g, ';').replace(/\n/g, ' '),
       (r.workSummary || '').replace(/,/g, ';').replace(/\n/g, ' '),
-      r.completionStatus || '',
+      getCompletionStatus(r.date, r.userEmail) || '',
       r.progressScore || '',
       r.moodEnergy || ''
     ]);
@@ -90,106 +100,69 @@ const WorkReportTab = () => {
   const isAdmin = stats?.role === 'Admin';
 
   return (
-    <div className="flex flex-col h-full bg-[#F8FAFC] p-8 overflow-y-auto hide-scrollbar">
+    <div className="flex flex-col h-full bg-[#F8FAFC] p-4 md:p-8 overflow-hidden">
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
-            <BarChart3 className="text-blue-600" size={32} />
-            {isAdmin ? 'Work Report' : 'My Work Report'}
-          </h1>
-          <p className="text-sm text-gray-500 ml-11 font-medium italic mt-1">
-            {isAdmin ? 'Advanced team performance tracking overview' : 'Your personal daily engagement and task metrics'}
-          </p>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
+        <div className="flex items-start gap-4">
+          <div className="p-3 bg-blue-100 rounded-2xl text-blue-600 shrink-0">
+            <BarChart3 size={28} />
+          </div>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight leading-tight">
+              {isAdmin ? 'Work Report' : 'My Work Report'}
+            </h1>
+            <p className="text-xs md:text-sm text-gray-500 font-medium italic mt-1">
+              {isAdmin ? 'Advanced team performance tracking overview' : 'Your personal daily engagement and task metrics'}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full md:w-auto">
           <button
             onClick={fetchData}
-            className="p-2.5 rounded-xl bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-all"
+            className="flex-1 md:flex-none flex justify-center items-center p-3 rounded-xl bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
             title="Refresh"
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={18} />
           </button>
           <button
             onClick={handleDownload}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
+            className="flex-3 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
           >
-            <Download size={16} /> Export
+            <Download size={18} /> Export CSV
           </button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-        <StatCard 
-          icon={<ClipboardList className="text-blue-600" />}
-          title={isAdmin ? "Total Tasks" : "My Tasks"}
-          value={stats?.tasksAssigned || 0}
-          subtext={isAdmin ? "Assigned across team" : "Tasks assigned to you"}
-          trend={isAdmin ? "+12%" : "ACTIVE"}
-        />
-        <StatCard 
-          icon={<CheckCircle2 className="text-emerald-600" />}
-          title="Completed"
-          value={stats?.tasksCompleted || 0}
-          subtext={isAdmin ? "Total tasks finished" : "Your completed tasks"}
-          trend={stats?.tasksAssigned > 0 ? `${Math.round((stats.tasksCompleted/stats.tasksAssigned)*100)}%` : "0%"}
-          isProgress
-        />
-        <StatCard 
-          icon={<Clock className="text-indigo-600" />}
-          title={isAdmin ? "Active SODs" : "My SOD Status"}
-          value={stats?.sodToday || 0}
-          subtext={isAdmin ? "Reports filed today" : (stats?.sodToday > 0 ? "Filed for today" : "Not filed yet")}
-          trend="LIVE"
-        />
-        <StatCard 
-          icon={<Target className="text-rose-600" />}
-          title={isAdmin ? "Pending EODs" : "My EOD Status"}
-          value={isAdmin ? ((stats?.sodToday || 0) - (stats?.eodToday || 0)) : stats?.eodToday}
-          subtext={isAdmin ? "Awaiting checkout" : (stats?.eodToday > 0 ? "Completed" : "Pending Checkout")}
-          trend={isAdmin ? "Action Required" : "DAILY"}
-        />
-        {!isAdmin && (
-          <StatCard 
-            icon={<TrendingUp className="text-orange-600" />}
-            title="Working Hours"
-            value={`${stats?.workingHours || 0} hrs`}
-            subtext="Today's total duration"
-            trend={stats?.eodToday > 0 ? "DONE" : "ONGOING"}
-          />
-        )}
-      </div>
 
       {/* Reports Table */}
-      <div className="bg-white rounded-[2rem] border-2 border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-[2rem] border-2 border-gray-100 shadow-sm overflow-hidden flex flex-col flex-1">
         {/* Table Header + Filters */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-sm font-black text-gray-700 uppercase tracking-widest flex items-center gap-2">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between p-4 md:p-6 border-b border-gray-100 gap-4">
+          <h2 className="text-xs md:text-sm font-black text-gray-700 uppercase tracking-widest flex items-center gap-2">
             <FileText size={16} className="text-blue-600" /> Report History
           </h2>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-gray-50 border-2 border-gray-200 rounded-xl px-3 py-2">
-              <Calendar size={13} className="text-gray-400" />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="flex items-center gap-2 bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-2.5 shadow-inner">
+              <Calendar size={14} className="text-gray-400" />
               <input
                 type="date"
-                className="bg-transparent text-xs font-bold text-gray-700 outline-none"
+                className="bg-transparent text-xs font-bold text-gray-700 outline-none flex-1"
                 value={filterDate}
                 onChange={e => setFilterDate(e.target.value)}
               />
               {filterDate && (
                 <button onClick={() => setFilterDate('')} className="text-gray-400 hover:text-red-400 transition-colors">
-                  <X size={12} />
+                  <X size={14} />
                 </button>
               )}
             </div>
-            <div className="flex items-center bg-gray-50 border-2 border-gray-200 rounded-xl overflow-hidden">
+            <div className="flex items-center bg-gray-50 border-2 border-gray-200 rounded-xl overflow-hidden p-1 shadow-inner">
               {['All', 'SOD', 'EOD'].map(t => (
                 <button
                   key={t}
                   onClick={() => setFilterType(t)}
-                  className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${filterType === t ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-blue-600'}`}
+                  className={`flex-1 sm:flex-none px-6 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-lg ${filterType === t ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:text-blue-600'}`}
                 >
                   {t}
                 </button>
@@ -201,8 +174,8 @@ const WorkReportTab = () => {
         {filteredReports.length === 0 ? (
           <div className="py-20 text-center text-gray-400 font-bold text-sm italic">No reports found for the selected filters.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+          <div className="overflow-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+            <table className="w-full text-left min-w-[1000px]">
               <thead>
                 <tr className="bg-blue-800 text-white text-[10px] font-black uppercase tracking-wider">
                   <th className="px-5 py-3.5">Date</th>
@@ -241,15 +214,18 @@ const WorkReportTab = () => {
                       </p>
                     </td>
                     <td className="px-5 py-3.5">
-                      {report.completionStatus ? (
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                          report.completionStatus === 'Fully Completed' ? 'bg-green-100 text-green-700' :
-                          report.completionStatus === 'Partially Completed' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-orange-100 text-orange-700'
-                        }`}>
-                          {report.completionStatus}
-                        </span>
-                      ) : <span className="text-gray-300 italic">—</span>}
+                      {(() => {
+                        const completionStatus = getCompletionStatus(report.date, report.userEmail);
+                        return (
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                            completionStatus === 'Fully Completed' ? 'bg-green-100 text-green-700' :
+                            completionStatus === 'Incomplete' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {completionStatus}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-5 py-3.5">
                       {report.progressScore ? (

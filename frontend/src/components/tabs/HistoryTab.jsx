@@ -13,8 +13,12 @@ const HistoryTab = () => {
   const { user } = useContext(AuthContext);
 
   const [formData, setFormData] = useState({
-    caseId: '', eventDate: '', histType: 'Complaint', summary: '', notes: '', fileLink: '', source: '', enteredBy: ''
+    caseId: '', eventDate: '', histType: 'Complaint', notes: '', fileLink: '', enteredBy: user?.fullName || user?.email || ''
   });
+
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, enteredBy: user?.fullName || user?.email || '' }));
+  }, [user]);
 
   const fetchHistory = async () => {
     try {
@@ -37,7 +41,7 @@ const HistoryTab = () => {
       await api.post('/history', formData);
       toast.success('History entry added');
       setFormData({ 
-        caseId: '', eventDate: '', histType: 'Complaint', summary: '', notes: '', fileLink: '', source: '', enteredBy: '' 
+        caseId: '', eventDate: '', histType: 'Complaint', notes: '', fileLink: '', enteredBy: user?.fullName || user?.email || '' 
       });
       fetchHistory();
     } catch (err) {
@@ -71,8 +75,8 @@ const HistoryTab = () => {
     <div className="section active w-full h-full flex flex-col bg-gray-50 pb-8 relative">
       {/* Header Area */}
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-800">History Upload</h2>
-        <p className="text-sm text-gray-500">Add pre-case or background history entries</p>
+        <h2 className="text-xl font-bold text-gray-800">Case History</h2>
+        
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
@@ -114,32 +118,20 @@ const HistoryTab = () => {
             </div>
 
             <div>
-              <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Event Summary</label>
-              <input type="text" className={inputClass} placeholder="One-line summary" value={formData.summary} onChange={(e) => setFormData({...formData, summary: e.target.value})} required />
-            </div>
-
-            <div>
-              <label className={labelClass}>Detailed Notes</label>
+              <label className={labelClass}>Details</label>
               <textarea className={`${inputClass} min-h-[80px]`} placeholder="Additional details..." value={formData.notes} onChange={(e) => setFormData({...formData, notes: e.target.value})}></textarea>
             </div>
 
             <div>
-              <label className={labelClass}>Attach File (Or Paste URL)</label>
               <div className="border border-dashed border-gray-300 rounded bg-gray-50 hover:bg-gray-100 transition-colors mb-2">
                 <FileUpload onUploadSuccess={(url) => setFormData({...formData, fileLink: url})} label="Click to browse or drag & drop any file" />
               </div>
               <input type="text" className={inputClass} placeholder="Or paste Google Drive / URL link..." value={formData.fileLink} onChange={(e) => setFormData({...formData, fileLink: e.target.value})} />
             </div>
 
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <label className={labelClass}>Source</label>
-                <input type="text" className={inputClass} placeholder="e.g. Email, WhatsApp" value={formData.source} onChange={(e) => setFormData({...formData, source: e.target.value})} />
-              </div>
-              <div className="flex-1">
-                <label className={labelClass}>Entered By</label>
-                <input type="text" className={inputClass} placeholder="Your name" value={formData.enteredBy} onChange={(e) => setFormData({...formData, enteredBy: e.target.value})} />
-              </div>
+            <div>
+              <label className={labelClass}>Entered By</label>
+              <input type="text" className={inputClass} placeholder="Your name" value={formData.enteredBy} disabled />
             </div>
 
             <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded shadow-sm transition-colors flex items-center justify-center gap-2 mt-2">

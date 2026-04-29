@@ -61,7 +61,7 @@ const ReviewerDashTab = () => {
       <div className="section-header flex justify-between items-center mb-6">
         <div className="w-full">
           <h2 className="text-2xl font-bold text-gray-800">Reviewer Dashboard</h2>
-          <div className="section-sub text-blue-600 font-semibold">Pending approval queue for refund requests</div>
+          
         </div>
       </div>
 

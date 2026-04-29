@@ -192,8 +192,8 @@ const AgreementGenerationTab = () => {
       
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
         <div>
-          <h2 className="text-xl font-bold text-gray-800">Agreement Generation (Native PDF)</h2>
-          <p className="text-sm text-gray-500">Fill details to generate a flawless PDF using native MS Word Engine</p>
+          <h2 className="text-xl font-bold text-gray-800">Agreement Generation</h2>
+          
         </div>
       </div>
 

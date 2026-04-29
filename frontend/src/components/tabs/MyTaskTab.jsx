@@ -28,7 +28,8 @@ import {
   DollarSign,
   History,
   UserCheck,
-  Trash2
+  Trash2,
+  ChevronDown
 } from 'lucide-react';
 
 const MyTaskTab = () => {
@@ -46,12 +47,17 @@ const MyTaskTab = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [linkedCase, setLinkedCase] = useState(null);
   const [fetchingCase, setFetchingCase] = useState(false);
+  const [collapsedColumns, setCollapsedColumns] = useState({
+    'To Do': false,
+    'In Progress': false,
+    'Completed': true // Start with some collapsed on mobile for better focus
+  });
   
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
     priority: 'Medium',
-    assignee: '',
+    assignee: user?.fullName || '',
     dueDate: '',
     caseId: '',
     reminderDateTime: '',
@@ -82,11 +88,16 @@ const MyTaskTab = () => {
   const fetchUsers = async () => {
     try {
       const res = await api.get('/users');
-      const opsUsers = res.data.filter(u => 
+      let opsUsers = res.data.filter(u => 
         (u.role === 'Operations' || u.role === 'Staff' || u.role === 'Admin') && 
         u.fullName && 
         !['User', 'Staff', 'Admin', 'Admin User', 'Test User', 'Accountant', 'Reviewer'].includes(u.fullName.trim())
       );
+
+      if (user?.fullName && !opsUsers.some(u => u.fullName === user.fullName)) {
+        opsUsers = [{ _id: 'current-user', fullName: user.fullName, role: user.role }, ...opsUsers];
+      }
+
       setUsers(opsUsers);
     } catch (err) {
       console.error('Failed to fetch users:', err);
@@ -109,6 +120,12 @@ const MyTaskTab = () => {
       setFetchingCase(false);
     }
   };
+
+  useEffect(() => {
+    if (isModalOpen && user?.fullName) {
+      setNewTask(prev => ({ ...prev, assignee: prev.assignee || user.fullName }));
+    }
+  }, [isModalOpen, user?.fullName]);
 
   const handleOpenTaskPanel = (task) => {
     setSelectedTask(task);
@@ -226,7 +243,7 @@ const MyTaskTab = () => {
         title: '',
         description: '',
         priority: 'Medium',
-        assignee: '',
+        assignee: user?.fullName || '',
         dueDate: '',
         caseId: '',
         reminderDateTime: '',
@@ -241,19 +258,23 @@ const MyTaskTab = () => {
   return (
     <div className="flex flex-col h-full bg-[#F8FAFC]">
       {/* Header */}
-      <div className="bg-white border-b border-gray-300 px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
-            <Layout className="text-blue-600" size={28} />
-            Task Management Board
-          </h1>
-          <p className="text-sm text-gray-500 ml-10 font-medium">Manage your daily tasks and track case progress</p>
+      <div className="bg-white border-b border-gray-300 px-4 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-blue-100 rounded-2xl text-blue-600 shrink-0">
+            <Layout size={24} />
+          </div>
+          <div>
+            <h1 className="text-xl md:text-2xl font-black text-gray-800 tracking-tight">
+              Task Management Board
+            </h1>
+            <p className="text-xs md:text-sm text-gray-500 font-medium">Manage your daily tasks and track case progress</p>
+          </div>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           {user?.role === 'Admin' && (
             <select 
-              className="bg-white border-2 border-gray-300 rounded-xl px-4 py-2 text-sm font-bold text-gray-700 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm"
+              className="bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-700 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm"
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
             >
@@ -263,16 +284,18 @@ const MyTaskTab = () => {
               ))}
             </select>
           )}
-          <button onClick={handleExportTasks} className="flex items-center gap-2 bg-white border-2 border-gray-300 text-gray-700 px-5 py-2 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm active:scale-95 disabled:opacity-50">
-            <Download size={18} /> Export
-          </button>
-          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95">
-            <Plus size={20} /> New Task
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={handleExportTasks} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border-2 border-gray-300 text-gray-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm active:scale-95">
+              <Download size={18} /> Export
+            </button>
+            <button onClick={() => setIsModalOpen(true)} className="flex-2 sm:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95">
+              <Plus size={20} /> New Task
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="p-8 flex flex-col h-full overflow-hidden">
+      <div className="p-4 md:p-8 flex flex-col h-full overflow-y-auto md:overflow-hidden">
         {/* Search Bar */}
         <div className="mb-8 relative max-w-xl">
           <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -283,18 +306,28 @@ const MyTaskTab = () => {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 h-full overflow-hidden pb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 h-full md:overflow-hidden pb-4">
           {columns.map(col => (
-            <div key={col.id} className="flex flex-col h-full min-w-[320px]" onDragOver={onDragOver} onDrop={(e) => onDrop(e, col.id)}>
-              <div className="flex items-center justify-between mb-4 px-2">
+            <div key={col.id} className="flex flex-col h-full min-w-0" onDragOver={onDragOver} onDrop={(e) => onDrop(e, col.id)}>
+              <div 
+                className="flex items-center justify-between mb-4 px-3 py-2 bg-white md:bg-transparent rounded-2xl md:rounded-none border-2 border-gray-100 md:border-none cursor-pointer md:cursor-default shadow-sm md:shadow-none"
+                onClick={() => {
+                  if (window.innerWidth < 768) {
+                    setCollapsedColumns(prev => ({ ...prev, [col.id]: !prev[col.id] }));
+                  }
+                }}
+              >
                 <div className="flex items-center gap-2">
                   <div className={`p-2 rounded-lg bg-${col.color}-50 text-${col.color}-600 border border-${col.color}-100`}>{col.icon}</div>
                   <h2 className="font-black text-gray-800 uppercase tracking-widest text-xs">{col.label}</h2>
                   <span className="bg-gray-200 text-gray-600 text-[10px] font-black px-2 py-0.5 rounded-full">{filteredTasks.filter(t => t.status === col.id).length}</span>
                 </div>
+                <div className="md:hidden">
+                   <ChevronDown size={18} className={`text-gray-400 transition-transform duration-300 ${collapsedColumns[col.id] ? 'rotate-[-90deg]' : 'rotate-0'}`} />
+                </div>
               </div>
 
-              <div className="flex-1 bg-gray-100/30 rounded-3xl border-2 border-gray-300 p-4 overflow-y-auto hide-scrollbar space-y-4 border-dashed">
+              <div className={`flex-1 bg-gray-100/30 rounded-3xl border-2 border-gray-300 p-4 overflow-y-auto md:hide-scrollbar space-y-4 border-dashed min-h-[300px] ${collapsedColumns[col.id] ? 'hidden md:block' : 'block animate-in slide-in-from-top-2 duration-300'}`}>
                 {filteredTasks.filter(t => t.status === col.id).length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-40 text-gray-400 opacity-30">
                     <AlertCircle size={32} className="mb-2" />

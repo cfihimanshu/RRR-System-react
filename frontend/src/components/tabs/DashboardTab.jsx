@@ -124,25 +124,47 @@ const DashboardTab = () => {
   const checkSodStatus = async () => {
     if (user?.role === 'Admin') return; 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
       const res = await api.get('/reports');
-      const hasSod = res.data.some(r => r.type === 'SOD' && r.date === today && r.userEmail === user.email);
-      setHasSodToday(hasSod);
       
-      // Auto-open SOD modal if not filled today
-      if (!hasSod) {
+      // Filter reports: must be SOD, today's date, and current user's email
+      const todaysSod = res.data.find(r => 
+        r.type === 'SOD' && 
+        r.date === today && 
+        r.userEmail?.trim().toLowerCase() === user?.email?.trim().toLowerCase()
+      );
+      
+      console.log('SOD Check Debug:', {
+        todayDate: today,
+        userEmail: user?.email,
+        totalReports: res.data.length,
+        sodReportsToday: res.data.filter(r => r.type === 'SOD' && r.date === today).map(r => ({
+          date: r.date,
+          userEmail: r.userEmail,
+          matches: r.userEmail?.trim().toLowerCase() === user?.email?.trim().toLowerCase()
+        })),
+        hasSodToday: !!todaysSod
+      });
+      
+      setHasSodToday(!!todaysSod);
+      
+      // Auto-open SOD modal only if not filled today
+      if (!todaysSod) {
         setTimeout(() => {
           openReportModal('SOD');
         }, 1000);
       }
     } catch (err) {
       console.error('Error checking SOD status:', err);
+      setHasSodToday(false);
     }
   };
 
   useEffect(() => {
-    checkSodStatus();
-  }, [user]);
+    if (user?.email) {
+      checkSodStatus();
+    }
+  }, [user?.email]);
 
   const openReportModal = async (type) => {
     if (type === 'EOD' && user?.role !== 'Admin' && !hasSodToday) {
@@ -267,7 +289,14 @@ const DashboardTab = () => {
       await api.post('/reports', payload);
       toast.success(`${reportType} report submitted successfully`, { id: loadingToast });
       setIsReportModalOpen(false);
-      checkSodStatus();
+      
+      // Immediately update SOD status if this was a SOD submission
+      if (reportType === 'SOD') {
+        setHasSodToday(true);
+      }
+      
+      // Re-fetch reports and stats
+      await checkSodStatus();
       fetchStats();
       
       setReportFormData({ 
@@ -317,36 +346,40 @@ const DashboardTab = () => {
 
   return (
     <div className="section active w-full pb-10 px-4">
-      <div className="section-header flex justify-between items-center mb-6 w-full">
+      <div className="section-header flex flex-col md:flex-row justify-between items-start md:items-center mb-8 w-full gap-6">
         <div className="flex-1 text-left">
-          <div className="section-title text-2xl font-bold text-gray-800">
+          <div className="section-title text-xl md:text-2xl lg:text-3xl font-black text-gray-800 tracking-tight leading-tight">
             {user?.fullName ? `${getGreeting()}, ${user.fullName}!` : `${getGreeting()}!`}
           </div>
-          <div className="section-sub text-blue-600 font-semibold">{user?.role} Dashboard Overview</div>
+          <div className="section-sub text-[10px] md:text-xs text-blue-600 font-bold uppercase tracking-widest mt-1 opacity-75">{user?.role} Dashboard Overview</div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
             {!hasSodToday && user?.role !== 'Admin' && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 rounded-full text-red-600 text-[10px] font-black uppercase tracking-wider animate-pulse">
+              <div className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-red-600 text-[9px] font-black uppercase tracking-wider animate-pulse">
                 <AlertTriangle size={12} /> SOD Pending
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => navigate('/new-case')}
-                className="bg-blue-600 text-white hover:bg-blue-700 px-5 py-2.5 rounded-xl text-xs font-black transition-all shadow-md flex items-center gap-2 active:scale-95"
-              >
-                <Plus size={16} /> New Case
-              </button>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
               <button 
                 onClick={() => openReportModal('SOD')}
-                className="bg-white border-2 border-blue-300 text-blue-600 hover:bg-blue-50 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2"
+                disabled={hasSodToday}
+                className={`flex-1 sm:flex-none px-6 py-3 rounded-2xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-2 uppercase tracking-widest ${
+                  hasSodToday 
+                    ? 'bg-gray-100 border-2 border-gray-300 text-gray-400 cursor-not-allowed opacity-60' 
+                    : 'bg-white border-2 border-blue-400 text-blue-600 hover:bg-blue-50 shadow-sm active:scale-95'
+                }`}
               >
                 <Send size={14} className="rotate-[-20deg]" /> Fill SOD
               </button>
               <button 
                 onClick={() => openReportModal('EOD')}
-                className="bg-blue-600 text-white hover:bg-blue-700 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-100 flex items-center gap-2"
+                disabled={user?.role !== 'Admin' && !hasSodToday}
+                className={`flex-1 sm:flex-none px-6 py-3 rounded-2xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-2 uppercase tracking-widest ${
+                  user?.role !== 'Admin' && !hasSodToday
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
+                    : 'bg-blue-600 text-white hover:bg-blue-700 shadow-xl shadow-blue-100 active:scale-95'
+                }`}
               >
                 <FileText size={14} /> Fill EOD
               </button>
@@ -694,7 +727,7 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        <div className="stat cursor-pointer hover:border-blue-300 transition-all" onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}>
+        {/* <div className="stat cursor-pointer hover:border-blue-300 transition-all" onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}>
           <div className="stat-icon" style={{ backgroundColor: '#e0f2fe', color: '#0284c7' }}>
             <FileText size={18} />
           </div>
@@ -702,7 +735,7 @@ const DashboardTab = () => {
             <div className="val" style={{ color: '#111827' }}>{stats.openCases}</div>
             <div className="lbl">Open Cases</div>
           </div>
-        </div>
+        </div> */}
 
         <div className="stat cursor-pointer hover:border-blue-300 transition-all" onClick={() => navigate('/case-master', { state: { statusFilter: 'Closed' } })}>
           <div className="stat-icon" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}>
@@ -744,7 +777,7 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        <div className="stat">
+        {/* <div className="stat">
           <div className="stat-icon" style={{ backgroundColor: '#fef2f2', color: '#dc2626' }}>
             <Clock size={18} />
           </div>
@@ -752,7 +785,7 @@ const DashboardTab = () => {
             <div className="val" style={{ color: '#111827' }}>{stats.overdueActions.length}</div>
             <div className="lbl">Overdue Actions</div>
           </div>
-        </div>
+        </div> */}
       </div>
 
       <div className="card" style={{ marginTop: '16px' }}>
