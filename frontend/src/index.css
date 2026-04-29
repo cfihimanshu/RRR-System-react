@@ -106,7 +106,10 @@ body { font-family: 'Google Sans', Roboto, Arial, sans-serif; font-size: 14px; c
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-grid.cols3 { grid-template-columns: 1fr 1fr 1fr; }
 .form-grid.full { grid-template-columns: 1fr; }
-@media (max-width: 640px) { .form-grid, .form-grid.cols3 { grid-template-columns: 1fr; } }
+@media (max-width: 768px) { 
+  .form-grid, .form-grid.cols3 { grid-template-columns: 1fr !important; } 
+  .field.span2, .field.span3 { grid-column: span 1 !important; }
+}
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field.span2 { grid-column: span 2; }
 .field.span3 { grid-column: span 3; }

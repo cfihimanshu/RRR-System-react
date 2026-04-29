@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import html2pdf from 'html2pdf.js';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import SearchableCaseSelect from '../shared/SearchableCaseSelect';
@@ -16,18 +17,19 @@ import {
   Users,
   Printer,
   Loader2,
-  Inbox
+  Inbox,
+  X
 } from 'lucide-react';
 
 const CaseStudyTab = () => {
   const [cases, setCases] = useState([]);
   const [selectedCase, setSelectedCase] = useState('');
   const [generatedCase, setGeneratedCase] = useState(null);
+  const [showMobilePreview, setShowMobilePreview] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const [fetchingCases, setFetchingCases] = useState(true);
   
-  // Data for the compiled view
   const [timeline, setTimeline] = useState([]);
   const [actions, setActions] = useState([]);
   const [comms, setComms] = useState([]);
@@ -53,11 +55,8 @@ const CaseStudyTab = () => {
       await api.put(`/cases/${selectedCase}`, { caseStudyGeneratedAt: now });
       
       const foundCase = cases.find(c => c.caseId === selectedCase);
-      if (foundCase) {
-        foundCase.caseStudyGeneratedAt = now;
-      }
+      if (foundCase) foundCase.caseStudyGeneratedAt = now;
       
-      // Fetch all related data for the report
       const [tlRes, actRes, commRes, docRes] = await Promise.all([
         api.get(`/timeline?caseId=${selectedCase}`),
         api.get(`/actions?caseId=${selectedCase}`),
@@ -71,6 +70,7 @@ const CaseStudyTab = () => {
       setDocs(docRes.data);
       
       setGeneratedCase({ ...foundCase, caseStudyGeneratedAt: now });
+      setShowMobilePreview(true);
       toast.success('Case study compiled successfully');
     } catch (err) {
       toast.error('Failed to generate case study');
@@ -98,6 +98,7 @@ const CaseStudyTab = () => {
       setComms(commRes.data);
       setDocs(docRes.data);
       setGeneratedCase(foundCase);
+      setShowMobilePreview(true);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load related data');
@@ -106,452 +107,207 @@ const CaseStudyTab = () => {
     }
   };
 
+  const handleDownloadPDF = () => {
+    if (!generatedCase) return;
+    const element = document.getElementById('report-to-download');
+    if (!element) return;
+
+    const opt = {
+      margin: [10, 10],
+      filename: `Report_${generatedCase.caseId}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    toast.loading('Generating PDF...', { id: 'pdf-gen' });
+    html2pdf().set(opt).from(element).save().then(() => {
+      toast.success('Download started!', { id: 'pdf-gen' });
+    }).catch(err => {
+      console.error(err);
+      toast.error('Failed to generate PDF', { id: 'pdf-gen' });
+    });
+  };
+
   const generatedCases = cases.filter(c => c.caseStudyGeneratedAt).sort((a, b) => new Date(b.caseStudyGeneratedAt) - new Date(a.caseStudyGeneratedAt));
 
-  return (
-    <div className="h-full bg-gray-50/50 p-6 overflow-y-auto print:bg-white print:p-0">
-      
-      {/* Page Layout Container */}
-      <div className="max-w-[1400px] mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-800">Case Study Generator</h1>
-        <p className="text-xs text-gray-500 mt-1">Auto-compiles case data into a formatted study document</p>
+  const ReportContent = ({ data, timeline, actions, comms, isMobile = false }) => (
+    <div id="report-to-download" className={`${isMobile ? 'p-6 md:p-10' : 'p-10 lg:p-14'} overflow-y-auto print:p-0 print:overflow-visible bg-white`}>
+      <div className="border-b-2 border-blue-600 pb-6 mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-blue-50 rounded-xl text-blue-600"><FileText size={isMobile ? 24 : 32} /></div>
+          <div>
+            <h1 className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-black text-gray-900 tracking-tight`}>CASE STUDY REPORT</h1>
+            <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Confidential Investigative Document</p>
+          </div>
+        </div>
+        <div className="text-left sm:text-right w-full sm:w-auto">
+          <div className="text-xl font-black text-blue-700 leading-none">{data.caseId}</div>
+          <div className="text-[10px] text-gray-400 mt-1 uppercase font-black tracking-widest">Report Reference ID</div>
+        </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        
-        {/* LEFT PANEL */}
-        <div className="print:hidden w-full lg:w-[420px] flex-shrink-0 flex flex-col gap-6">
-          
-          {/* Generate Block */}
-          <div className="bg-white rounded-xl shadow-sm border-2 border-gray-300 overflow-visible transition-all hover:shadow-md">
-            <div className="p-4 bg-gray-50/80 border-b-2 border-gray-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <RefreshCcw size={18} className="text-purple-600" />
-                <h2 className="text-[14px] font-black text-gray-800 uppercase tracking-tight">Generate Study</h2>
-              </div>
-              <div className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded">AUTO-COMPILE</div>
-            </div>
-            <div className="p-4">
-              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Select Case ID</label>
-              <SearchableCaseSelect 
-                cases={cases} 
-                value={selectedCase} 
-                onChange={setSelectedCase} 
-              />
-              <div className="mb-4"></div> {/* Spacer */}
-              
-              <button 
-                onClick={handleGenerate}
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-2 text-sm"
-              >
-                {loading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
-                {loading ? 'Compiling Study...' : 'Generate Case Study'}
-              </button>
-            </div>
-          </div>
-
-          {/* Control Block */}
-          <div className="bg-white rounded-xl shadow-sm border-2 border-gray-300 overflow-hidden flex flex-col max-h-[500px] transition-all hover:shadow-md">
-            <div className="p-4 bg-gray-50/80 border-b-2 border-gray-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Settings size={18} className="text-orange-500" />
-                <h2 className="text-[14px] font-black text-gray-800 uppercase tracking-tight">Generated Studies</h2>
-              </div>
-              <div className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">{generatedCases.length} REPORTS</div>
-            </div>
-            <div className="overflow-auto flex-1">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-blue-800 text-white text-[9px] font-bold tracking-wider uppercase sticky top-0 z-10">
-                  <tr>
-                    <th className="px-3 py-2 whitespace-nowrap">Case ID</th>
-                    <th className="px-3 py-2 whitespace-nowrap text-center">Status</th>
-                    <th className="px-3 py-2 whitespace-nowrap">Last Refresh</th>
-                  </tr>
-                </thead>
-                <tbody className="text-[11px] text-gray-700 divide-y divide-gray-100">
-                  {generatedCases.length === 0 ? (
-                    <tr><td colSpan="3" className="px-4 py-8 text-center text-gray-400 italic">No case studies generated yet.</td></tr>
-                  ) : (
-                    generatedCases.map(c => (
-                      <tr key={c.caseId} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => loadGeneratedStudy(c.caseId)}>
-                        <td className="px-3 py-2 font-mono text-blue-600 font-bold whitespace-normal break-words max-w-[80px]">
-                          {c.caseId.replace(/-/g, '-\u200B')}
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <span className="bg-green-100 text-green-800 border border-green-200 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap block">Study Generated</span>
-                        </td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                          {new Date(c.caseStudyGeneratedAt).toLocaleString('en-IN', { day: 'numeric', month: 'numeric', year: 'numeric' })}<br/>
-                          {new Date(c.caseStudyGeneratedAt).toLocaleString('en-IN', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
+      {/* Case Overview */}
+      <div className="mb-10">
+        <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
+          <Info size={16} /> Case Overview
         </div>
-
-        <div className="flex-1 bg-white rounded-xl shadow-sm border-2 border-gray-300 flex flex-col min-h-[700px] h-fit relative print:border-none print:shadow-none print:m-0 print:p-0">
-          {!generatedCase ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-20 text-center">
-              <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6">
-                <FileText size={40} className="text-gray-200" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-600 mb-2">No Study Loaded</h3>
-              <p className="text-sm max-w-[250px] mx-auto text-gray-400">Select a Case ID and click Generate to compile the full case study document.</p>
-            </div>
-          ) : loading ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
-              <Loader2 size={48} className="text-blue-500 animate-spin mb-4" />
-              <h3 className="text-lg font-bold text-gray-700">Compiling Report...</h3>
-              <p className="text-sm text-gray-500">Fetching all timeline, communication, and action logs.</p>
-            </div>
-          ) : (
-            <>
-              {/* PDF Download Button */}
-              <div className="absolute top-6 right-8 print:hidden flex gap-3">
-                <button 
-                  onClick={() => window.print()} 
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-lg shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
-                >
-                  <Printer size={18} /> Print / Save PDF
-                </button>
-              </div>
-
-              <div className="p-10 lg:p-14 overflow-y-auto print:p-0 print:overflow-visible bg-white">
-                <div className="border-b-2 border-blue-600 pb-6 mb-10 flex justify-between items-end">
-                  <div>
-                    <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-                      <FileText size={32} className="text-blue-600" />
-                      CASE STUDY REPORT
-                    </h1>
-                    <p className="text-gray-500 font-bold text-sm mt-1 uppercase tracking-widest">Confidential Investigative Document</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-blue-700 leading-none">{generatedCase.caseId}</div>
-                    <div className="text-[10px] text-gray-400 mt-1 uppercase font-black">Report Reference ID</div>
-                  </div>
-                </div>
-
-                {/* CASE OVERVIEW */}
-                <div className="mb-10 group">
-                  <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
-                    <Info size={16} /> Case Overview
-                  </div>
-                  <div className="border-x border-b border-gray-200 rounded-b-lg overflow-hidden">
-                  <table className="w-full border-collapse border border-gray-200 text-left">
-                    <tbody className="text-[11px]">
-                      <tr>
-                        <td className="w-1/3 p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Case ID</td>
-                        <td className="w-2/3 p-2 border border-gray-200 text-gray-600">{generatedCase.caseId}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Created</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.createdDate ? new Date(generatedCase.createdDate).toLocaleString('en-IN') : '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Brand Name</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.brandName || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Company</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.companyName || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Case Title</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.caseTitle || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Client</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.clientName || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Mobile</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.clientMobile || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Email</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.clientEmail || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">State</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.state || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Services</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.servicesSold?.map(s => s.serviceName).join(', ') || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Source of Complaint</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.sourceOfComplaint || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Type of Complaint</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.typeOfComplaint || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Engagement Note</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.engagementNote || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Total MOU Value</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.totalMouValue ? `₹${Number(generatedCase.totalMouValue).toLocaleString('en-IN')}` : '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Amount Paid</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">₹{Number(generatedCase.totalAmtPaid || 0).toLocaleString('en-IN')}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Amount In Dispute</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">₹{Number(generatedCase.amtInDispute || 0).toLocaleString('en-IN')}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">MOU Signed</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.mouSigned || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Priority</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.priority || 'Medium'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Status</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.currentStatus || 'New'}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                {/* RISK PROFILE */}
-                <div className="mb-10">
-                  <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
-                    <ShieldAlert size={16} /> Risk Profile & Legal Assessment
-                  </div>
-                  <div className="border-x border-b border-gray-200 rounded-b-lg overflow-hidden">
-                  <table className="w-full border-collapse border border-gray-200 text-left">
-                    <tbody className="text-[11px]">
-                      <tr>
-                        <td className="w-1/3 p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Social Media Risk</td>
-                        <td className="w-2/3 p-2 border border-gray-200 text-gray-600">{generatedCase.smRisk || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Consumer Complaint (Grievance)</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.grievanceNumber || (generatedCase.grievanceNumber ? 'Yes' : '-')}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Police/Cyber Threat</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.policeThreat || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Cyber Ack Numbers</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.cyberAckNumbers || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">FIR Number</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.firNumber || '-'} {generatedCase.firFileLink ? `(File Attached)` : ''}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                {/* PROOFS ATTACHED */}
-                <div className="mb-10">
-                  <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
-                    <CheckSquare size={16} /> Evidence & Verification Proofs
-                  </div>
-                  <div className="border-x border-b border-gray-200 rounded-b-lg overflow-hidden">
-                  <table className="w-full border-collapse border border-gray-200 text-left">
-                    <tbody className="text-[11px]">
-                      <tr>
-                        <td className="w-1/3 p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Call Recording</td>
-                        <td className="w-2/3 p-2 border border-gray-200 text-gray-600">{generatedCase.proofCallRec === 'true' ? '✅ Available' : '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">WhatsApp Chat</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.proofWaChat === 'true' ? '✅ Available' : '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Video Call Proof</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.proofVideoCall === 'true' ? '✅ Available' : '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Funding Email</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.proofFundingEmail === 'true' ? '✅ Available' : '-'}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                {/* CASE NARRATIVE */}
-                <div className="mb-10">
-                  <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
-                    <FileText size={16} /> Detailed Case Narrative
-                  </div>
-                  <div className="border-x border-b border-gray-200 rounded-b-lg overflow-hidden">
-                  <table className="w-full border-collapse border border-gray-200 text-left">
-                    <tbody className="text-[11px]">
-                      <tr>
-                        <td className="w-1/3 p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Case Summary</td>
-                        <td className="w-2/3 p-2 border border-gray-200 text-gray-600 whitespace-pre-wrap">{generatedCase.caseSummary || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Client Allegation</td>
-                        <td className="p-2 border border-gray-200 text-gray-600 whitespace-pre-wrap">{generatedCase.clientAllegation || '-'}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                {/* TEAM */}
-                <div className="mb-10">
-                  <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
-                    <Users size={16} /> Responsible Team & Officers
-                  </div>
-                  <div className="border-x border-b border-gray-200 rounded-b-lg overflow-hidden">
-                  <table className="w-full border-collapse border border-gray-200 text-left">
-                    <tbody className="text-[11px]">
-                      <tr>
-                        <td className="w-1/3 p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">BDE / Initiated By</td>
-                        <td className="w-2/3 p-2 border border-gray-200 text-gray-600">{generatedCase.initiatedBy || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Assigned To</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.assignedTo || generatedCase.accountable || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Legal Officer</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.legalOfficer || '-'}</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2 border border-gray-200 bg-gray-50 font-bold text-gray-800">Accounts Department</td>
-                        <td className="p-2 border border-gray-200 text-gray-600">{generatedCase.accounts || '-'}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                {/* TIMELINE */}
-                <div className="mb-10">
-                  <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
-                    <History size={16} /> Complete Chronological Timeline ({timeline.length})
-                  </div>
-                  <div className="border-x border-b border-gray-200 rounded-b-lg overflow-hidden">
-                  <table className="w-full border-collapse border border-gray-200 text-left">
-                    <thead className="bg-gray-50 font-bold text-gray-800 text-[10px] uppercase">
-                      <tr>
-                        <th className="p-2 border border-gray-200 whitespace-nowrap">Date</th>
-                        <th className="p-2 border border-gray-200 whitespace-nowrap">Source</th>
-                        <th className="p-2 border border-gray-200 whitespace-nowrap">Type</th>
-                        <th className="p-2 border border-gray-200 w-1/2">Summary</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-[11px] text-gray-600">
-                      {timeline.length === 0 ? (
-                        <tr><td colSpan="4" className="p-2 border border-gray-200 text-center">No timeline events</td></tr>
-                      ) : timeline.map(t => (
-                        <tr key={t._id}>
-                          <td className="p-2 border border-gray-200 whitespace-nowrap">{new Date(t.eventDate).toLocaleString('en-IN')}</td>
-                          <td className="p-2 border border-gray-200">{t.source}</td>
-                          <td className="p-2 border border-gray-200">{t.eventType}</td>
-                          <td className="p-2 border border-gray-200">{t.summary}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                {/* ACTIONS */}
-                <div className="mb-10">
-                  <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
-                    <Calendar size={16} /> Verified Actions Log ({actions.length})
-                  </div>
-                  <div className="border-x border-b border-gray-200 rounded-b-lg overflow-hidden">
-                  <table className="w-full border-collapse border border-gray-200 text-left">
-                    <thead className="bg-gray-50 font-bold text-gray-800 text-[10px] uppercase">
-                      <tr>
-                        <th className="p-2 border border-gray-200 whitespace-nowrap">Date</th>
-                        <th className="p-2 border border-gray-200 whitespace-nowrap">Type</th>
-                        <th className="p-2 border border-gray-200 whitespace-nowrap">Done By</th>
-                        <th className="p-2 border border-gray-200 w-1/2">Summary</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-[11px] text-gray-600">
-                      {actions.length === 0 ? (
-                        <tr><td colSpan="4" className="p-2 border border-gray-200 text-center">No actions</td></tr>
-                      ) : actions.map(a => (
-                        <tr key={a._id}>
-                          <td className="p-2 border border-gray-200 whitespace-nowrap">{new Date(a.dateTime).toLocaleString('en-IN')}</td>
-                          <td className="p-2 border border-gray-200">{a.actionType}</td>
-                          <td className="p-2 border border-gray-200">{a.doneBy}</td>
-                          <td className="p-2 border border-gray-200">{a.summary}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                {/* COMMUNICATIONS */}
-                <div className="mb-10">
-                  <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
-                    <MessageSquare size={16} /> Communication History ({comms.length})
-                  </div>
-                  <div className="border-x border-b border-gray-200 rounded-b-lg overflow-hidden">
-                  <table className="w-full border-collapse border border-gray-200 text-left">
-                    <thead className="bg-gray-50 font-bold text-gray-800 text-[10px] uppercase">
-                      <tr>
-                        <th className="p-2 border border-gray-200 whitespace-nowrap">Date</th>
-                        <th className="p-2 border border-gray-200 whitespace-nowrap">Mode</th>
-                        <th className="p-2 border border-gray-200 whitespace-nowrap">Direction</th>
-                        <th className="p-2 border border-gray-200 w-1/2">Summary</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-[11px] text-gray-600">
-                      {comms.length === 0 ? (
-                        <tr><td colSpan="4" className="p-2 border border-gray-200 text-center">No communications</td></tr>
-                      ) : comms.map(c => (
-                        <tr key={c._id}>
-                          <td className="p-2 border border-gray-200 whitespace-nowrap">{new Date(c.dateTime).toLocaleString('en-IN')}</td>
-                          <td className="p-2 border border-gray-200">{c.mode}</td>
-                          <td className="p-2 border border-gray-200">{c.direction}</td>
-                          <td className="p-2 border border-gray-200">{c.summary}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                <div className="text-right border-t-2 border-gray-100 pt-8 mt-12 mb-4">
-                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Generated System Timestamp</div>
-                  <div className="text-xs font-bold text-gray-600">
-                    {new Date(generatedCase.caseStudyGeneratedAt).toLocaleString('en-IN', {
-                      day: 'numeric', month: 'long', year: 'numeric',
-                      hour: 'numeric', minute: '2-digit', hour12: true
-                    })}
-                  </div>
-                  <div className="mt-4 text-[9px] text-gray-400 italic">This is an auto-generated report from RRR Engine. No signature required.</div>
-                </div>
-
-              </div>
-            </>
-          )}
+        <div className="border-x border-b border-gray-200 rounded-b-lg overflow-x-auto">
+          <table className="w-full min-w-[500px] border-collapse text-left">
+            <tbody className="text-[11px]">
+              {[
+                ['Case ID', data.caseId],
+                ['Created', data.createdDate ? new Date(data.createdDate).toLocaleString('en-IN') : '-'],
+                ['Brand Name', data.brandName || '-'],
+                ['Company', data.companyName || '-'],
+                ['Case Title', data.caseTitle || '-'],
+                ['Client', data.clientName || '-'],
+                ['Mobile', data.clientMobile || '-'],
+                ['Email', data.clientEmail || '-'],
+                ['State', data.state || '-'],
+                ['Services', data.servicesSold?.map(s => s.serviceName).join(', ') || '-'],
+                ['Source', data.sourceOfComplaint || '-'],
+                ['Type', data.typeOfComplaint || '-'],
+                ['MOU Value', data.totalMouValue ? `₹${Number(data.totalMouValue).toLocaleString('en-IN')}` : '-'],
+                ['Amount Paid', `₹${Number(data.totalAmtPaid || 0).toLocaleString('en-IN')}`],
+                ['Dispute Amt', `₹${Number(data.amtInDispute || 0).toLocaleString('en-IN')}`],
+                ['MOU Signed', data.mouSigned || '-'],
+                ['Priority', data.priority || 'Medium'],
+                ['Status', data.currentStatus || 'New'],
+              ].map(([lbl, val]) => (
+                <tr key={lbl}>
+                  <td className="w-1/3 p-2.5 border border-gray-100 bg-gray-50/50 font-bold text-gray-800">{lbl}</td>
+                  <td className="w-2/3 p-2.5 border border-gray-100 text-gray-600">{val}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      </div>
 
+      {/* Timeline & Actions (Summarized for space) */}
+      <div className="mb-10">
+        <div className="bg-blue-600 text-white font-bold text-xs uppercase p-3 tracking-widest flex items-center gap-2 rounded-t-lg shadow-sm">
+          <History size={16} /> Case Timeline & Actions
+        </div>
+        <div className="border-x border-b border-gray-200 rounded-b-lg overflow-x-auto">
+          <table className="w-full min-w-[600px] border-collapse text-left">
+            <thead className="bg-gray-50 font-bold text-gray-800 text-[10px] uppercase">
+              <tr>
+                <th className="p-2.5 border border-gray-100">Date</th>
+                <th className="p-2.5 border border-gray-100">Type</th>
+                <th className="p-2.5 border border-gray-100 w-1/2">Summary</th>
+              </tr>
+            </thead>
+            <tbody className="text-[11px] text-gray-600">
+              {timeline.length === 0 && actions.length === 0 ? (
+                <tr><td colSpan="3" className="p-4 text-center">No history logged</td></tr>
+              ) : (
+                [...timeline, ...actions.map(a => ({...a, eventDate: a.dateTime, eventType: a.actionType}))]
+                  .sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))
+                  .map((t, idx) => (
+                    <tr key={idx}>
+                      <td className="p-2.5 border border-gray-100 whitespace-nowrap">{new Date(t.eventDate).toLocaleString('en-IN')}</td>
+                      <td className="p-2.5 border border-gray-100 font-bold">{t.eventType}</td>
+                      <td className="p-2.5 border border-gray-100">{t.summary}</td>
+                    </tr>
+                  ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="text-right border-t border-gray-100 pt-8 mt-12 mb-4 opacity-60">
+        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">System Generated Timestamp</div>
+        <div className="text-[11px] font-bold text-gray-600">{new Date(data.caseStudyGeneratedAt).toLocaleString('en-IN')}</div>
       </div>
     </div>
-  </div>
-);
+  );
+
+  return (
+    <div className="h-full bg-gray-50/50 p-4 md:p-6 overflow-y-auto">
+      <div className="max-w-[1400px] mx-auto">
+        <div className="mb-6 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">Case Study Generator</h1>
+            <p className="text-xs text-gray-500 mt-1">Compile full case reports into PDF</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-6">
+          <div className="w-full lg:w-[400px] flex-shrink-0 flex flex-col gap-6">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-2">Select Case ID</label>
+              <SearchableCaseSelect cases={cases} value={selectedCase} onChange={setSelectedCase} />
+              <button 
+                onClick={handleGenerate} 
+                disabled={loading}
+                className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
+              >
+                {loading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+                Generate Study
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col max-h-[500px]">
+              <div className="p-4 bg-gray-50/80 border-b border-gray-200 font-black text-gray-800 uppercase tracking-tight text-xs">Reports History</div>
+              <div className="overflow-auto">
+                <table className="w-full text-left">
+                  <tbody className="text-[11px] divide-y divide-gray-100">
+                    {generatedCases.map(c => (
+                      <tr key={c.caseId} className="hover:bg-gray-50 cursor-pointer" onClick={() => loadGeneratedStudy(c.caseId)}>
+                        <td className="px-4 py-3 font-bold text-blue-600">{c.caseId}</td>
+                        <td className="px-4 py-3 text-gray-400">{new Date(c.caseStudyGeneratedAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden lg:flex flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 flex-col min-h-[700px] relative">
+            {!generatedCase ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-300"><FileText size={64} className="opacity-10" /></div>
+            ) : loading ? (
+              <div className="flex-1 flex flex-col items-center justify-center"><Loader2 size={48} className="animate-spin text-blue-500" /></div>
+            ) : (
+              <div className="flex flex-col h-full">
+                <div className="p-4 border-b border-gray-100 flex justify-end gap-3">
+                  <button onClick={handleDownloadPDF} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-xs font-bold uppercase tracking-widest"><FileDown size={14} /> Download PDF</button>
+                  <button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-xs font-bold uppercase tracking-widest"><Printer size={14} /> Print</button>
+                </div>
+                <div className="flex-1 overflow-auto"><ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} /></div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showMobilePreview && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm lg:hidden">
+          <div className="bg-white w-full h-full sm:h-[95vh] sm:max-w-2xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between px-6 py-4 bg-blue-700 text-white shadow-lg">
+              <span className="font-black uppercase tracking-widest text-[10px]">Report Preview</span>
+              <div className="flex items-center gap-2">
+                <button onClick={handleDownloadPDF} className="bg-green-500 hover:bg-green-600 p-2 rounded-xl"><FileDown size={20} /></button>
+                <button onClick={() => setShowMobilePreview(false)} className="bg-white/20 p-2 rounded-xl"><X size={20} /></button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {loading ? <div className="p-20 text-center"><Loader2 size={48} className="animate-spin mx-auto text-blue-500" /></div> : <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} isMobile={true} />}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {generatedCase && !showMobilePreview && (
+        <button onClick={() => setShowMobilePreview(true)} className="lg:hidden fixed bottom-6 right-6 z-[90] bg-blue-600 text-white p-4 rounded-full shadow-2xl animate-bounce"><FileText size={24} /></button>
+      )}
+    </div>
+  );
 };
 
 export default CaseStudyTab;
