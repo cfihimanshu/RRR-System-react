@@ -220,8 +220,8 @@ const NewCaseTab = () => {
     e.preventDefault();
 
     // Validations
-    if (formData.clientEmail && !formData.clientEmail.toLowerCase().endsWith('@gmail.com')) {
-      return toast.error('Email must be a @gmail.com address', { icon: '📧' });
+    if (formData.clientEmail && !formData.clientEmail.toLowerCase().endsWith('@')) {
+      return toast.error('Email must be a @ address', { icon: '📧' });
     }
     
     const cleanMobile = formData.clientMobile.replace(/\s+/g, '');
