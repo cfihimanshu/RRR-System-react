@@ -29,7 +29,7 @@ const Login = () => {
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Email Address</label>
             <input
               type="email"
-              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+              className="w-full bg-white border border-gray-300 rounded-lg p-3 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-gray-400"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -39,7 +39,7 @@ const Login = () => {
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Password</label>
             <input
               type="password"
-              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+              className="w-full bg-white border border-gray-300 rounded-lg p-3 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-gray-400"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

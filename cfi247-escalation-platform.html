@@ -1,0 +1,3929 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CFI247 — Escalation Management Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0b0e14;
+      --bg-secondary: #111520;
+      --bg-card: #151b28;
+      --bg-card-hover: #1a2235;
+      --bg-input: #0f1521;
+      --border: #1e2a3f;
+      --border-light: #253045;
+      --accent: #f97316;
+      --accent-hover: #fb923c;
+      --accent-soft: rgba(249, 115, 22, 0.12);
+      --accent-soft2: rgba(249, 115, 22, 0.06);
+      --blue: #3b82f6;
+      --blue-soft: rgba(59, 130, 246, 0.12);
+      --green: #22c55e;
+      --green-soft: rgba(34, 197, 94, 0.12);
+      --red: #ef4444;
+      --red-soft: rgba(239, 68, 68, 0.12);
+      --yellow: #eab308;
+      --yellow-soft: rgba(234, 179, 8, 0.12);
+      --purple: #a855f7;
+      --purple-soft: rgba(168, 85, 247, 0.12);
+      --text-primary: #e2e8f0;
+      --text-secondary: #7e96b8;
+      --text-muted: #4a6080;
+      --font-display: 'Syne', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --font-mono: 'DM Mono', monospace;
+      --radius: 10px;
+      --radius-lg: 16px;
+      --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+      --transition: all 0.2s ease;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 14px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── LAYOUT ── */
+    .app {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      overflow-y: auto;
+      transition: var(--transition);
+      z-index: 100;
+    }
+
+    .sidebar-logo {
+      padding: 22px 20px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 14px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .logo-text {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: 0.5px;
+    }
+
+    .logo-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .sidebar-user {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #c2410c);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .user-role {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .online-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-left: auto;
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse-green 2s infinite;
+    }
+
+    @keyframes pulse-green {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.4;
+      }
+    }
+
+    .sidebar-section-label {
+      padding: 14px 16px 6px;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 16px;
+      cursor: pointer;
+      border-radius: 0;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .nav-item:hover {
+      background: var(--accent-soft2);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 0 2px 2px 0;
+    }
+
+    .nav-icon {
+      width: 18px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .nav-badge {
+      margin-left: auto;
+      background: var(--accent);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-family: var(--font-mono);
+    }
+
+    .nav-badge.blue {
+      background: var(--blue);
+    }
+
+    .nav-badge.red {
+      background: var(--red);
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ── MAIN ── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .topbar {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .topbar-title {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .topbar-breadcrumb {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .topbar-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 7px 14px;
+      border-radius: var(--radius);
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 500;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-ghost:hover {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border-color: var(--border-light);
+    }
+
+    .btn-danger {
+      background: var(--red-soft);
+      color: var(--red);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-danger:hover {
+      background: var(--red);
+      color: #fff;
+    }
+
+    .btn-success {
+      background: var(--green-soft);
+      color: var(--green);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+
+    .btn-success:hover {
+      background: var(--green);
+      color: #fff;
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+
+    .btn-xs {
+      padding: 3px 8px;
+      font-size: 11px;
+      border-radius: 6px;
+    }
+
+    .notif-btn {
+      width: 36px;
+      height: 36px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      color: var(--text-secondary);
+      transition: var(--transition);
+    }
+
+    .notif-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .notif-dot {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 7px;
+      height: 7px;
+      background: var(--red);
+      border-radius: 50%;
+      border: 2px solid var(--bg-secondary);
+    }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      background: var(--bg-primary);
+    }
+
+    /* ── PAGES ── */
+    .page {
+      display: none;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      transition: var(--transition);
+    }
+
+    .card:hover {
+      border-color: var(--border-light);
+    }
+
+    .card-title {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── STATS GRID ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+      transition: var(--transition);
+    }
+
+    .stat-card:hover {
+      border-color: var(--border-light);
+      transform: translateY(-2px);
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+    }
+
+    .stat-card.orange::after {
+      background: var(--accent);
+    }
+
+    .stat-card.blue::after {
+      background: var(--blue);
+    }
+
+    .stat-card.green::after {
+      background: var(--green);
+    }
+
+    .stat-card.red::after {
+      background: var(--red);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-family: var(--font-mono);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .stat-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .stat-icon {
+      position: absolute;
+      right: 16px;
+      top: 16px;
+      font-size: 20px;
+      opacity: 0.3;
+    }
+
+    /* ── GRID LAYOUTS ── */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .grid-65-35 {
+      display: grid;
+      grid-template-columns: 1.8fr 1fr;
+      gap: 12px;
+    }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: var(--radius);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      background: var(--bg-input);
+      padding: 8px 10px;
+      text-align: left;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: var(--transition);
+      cursor: pointer;
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background: var(--bg-card-hover);
+    }
+
+    tbody td {
+      padding: 8px 10px;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    /* ── BADGES ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+    }
+
+    .badge-orange {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid rgba(249, 115, 22, 0.2);
+    }
+
+    .badge-blue {
+      background: var(--blue-soft);
+      color: var(--blue);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .badge-green {
+      background: var(--green-soft);
+      color: var(--green);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+
+    .badge-red {
+      background: var(--red-soft);
+      color: var(--red);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .badge-yellow {
+      background: var(--yellow-soft);
+      color: var(--yellow);
+      border: 1px solid rgba(234, 179, 8, 0.2);
+    }
+
+    .badge-purple {
+      background: var(--purple-soft);
+      color: var(--purple);
+      border: 1px solid rgba(168, 85, 247, 0.2);
+    }
+
+    /* ── PRIORITY DOTS ── */
+    .priority-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: inline-block;
+    }
+
+    .priority-critical {
+      background: var(--red);
+      box-shadow: 0 0 6px var(--red);
+    }
+
+    .priority-high {
+      background: var(--accent);
+    }
+
+    .priority-medium {
+      background: var(--yellow);
+    }
+
+    .priority-low {
+      background: var(--green);
+    }
+
+    /* ── FORM ELEMENTS ── */
+    .form-group {
+      margin-bottom: 10px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-bottom: 4px;
+    }
+
+    .form-label .req {
+      color: var(--accent);
+      margin-left: 2px;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 13px;
+      transition: var(--transition);
+      outline: none;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--accent);
+      background: var(--bg-card);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 70px;
+    }
+
+    select option {
+      background: var(--bg-card);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .form-row-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    /* ── FILE UPLOAD ── */
+    .file-drop {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      background: var(--bg-input);
+    }
+
+    .file-drop:hover,
+    .file-drop.over {
+      border-color: var(--accent);
+      background: var(--accent-soft2);
+    }
+
+    .file-drop-icon {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .file-drop-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .file-drop-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .uploaded-file {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-top: 8px;
+    }
+
+    .file-icon {
+      font-size: 18px;
+    }
+
+    .file-name {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-size {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .file-remove {
+      cursor: pointer;
+      color: var(--text-muted);
+      padding: 2px;
+      transition: var(--transition);
+    }
+
+    .file-remove:hover {
+      color: var(--red);
+    }
+
+    /* ── TIMELINE ── */
+    .timeline {
+      position: relative;
+      padding-left: 24px;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--border);
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      left: -21px;
+      top: 4px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid var(--bg-card);
+      z-index: 1;
+    }
+
+    .timeline-dot.orange {
+      background: var(--accent);
+    }
+
+    .timeline-dot.blue {
+      background: var(--blue);
+    }
+
+    .timeline-dot.green {
+      background: var(--green);
+    }
+
+    .timeline-dot.red {
+      background: var(--red);
+    }
+
+    .timeline-dot.purple {
+      background: var(--purple);
+    }
+
+    .timeline-time {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-bottom: 4px;
+    }
+
+    .timeline-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .timeline-author {
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── PROGRESS ── */
+    .progress-bar {
+      height: 6px;
+      background: var(--bg-input);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 10px;
+      background: var(--accent);
+      transition: width 0.6s ease;
+    }
+
+    .progress-fill.blue {
+      background: var(--blue);
+    }
+
+    .progress-fill.green {
+      background: var(--green);
+    }
+
+    .progress-stages {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .progress-stage {
+      flex: 1;
+      height: 4px;
+      border-radius: 4px;
+      background: var(--border);
+      transition: var(--transition);
+    }
+
+    .progress-stage.done {
+      background: var(--green);
+    }
+
+    .progress-stage.active {
+      background: var(--accent);
+    }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-overlay.open {
+      display: flex;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      width: 680px;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(20px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .modal-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-title {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .modal-close {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 20px;
+      line-height: 1;
+      padding: 4px;
+      transition: var(--transition);
+    }
+
+    .modal-close:hover {
+      color: var(--text-primary);
+    }
+
+    .modal-body {
+      padding: 20px 24px;
+    }
+
+    .modal-footer {
+      padding: 14px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* ── CASE DETAIL ── */
+    .case-detail-header {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+
+    .case-id-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .case-id {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .case-title-h {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      flex: 1;
+      margin-bottom: 10px;
+    }
+
+    .case-meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .case-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .case-meta-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-family: var(--font-mono);
+    }
+
+    .case-meta-val {
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    /* ── TABS ── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+
+    .tab {
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: var(--transition);
+    }
+
+    .tab:hover {
+      color: var(--text-primary);
+    }
+
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.2s ease;
+    }
+
+    /* ── REPORT ── */
+    .report-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .report-header {
+      background: linear-gradient(135deg, #0f1521, #1a2235);
+      padding: 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .report-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .report-date {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .report-body {
+      padding: 24px;
+    }
+
+    .report-section {
+      margin-bottom: 24px;
+    }
+
+    .report-section-title {
+      font-family: var(--font-display);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--accent);
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .report-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .report-item:last-child {
+      border-bottom: none;
+    }
+
+    .report-item-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .report-item-val {
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    .report-summary {
+      background: var(--bg-input);
+      border-radius: var(--radius);
+      padding: 14px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      border-left: 3px solid var(--accent);
+    }
+
+    /* ── ALERTS ── */
+    .alert {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .alert-warning {
+      background: var(--yellow-soft);
+      border: 1px solid rgba(234, 179, 8, 0.2);
+      color: var(--yellow);
+    }
+
+    .alert-info {
+      background: var(--blue-soft);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      color: var(--blue);
+    }
+
+    .alert-success {
+      background: var(--green-soft);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+      color: var(--green);
+    }
+
+    .alert-danger {
+      background: var(--red-soft);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: var(--red);
+    }
+
+    /* ── NOTIFICATION PANEL ── */
+    .notif-panel {
+      position: fixed;
+      top: 56px;
+      right: 16px;
+      width: 340px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      z-index: 500;
+      display: none;
+      overflow: hidden;
+      animation: slideDown 0.2s ease;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .notif-panel.open {
+      display: block;
+    }
+
+    .notif-panel-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .notif-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .notif-item:hover {
+      background: var(--bg-card-hover);
+    }
+
+    .notif-item:last-child {
+      border-bottom: none;
+    }
+
+    .notif-item-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .notif-item-title {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .notif-item-text {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .notif-item-time {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* ── CHANNEL ICONS ── */
+    .channel-icon {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+    }
+
+    .channel-icon span {
+      font-size: 13px;
+    }
+
+    /* ── TOAST ── */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 280px;
+      box-shadow: var(--shadow);
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .toast.success {
+      border-left: 3px solid var(--green);
+    }
+
+    .toast.error {
+      border-left: 3px solid var(--red);
+    }
+
+    .toast.info {
+      border-left: 3px solid var(--blue);
+    }
+
+    /* ── SECTION HEADER ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .section-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── SEARCH ── */
+    .search-wrap {
+      position: relative;
+    }
+
+    .search-wrap input {
+      padding-left: 34px;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 14px;
+      pointer-events: none;
+    }
+
+    /* ── CHANNEL FILTER ── */
+    .filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .chip {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      color: var(--text-secondary);
+      transition: var(--transition);
+      font-family: var(--font-mono);
+    }
+
+    .chip:hover,
+    .chip.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-light);
+      border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+
+    /* ── DIVIDER ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+    }
+
+    /* ── CHECKLIST ── */
+    .checklist-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .checklist-item:last-child {
+      border-bottom: none;
+    }
+
+    .checklist-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .checklist-item label {
+      font-size: 13px;
+      cursor: pointer;
+      flex: 1;
+    }
+
+    .checklist-item label.done {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    /* ── KPI ROW ── */
+    .kpi-row {
+      display: flex;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+    }
+
+    .kpi-row:last-child {
+      border-bottom: none;
+    }
+
+    .kpi-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      flex: 1;
+    }
+
+    .kpi-val {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .kpi-bar {
+      flex: 2;
+    }
+
+    /* ── MISC ── */
+    .mt-4 {
+      margin-top: 4px;
+    }
+
+    .mt-8 {
+      margin-top: 8px;
+    }
+
+    .mt-16 {
+      margin-top: 16px;
+    }
+
+    .mt-20 {
+      margin-top: 20px;
+    }
+
+    .mb-16 {
+      margin-bottom: 16px;
+    }
+
+    .mb-20 {
+      margin-bottom: 20px;
+    }
+
+    .flex {
+      display: flex;
+    }
+
+    .items-center {
+      align-items: center;
+    }
+
+    .gap-8 {
+      gap: 8px;
+    }
+
+    .gap-12 {
+      gap: 12px;
+    }
+
+    .text-muted {
+      color: var(--text-muted);
+    }
+
+    .text-accent {
+      color: var(--accent);
+    }
+
+    .text-green {
+      color: var(--green);
+    }
+
+    .text-red {
+      color: var(--red);
+    }
+
+    .text-blue {
+      color: var(--blue);
+    }
+
+    .font-mono {
+      font-family: var(--font-mono);
+    }
+
+    .font-display {
+      font-family: var(--font-display);
+    }
+
+    .fw-700 {
+      font-weight: 700;
+    }
+
+    .fs-12 {
+      font-size: 12px;
+    }
+
+    .fs-11 {
+      font-size: 11px;
+    }
+
+    /* ── SLA INDICATOR ── */
+    .sla-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sla-fill {
+      height: 4px;
+      border-radius: 4px;
+      flex: 1;
+      background: var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sla-fill-inner {
+      height: 100%;
+      border-radius: 4px;
+    }
+
+    .sla-label {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      white-space: nowrap;
+    }
+
+    .case-row-detail {
+      display: none;
+    }
+
+    /* ── ANIMATE ── */
+    .fade-in {
+      animation: fadeIn 0.3s ease;
+    }
+
+    .inbox-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .inbox-item:hover {
+      background: var(--bg-card-hover);
+    }
+
+    .inbox-item.unread {
+      border-left: 3px solid var(--accent);
+    }
+
+    .inbox-item.read {
+      border-left: 3px solid transparent;
+    }
+
+    .inbox-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+      flex-shrink: 0;
+      color: #fff;
+    }
+
+    .inbox-subject {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+
+    .inbox-preview {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 400px;
+    }
+
+    .inbox-time {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      margin-left: auto;
+    }
+
+    @media (max-width: 900px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .grid-2,
+      .grid-65-35,
+      .grid-3 {
+        grid-template-columns: 1fr;
+      }
+
+      .form-row,
+      .form-row-3 {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        width: 56px;
+        min-width: 56px;
+      }
+
+      .nav-item span,
+      .sidebar-logo .logo-text,
+      .sidebar-logo .logo-sub,
+      .sidebar-user .user-name,
+      .sidebar-user .user-role,
+      .nav-badge,
+      .sidebar-section-label {
+        display: none;
+      }
+
+      .sidebar-footer span {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="app">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">CFI</div>
+        <div>
+          <div class="logo-text">CFI247</div>
+          <div class="logo-sub">Escalation Mgmt</div>
+        </div>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="user-avatar">RS</div>
+        <div>
+          <div class="user-name">Rahul Sharma</div>
+          <div class="user-role">Case Manager</div>
+        </div>
+        <div class="online-dot"></div>
+      </div>
+
+      <div class="sidebar-section-label">Core</div>
+
+      <div class="nav-item active" onclick="showPage('dashboard')">
+        <span class="nav-icon">⊞</span>
+        <span>Dashboard</span>
+      </div>
+      <div class="nav-item" onclick="showPage('my-cases')">
+        <span class="nav-icon">📋</span>
+        <span>My Cases</span>
+        <span class="nav-badge">7</span>
+      </div>
+      <div class="nav-item" onclick="showPage('new-case')">
+        <span class="nav-icon">＋</span>
+        <span>New Case</span>
+      </div>
+      <div class="nav-item" onclick="showPage('inbox')">
+        <span class="nav-icon">✉</span>
+        <span>Inbox</span>
+        <span class="nav-badge red">3</span>
+      </div>
+
+      <div class="sidebar-section-label">Reports</div>
+
+      <div class="nav-item" onclick="showPage('sod-report')">
+        <span class="nav-icon">🌅</span>
+        <span>SOD Report</span>
+      </div>
+      <div class="nav-item" onclick="showPage('eod-report')">
+        <span class="nav-icon">🌆</span>
+        <span>EOD Report</span>
+      </div>
+      <div class="nav-item" onclick="showPage('work-report')">
+        <span class="nav-icon">📊</span>
+        <span>Work Report</span>
+      </div>
+
+      <div class="sidebar-section-label">Admin</div>
+
+      <div class="nav-item" onclick="showPage('all-cases')">
+        <span class="nav-icon">🗂</span>
+        <span>All Cases</span>
+      </div>
+      <div class="nav-item" onclick="showPage('team')">
+        <span class="nav-icon">👥</span>
+        <span>Team</span>
+      </div>
+      <div class="nav-item" onclick="showPage('settings')">
+        <span class="nav-icon">⚙</span>
+        <span>Settings</span>
+      </div>
+
+      <div class="sidebar-footer">
+        <span style="font-size:16px">🔒</span>
+        <span style="font-size:11px;color:var(--text-muted)">v2.4.1</span>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main">
+      <div class="topbar">
+        <div>
+          <div class="topbar-title" id="topbar-title">Dashboard</div>
+          <div class="topbar-breadcrumb" id="topbar-bc">CFI247 / Overview</div>
+        </div>
+        <div class="topbar-actions">
+          <div
+            style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);background:var(--bg-card);padding:5px 10px;border-radius:6px;border:1px solid var(--border)"
+            id="live-clock"></div>
+          <button class="btn btn-primary btn-sm" onclick="openModal('case-modal')">+ New Case</button>
+          <div class="notif-btn" onclick="toggleNotif()">
+            🔔
+            <div class="notif-dot"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOTIFICATION PANEL -->
+      <div class="notif-panel" id="notif-panel">
+        <div class="notif-panel-header">
+          <span>Notifications</span>
+          <span style="font-size:11px;color:var(--accent);cursor:pointer">Mark all read</span>
+        </div>
+        <div class="notif-item">
+          <div class="notif-item-icon" style="background:var(--red-soft)">🚨</div>
+          <div style="flex:1">
+            <div class="notif-item-title">Critical Case Escalated</div>
+            <div class="notif-item-text">ESC-2024-089 has been escalated to Tier 3</div>
+            <div class="notif-item-time">2 min ago</div>
+          </div>
+        </div>
+        <div class="notif-item">
+          <div class="notif-item-icon" style="background:var(--accent-soft)">📋</div>
+          <div style="flex:1">
+            <div class="notif-item-title">New Case Assigned</div>
+            <div class="notif-item-text">ESC-2024-092 assigned to you by Admin</div>
+            <div class="notif-item-time">18 min ago</div>
+          </div>
+        </div>
+        <div class="notif-item">
+          <div class="notif-item-icon" style="background:var(--blue-soft)">✉</div>
+          <div style="flex:1">
+            <div class="notif-item-title">Email from Client</div>
+            <div class="notif-item-text">Mehta Pvt Ltd – RE: MOU Clarification</div>
+            <div class="notif-item-time">45 min ago</div>
+          </div>
+        </div>
+        <div class="notif-item">
+          <div class="notif-item-icon" style="background:var(--yellow-soft)">⏱</div>
+          <div style="flex:1">
+            <div class="notif-item-title">SLA Breach Warning</div>
+            <div class="notif-item-text">ESC-2024-081 SLA expires in 2 hours</div>
+            <div class="notif-item-time">1 hr ago</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+
+        <!-- ═══════════════════ DASHBOARD ═══════════════════ -->
+        <div class="page active" id="page-dashboard">
+          <div class="stats-grid">
+            <div class="stat-card orange">
+              <div class="stat-icon">📋</div>
+              <div class="stat-label">My Active Cases</div>
+              <div class="stat-value" style="color:var(--accent)">7</div>
+              <div class="stat-sub">3 require action today</div>
+            </div>
+            <div class="stat-card red">
+              <div class="stat-icon">🚨</div>
+              <div class="stat-label">Critical / High</div>
+              <div class="stat-value" style="color:var(--red)">2</div>
+              <div class="stat-sub">SLA breach risk</div>
+            </div>
+            <div class="stat-card green">
+              <div class="stat-icon">✅</div>
+              <div class="stat-label">Resolved This Week</div>
+              <div class="stat-value" style="color:var(--green)">14</div>
+              <div class="stat-sub">↑ 22% vs last week</div>
+            </div>
+            <div class="stat-card blue">
+              <div class="stat-icon">⏱</div>
+              <div class="stat-label">Avg Resolution Time</div>
+              <div class="stat-value" style="color:var(--blue)">18h</div>
+              <div class="stat-sub">Target: 24h</div>
+            </div>
+          </div>
+
+          <!-- SOD CHECK -->
+          <div class="alert alert-warning" id="sod-alert" style="cursor:pointer" onclick="showPage('sod-report')">
+            <span>🌅</span>
+            <div>
+              <strong>SOD Report Pending</strong> — You haven't submitted your Start-of-Day report yet.
+              <span style="color:var(--accent);margin-left:6px;font-weight:600">File Now →</span>
+            </div>
+          </div>
+
+          <div class="grid-65-35" style="margin-bottom:20px">
+            <!-- Assigned Cases Quick View -->
+            <div class="card">
+              <div class="card-title">
+                📋 My Assigned Cases
+                <button class="btn btn-ghost btn-xs" onclick="showPage('my-cases')" style="margin-left:auto">View
+                  All</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Case ID</th>
+                      <th>Client</th>
+                      <th>Channel</th>
+                      <th>Priority</th>
+                      <th>Status</th>
+                      <th>SLA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr onclick="openCaseDetail('ESC-2024-089')">
+                      <td><span class="font-mono" style="color:var(--accent);font-size:12px">ESC-089</span></td>
+                      <td>Mehta Pvt Ltd</td>
+                      <td><span class="channel-icon"><span>📧</span> Email</span></td>
+                      <td><span class="priority-dot priority-critical"></span> <span
+                          style="color:var(--red);font-size:11px;font-weight:600">Critical</span></td>
+                      <td><span class="badge badge-red">Escalated</span></td>
+                      <td><span style="color:var(--red);font-size:11px;font-family:var(--font-mono)">2h left</span></td>
+                    </tr>
+                    <tr onclick="openCaseDetail('ESC-2024-085')">
+                      <td><span class="font-mono" style="color:var(--accent);font-size:12px">ESC-085</span></td>
+                      <td>Sharma Exports</td>
+                      <td><span class="channel-icon"><span>📱</span> WhatsApp</span></td>
+                      <td><span class="priority-dot priority-high"></span> <span
+                          style="color:var(--accent);font-size:11px;font-weight:600">High</span></td>
+                      <td><span class="badge badge-orange">In Progress</span></td>
+                      <td><span style="color:var(--yellow);font-size:11px;font-family:var(--font-mono)">6h left</span>
+                      </td>
+                    </tr>
+                    <tr onclick="openCaseDetail('ESC-2024-082')">
+                      <td><span class="font-mono" style="color:var(--accent);font-size:12px">ESC-082</span></td>
+                      <td>Gupta Industries</td>
+                      <td><span class="channel-icon"><span>📞</span> Call</span></td>
+                      <td><span class="priority-dot priority-medium"></span> <span
+                          style="color:var(--yellow);font-size:11px;font-weight:600">Medium</span></td>
+                      <td><span class="badge badge-blue">Under Review</span></td>
+                      <td><span style="color:var(--green);font-size:11px;font-family:var(--font-mono)">14h left</span>
+                      </td>
+                    </tr>
+                    <tr onclick="openCaseDetail('ESC-2024-079')">
+                      <td><span class="font-mono" style="color:var(--accent);font-size:12px">ESC-079</span></td>
+                      <td>Agarwal Corp</td>
+                      <td><span class="channel-icon"><span>🌐</span> Portal</span></td>
+                      <td><span class="priority-dot priority-low"></span> <span
+                          style="color:var(--green);font-size:11px;font-weight:600">Low</span></td>
+                      <td><span class="badge badge-green">MOU Signed</span></td>
+                      <td><span style="color:var(--green);font-size:11px;font-family:var(--font-mono)">22h left</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Activity Feed -->
+            <div class="card">
+              <div class="card-title">🕐 Recent Activity</div>
+              <div class="timeline">
+                <div class="timeline-item">
+                  <div class="timeline-dot orange"></div>
+                  <div class="timeline-time">Today, 09:42 AM</div>
+                  <div class="timeline-text">Progress updated on <strong>ESC-089</strong> — MOU draft sent to client
+                  </div>
+                  <div class="timeline-author">You</div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-dot red"></div>
+                  <div class="timeline-time">Today, 08:15 AM</div>
+                  <div class="timeline-text"><strong>ESC-089</strong> escalated to Tier 3 due to SLA breach risk</div>
+                  <div class="timeline-author">System Auto</div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-dot blue"></div>
+                  <div class="timeline-time">Yesterday, 04:30 PM</div>
+                  <div class="timeline-text">Email communication uploaded for <strong>ESC-085</strong></div>
+                  <div class="timeline-author">You</div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-dot green"></div>
+                  <div class="timeline-time">Yesterday, 11:00 AM</div>
+                  <div class="timeline-text">Signed MOU received from <strong>Agarwal Corp</strong></div>
+                  <div class="timeline-author">You</div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-dot purple"></div>
+                  <div class="timeline-time">Yesterday, 09:00 AM</div>
+                  <div class="timeline-text">SOD Report submitted successfully</div>
+                  <div class="timeline-author">You</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Performance -->
+          <div class="grid-3">
+            <div class="card">
+              <div class="card-title">📈 Case Progress</div>
+              <div class="kpi-row">
+                <div class="kpi-label">Open</div>
+                <div class="kpi-val" style="color:var(--accent)">7</div>
+                <div class="kpi-bar">
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width:35%"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="kpi-row">
+                <div class="kpi-label">In Progress</div>
+                <div class="kpi-val" style="color:var(--blue)">4</div>
+                <div class="kpi-bar">
+                  <div class="progress-bar">
+                    <div class="progress-fill blue" style="width:20%"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="kpi-row">
+                <div class="kpi-label">Resolved</div>
+                <div class="kpi-val" style="color:var(--green)">14</div>
+                <div class="kpi-bar">
+                  <div class="progress-bar">
+                    <div class="progress-fill green" style="width:70%"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="kpi-row">
+                <div class="kpi-label">Escalated</div>
+                <div class="kpi-val" style="color:var(--red)">2</div>
+                <div class="kpi-bar">
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width:10%;background:var(--red)"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">📡 Case Channels</div>
+              <div class="kpi-row">
+                <div class="kpi-label">📧 Email</div>
+                <div class="kpi-val">8</div>
+                <div class="kpi-bar">
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width:40%"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="kpi-row">
+                <div class="kpi-label">📱 WhatsApp</div>
+                <div class="kpi-val">5</div>
+                <div class="kpi-bar">
+                  <div class="progress-bar">
+                    <div class="progress-fill blue" style="width:25%"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="kpi-row">
+                <div class="kpi-label">📞 Call</div>
+                <div class="kpi-val">4</div>
+                <div class="kpi-bar">
+                  <div class="progress-bar">
+                    <div class="progress-fill green" style="width:20%"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="kpi-row">
+                <div class="kpi-label">🌐 Portal</div>
+                <div class="kpi-val">3</div>
+                <div class="kpi-bar">
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width:15%;background:var(--purple)"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">✅ Today's Checklist</div>
+              <div class="checklist-item">
+                <input type="checkbox" id="c1" checked onchange="updateChecklist(this)">
+                <label for="c1" class="done">Submit SOD Report</label>
+              </div>
+              <div class="checklist-item">
+                <input type="checkbox" id="c2" onchange="updateChecklist(this)">
+                <label for="c2">Follow up on ESC-089 MOU</label>
+              </div>
+              <div class="checklist-item">
+                <input type="checkbox" id="c3" onchange="updateChecklist(this)">
+                <label for="c3">Upload email communication — ESC-085</label>
+              </div>
+              <div class="checklist-item">
+                <input type="checkbox" id="c4" onchange="updateChecklist(this)">
+                <label for="c4">Review SLA status of ESC-082</label>
+              </div>
+              <div class="checklist-item">
+                <input type="checkbox" id="c5" onchange="updateChecklist(this)">
+                <label for="c5">Submit EOD Report</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ MY CASES ═══════════════════ -->
+        <div class="page" id="page-my-cases">
+          <div class="section-header">
+            <div>
+              <div class="section-title">My Assigned Cases</div>
+              <div class="section-sub">7 active cases assigned to you</div>
+            </div>
+            <div class="flex gap-8">
+              <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="text" placeholder="Search cases..." style="width:220px">
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="openModal('case-modal')">+ New Case</button>
+            </div>
+          </div>
+
+          <div class="filter-chips">
+            <div class="chip active">All (7)</div>
+            <div class="chip">Critical (1)</div>
+            <div class="chip">High (2)</div>
+            <div class="chip">Medium (3)</div>
+            <div class="chip">Low (1)</div>
+            <div class="chip">Escalated</div>
+            <div class="chip">In Progress</div>
+            <div class="chip">MOU Pending</div>
+          </div>
+
+          <div class="card" style="padding:0">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Case ID</th>
+                    <th>Client / Contact</th>
+                    <th>Issue</th>
+                    <th>Channel</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>MOU</th>
+                    <th>SLA</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr onclick="openCaseDetail('ESC-2024-089')">
+                    <td><span class="font-mono text-accent">ESC-089</span></td>
+                    <td>
+                      <div style="font-weight:600">Mehta Pvt Ltd</div>
+                      <div class="fs-11 text-muted">Ankit Mehta</div>
+                    </td>
+                    <td style="max-width:160px;font-size:12px">Payment dispute — ₹14.2L</td>
+                    <td><span class="channel-icon"><span>📧</span> Email</span></td>
+                    <td><span class="priority-dot priority-critical"></span> <span
+                        class="badge badge-red">Critical</span></td>
+                    <td><span class="badge badge-red">Escalated</span></td>
+                    <td><span class="badge badge-yellow">Pending</span></td>
+                    <td><span style="color:var(--red);font-size:11px;font-family:var(--font-mono)">⚠ 2h left</span></td>
+                    <td><button class="btn btn-ghost btn-xs"
+                        onclick="event.stopPropagation();openCaseDetail('ESC-2024-089')">Open →</button></td>
+                  </tr>
+                  <tr onclick="openCaseDetail('ESC-2024-085')">
+                    <td><span class="font-mono text-accent">ESC-085</span></td>
+                    <td>
+                      <div style="font-weight:600">Sharma Exports</div>
+                      <div class="fs-11 text-muted">Priya Sharma</div>
+                    </td>
+                    <td style="max-width:160px;font-size:12px">Compliance documentation missing</td>
+                    <td><span class="channel-icon"><span>📱</span> WhatsApp</span></td>
+                    <td><span class="priority-dot priority-high"></span> <span class="badge badge-orange">High</span>
+                    </td>
+                    <td><span class="badge badge-orange">In Progress</span></td>
+                    <td><span class="badge badge-yellow">Pending</span></td>
+                    <td><span style="color:var(--yellow);font-size:11px;font-family:var(--font-mono)">6h left</span>
+                    </td>
+                    <td><button class="btn btn-ghost btn-xs"
+                        onclick="event.stopPropagation();openCaseDetail('ESC-2024-085')">Open →</button></td>
+                  </tr>
+                  <tr onclick="openCaseDetail('ESC-2024-082')">
+                    <td><span class="font-mono text-accent">ESC-082</span></td>
+                    <td>
+                      <div style="font-weight:600">Gupta Industries</div>
+                      <div class="fs-11 text-muted">Rakesh Gupta</div>
+                    </td>
+                    <td style="max-width:160px;font-size:12px">Contract terms renegotiation</td>
+                    <td><span class="channel-icon"><span>📞</span> Call</span></td>
+                    <td><span class="priority-dot priority-medium"></span> <span
+                        class="badge badge-yellow">Medium</span></td>
+                    <td><span class="badge badge-blue">Under Review</span></td>
+                    <td><span class="badge badge-blue">In Review</span></td>
+                    <td><span style="color:var(--green);font-size:11px;font-family:var(--font-mono)">14h left</span>
+                    </td>
+                    <td><button class="btn btn-ghost btn-xs"
+                        onclick="event.stopPropagation();openCaseDetail('ESC-2024-082')">Open →</button></td>
+                  </tr>
+                  <tr onclick="openCaseDetail('ESC-2024-079')">
+                    <td><span class="font-mono text-accent">ESC-079</span></td>
+                    <td>
+                      <div style="font-weight:600">Agarwal Corp</div>
+                      <div class="fs-11 text-muted">Suresh Agarwal</div>
+                    </td>
+                    <td style="max-width:160px;font-size:12px">Service agreement finalization</td>
+                    <td><span class="channel-icon"><span>🌐</span> Portal</span></td>
+                    <td><span class="priority-dot priority-low"></span> <span class="badge badge-green">Low</span></td>
+                    <td><span class="badge badge-green">MOU Signed</span></td>
+                    <td><span class="badge badge-green">Signed</span></td>
+                    <td><span style="color:var(--green);font-size:11px;font-family:var(--font-mono)">22h left</span>
+                    </td>
+                    <td><button class="btn btn-ghost btn-xs"
+                        onclick="event.stopPropagation();openCaseDetail('ESC-2024-079')">Open →</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ CASE DETAIL ═══════════════════ -->
+        <div class="page" id="page-case-detail">
+          <div style="margin-bottom:12px">
+            <button class="btn btn-ghost btn-sm" onclick="showPage('my-cases')">← Back to Cases</button>
+          </div>
+
+          <div class="case-detail-header">
+            <div class="case-id-row">
+              <span class="case-id" id="detail-case-id">ESC-2024-089</span>
+              <span class="badge badge-red" id="detail-priority-badge">Critical</span>
+              <span class="badge badge-red" id="detail-status-badge">Escalated</span>
+              <div style="margin-left:auto;display:flex;gap:8px">
+                <button class="btn btn-ghost btn-sm">Transfer</button>
+                <button class="btn btn-success btn-sm" onclick="showToast('Case marked resolved!','success')">Mark
+                  Resolved</button>
+              </div>
+            </div>
+            <div class="case-title-h mb-16" id="detail-title">Payment Dispute — Mehta Pvt Ltd (₹14.2L)</div>
+
+            <!-- Progress Stages -->
+            <div style="margin-bottom:8px">
+              <div
+                style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">
+                Case Progress</div>
+              <div style="display:flex;gap:0;overflow:hidden;border-radius:6px;border:1px solid var(--border)">
+                <div
+                  style="flex:1;padding:4px 8px;font-size:10px;font-family:var(--font-mono);text-align:center;background:var(--green-soft);color:var(--green);border-right:1px solid var(--border)">
+                  ✓ Case Locked</div>
+                <div
+                  style="flex:1;padding:4px 8px;font-size:10px;font-family:var(--font-mono);text-align:center;background:var(--green-soft);color:var(--green);border-right:1px solid var(--border)">
+                  ✓ Assigned</div>
+                <div
+                  style="flex:1;padding:4px 8px;font-size:10px;font-family:var(--font-mono);text-align:center;background:var(--accent-soft);color:var(--accent);font-weight:700;border-right:1px solid var(--border)">
+                  ● MOU</div>
+                <div
+                  style="flex:1;padding:4px 8px;font-size:10px;font-family:var(--font-mono);text-align:center;background:var(--bg-input);color:var(--text-muted);border-right:1px solid var(--border)">
+                  Negotiation</div>
+                <div
+                  style="flex:1;padding:4px 8px;font-size:10px;font-family:var(--font-mono);text-align:center;background:var(--bg-input);color:var(--text-muted)">
+                  Resolution</div>
+              </div>
+            </div>
+
+            <div class="case-meta-row">
+              <div class="case-meta-item">
+                <span class="case-meta-label">Client</span>
+                <span class="case-meta-val">Mehta Pvt Ltd</span>
+              </div>
+              <div class="case-meta-item">
+                <span class="case-meta-label">Contact</span>
+                <span class="case-meta-val">Ankit Mehta</span>
+              </div>
+              <div class="case-meta-item">
+                <span class="case-meta-label">Channel</span>
+                <span class="case-meta-val">📧 Email</span>
+              </div>
+              <div class="case-meta-item">
+                <span class="case-meta-label">Assigned To</span>
+                <span class="case-meta-val">Rahul Sharma (You)</span>
+              </div>
+              <div class="case-meta-item">
+                <span class="case-meta-label">Created</span>
+                <span class="case-meta-val" style="font-family:var(--font-mono);font-size:12px">29 Apr 2024</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="tabs">
+            <div class="tab active" onclick="switchTab(this,'tab-details')">Case Details</div>
+            <div class="tab" onclick="switchTab(this,'tab-comms')">Communications</div>
+            <div class="tab" onclick="switchTab(this,'tab-docs')">Documents & MOU</div>
+            <div class="tab" onclick="switchTab(this,'tab-progress')">Progress Update</div>
+            <div class="tab" onclick="switchTab(this,'tab-history')">History</div>
+          </div>
+
+          <!-- TAB: CASE DETAILS -->
+          <div class="tab-content active" id="tab-details">
+            <div class="grid-65-35">
+              <div class="card">
+                <div class="card-title">📝 Case Information</div>
+                <div class="form-group">
+                  <label class="form-label">Case Description</label>
+                  <textarea
+                    rows="4">Client Mehta Pvt Ltd has raised a dispute regarding payment of ₹14,20,000 for services rendered in Q3 2024. Client claims partial services were not delivered as per agreement. SLA demands resolution within 24 hours. MOU clarification required before final settlement.</textarea>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Client Contact No.</label>
+                    <input type="text" value="+91 98765 43210">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Client Email</label>
+                    <input type="email" value="ankit@mehtapvtltd.com">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Dispute Amount</label>
+                    <input type="text" value="₹14,20,000">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <select>
+                      <option selected>Payment Dispute</option>
+                      <option>Contract Breach</option>
+                      <option>Compliance Issue</option>
+                      <option>Service Failure</option>
+                    </select>
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="showToast('Case details saved!','success')">Save
+                  Changes</button>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div class="card">
+                  <div class="card-title">⚡ Quick Actions</div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <button class="btn btn-ghost btn-sm" onclick="showToast('Email sent to client','info')">📧 Send
+                      Email to Client</button>
+                    <button class="btn btn-ghost btn-sm"
+                      onclick="switchTab(document.querySelector('.tab.active'),'tab-docs')">📄 Upload MOU</button>
+                    <button class="btn btn-ghost btn-sm"
+                      onclick="switchTab(document.querySelector('.tab:nth-child(4)'),'tab-progress')">📊 Update
+                      Progress</button>
+                    <button class="btn btn-danger btn-sm" onclick="showToast('Case escalated to Tier 3','error')">🚨
+                      Escalate Case</button>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-title">📊 SLA Status</div>
+                  <div style="text-align:center;margin-bottom:12px">
+                    <div style="font-family:var(--font-display);font-size:32px;font-weight:800;color:var(--red)">87%
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">of SLA elapsed
+                    </div>
+                  </div>
+                  <div class="progress-bar" style="height:8px">
+                    <div class="progress-fill" style="width:87%;background:var(--red)"></div>
+                  </div>
+                  <div
+                    style="display:flex;justify-content:space-between;margin-top:8px;font-size:10px;font-family:var(--font-mono);color:var(--text-muted)">
+                    <span>Started 29 Apr</span>
+                    <span style="color:var(--red)">Expires 30 Apr</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: COMMUNICATIONS -->
+          <div class="tab-content" id="tab-comms">
+            <div class="grid-65-35">
+              <div>
+                <!-- Add Communication -->
+                <div class="card mb-16">
+                  <div class="card-title">✉ Log Communication</div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label">Communication Type <span class="req">*</span></label>
+                      <select>
+                        <option>Email</option>
+                        <option>Call</option>
+                        <option>WhatsApp</option>
+                        <option>Meeting</option>
+                        <option>Portal Message</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Direction</label>
+                      <select>
+                        <option>Incoming (from client)</option>
+                        <option>Outgoing (to client)</option>
+                        <option>Internal</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Subject / Summary <span class="req">*</span></label>
+                    <input type="text" placeholder="Brief subject of this communication">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Communication Details <span class="req">*</span></label>
+                    <textarea placeholder="Describe what was discussed, agreed upon, or communicated..."></textarea>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label">Date & Time</label>
+                      <input type="datetime-local">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Attach Email / Screenshot</label>
+                      <input type="file" accept=".pdf,.eml,.png,.jpg">
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Outcome / Next Step</label>
+                    <input type="text" placeholder="What was agreed / what's the follow-up?">
+                  </div>
+                  <button class="btn btn-primary btn-sm"
+                    onclick="showToast('Communication logged successfully!','success')">Log Communication</button>
+                </div>
+              </div>
+
+              <!-- Communication History -->
+              <div class="card" style="height:fit-content">
+                <div class="card-title">🕐 Communication History</div>
+                <div class="timeline">
+                  <div class="timeline-item">
+                    <div class="timeline-dot orange"></div>
+                    <div class="timeline-time">📧 29 Apr, 09:42 AM — Outgoing</div>
+                    <div class="timeline-text"><strong>MOU Draft sent</strong> — Sent revised MOU draft with updated
+                      payment terms for client review</div>
+                    <div class="timeline-author">You → Ankit Mehta</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="timeline-dot blue"></div>
+                    <div class="timeline-time">📞 28 Apr, 03:15 PM — Call</div>
+                    <div class="timeline-text"><strong>30-min call</strong> — Client raised concerns about delivery
+                      quality in Q3. Agreed to schedule follow-up within 48 hours.</div>
+                    <div class="timeline-author">You ↔ Ankit Mehta</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="timeline-dot green"></div>
+                    <div class="timeline-time">📧 28 Apr, 10:00 AM — Incoming</div>
+                    <div class="timeline-text"><strong>RE: Dispute Notice</strong> — Client sent formal dispute letter
+                      with invoice references. Attached to case file.</div>
+                    <div class="timeline-author">Ankit Mehta → You</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="timeline-dot purple"></div>
+                    <div class="timeline-time">📧 27 Apr, 04:00 PM — Outgoing</div>
+                    <div class="timeline-text"><strong>Acknowledgement</strong> — Sent case acknowledgement and initial
+                      assessment timeline</div>
+                    <div class="timeline-author">System → Ankit Mehta</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: DOCUMENTS & MOU -->
+          <div class="tab-content" id="tab-docs">
+            <div class="grid-2">
+              <!-- Upload MOU -->
+              <div class="card">
+                <div class="card-title">📄 MOU Upload</div>
+                <div class="form-group">
+                  <label class="form-label">MOU Type</label>
+                  <select>
+                    <option>Signed MOU (Final)</option>
+                    <option>MOU Draft</option>
+                    <option>Revised MOU</option>
+                    <option>Amendment</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Upload Signed MOU <span class="req">*</span></label>
+                  <div class="file-drop" onclick="document.getElementById('mou-upload').click()" id="mou-drop">
+                    <div class="file-drop-icon">📄</div>
+                    <div class="file-drop-text">Click to upload or drag & drop</div>
+                    <div class="file-drop-sub">PDF, DOCX — Max 20MB</div>
+                  </div>
+                  <input type="file" id="mou-upload" style="display:none" accept=".pdf,.docx"
+                    onchange="handleFileUpload(this,'mou-files')">
+                  <div id="mou-files"></div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label"> Date</label>
+                  <input type="date">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Signatory Name (Client)</label>
+                  <input type="text" placeholder="Name of client signatory">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Remarks</label>
+                  <textarea placeholder="Any notes about this MOU version..." rows="3"></textarea>
+                </div>
+                <button class="btn btn-primary btn-sm"
+                  onclick="showToast('MOU uploaded and recorded!','success')">Upload MOU</button>
+              </div>
+
+              <!-- Upload Email Communications -->
+              <div class="card">
+                <div class="card-title">📧 Upload Email Communication</div>
+                <div class="form-group">
+                  <label class="form-label">Email Subject</label>
+                  <input type="text" placeholder="Subject line of the email thread">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Upload Email File / Screenshot <span class="req">*</span></label>
+                  <div class="file-drop" onclick="document.getElementById('email-upload').click()" id="email-drop">
+                    <div class="file-drop-icon">📧</div>
+                    <div class="file-drop-text">Click to upload email export or screenshot</div>
+                    <div class="file-drop-sub">.eml, PDF, PNG, JPG — Max 10MB each</div>
+                  </div>
+                  <input type="file" id="email-upload" style="display:none" accept=".eml,.pdf,.png,.jpg,.jpeg" multiple
+                    onchange="handleFileUpload(this,'email-files')">
+                  <div id="email-files"></div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Email Date</label>
+                  <input type="date">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Other Documents</label>
+                  <div class="file-drop" onclick="document.getElementById('other-upload').click()">
+                    <div class="file-drop-icon">📎</div>
+                    <div class="file-drop-text">Supporting docs, invoices, agreements</div>
+                    <div class="file-drop-sub">Any format — Max 20MB</div>
+                  </div>
+                  <input type="file" id="other-upload" style="display:none" multiple
+                    onchange="handleFileUpload(this,'other-files')">
+                  <div id="other-files"></div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="showToast('Documents uploaded!','success')">Upload
+                  Documents</button>
+              </div>
+            </div>
+
+            <!-- Document List -->
+            <div class="card mt-20">
+              <div class="card-title">🗂 Case Documents</div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>File</th>
+                      <th>Type</th>
+                      <th>Uploaded By</th>
+                      <th>Date</th>
+                      <th>Size</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span style="margin-right:6px">📄</span><span
+                          class="font-mono fs-12">Dispute_Notice_MehtaPvtLtd.pdf</span></td>
+                      <td><span class="badge badge-red">Dispute Doc</span></td>
+                      <td>System</td>
+                      <td class="font-mono fs-11 text-muted">28 Apr 2024</td>
+                      <td class="font-mono fs-11 text-muted">240 KB</td>
+                      <td><button class="btn btn-ghost btn-xs">View</button></td>
+                    </tr>
+                    <tr>
+                      <td><span style="margin-right:6px">📧</span><span
+                          class="font-mono fs-12">Email_Thread_27Apr.eml</span></td>
+                      <td><span class="badge badge-blue">Email</span></td>
+                      <td>Rahul Sharma</td>
+                      <td class="font-mono fs-11 text-muted">28 Apr 2024</td>
+                      <td class="font-mono fs-11 text-muted">85 KB</td>
+                      <td><button class="btn btn-ghost btn-xs">View</button></td>
+                    </tr>
+                    <tr>
+                      <td><span style="margin-right:6px">📄</span><span
+                          class="font-mono fs-12">MOU_Draft_v1_Mehta.docx</span></td>
+                      <td><span class="badge badge-yellow">MOU Draft</span></td>
+                      <td>Rahul Sharma</td>
+                      <td class="font-mono fs-11 text-muted">29 Apr 2024</td>
+                      <td class="font-mono fs-11 text-muted">120 KB</td>
+                      <td><button class="btn btn-ghost btn-xs">View</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: PROGRESS UPDATE -->
+          <div class="tab-content" id="tab-progress">
+            <div class="grid-2">
+              <div class="card">
+                <div class="card-title">📊 Update Case Progress</div>
+                <div class="form-group">
+                  <label class="form-label">Current Stage <span class="req">*</span></label>
+                  <select>
+                    <option>Intake / New</option>
+                    <option>Assigned</option>
+                    <option selected>MOU in Progress</option>
+                    <option>Under Negotiation</option>
+                    <option>Pending Approval</option>
+                    <option>Resolved</option>
+                    <option>Closed</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Progress % <span class="req">*</span></label>
+                  <input type="range" min="0" max="100" value="45"
+                    oninput="document.getElementById('prog-val').textContent=this.value+'%'"
+                    style="padding:0;height:auto;background:transparent;border:none">
+                  <div
+                    style="text-align:right;font-family:var(--font-mono);color:var(--accent);font-size:14px;font-weight:700"
+                    id="prog-val">45%</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Update Summary <span class="req">*</span></label>
+                  <textarea placeholder="What has been done? What's the current status?"></textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Next Action Planned</label>
+                  <input type="text" placeholder="e.g. Send final MOU for signature">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Blockers / Issues</label>
+                  <textarea rows="3" placeholder="Any blockers slowing the resolution?"></textarea>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Next Follow-up Date</label>
+                    <input type="date">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Escalate To</label>
+                    <select>
+                      <option value="">— No escalation —</option>
+                      <option>Team Lead</option>
+                      <option>Manager</option>
+                      <option>Director</option>
+                    </select>
+                  </div>
+                </div>
+                <button class="btn btn-primary" onclick="showToast('Progress updated!','success')">Save Progress
+                  Update</button>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div class="card">
+                  <div class="card-title">📋 Progress Timeline</div>
+                  <div class="timeline">
+                    <div class="timeline-item">
+                      <div class="timeline-dot orange"></div>
+                      <div class="timeline-time">29 Apr — 45% complete</div>
+                      <div class="timeline-text">MOU draft sent to client. Awaiting signature.</div>
+                      <div class="timeline-author">Updated by: You</div>
+                    </div>
+                    <div class="timeline-item">
+                      <div class="timeline-dot blue"></div>
+                      <div class="timeline-time">28 Apr — 25% complete</div>
+                      <div class="timeline-text">Initial assessment completed. Call held with client.</div>
+                      <div class="timeline-author">Updated by: You</div>
+                    </div>
+                    <div class="timeline-item">
+                      <div class="timeline-dot green"></div>
+                      <div class="timeline-time">27 Apr — 10% complete</div>
+                      <div class="timeline-text">Case created and assigned. Acknowledgement sent.</div>
+                      <div class="timeline-author">Updated by: System</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-title">✅ Resolution Checklist</div>
+                  <div class="checklist-item">
+                    <input type="checkbox" id="r1" checked onchange="updateChecklist(this)">
+                    <label for="r1" class="done">Initial contact made</label>
+                  </div>
+                  <div class="checklist-item">
+                    <input type="checkbox" id="r2" checked onchange="updateChecklist(this)">
+                    <label for="r2" class="done">Documents received from client</label>
+                  </div>
+                  <div class="checklist-item">
+                    <input type="checkbox" id="r3" checked onchange="updateChecklist(this)">
+                    <label for="r3" class="done">MOU draft prepared</label>
+                  </div>
+                  <div class="checklist-item">
+                    <input type="checkbox" id="r4" onchange="updateChecklist(this)">
+                    <label for="r4">Signed MOU received</label>
+                  </div>
+                  <div class="checklist-item">
+                    <input type="checkbox" id="r5" onchange="updateChecklist(this)">
+                    <label for="r5">Final settlement agreed</label>
+                  </div>
+                  <div class="checklist-item">
+                    <input type="checkbox" id="r6" onchange="updateChecklist(this)">
+                    <label for="r6">Case closed</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: HISTORY -->
+          <div class="tab-content" id="tab-history">
+            <div class="card">
+              <div class="card-title">📜 Full Case Audit Trail</div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date & Time</th>
+                      <th>Action</th>
+                      <th>Details</th>
+                      <th>By</th>
+                      <th>Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="font-mono fs-11 text-muted">29 Apr 09:42</td>
+                      <td>Document Uploaded</td>
+                      <td class="fs-12 text-muted">MOU Draft v1 uploaded</td>
+                      <td>Rahul Sharma</td>
+                      <td><span class="badge badge-blue">Document</span></td>
+                    </tr>
+                    <tr>
+                      <td class="font-mono fs-11 text-muted">29 Apr 08:15</td>
+                      <td>Status Changed</td>
+                      <td class="fs-12 text-muted">In Progress → Escalated</td>
+                      <td>System Auto</td>
+                      <td><span class="badge badge-red">Escalation</span></td>
+                    </tr>
+                    <tr>
+                      <td class="font-mono fs-11 text-muted">28 Apr 15:15</td>
+                      <td>Communication Logged</td>
+                      <td class="fs-12 text-muted">Call with Ankit Mehta — 30 min</td>
+                      <td>Rahul Sharma</td>
+                      <td><span class="badge badge-orange">Comm</span></td>
+                    </tr>
+                    <tr>
+                      <td class="font-mono fs-11 text-muted">28 Apr 10:00</td>
+                      <td>Email Received</td>
+                      <td class="fs-12 text-muted">Dispute Notice from client</td>
+                      <td>System</td>
+                      <td><span class="badge badge-blue">Email</span></td>
+                    </tr>
+                    <tr>
+                      <td class="font-mono fs-11 text-muted">27 Apr 16:00</td>
+                      <td>Case Created</td>
+                      <td class="fs-12 text-muted">Assigned to Rahul Sharma</td>
+                      <td>Admin</td>
+                      <td><span class="badge badge-green">System</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ NEW CASE ═══════════════════ -->
+        <div class="page" id="page-new-case">
+          <div class="section-header mb-20">
+            <div>
+              <div class="section-title">New Escalation Case</div>
+              <div class="section-sub">Register a new case from any incoming channel</div>
+            </div>
+          </div>
+
+          <div class="grid-65-35">
+            <div class="card">
+              <div class="card-title">📋 Case Information</div>
+
+              <div class="form-group">
+                <label class="form-label">Incoming Channel <span class="req">*</span></label>
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+                  <div class="channel-select-btn active" onclick="selectChannel(this,'Email')">📧<br><span
+                      style="font-size:10px">Email</span></div>
+                  <div class="channel-select-btn" onclick="selectChannel(this,'WhatsApp')">📱<br><span
+                      style="font-size:10px">WhatsApp</span></div>
+                  <div class="channel-select-btn" onclick="selectChannel(this,'Call')">📞<br><span
+                      style="font-size:10px">Call</span></div>
+                  <div class="channel-select-btn" onclick="selectChannel(this,'Portal')">🌐<br><span
+                      style="font-size:10px">Portal</span></div>
+                  <div class="channel-select-btn" onclick="selectChannel(this,'Walk-in')">🏢<br><span
+                      style="font-size:10px">Walk-in</span></div>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Client / Company Name <span class="req">*</span></label>
+                  <input type="text" placeholder="Full company name">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Contact Person <span class="req">*</span></label>
+                  <input type="text" placeholder="Name of the contact">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Contact Email</label>
+                  <input type="email" placeholder="client@company.com">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Contact Phone</label>
+                  <input type="tel" placeholder="+91 XXXXX XXXXX">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Case Title / Subject <span class="req">*</span></label>
+                <input type="text" placeholder="Brief title describing the escalation issue">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Case Description <span class="req">*</span></label>
+                <textarea rows="5"
+                  placeholder="Detailed description of the escalation — what happened, when, what client is expecting..."></textarea>
+              </div>
+
+              <div class="form-row-3">
+                <div class="form-group">
+                  <label class="form-label">Priority <span class="req">*</span></label>
+                  <select>
+                    <option>Low</option>
+                    <option>Medium</option>
+                    <option selected>High</option>
+                    <option>Critical</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Category</label>
+                  <select>
+                    <option>Payment Dispute</option>
+                    <option>Contract Breach</option>
+                    <option>Compliance Issue</option>
+                    <option>Service Failure</option>
+                    <option>Refund Request</option>
+                    <option>Legal</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Assign To</label>
+                  <select>
+                    <option selected>Me (Self-assign)</option>
+                    <option>Rahul Sharma</option>
+                    <option>Priya Singh</option>
+                    <option>Vikram Joshi</option>
+                    <option>Team Lead Queue</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Dispute Amount (if any)</label>
+                  <input type="text" placeholder="₹ 0.00">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">SLA Priority</label>
+                  <select>
+                    <option>Standard (24 hours)</option>
+                    <option>Urgent (8 hours)</option>
+                    <option>Critical (4 hours)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Initial Communication Summary</label>
+                <textarea rows="3"
+                  placeholder="Summary of the first communication that triggered this escalation..."></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Attach Documents (Optional)</label>
+                <div class="file-drop" onclick="document.getElementById('new-case-upload').click()">
+                  <div class="file-drop-icon">📎</div>
+                  <div class="file-drop-text">Emails, screenshots, invoices, contracts</div>
+                  <div class="file-drop-sub">PDF, DOCX, PNG, JPG, EML — Multiple files allowed</div>
+                </div>
+                <input type="file" id="new-case-upload" style="display:none" multiple
+                  onchange="handleFileUpload(this,'new-case-files')">
+                <div id="new-case-files"></div>
+              </div>
+
+              <div style="display:flex;gap:10px;margin-top:8px">
+                <button class="btn btn-primary"
+                  onclick="showToast('Case ESC-2024-093 created and assigned!','success')">Create Case</button>
+                <button class="btn btn-ghost">Save Draft</button>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div class="card">
+                <div class="card-title">💡 Case Guidelines</div>
+                <div class="timeline" style="padding-left:16px;font-size:12px">
+                  <div class="timeline-item" style="margin-bottom:12px">
+                    <div class="timeline-dot orange" style="left:-13px"></div>
+                    <div style="color:var(--text-secondary)">All incoming cases must be logged within <strong>30
+                        minutes</strong> of receipt.</div>
+                  </div>
+                  <div class="timeline-item" style="margin-bottom:12px">
+                    <div class="timeline-dot blue" style="left:-13px"></div>
+                    <div style="color:var(--text-secondary)">Critical cases must be acknowledged within <strong>15
+                        minutes</strong>.</div>
+                  </div>
+                  <div class="timeline-item" style="margin-bottom:12px">
+                    <div class="timeline-dot green" style="left:-13px"></div>
+                    <div style="color:var(--text-secondary)">Upload all supporting documentation at time of case
+                      creation if available.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="timeline-dot purple" style="left:-13px"></div>
+                    <div style="color:var(--text-secondary)">MOU must be requested within <strong>2 hours</strong> for
+                      financial disputes above ₹5L.</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">📊 Today's Intake Stats</div>
+                <div class="report-item">
+                  <span class="report-item-label">Cases Created Today</span>
+                  <span class="report-item-val text-accent">4</span>
+                </div>
+                <div class="report-item">
+                  <span class="report-item-label">Your Cases (Total)</span>
+                  <span class="report-item-val">7</span>
+                </div>
+                <div class="report-item">
+                  <span class="report-item-label">Auto-escalated</span>
+                  <span class="report-item-val text-red">1</span>
+                </div>
+                <div class="report-item">
+                  <span class="report-item-label">Resolved Today</span>
+                  <span class="report-item-val text-green">2</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ INBOX ═══════════════════ -->
+        <div class="page" id="page-inbox">
+          <div class="section-header mb-20">
+            <div>
+              <div class="section-title">Inbox</div>
+              <div class="section-sub">3 unread messages across all channels</div>
+            </div>
+            <div class="flex gap-8">
+              <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="text" placeholder="Search messages..." style="width:220px">
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-chips mb-16">
+            <div class="chip active">All</div>
+            <div class="chip">📧 Email</div>
+            <div class="chip">📱 WhatsApp</div>
+            <div class="chip">🌐 Portal</div>
+            <div class="chip">Unread</div>
+          </div>
+
+          <div class="card" style="padding:0">
+            <div class="inbox-item unread">
+              <div class="inbox-avatar" style="background:linear-gradient(135deg,var(--accent),#c2410c)">AM</div>
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+                  <div class="inbox-subject">RE: MOU Clarification — ESC-089</div>
+                  <span class="badge badge-red" style="font-size:9px">Critical</span>
+                  <span class="badge badge-blue" style="font-size:9px">📧 Email</span>
+                </div>
+                <div class="inbox-preview">Hi Rahul, I've reviewed the draft MOU but have concerns about clause 4.2
+                  regarding liability. Could we schedule a call today to discuss...</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                <div class="inbox-time">09:31 AM</div>
+                <button class="btn btn-primary btn-xs" onclick="showToast('Opening case ESC-089','info')">Link to
+                  Case</button>
+              </div>
+            </div>
+            <div class="inbox-item unread">
+              <div class="inbox-avatar" style="background:linear-gradient(135deg,var(--blue),#1d4ed8)">PS</div>
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+                  <div class="inbox-subject">Documents for ESC-085 attached</div>
+                  <span class="badge badge-orange" style="font-size:9px">High</span>
+                  <span class="badge badge-green" style="font-size:9px">📱 WhatsApp</span>
+                </div>
+                <div class="inbox-preview">Rahul bhai, I'm sending you the compliance certificates you asked for. Please
+                  check and confirm once received.</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                <div class="inbox-time">08:50 AM</div>
+                <button class="btn btn-primary btn-xs" onclick="showToast('Opening case ESC-085','info')">Link to
+                  Case</button>
+              </div>
+            </div>
+            <div class="inbox-item unread">
+              <div class="inbox-avatar" style="background:linear-gradient(135deg,var(--purple),#7e22ce)">RG</div>
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+                  <div class="inbox-subject">Contract Amendment Request</div>
+                  <span class="badge badge-yellow" style="font-size:9px">Medium</span>
+                  <span class="badge badge-purple" style="font-size:9px">🌐 Portal</span>
+                </div>
+                <div class="inbox-preview">We need to update the payment schedule in our contract. Could you help
+                  process an amendment to the current terms?</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                <div class="inbox-time">Yesterday</div>
+                <button class="btn btn-ghost btn-xs" onclick="showToast('Creating new case from message','info')">Create
+                  Case</button>
+              </div>
+            </div>
+            <div class="inbox-item read">
+              <div class="inbox-avatar" style="background:linear-gradient(135deg,var(--green),#15803d)">SA</div>
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+                  <div class="inbox-subject">MOU Signed — Agarwal Corp</div>
+                  <span class="badge badge-green" style="font-size:9px">Closed</span>
+                  <span class="badge badge-blue" style="font-size:9px">📧 Email</span>
+                </div>
+                <div class="inbox-preview">Please find attached the signed copy of the MOU as agreed. We look forward to
+                  the resolution of this matter.</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                <div class="inbox-time">Yesterday</div>
+                <button class="btn btn-ghost btn-xs">View</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ SOD REPORT ═══════════════════ -->
+        <div class="page" id="page-sod-report">
+          <div class="section-header mb-20">
+            <div>
+              <div class="section-title">🌅 Start of Day Report</div>
+              <div class="section-sub">Daily SOD submission — <span id="sod-date" style="color:var(--accent)"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-65-35">
+            <div class="card">
+              <div class="card-title">📝 SOD Report Form</div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Report Date <span class="req">*</span></label>
+                  <input type="date" id="sod-date-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Reporting Officer</label>
+                  <input type="text" value="Rahul Sharma" readonly style="color:var(--text-muted)">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Today's Work Plan / Key Objectives <span class="req">*</span></label>
+                <textarea rows="5"
+                  placeholder="What are your main objectives for today? What cases will you work on?&#10;&#10;e.g.:&#10;1. Follow up on ESC-089 MOU with Mehta Pvt Ltd&#10;2. Call Sharma Exports re: compliance docs&#10;3. Close ESC-079 after receiving signed MOU"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Cases Prioritized for Today</label>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div
+                    style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg-input);border-radius:var(--radius)">
+                    <span class="priority-dot priority-critical"></span>
+                    <span class="font-mono fs-12">ESC-089</span>
+                    <span class="fs-12 text-muted">— Mehta Pvt Ltd (MOU)</span>
+                    <span class="badge badge-red" style="margin-left:auto">Critical</span>
+                  </div>
+                  <div
+                    style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg-input);border-radius:var(--radius)">
+                    <span class="priority-dot priority-high"></span>
+                    <span class="font-mono fs-12">ESC-085</span>
+                    <span class="fs-12 text-muted">— Sharma Exports (Docs)</span>
+                    <span class="badge badge-orange" style="margin-left:auto">High</span>
+                  </div>
+                  <div
+                    style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg-input);border-radius:var(--radius)">
+                    <span class="priority-dot priority-medium"></span>
+                    <span class="font-mono fs-12">ESC-082</span>
+                    <span class="fs-12 text-muted">— Gupta Industries (Review)</span>
+                    <span class="badge badge-yellow" style="margin-left:auto">Medium</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Pending Items from Previous Day</label>
+                <textarea rows="3"
+                  placeholder="List anything not completed yesterday that needs carry-forward..."></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Expected Challenges / Blockers</label>
+                <textarea rows="3" placeholder="Any known blockers for today's work?"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Hours Planned</label>
+                <div class="form-row">
+                  <input type="time" value="09:00" placeholder="Start Time">
+                  <input type="time" value="18:00" placeholder="End Time">
+                </div>
+              </div>
+
+              <div style="display:flex;gap:10px">
+                <button class="btn btn-primary" onclick="submitSOD()">✓ Submit SOD Report</button>
+                <button class="btn btn-ghost">Save Draft</button>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div class="card">
+                <div class="card-title">📊 Yesterday's Summary</div>
+                <div class="report-item"><span class="report-item-label">Cases Worked</span><span
+                    class="report-item-val">5</span></div>
+                <div class="report-item"><span class="report-item-label">Cases Resolved</span><span
+                    class="report-item-val text-green">2</span></div>
+                <div class="report-item"><span class="report-item-label">Comms Logged</span><span
+                    class="report-item-val">8</span></div>
+                <div class="report-item"><span class="report-item-label">Docs Uploaded</span><span
+                    class="report-item-val">3</span></div>
+                <div class="report-item"><span class="report-item-label">Hours Logged</span><span
+                    class="report-item-val font-mono">8h 30m</span></div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">📅 SOD History</div>
+                <div class="timeline" style="font-size:12px">
+                  <div class="timeline-item" style="margin-bottom:10px">
+                    <div class="timeline-dot green"></div>
+                    <div class="timeline-time">28 Apr 2024 — 08:55 AM</div>
+                    <div class="timeline-text">✓ Submitted on time</div>
+                  </div>
+                  <div class="timeline-item" style="margin-bottom:10px">
+                    <div class="timeline-dot green"></div>
+                    <div class="timeline-time">27 Apr 2024 — 09:02 AM</div>
+                    <div class="timeline-text">✓ Submitted on time</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="timeline-dot red"></div>
+                    <div class="timeline-time">26 Apr 2024 — 10:15 AM</div>
+                    <div class="timeline-text">⚠ Late submission (75 min delay)</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ EOD REPORT ═══════════════════ -->
+        <div class="page" id="page-eod-report">
+          <div class="section-header mb-20">
+            <div>
+              <div class="section-title">🌆 End of Day Report</div>
+              <div class="section-sub">Daily EOD submission — <span style="color:var(--accent)" id="eod-date"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-65-35">
+            <div class="card">
+              <div class="card-title">📝 EOD Report Form</div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Report Date <span class="req">*</span></label>
+                  <input type="date" id="eod-date-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Reporting Officer</label>
+                  <input type="text" value="Rahul Sharma" readonly style="color:var(--text-muted)">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Work Done Today <span class="req">*</span></label>
+                <textarea rows="6"
+                  placeholder="Summarize all the work completed today. List each case and what was done.&#10;&#10;e.g.:&#10;1. ESC-089: Called Mehta Pvt Ltd, sent MOU draft v2&#10;2. ESC-085: Received compliance docs, uploaded to case&#10;3. ESC-082: Under review, sent summary to manager"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Cases Worked On Today <span class="req">*</span></label>
+                <textarea rows="3" placeholder="List Case IDs and brief actions taken on each..."></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Cases Resolved Today</label>
+                <textarea rows="2" placeholder="Case IDs of any cases resolved/closed today..."></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Pending / Carry Forward</label>
+                <textarea rows="3"
+                  placeholder="What couldn't be completed today? What's being carried to tomorrow?"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Blockers Encountered</label>
+                <textarea rows="3" placeholder="Any blockers, delays, or escalation needs?"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Client Escalations / Urgent Issues</label>
+                <textarea rows="2" placeholder="Any urgent cases that need immediate manager attention?"></textarea>
+              </div>
+
+              <div class="form-row-3">
+                <div class="form-group">
+                  <label class="form-label">Cases Worked</label>
+                  <input type="number" placeholder="0" min="0">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Cases Resolved</label>
+                  <input type="number" placeholder="0" min="0">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Hours Logged</label>
+                  <input type="number" placeholder="0.0" step="0.5" min="0" max="24">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Tomorrow's Priority Actions</label>
+                <textarea rows="3" placeholder="What needs to happen first thing tomorrow?"></textarea>
+              </div>
+
+              <div style="display:flex;gap:10px">
+                <button class="btn btn-primary" onclick="submitEOD()">✓ Submit EOD Report</button>
+                <button class="btn btn-ghost">Save Draft</button>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div class="card">
+                <div class="card-title">📊 Today's Auto-Summary</div>
+                <div class="alert alert-info" style="margin-bottom:12px">
+                  <span>ℹ</span>
+                  <span style="font-size:11px">Auto-compiled from case activity. Review before submitting.</span>
+                </div>
+                <div class="report-item"><span class="report-item-label">Cases Logged</span><span
+                    class="report-item-val text-accent">4</span></div>
+                <div class="report-item"><span class="report-item-label">Communications</span><span
+                    class="report-item-val">6</span></div>
+                <div class="report-item"><span class="report-item-label">Docs Uploaded</span><span
+                    class="report-item-val">4</span></div>
+                <div class="report-item"><span class="report-item-label">Progress Updates</span><span
+                    class="report-item-val">3</span></div>
+                <div class="report-item"><span class="report-item-label">Escalations Made</span><span
+                    class="report-item-val text-red">1</span></div>
+                <div class="report-item"><span class="report-item-label">Cases Resolved</span><span
+                    class="report-item-val text-green">2</span></div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">📅 EOD Compliance</div>
+                <div class="timeline" style="font-size:12px">
+                  <div class="timeline-item" style="margin-bottom:10px">
+                    <div class="timeline-dot green"></div>
+                    <div class="timeline-time">28 Apr — 5:48 PM</div>
+                    <div class="timeline-text">✓ Submitted on time</div>
+                  </div>
+                  <div class="timeline-item" style="margin-bottom:10px">
+                    <div class="timeline-dot green"></div>
+                    <div class="timeline-time">27 Apr — 5:55 PM</div>
+                    <div class="timeline-text">✓ Submitted on time</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="timeline-dot orange"></div>
+                    <div class="timeline-time">26 Apr — 6:20 PM</div>
+                    <div class="timeline-text">⚠ Slight delay</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ WORK REPORT ═══════════════════ -->
+        <div class="page" id="page-work-report">
+          <div class="section-header mb-20">
+            <div>
+              <div class="section-title">📊 Auto-Generated Work Report</div>
+              <div class="section-sub">Compiled from SOD, EOD, and case activity data</div>
+            </div>
+            <div class="flex gap-8">
+              <select style="width:160px">
+                <option>Today (29 Apr)</option>
+                <option>This Week</option>
+                <option>This Month</option>
+                <option>Custom Range</option>
+              </select>
+              <button class="btn btn-ghost btn-sm">⬇ Export PDF</button>
+              <button class="btn btn-primary btn-sm">⬇ Export Excel</button>
+            </div>
+          </div>
+
+          <div class="report-container mb-20">
+            <div class="report-header">
+              <div>
+                <div class="report-title">Daily Work Report — Rahul Sharma</div>
+                <div class="report-date" style="margin-top:4px">Generated: 29 April 2024 | Period: 29 Apr 2024</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-family:var(--font-display);font-size:22px;font-weight:800;color:var(--accent)">CFI247
+                </div>
+                <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">Escalation Management
+                </div>
+              </div>
+            </div>
+
+            <div class="report-body">
+              <div class="grid-3" style="gap:16px;margin-bottom:24px">
+                <div
+                  style="background:var(--accent-soft);border:1px solid rgba(249,115,22,0.2);border-radius:var(--radius);padding:16px;text-align:center">
+                  <div style="font-family:var(--font-display);font-size:28px;font-weight:800;color:var(--accent)">7
+                  </div>
+                  <div
+                    style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px">
+                    Active Cases</div>
+                </div>
+                <div
+                  style="background:var(--green-soft);border:1px solid rgba(34,197,94,0.2);border-radius:var(--radius);padding:16px;text-align:center">
+                  <div style="font-family:var(--font-display);font-size:28px;font-weight:800;color:var(--green)">2</div>
+                  <div
+                    style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px">
+                    Resolved Today</div>
+                </div>
+                <div
+                  style="background:var(--blue-soft);border:1px solid rgba(59,130,246,0.2);border-radius:var(--radius);padding:16px;text-align:center">
+                  <div style="font-family:var(--font-display);font-size:28px;font-weight:800;color:var(--blue)">8h</div>
+                  <div
+                    style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px">
+                    Hours Logged</div>
+                </div>
+              </div>
+
+              <div class="report-section">
+                <div class="report-section-title">📋 SOD Targets vs Completion</div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Task Planned</th>
+                        <th>Case</th>
+                        <th>Status</th>
+                        <th>Time Spent</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="fs-12">Follow up on MOU — Mehta Pvt Ltd</td>
+                        <td><span class="font-mono text-accent fs-11">ESC-089</span></td>
+                        <td><span class="badge badge-yellow">In Progress</span></td>
+                        <td class="font-mono fs-11 text-muted">2h 15m</td>
+                      </tr>
+                      <tr>
+                        <td class="fs-12">Compliance docs — Sharma Exports</td>
+                        <td><span class="font-mono text-accent fs-11">ESC-085</span></td>
+                        <td><span class="badge badge-green">Done</span></td>
+                        <td class="font-mono fs-11 text-muted">1h 30m</td>
+                      </tr>
+                      <tr>
+                        <td class="fs-12">Contract review — Gupta Industries</td>
+                        <td><span class="font-mono text-accent fs-11">ESC-082</span></td>
+                        <td><span class="badge badge-blue">Under Review</span></td>
+                        <td class="font-mono fs-11 text-muted">1h 00m</td>
+                      </tr>
+                      <tr>
+                        <td class="fs-12">Close case — Agarwal Corp</td>
+                        <td><span class="font-mono text-accent fs-11">ESC-079</span></td>
+                        <td><span class="badge badge-green">Completed</span></td>
+                        <td class="font-mono fs-11 text-muted">45m</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="report-section">
+                <div class="report-section-title">📊 Case Activity Summary</div>
+                <div class="grid-2" style="gap:16px">
+                  <div>
+                    <div class="report-item"><span class="report-item-label">Emails Sent</span><span
+                        class="report-item-val">4</span></div>
+                    <div class="report-item"><span class="report-item-label">Calls Made</span><span
+                        class="report-item-val">2</span></div>
+                    <div class="report-item"><span class="report-item-label">WhatsApp Messages</span><span
+                        class="report-item-val">6</span></div>
+                    <div class="report-item"><span class="report-item-label">Documents Uploaded</span><span
+                        class="report-item-val">4</span></div>
+                  </div>
+                  <div>
+                    <div class="report-item"><span class="report-item-label">MOUs Processed</span><span
+                        class="report-item-val">1</span></div>
+                    <div class="report-item"><span class="report-item-label">Progress Updates</span><span
+                        class="report-item-val">3</span></div>
+                    <div class="report-item"><span class="report-item-label">Escalations Raised</span><span
+                        class="report-item-val text-red">1</span></div>
+                    <div class="report-item"><span class="report-item-label">SLA Compliance</span><span
+                        class="report-item-val text-green">86%</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="report-section">
+                <div class="report-section-title">📝 EOD Summary (Self-Reported)</div>
+                <div class="report-summary">
+                  Worked on 5 active cases today. Primary focus was on ESC-089 (Mehta Pvt Ltd) — MOU draft v2 sent after
+                  morning discussion. ESC-085 compliance documents received and uploaded. Agarwal Corp case (ESC-079)
+                  closed after receiving signed MOU. ESC-082 contract review ongoing; summary submitted to manager for
+                  direction. One escalation raised for ESC-089 due to SLA proximity. Tomorrow: finalize MOU with Mehta,
+                  close ESC-082 after manager review.
+                </div>
+              </div>
+
+              <div class="report-section">
+                <div class="report-section-title">📈 Performance Score</div>
+                <div class="kpi-row">
+                  <div class="kpi-label">SLA Compliance</div>
+                  <div class="kpi-val text-green">86%</div>
+                  <div class="kpi-bar">
+                    <div class="progress-bar">
+                      <div class="progress-fill green" style="width:86%"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="kpi-row">
+                  <div class="kpi-label">Task Completion Rate</div>
+                  <div class="kpi-val text-accent">75%</div>
+                  <div class="kpi-bar">
+                    <div class="progress-bar">
+                      <div class="progress-fill" style="width:75%"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="kpi-row">
+                  <div class="kpi-label">Documentation Rate</div>
+                  <div class="kpi-val text-blue">90%</div>
+                  <div class="kpi-bar">
+                    <div class="progress-bar">
+                      <div class="progress-fill blue" style="width:90%"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="kpi-row">
+                  <div class="kpi-label">Report Compliance</div>
+                  <div class="kpi-val text-green">100%</div>
+                  <div class="kpi-bar">
+                    <div class="progress-bar">
+                      <div class="progress-fill green" style="width:100%"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ ALL CASES ═══════════════════ -->
+        <div class="page" id="page-all-cases">
+          <div class="section-header mb-20">
+            <div>
+              <div class="section-title">All Cases</div>
+              <div class="section-sub">Admin view — all cases across all agents</div>
+            </div>
+            <div class="flex gap-8">
+              <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="text" placeholder="Search all cases..." style="width:220px">
+              </div>
+              <button class="btn btn-ghost btn-sm">Export</button>
+              <button class="btn btn-primary btn-sm" onclick="openModal('case-modal')">+ New Case</button>
+            </div>
+          </div>
+
+          <div class="filter-chips mb-16">
+            <div class="chip active">All (24)</div>
+            <div class="chip">Open (11)</div>
+            <div class="chip">In Progress (7)</div>
+            <div class="chip">Escalated (2)</div>
+            <div class="chip">Resolved (4)</div>
+          </div>
+
+          <div class="card" style="padding:0">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Case ID</th>
+                    <th>Client</th>
+                    <th>Assigned To</th>
+                    <th>Channel</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>MOU</th>
+                    <th>SLA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr onclick="openCaseDetail('ESC-2024-089')">
+                    <td><span class="font-mono text-accent">ESC-089</span></td>
+                    <td>Mehta Pvt Ltd</td>
+                    <td>Rahul Sharma</td>
+                    <td>📧 Email</td>
+                    <td><span class="badge badge-red">Critical</span></td>
+                    <td><span class="badge badge-red">Escalated</span></td>
+                    <td><span class="badge badge-yellow">Pending</span></td>
+                    <td><span style="color:var(--red);font-size:11px">⚠ 2h</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="font-mono text-accent">ESC-091</span></td>
+                    <td>Tata Finance</td>
+                    <td>Priya Singh</td>
+                    <td>📞 Call</td>
+                    <td><span class="badge badge-red">Critical</span></td>
+                    <td><span class="badge badge-orange">In Progress</span></td>
+                    <td><span class="badge badge-yellow">Pending</span></td>
+                    <td><span style="color:var(--yellow);font-size:11px">4h</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="font-mono text-accent">ESC-090</span></td>
+                    <td>Reliance Corp</td>
+                    <td>Vikram Joshi</td>
+                    <td>🌐 Portal</td>
+                    <td><span class="badge badge-orange">High</span></td>
+                    <td><span class="badge badge-blue">Under Review</span></td>
+                    <td><span class="badge badge-blue">In Review</span></td>
+                    <td><span style="color:var(--green);font-size:11px">10h</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="font-mono text-accent">ESC-079</span></td>
+                    <td>Agarwal Corp</td>
+                    <td>Rahul Sharma</td>
+                    <td>🌐 Portal</td>
+                    <td><span class="badge badge-green">Low</span></td>
+                    <td><span class="badge badge-green">Resolved</span></td>
+                    <td><span class="badge badge-green">Signed</span></td>
+                    <td><span style="color:var(--green);font-size:11px">✓ Done</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ TEAM ═══════════════════ -->
+        <div class="page" id="page-team">
+          <div class="section-header mb-20">
+            <div class="section-title">Team</div>
+          </div>
+          <div class="grid-3">
+            <div class="card" style="text-align:center">
+              <div
+                style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#c2410c);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#fff;margin:0 auto 12px">
+                RS</div>
+              <div style="font-weight:600;font-family:var(--font-display)">Rahul Sharma</div>
+              <div class="text-muted fs-12 mt-4">Case Manager</div>
+              <div style="display:flex;justify-content:center;gap:8px;margin-top:12px">
+                <span class="badge badge-orange">7 Active</span>
+                <span class="badge badge-green">14 Resolved</span>
+              </div>
+            </div>
+            <div class="card" style="text-align:center">
+              <div
+                style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#1d4ed8);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#fff;margin:0 auto 12px">
+                PS</div>
+              <div style="font-weight:600;font-family:var(--font-display)">Priya Singh</div>
+              <div class="text-muted fs-12 mt-4">Senior Manager</div>
+              <div style="display:flex;justify-content:center;gap:8px;margin-top:12px">
+                <span class="badge badge-orange">5 Active</span>
+                <span class="badge badge-green">22 Resolved</span>
+              </div>
+            </div>
+            <div class="card" style="text-align:center">
+              <div
+                style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--purple),#7e22ce);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#fff;margin:0 auto 12px">
+                VJ</div>
+              <div style="font-weight:600;font-family:var(--font-display)">Vikram Joshi</div>
+              <div class="text-muted fs-12 mt-4">Case Manager</div>
+              <div style="display:flex;justify-content:center;gap:8px;margin-top:12px">
+                <span class="badge badge-orange">4 Active</span>
+                <span class="badge badge-green">9 Resolved</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════ SETTINGS ═══════════════════ -->
+        <div class="page" id="page-settings">
+          <div class="section-title mb-16">⚙ Settings</div>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">🔔 Notification Preferences</div>
+              <div class="form-group"><label class="form-label">New Case Assigned</label><select>
+                  <option>Immediate</option>
+                  <option>Every 30 min</option>
+                  <option>Off</option>
+                </select></div>
+              <div class="form-group"><label class="form-label">SLA Breach Warning</label><select>
+                  <option>4 Hours Before</option>
+                  <option>2 Hours Before</option>
+                  <option>1 Hour Before</option>
+                </select></div>
+              <div class="form-group"><label class="form-label">Email Notifications</label><select>
+                  <option>All Activity</option>
+                  <option>Critical Only</option>
+                  <option>Off</option>
+                </select></div>
+              <button class="btn btn-primary btn-sm" onclick="showToast('Settings saved!','success')">Save
+                Settings</button>
+            </div>
+            <div class="card">
+              <div class="card-title">🗂 SLA Configuration</div>
+              <div class="form-group"><label class="form-label">Critical Case SLA</label><input type="text"
+                  value="4 hours"></div>
+              <div class="form-group"><label class="form-label">High Priority SLA</label><input type="text"
+                  value="8 hours"></div>
+              <div class="form-group"><label class="form-label">Standard SLA</label><input type="text" value="24 hours">
+              </div>
+              <div class="form-group"><label class="form-label">MOU Request Threshold</label><input type="text"
+                  value="₹5,00,000"></div>
+              <button class="btn btn-primary btn-sm" onclick="showToast('SLA config saved!','success')">Save SLA
+                Config</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /content -->
+    </div><!-- /main -->
+  </div><!-- /app -->
+
+  <!-- ══ NEW CASE MODAL ══ -->
+  <div class="modal-overlay" id="case-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">+ Create New Escalation Case</div>
+        <div class="modal-close" onclick="closeModal('case-modal')">×</div>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Client Name <span class="req">*</span></label>
+            <input type="text" placeholder="Company / Individual">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contact Person</label>
+            <input type="text" placeholder="Name">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Case Title <span class="req">*</span></label>
+          <input type="text" placeholder="Brief title of the escalation">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Channel</label>
+            <select>
+              <option>Email</option>
+              <option>WhatsApp</option>
+              <option>Call</option>
+              <option>Portal</option>
+              <option>Walk-in</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select>
+              <option>Low</option>
+              <option>Medium</option>
+              <option selected>High</option>
+              <option>Critical</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea placeholder="Describe the escalation issue..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('case-modal')">Cancel</button>
+        <button class="btn btn-primary"
+          onclick="closeModal('case-modal');showToast('Case created successfully!','success')">Create Case</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <style>
+    .channel-select-btn {
+      padding: 10px 8px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      font-size: 18px;
+      font-family: var(--font-body);
+      color: var(--text-secondary);
+    }
+
+    .channel-select-btn:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .channel-select-btn.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+  </style>
+
+  <script>
+    // ── Page Navigation ──
+    const pages = {
+      'dashboard': { title: 'Dashboard', bc: 'CFI247 / Overview' },
+      'my-cases': { title: 'My Cases', bc: 'CFI247 / My Cases' },
+      'case-detail': { title: 'Case Detail', bc: 'CFI247 / My Cases / Case Detail' },
+      'new-case': { title: 'New Case', bc: 'CFI247 / Create Case' },
+      'inbox': { title: 'Inbox', bc: 'CFI247 / Inbox' },
+      'sod-report': { title: 'SOD Report', bc: 'CFI247 / Reports / SOD' },
+      'eod-report': { title: 'EOD Report', bc: 'CFI247 / Reports / EOD' },
+      'work-report': { title: 'Work Report', bc: 'CFI247 / Reports / Work Report' },
+      'all-cases': { title: 'All Cases (Admin)', bc: 'CFI247 / Admin / All Cases' },
+      'team': { title: 'Team', bc: 'CFI247 / Team' },
+      'settings': { title: 'Settings', bc: 'CFI247 / Settings' },
+    };
+
+    function showPage(id) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-' + id).classList.add('active');
+
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => {
+        if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'" + id + "'")) {
+          n.classList.add('active');
+        }
+      });
+
+      if (pages[id]) {
+        document.getElementById('topbar-title').textContent = pages[id].title;
+        document.getElementById('topbar-bc').textContent = pages[id].bc;
+      }
+
+      // Close notif panel
+      document.getElementById('notif-panel').classList.remove('open');
+    }
+
+    function openCaseDetail(caseId) {
+      showPage('case-detail');
+      if (document.getElementById('detail-case-id')) {
+        document.getElementById('detail-case-id').textContent = caseId;
+      }
+    }
+
+    // ── Tabs ──
+    function switchTab(tabEl, contentId) {
+      if (!tabEl) return;
+      const tabsContainer = tabEl.closest('.tabs');
+      if (tabsContainer) {
+        tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tabEl.classList.add('active');
+      }
+
+      const parent = tabEl.closest('.page') || document;
+      parent.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      const el = document.getElementById(contentId);
+      if (el) el.classList.add('active');
+    }
+
+    // ── Modal ──
+    function openModal(id) {
+      document.getElementById(id).classList.add('open');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+
+    document.querySelectorAll('.modal-overlay').forEach(o => {
+      o.addEventListener('click', function (e) {
+        if (e.target === this) this.classList.remove('open');
+      });
+    });
+
+    // ── Notifications ──
+    function toggleNotif() {
+      document.getElementById('notif-panel').classList.toggle('open');
+    }
+
+    document.addEventListener('click', function (e) {
+      const panel = document.getElementById('notif-panel');
+      if (!e.target.closest('.notif-btn') && !e.target.closest('.notif-panel')) {
+        panel.classList.remove('open');
+      }
+    });
+
+    // ── Toast ──
+    function showToast(msg, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const icons = { success: '✅', error: '🚨', info: 'ℹ' };
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      toast.innerHTML = `<span>${icons[type]}</span><span>${msg}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => { toast.style.animation = 'slideIn 0.3s ease reverse'; setTimeout(() => toast.remove(), 300); }, 3000);
+    }
+
+    // ── File Upload ──
+    function handleFileUpload(input, containerId) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      Array.from(input.files).forEach(file => {
+        const size = file.size < 1024 * 1024 ? (file.size / 1024).toFixed(0) + ' KB' : (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+        const ext = file.name.split('.').pop().toUpperCase();
+        const icons = { PDF: '📄', DOCX: '📄', DOC: '📄', PNG: '🖼', JPG: '🖼', JPEG: '🖼', EML: '📧' };
+        const icon = icons[ext] || '📎';
+        const el = document.createElement('div');
+        el.className = 'uploaded-file';
+        el.innerHTML = `<span class="file-icon">${icon}</span><span class="file-name">${file.name}</span><span class="file-size">${size}</span><span class="file-remove" onclick="this.parentElement.remove()">✕</span>`;
+        container.appendChild(el);
+      });
+      showToast('File(s) attached — click Upload to save', 'info');
+    }
+
+    // ── Checklist ──
+    function updateChecklist(cb) {
+      const label = cb.nextElementSibling;
+      if (label) label.classList.toggle('done', cb.checked);
+    }
+
+    // ── Channel selector ──
+    function selectChannel(el, ch) {
+      el.closest('.form-group').querySelectorAll('.channel-select-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    // ── Clock ──
+    function updateClock() {
+      const now = new Date();
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const d = days[now.getDay()];
+      const t = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const clockEl = document.getElementById('live-clock');
+      if (clockEl) clockEl.textContent = d + ' ' + t;
+    }
+
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ── Date Init ──
+    function initDates() {
+      const today = new Date().toISOString().slice(0, 10);
+      const label = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      ['sod-date-input', 'eod-date-input'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = today;
+      });
+      ['sod-date', 'eod-date'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = label;
+      });
+    }
+
+    initDates();
+
+    // ── SOD / EOD Submit ──
+    function submitSOD() {
+      document.getElementById('sod-alert').style.display = 'none';
+      showToast('SOD Report submitted successfully! ✓', 'success');
+      setTimeout(() => showPage('dashboard'), 800);
+    }
+
+    function submitEOD() {
+      showToast('EOD Report submitted successfully! ✓', 'success');
+      setTimeout(() => showPage('work-report'), 800);
+    }
+
+    // ── Filter chips ──
+    document.querySelectorAll('.filter-chips').forEach(group => {
+      group.querySelectorAll('.chip').forEach(chip => {
+        chip.addEventListener('click', function () {
+          this.closest('.filter-chips').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+          this.classList.add('active');
+        });
+      });
+    });
+
+    // ── Drag & drop upload areas ──
+    document.querySelectorAll('.file-drop').forEach(drop => {
+      drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+      drop.addEventListener('drop', e => {
+        e.preventDefault();
+        drop.classList.remove('over');
+        showToast('File dropped — ready to upload', 'info');
+      });
+    });
+  </script>
+</body>
+
+</html>

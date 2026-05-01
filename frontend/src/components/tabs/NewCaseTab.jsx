@@ -4,19 +4,19 @@ import toast from 'react-hot-toast';
 import FileUpload from '../shared/FileUpload';
 import SearchableSelect from '../shared/SearchableSelect';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { 
-  Building2, 
-  Wrench, 
-  User, 
-  IndianRupee, 
-  AlertTriangle, 
-  FileText, 
-  Users, 
-  CheckCircle, 
-  Trash2, 
-  PhoneIncoming, 
-  MessageCircle, 
-  Video, 
+import {
+  Building2,
+  Wrench,
+  User,
+  IndianRupee,
+  AlertTriangle,
+  FileText,
+  Users,
+  CheckCircle,
+  Trash2,
+  PhoneIncoming,
+  MessageCircle,
+  Video,
   Mail,
   Plus,
   X
@@ -33,12 +33,12 @@ const initialService = {
 };
 
 const indianStates = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
-  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
-  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
-  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
-  "Uttarakhand", "West Bengal", "Andaman and Nicobar Islands", "Chandigarh", 
-  "Dadra and Nagar Haveli and Daman and Diu", "Lakshadweep", "Delhi", "Puducherry", 
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
+  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh",
+  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh",
+  "Uttarakhand", "West Bengal", "Andaman and Nicobar Islands", "Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu", "Lakshadweep", "Delhi", "Puducherry",
   "Ladakh", "Jammu and Kashmir"
 ];
 
@@ -49,7 +49,7 @@ const NewCaseTab = () => {
 
   const [formData, setFormData] = useState({
     companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
-    typeOfComplaint: '', brandName: '', 
+    typeOfComplaint: '', brandName: '',
     engagementNote: 'This is a multi-stage consultancy and execution support engagement. ₹0 was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.',
     clientName: '', clientMobile: '', clientEmail: '', state: '',
     totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '',
@@ -59,12 +59,12 @@ const NewCaseTab = () => {
     firNumber: '', firFileLink: '', grievanceNumber: '',
     assignedTo: '' // New field
   });
-  
+
   const [errors, setErrors] = useState({
     clientEmail: '',
     clientMobile: ''
   });
-  
+
   const [userList, setUserList] = useState([]); // List of users for dropdown
 
   const [serviceMode, setServiceMode] = useState('Single Service');
@@ -111,15 +111,15 @@ const NewCaseTab = () => {
           policeThreat: editCase.policeThreat || 'None'
         };
       });
-      
+
       setServiceMode(editCase.serviceMode || 'Single Service');
-      
+
       if (editCase.servicesSold && Array.isArray(editCase.servicesSold) && editCase.servicesSold.length > 0) {
         setServices(editCase.servicesSold);
       } else {
         setServices([{ ...initialService }]);
       }
-      
+
       if (editCase.cyberAckNumbers) {
         setCyberAcks(editCase.cyberAckNumbers.split(',').filter(Boolean));
       } else {
@@ -153,13 +153,13 @@ const NewCaseTab = () => {
       totalMouValue: totalMou || '',
       amtInDispute: dispute || ''
     }));
-    
+
     // Also update engagement note if MOU value changes
     if (totalMou >= 0) {
-       setFormData(prev => ({
-         ...prev,
-         engagementNote: `This is a multi-stage consultancy and execution support engagement. ₹${totalMou} was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.`
-       }));
+      setFormData(prev => ({
+        ...prev,
+        engagementNote: `This is a multi-stage consultancy and execution support engagement. ₹${totalMou} was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.`
+      }));
     }
   }, [services]);
 
@@ -179,8 +179,8 @@ const NewCaseTab = () => {
 
     // Inline Validations
     if (name === 'clientEmail') {
-      if (value && !value.toLowerCase().endsWith('@gmail.com')) {
-        setErrors(prev => ({ ...prev, clientEmail: 'Pattern not valid! Must end with @gmail.com' }));
+      if (value && !value.includes('@')) {
+        setErrors(prev => ({ ...prev, clientEmail: 'Pattern not valid! Must contain @' }));
       } else {
         setErrors(prev => ({ ...prev, clientEmail: '' }));
       }
@@ -220,10 +220,10 @@ const NewCaseTab = () => {
     e.preventDefault();
 
     // Validations
-    if (formData.clientEmail && !formData.clientEmail.toLowerCase().endsWith('@gmail.com')) {
-      return toast.error('Email must be a @gmail.com address', { icon: '📧' });
+    if (formData.clientEmail && !formData.clientEmail.includes('@')) {
+      return toast.error('Email must be a valid address containing @', { icon: '📧' });
     }
-    
+
     const cleanMobile = formData.clientMobile.replace(/\s+/g, '');
     if (cleanMobile && !/^\d{10}$/.test(cleanMobile)) {
       return toast.error('Mobile number must be exactly 10 digits', { icon: '📱' });
@@ -238,7 +238,9 @@ const NewCaseTab = () => {
       };
 
       if (editCase) {
-        await api.put(`/cases/${editCase.caseId}`, payload);
+        // Remove MongoDB internal fields that should not be sent in the update
+        const { _id, __v, caseId, createdAt, updatedAt, ...cleanPayload } = payload;
+        await api.put(`/cases/${editCase.caseId}`, cleanPayload);
         toast.success('Case updated successfully');
         navigate('/case-master'); // Go back to master list after edit
       } else {
@@ -264,33 +266,36 @@ const NewCaseTab = () => {
     }
   };
 
-  const inputClass = "w-full border border-gray-300 rounded p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all bg-white";
-  const labelClass = "block text-[11px] font-bold text-gray-600 uppercase tracking-wide mb-1";
-  const sectionTitleClass = "text-md font-bold flex items-center gap-2 mb-4 text-gray-800";
-  const cardClass = "bg-white rounded-lg border border-gray-200 p-5 mb-5 shadow-sm";
+  const inputClass = "w-full border border-border rounded-xl px-4 py-3 text-sm focus:border-accent focus:ring-1 focus:ring-accent-soft outline-none transition-all bg-bg-input text-text-primary font-medium placeholder:text-text-muted shadow-inner";
+  const labelClass = "block text-[11px] font-black text-text-muted uppercase tracking-[0.1em] mb-2";
+  const sectionTitleClass = "text-md font-black flex items-center gap-2 mb-6 text-text-primary uppercase tracking-wider";
+  const cardClass = "bg-bg-card rounded-2xl border-2 border-border p-4 sm:p-6 mb-6 shadow-sm transition-all duration-300";
 
   return (
-    <div className="section active w-full pb-10 px-4">
-      <div className="mb-4">
-        <h2 className="text-2xl font-bold text-gray-800">New Case Creation</h2>
+    <div className="section active w-full pb-10 px-4 bg-bg-primary">
+      <div className="mb-6">
+        <h2 className="text-2xl font-black text-text-primary uppercase tracking-tight">
+          {editCase ? 'Edit Case' : 'New Case Registration'}
+        </h2>
+
       </div>
 
       <form onSubmit={handleSubmit}>
 
         {/* Company & Case Info */}
         <div className={cardClass}>
-          <h3 className={sectionTitleClass}><Building2 size={18} className="text-blue-500" /> Company & Case Info</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <h3 className={sectionTitleClass}><Building2 size={18} className="text-accent" /> Company & Case Info</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
             <div>
-              <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Company Name</label>
+              <label className={`${labelClass} after:content-['*'] after:text-red`}>Company Name</label>
               <input type="text" className={inputClass} name="companyName" value={formData.companyName || ''} onChange={handleChange} placeholder="e.g. ABC Solutions Pvt Ltd" required />
             </div>
             <div>
-              <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Case Title</label>
-              <input type="text" className={`${inputClass} bg-gray-50`} value={formData.caseTitle || ''} placeholder="Auto generated title" readOnly required />
+              <label className={`${labelClass} after:content-['*'] after:text-red`}>Case Title</label>
+              <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed`} value={formData.caseTitle || ''} placeholder="Auto generated title" readOnly required />
             </div>
             <div>
-              <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Priority</label>
+              <label className={`${labelClass} after:content-['*'] after:text-red`}>Priority</label>
               <select className={inputClass} name="priority" value={formData.priority || 'Medium'} onChange={handleChange} required>
                 <option value="High">High</option>
                 <option value="Medium">Medium</option>
@@ -309,7 +314,7 @@ const NewCaseTab = () => {
               </select>
             </div>
             <div>
-              <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Type of Complaint</label>
+              <label className={`${labelClass} after:content-['*'] after:text-red`}>Type of Complaint</label>
               <select className={inputClass} name="typeOfComplaint" value={formData.typeOfComplaint || ''} onChange={handleChange} required>
                 <option value="">-- Select --</option>
                 <option value="Legal Notice">Legal Notice</option>
@@ -323,7 +328,7 @@ const NewCaseTab = () => {
               </select>
             </div>
             <div>
-              <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Brand Name</label>
+              <label className={`${labelClass} after:content-['*'] after:text-red`}>Brand Name</label>
               <select className={inputClass} name="brandName" value={formData.brandName || ''} onChange={handleChange} required>
                 <option value="">-- Select --</option>
                 <option value="Startupflora">Startupflora</option>
@@ -333,12 +338,12 @@ const NewCaseTab = () => {
 
           {/* Conditional Complaint Fields */}
           {(formData.typeOfComplaint === 'Cyber Complaint' || formData.typeOfComplaint === 'FIR' || formData.typeOfComplaint === 'Consumer Complaint') && (
-            <div className="mt-4 pt-4 border-t border-gray-100 bg-red-50/50 -mx-5 px-5 pb-2">
+            <div className="mt-6 pt-6 border-t border-border bg-red-soft/20 -mx-8 px-8 pb-4">
               {formData.typeOfComplaint === 'Cyber Complaint' && (
-                <div className="mb-3">
+                <div className="mb-4">
                   <label className={labelClass}>Cyber Acknowledgment Numbers</label>
                   {cyberAcks.map((ack, idx) => (
-                    <div key={idx} className="flex gap-2 mb-2">
+                    <div key={idx} className="flex gap-3 mb-3">
                       <input
                         type="text"
                         className={inputClass}
@@ -347,15 +352,15 @@ const NewCaseTab = () => {
                         onChange={(e) => handleCyberAckChange(idx, e.target.value)}
                       />
                       {cyberAcks.length > 1 && (
-                        <button type="button" onClick={() => removeCyberAck(idx)} className="bg-red-100 text-red-600 px-3 rounded font-bold hover:bg-red-200">×</button>
+                        <button type="button" onClick={() => removeCyberAck(idx)} className="bg-red-soft text-red px-4 rounded-xl font-black hover:bg-red hover:text-white transition-all">×</button>
                       )}
                     </div>
                   ))}
-                  <button type="button" onClick={addCyberAck} className="text-xs text-blue-600 font-semibold hover:underline mt-1">+ Add Another Number</button>
+                  <button type="button" onClick={addCyberAck} className="text-xs text-accent font-black hover:underline mt-1 uppercase tracking-widest">+ Add Another Number</button>
                 </div>
               )}
               {formData.typeOfComplaint === 'FIR' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
                   <div>
                     <label className={labelClass}>FIR Number</label>
                     <input type="text" className={inputClass} name="firNumber" value={formData.firNumber} onChange={handleChange} />
@@ -366,7 +371,7 @@ const NewCaseTab = () => {
                 </div>
               )}
               {formData.typeOfComplaint === 'Consumer Complaint' && (
-                <div className="mb-3">
+                <div className="mb-4">
                   <label className={labelClass}>Grievance Number</label>
                   <input type="text" className={inputClass} name="grievanceNumber" value={formData.grievanceNumber} onChange={handleChange} />
                 </div>
@@ -376,13 +381,13 @@ const NewCaseTab = () => {
         </div>
 
         {/* Services Sold Configuration */}
-        <div className={`${cardClass} border-yellow-400/50 shadow-[0_0_10px_rgba(250,204,21,0.05)]`}>
-          <h3 className={sectionTitleClass}><Wrench size={18} className="text-yellow-500" /> Services Sold Configuration</h3>
+        <div className={`${cardClass} border-yellow-soft/50 shadow-[0_0_10px_rgba(250,204,21,0.05)]`}>
+          <h3 className={sectionTitleClass}><Wrench size={18} className="text-yellow" /> Services Sold Configuration</h3>
 
-          <div className="flex flex-col md:flex-row gap-4 mb-5 border-b border-gray-100 pb-5">
-            <div className="w-full md:w-1/4">
+          <div className="flex flex-col lg:flex-row gap-6 mb-8 border-b border-border pb-8">
+            <div className="w-full lg:w-1/4">
               <label className={labelClass}>Service Mode</label>
-              <select className={`${inputClass} font-semibold`} value={serviceMode} onChange={(e) => {
+              <select className={`${inputClass} font-black uppercase text-[11px] tracking-widest`} value={serviceMode} onChange={(e) => {
                 setServiceMode(e.target.value);
                 if (e.target.value === 'Single Service') setServices([services[0]]);
               }}>
@@ -390,10 +395,10 @@ const NewCaseTab = () => {
                 <option value="Multiple Services">Multiple Services</option>
               </select>
             </div>
-            <div className="w-full md:w-3/4">
+            <div className="w-full lg:w-3/4">
               <label className={labelClass}>Engagement Note</label>
               <textarea
-                className={`${inputClass} h-10 border-dashed text-gray-600`}
+                className={`${inputClass} h-12 border-dashed !bg-bg-secondary italic`}
                 name="engagementNote"
                 value={formData.engagementNote}
                 onChange={handleChange}
@@ -403,16 +408,16 @@ const NewCaseTab = () => {
           </div>
 
           {services.map((svc, idx) => (
-            <div key={idx} className="relative bg-gray-50/50 p-4 rounded border border-gray-100 mb-4">
+            <div key={idx} className="relative bg-bg-input p-6 rounded-2xl border border-border mb-6">
               {services.length > 1 && (
-                <button type="button" onClick={() => removeService(idx)} className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1" title="Remove Service">
-                  <X size={16} />
+                <button type="button" onClick={() => removeService(idx)} className="absolute top-4 right-4 text-red hover:bg-red-soft p-2 rounded-xl transition-all" title="Remove Service">
+                  <X size={18} />
                 </button>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="md:col-span-2">
                   <label className={labelClass}>Service Name</label>
-                  <input type="text" className={inputClass} placeholder="Enter service" value={svc.serviceName} onChange={e => handleServiceChange(idx, 'serviceName', e.target.value)} />
+                  <input type="text" className={inputClass} placeholder="Enter service name" value={svc.serviceName} onChange={e => handleServiceChange(idx, 'serviceName', e.target.value)} />
                 </div>
                 <div>
                   <label className={labelClass}>Service Amount</label>
@@ -440,7 +445,7 @@ const NewCaseTab = () => {
                 </div>
                 <div>
                   <label className={labelClass}>BDA</label>
-                  <input type="text" className={inputClass} placeholder="Name" value={svc.bda} onChange={e => handleServiceChange(idx, 'bda', e.target.value)} />
+                  <input type="text" className={inputClass} placeholder="BDA Name" value={svc.bda} onChange={e => handleServiceChange(idx, 'bda', e.target.value)} />
                 </div>
                 <div>
                   <label className={labelClass}>Department</label>
@@ -456,38 +461,39 @@ const NewCaseTab = () => {
           ))}
 
           {serviceMode === 'Multiple Services' && (
-            <button type="button" onClick={addService} className="mt-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-1.5 px-4 rounded border border-gray-300 transition-colors flex items-center gap-2">
-              <Plus size={14} /> Add Another Service
+            <button type="button" onClick={addService} className="mt-2 text-xs bg-bg-secondary hover:bg-bg-input text-text-primary font-black py-3 px-6 rounded-2xl border-2 border-border transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
+              <Plus size={16} /> Add Another Service
             </button>
           )}
         </div>
 
         {/* Client Information */}
         <div className={cardClass}>
-          <h3 className={sectionTitleClass}><User size={18} className="text-blue-400" /> Client Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <h3 className={sectionTitleClass}><User size={18} className="text-blue" /> Client Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             <div>
-              <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Client Name</label>
+              <label className={`${labelClass} after:content-['*'] after:text-red`}>Client Name</label>
               <input type="text" className={inputClass} name="clientName" value={formData.clientName} onChange={handleChange} placeholder="Full name" required />
             </div>
             <div>
               <label className={labelClass}>Mobile</label>
-              <input type="text" className={`${inputClass} ${errors.clientMobile ? 'border-red-500 bg-red-50' : ''}`} name="clientMobile" value={formData.clientMobile} onChange={handleChange} placeholder="10 Digit Number" required />
-              {errors.clientMobile && <p className="text-[9px] text-red-500 font-bold mt-1 uppercase tracking-tighter">{errors.clientMobile}</p>}
+              <input type="text" className={`${inputClass} ${errors.clientMobile ? 'border-red bg-red-soft' : ''}`} name="clientMobile" value={formData.clientMobile} onChange={handleChange} placeholder="10 Digit Number" required />
+              {errors.clientMobile && <p className="text-[9px] text-red font-black mt-2 uppercase tracking-widest">{errors.clientMobile}</p>}
             </div>
             <div>
               <label className={labelClass}>Email</label>
-              <input type="email" className={`${inputClass} ${errors.clientEmail ? 'border-red-500 bg-red-50' : ''}`} name="clientEmail" value={formData.clientEmail || ''} onChange={handleChange} placeholder="example@gmail.com" />
-              {errors.clientEmail && <p className="text-[9px] text-red-500 font-bold mt-1 uppercase tracking-tighter">{errors.clientEmail}</p>}
+              <input type="email" className={`${inputClass} ${errors.clientEmail ? 'border-red bg-red-soft' : ''}`} name="clientEmail" value={formData.clientEmail || ''} onChange={handleChange} placeholder="example@gmail.com" />
+              {errors.clientEmail && <p className="text-[9px] text-red font-black mt-2 uppercase tracking-widest">{errors.clientEmail}</p>}
             </div>
             <div>
               <label className={labelClass}>State</label>
-              <SearchableSelect 
+              <SearchableSelect
                 name="state"
                 options={indianStates}
                 value={formData.state}
                 onChange={handleChange}
                 placeholder="Search state..."
+                className="!bg-bg-input !border-border"
               />
             </div>
           </div>
@@ -495,11 +501,11 @@ const NewCaseTab = () => {
 
         {/* Financial Details */}
         <div className={cardClass}>
-          <h3 className={sectionTitleClass}><IndianRupee size={18} className="text-orange-500" /> Financial Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <h3 className={sectionTitleClass}><IndianRupee size={18} className="text-yellow" /> Financial Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             <div>
               <label className={labelClass}>Total Amount Paid (₹)</label>
-              <input type="text" className={`${inputClass} bg-gray-50 font-bold`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" />
+              <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" />
             </div>
             <div>
               <label className={labelClass}>MOU Signed?</label>
@@ -510,19 +516,19 @@ const NewCaseTab = () => {
             </div>
             <div>
               <label className={labelClass}>Total MOU Value (₹)</label>
-              <input type="text" className={`${inputClass} bg-gray-50 font-bold`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" />
+              <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" />
             </div>
             <div>
               <label className={labelClass}>Amount In Dispute (₹)</label>
-              <input type="text" className={`${inputClass} bg-blue-50 font-bold text-blue-700`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" />
+              <input type="text" className={`${inputClass} bg-blue-soft font-black text-blue border-blue-soft`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" />
             </div>
           </div>
         </div>
 
         {/* Risk & Threat Assessment */}
         <div className={cardClass}>
-          <h3 className={sectionTitleClass}><AlertTriangle size={18} className="text-red-500" /> Risk & Threat Assessment</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <h3 className={sectionTitleClass}><AlertTriangle size={18} className="text-red" /> Risk & Threat Assessment</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             <div>
               <label className={labelClass}>Social Media Risk</label>
               <select className={inputClass} name="smRisk" value={formData.smRisk || 'None'} onChange={handleChange}>
@@ -551,57 +557,57 @@ const NewCaseTab = () => {
 
         {/* Case Narrative */}
         <div className={cardClass}>
-          <h3 className={sectionTitleClass}><FileText size={18} className="text-gray-500" /> Case Narrative</h3>
-          <div className="grid grid-cols-1 gap-4 mb-4">
+          <h3 className={sectionTitleClass}><FileText size={18} className="text-text-muted" /> Case Narrative</h3>
+          <div className="grid grid-cols-1 gap-6 mb-8">
             <div>
-              <label className={`${labelClass} after:content-['*'] after:text-red-500`}>Case Summary</label>
-              <textarea className={`${inputClass} min-h-[80px]`} name="caseSummary" value={formData.caseSummary || ''} onChange={handleChange} placeholder="Brief overview of the case..." required></textarea>
+              <label className={`${labelClass} after:content-['*'] after:text-red`}>Case Summary</label>
+              <textarea className={`${inputClass} min-h-[100px]`} name="caseSummary" value={formData.caseSummary || ''} onChange={handleChange} placeholder="Brief overview of the case..." required></textarea>
             </div>
             <div>
               <label className={labelClass}>Client's Main Allegation</label>
-              <textarea className={`${inputClass} min-h-[80px]`} name="clientAllegation" value={formData.clientAllegation || ''} onChange={handleChange} placeholder="What the client claims..."></textarea>
+              <textarea className={`${inputClass} min-h-[100px]`} name="clientAllegation" value={formData.clientAllegation || ''} onChange={handleChange} placeholder="What the client claims..."></textarea>
             </div>
           </div>
 
-          <div className="bg-gray-50 border border-gray-200 rounded p-4">
-            <label className="block text-sm font-bold text-gray-700 mb-3 uppercase tracking-wide">Proofs</label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center justify-between bg-white border border-gray-200 p-2 rounded">
-                <div className="flex items-center gap-2">
-                  <PhoneIncoming size={14} className="text-gray-400" />
-                  <span className="text-xs font-semibold text-gray-600 uppercase">Call Recording</span>
+          <div className="bg-bg-secondary border-2 border-border rounded-2xl p-4 sm:p-8">
+            <label className="block text-[11px] font-black text-text-muted mb-6 uppercase tracking-widest"> Proofs</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div className="flex items-center justify-between bg-bg-card border-2 border-border p-4 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <PhoneIncoming size={16} className="text-accent" />
+                  <span className="text-xs font-black text-text-secondary uppercase tracking-widest">Call Recording</span>
                 </div>
-                <select className="border border-gray-300 rounded text-xs p-1 outline-none" name="proofCallRec" value={formData.proofCallRec || 'No'} onChange={handleChange}>
+                <select className="bg-bg-input border border-border rounded-xl text-xs font-black p-2 outline-none" name="proofCallRec" value={formData.proofCallRec || 'No'} onChange={handleChange}>
                   <option value="No">No</option>
                   <option value="Yes">Yes</option>
                 </select>
               </div>
-              <div className="flex items-center justify-between bg-white border border-gray-200 p-2 rounded">
-                <div className="flex items-center gap-2">
-                  <MessageCircle size={14} className="text-gray-400" />
-                  <span className="text-xs font-semibold text-gray-600 uppercase">WhatsApp Chat</span>
+              <div className="flex items-center justify-between bg-bg-card border-2 border-border p-4 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <MessageCircle size={16} className="text-green" />
+                  <span className="text-xs font-black text-text-secondary uppercase tracking-widest">WhatsApp Chat</span>
                 </div>
-                <select className="border border-gray-300 rounded text-xs p-1 outline-none" name="proofWaChat" value={formData.proofWaChat || 'No'} onChange={handleChange}>
+                <select className="bg-bg-input border border-border rounded-xl text-xs font-black p-2 outline-none" name="proofWaChat" value={formData.proofWaChat || 'No'} onChange={handleChange}>
                   <option value="No">No</option>
                   <option value="Yes">Yes</option>
                 </select>
               </div>
-              <div className="flex items-center justify-between bg-white border border-gray-200 p-2 rounded">
-                <div className="flex items-center gap-2">
-                  <Video size={14} className="text-gray-400" />
-                  <span className="text-xs font-semibold text-gray-600 uppercase">Video Call</span>
+              <div className="flex items-center justify-between bg-bg-card border-2 border-border p-4 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <Video size={16} className="text-purple" />
+                  <span className="text-xs font-black text-text-secondary uppercase tracking-widest">Video Call</span>
                 </div>
-                <select className="border border-gray-300 rounded text-xs p-1 outline-none" name="proofVideoCall" value={formData.proofVideoCall || 'No'} onChange={handleChange}>
+                <select className="bg-bg-input border border-border rounded-xl text-xs font-black p-2 outline-none" name="proofVideoCall" value={formData.proofVideoCall || 'No'} onChange={handleChange}>
                   <option value="No">No</option>
                   <option value="Yes">Yes</option>
                 </select>
               </div>
-              <div className="flex items-center justify-between bg-white border border-gray-200 p-2 rounded">
-                <div className="flex items-center gap-2">
-                  <Mail size={14} className="text-gray-400" />
-                  <span className="text-xs font-semibold text-gray-600 uppercase">Funding Email</span>
+              <div className="flex items-center justify-between bg-bg-card border-2 border-border p-4 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <Mail size={16} className="text-blue" />
+                  <span className="text-xs font-black text-text-secondary uppercase tracking-widest">Funding Email</span>
                 </div>
-                <select className="border border-gray-300 rounded text-xs p-1 outline-none" name="proofFundingEmail" value={formData.proofFundingEmail || 'No'} onChange={handleChange}>
+                <select className="bg-bg-input border border-border rounded-xl text-xs font-black p-2 outline-none" name="proofFundingEmail" value={formData.proofFundingEmail || 'No'} onChange={handleChange}>
                   <option value="No">No</option>
                   <option value="Yes">Yes</option>
                 </select>
@@ -612,8 +618,8 @@ const NewCaseTab = () => {
 
         {/* Team Assignment */}
         <div className={cardClass}>
-          <h3 className={sectionTitleClass}><Users size={18} className="text-purple-500" /> Team Assignment</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className={sectionTitleClass}><Users size={18} className="text-purple" /> Team Assignment</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className={labelClass}>Initiated By</label>
               <select className={inputClass} name="initiatedBy" value={formData.initiatedBy || ''} onChange={handleChange}>
@@ -649,12 +655,12 @@ const NewCaseTab = () => {
         </div>
 
         {/* Form Actions */}
-        <div className="flex gap-3">
-          <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded shadow transition-colors flex items-center gap-2">
-            <CheckCircle size={18} /> {editCase ? 'Update Case' : 'Create Case & Generate Study'}
+        <div className="flex flex-col sm:flex-row gap-4 mb-20">
+          <button type="submit" className="w-full sm:w-auto bg-accent text-white font-black py-4 px-10 rounded-2xl shadow-xl shadow-accent-soft transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-95">
+            <CheckCircle size={20} /> {editCase ? 'Update Case Profile' : 'Submit'}
           </button>
-          <button type="button" className="bg-white hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 rounded border border-gray-300 shadow-sm transition-colors flex items-center gap-2" onClick={() => editCase ? navigate('/case-master') : window.location.reload()}>
-            <Trash2 size={18} /> {editCase ? 'Cancel Edit' : 'Clear Form'}
+          <button type="button" className="w-full sm:w-auto bg-bg-card hover:bg-bg-input text-text-primary font-black py-4 px-10 rounded-2xl border-2 border-border shadow-sm transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-95" onClick={() => editCase ? navigate('/case-master') : window.location.reload()}>
+            <Trash2 size={20} /> {editCase ? 'Cancel Edit' : 'Reset Form'}
           </button>
         </div>
 

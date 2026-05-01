@@ -23,7 +23,7 @@ router.post('/', verifyToken, async (req, res) => {
         id: Date.now().toString(),
         caseId: doc.caseId,
         eventDate: doc.dateTime,
-        source: 'Action',
+        source: req.user.fullName || 'Action',
         eventType: doc.actionType,
         summary: doc.remarks || doc.summary
     });

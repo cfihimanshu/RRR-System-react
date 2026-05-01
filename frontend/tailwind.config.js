@@ -7,28 +7,42 @@ export default {
   theme: {
     extend: {
       colors: {
+        'bg-primary': 'var(--bg-primary)',
+        'bg-secondary': 'var(--bg-secondary)',
+        'bg-card': 'var(--bg-card)',
+        'bg-input': 'var(--bg-input)',
+        'border': 'var(--border)',
+        'border-light': 'var(--border-light)',
+        'accent': 'var(--accent)',
+        'accent-hover': 'var(--accent-hover)',
+        'accent-soft': 'var(--accent-soft)',
+        'text-primary': 'var(--text-primary)',
+        'text-secondary': 'var(--text-secondary)',
+        'text-muted': 'var(--text-muted)',
         blue: {
-          light: '#e8f0fe',
-          DEFAULT: '#1a73e8',
-          dark: '#1558b0',
+          soft: 'var(--blue-soft)',
+          DEFAULT: 'var(--blue)',
         },
         green: {
-          light: '#e6f4ea',
-          DEFAULT: '#34a853',
+          soft: 'var(--green-soft)',
+          DEFAULT: 'var(--green)',
         },
         red: {
-          light: '#fce8e6',
-          DEFAULT: '#ea4335',
+          soft: 'var(--red-soft)',
+          DEFAULT: 'var(--red)',
         },
         orange: {
-          light: '#fef7e0',
-          DEFAULT: '#fbbc04',
+          soft: 'var(--orange-light)',
+          DEFAULT: 'var(--orange)',
         },
-        gray: {
-          light: '#f1f3f4',
-          border: '#dadce0',
-          DEFAULT: '#5f6368',
+        purple: {
+          soft: 'var(--purple-soft)',
+          DEFAULT: 'var(--purple)',
         },
+        yellow: {
+          soft: 'var(--yellow-soft)',
+          DEFAULT: 'var(--yellow)',
+        }
       }
     },
   },

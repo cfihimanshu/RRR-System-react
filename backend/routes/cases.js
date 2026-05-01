@@ -11,6 +11,7 @@ const Action = require('../models/Action');
 const Refund = require('../models/Refund');
 const Document = require('../models/Document');
 const History = require('../models/History');
+const Progress = require('../models/Progress');
 const { verifyToken } = require('../middleware/auth');
 const { roleGuard } = require('../middleware/roleGuard');
 
@@ -56,7 +57,7 @@ function generateCaseId(brandName, companyName, existingCases) {
 
 async function updateRelatedModels(oldId, newId) {
   if (!oldId || !newId || oldId === newId) return;
-  
+
   await Promise.all([
     Timeline.updateMany({ caseId: oldId }, { $set: { caseId: newId } }),
     Task.updateMany({ caseId: oldId }, { $set: { caseId: newId } }),
@@ -84,15 +85,15 @@ router.post('/bulk/sync-ids', verifyToken, roleGuard(['Admin']), async (req, res
   try {
     const allCases = await Case.find();
     let updatedCount = 0;
-    
+
     // Sort by createdAt to maintain original sequence
     allCases.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    
+
     const processedCases = [];
     for (const c of allCases) {
       const currentId = c.caseId || c.get('caseid');
       const correctId = generateCaseId(c.brandName, c.companyName, processedCases);
-      
+
       if (currentId !== correctId) {
         await updateRelatedModels(currentId, correctId);
         c.caseId = correctId;
@@ -102,7 +103,7 @@ router.post('/bulk/sync-ids', verifyToken, roleGuard(['Admin']), async (req, res
       }
       processedCases.push(c);
     }
-    
+
     res.json({ message: `Successfully synchronized ${updatedCount} case IDs.` });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -113,16 +114,26 @@ router.post('/bulk/sync-ids', verifyToken, roleGuard(['Admin']), async (req, res
 router.get('/', verifyToken, async (req, res) => {
   try {
     let query = {};
-    
+
     // Logic: Admin sees all. Others see only their assigned or initiated cases.
     if (req.user.role !== 'Admin') {
-      const userName = req.user.fullName?.trim();
-      const nameRegex = new RegExp(`^\\s*${userName}\\s*$`, 'i');
-      
+      const User = require('../models/User');
+      const dbUser = await User.findById(req.user.id);
+      const possibleNames = [
+        req.user.fullName,
+        dbUser?.fullName,
+        dbUser?.name,
+        req.user.email
+      ].filter(Boolean);
+
+      const regexName = possibleNames.length > 0 ? possibleNames[0] : 'UNKNOWN_USER_FALLBACK';
+
       query = {
         $or: [
-          { assignedTo: { $regex: nameRegex } },
-          { initiatedBy: { $regex: nameRegex } }
+          { assignedTo: { $in: possibleNames } },
+          { initiatedBy: { $in: possibleNames } },
+          { assignedTo: { $regex: regexName, $options: 'i' } },
+          { initiatedBy: { $regex: regexName, $options: 'i' } }
         ]
       };
     }
@@ -149,7 +160,7 @@ router.get('/available-dates', verifyToken, async (req, res) => {
         }
       })
       .filter(d => d);
-    
+
     res.json([...new Set(formattedDates)]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -163,8 +174,8 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
   try {
     const allCases = await Case.find({}, 'caseId');
     const caseId = generateCaseId(req.body.brandName, req.body.companyName, allCases);
-    const newCase = new Case({ 
-      ...req.body, 
+    const newCase = new Case({
+      ...req.body,
       caseId,
       createdDate: req.body.createdDate || new Date().toISOString(),
       lastUpdateDate: new Date().toISOString(),
@@ -182,7 +193,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
         const borderColor = isCritical ? '#ea4335' : '#1a73e8';
         const headerColor = isCritical ? '#ea4335' : '#1a73e8';
         const headerText = isCritical ? '🚨 Critical Case Created' : '📋 New Case Created';
-        const subject = isCritical 
+        const subject = isCritical
           ? `🚨 CRITICAL CASE: ${caseId} — ${req.body.typeOfComplaint}`
           : `📋 New Case Created: ${caseId}`;
 
@@ -252,11 +263,32 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       id: Date.now().toString() + Math.random().toString(36).substring(7),
       caseId: caseId,
       eventDate: new Date().toISOString(),
-      source: 'System',
+      source: req.user.fullName || req.user.email || 'System',
       eventType: 'Case Created',
       summary: 'Manual Case Creation'
     });
     await timelineEntry.save();
+
+    // Create initial Progress log to show in the Progress Timeline
+    try {
+      await Progress.create({
+        caseId: caseId,
+        stage: req.body.currentStatus || 'Case Locked',
+        percentage: 0,
+        summary: 'Case initiated and added to the register.',
+        updatedBy: req.user.fullName || req.user.email,
+        checklist: [
+          { id: 1, label: 'Initial contact made', completed: false },
+          { id: 2, label: 'Documents received ', completed: false },
+          { id: 3, label: 'MOU draft prepared', completed: false },
+          { id: 4, label: 'Signed MOU received', completed: false },
+          { id: 5, label: 'Final settlement agreed', completed: false },
+          { id: 6, label: 'Case closed', completed: false }
+        ]
+      });
+    } catch (err) {
+      console.error('Error creating initial progress log:', err);
+    }
 
     res.status(201).json(newCase);
   } catch (error) {
@@ -273,11 +305,11 @@ router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations']), asyn
 
     await Case.updateMany(
       { caseId: { $in: caseIds } },
-      { 
-        $set: { 
+      {
+        $set: {
           assignedTo,
           lastUpdateDate: new Date().toISOString()
-        } 
+        }
       }
     );
 
@@ -300,23 +332,26 @@ router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations']), asyn
 router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async (req, res) => {
   try {
     const caseId = req.params.caseId;
-    
+
     const existingCase = await Case.findOne({ caseId });
     if (!existingCase) return res.status(404).json({ error: 'Case not found' });
 
     // Ownership check: Admin and Operations can update anything. 
     // Staff/Others can only update if assigned to them.
     const canUpdate = req.user.role === 'Admin' || req.user.role === 'Operations' || existingCase.assignedTo === req.user.fullName;
-    
+
     if (!canUpdate) {
       return res.status(403).json({ error: 'You do not have permission to update this case' });
     }
 
     const isAssigning = req.body.assignedTo && req.body.assignedTo !== existingCase.assignedTo;
 
+    // Strip immutable/system fields from update payload to prevent MongoDB errors
+    const { _id, __v, caseId: bodyCaseId, createdAt, updatedAt, ...updateData } = req.body;
+
     const updated = await Case.findOneAndUpdate(
-      { caseId }, 
-      { ...req.body, lastUpdateDate: new Date().toISOString() }, 
+      { caseId },
+      { ...updateData, lastUpdateDate: new Date().toISOString() },
       { new: true }
     );
 
@@ -325,10 +360,10 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
       console.log('Assignment change detected for case:', caseId, 'New Assignee Name:', req.body.assignedTo);
       try {
         // Search user ignoring any leading/trailing spaces in DB and case-insensitive
-        const assignee = await User.findOne({ 
-          fullName: { $regex: new RegExp(`^\\s*${req.body.assignedTo.trim()}\\s*$`, 'i') } 
+        const assignee = await User.findOne({
+          fullName: { $regex: new RegExp(`^\\s*${req.body.assignedTo.trim()}\\s*$`, 'i') }
         });
-        
+
         const admins = await User.find({ role: 'Admin' });
         const adminEmails = admins.map(u => u.email).join(',');
 
@@ -458,7 +493,7 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
         caseSummary: getVal(['summary', 'description', 'caseinfo', 'narrative', 'details']),
         clientAllegation: getVal(['allegation', 'clientallegation', 'claims']),
         initiatedBy: getVal(['initiatedby', 'salesperson', 'createdby', 'initiator']),
-        servicesSold: getVal(['services', 'product', 'service', 'servicename']) ? [{ 
+        servicesSold: getVal(['services', 'product', 'service', 'servicename']) ? [{
           serviceName: getVal(['services', 'product', 'service', 'servicename']),
           serviceAmount: getVal(['serviceamount', 'price', 'cost']),
           signedMouAmount: getVal(['signedmouamount', 'mouamount']),
@@ -487,19 +522,19 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
     // Create timeline entries only if they don't already exist for these caseIds
     const timelineEntries = [];
     for (const c of finalCases) {
-       const exists = await Timeline.findOne({ caseId: c.caseId, eventType: 'Case Created' });
-       if (!exists) {
-         timelineEntries.push({
-           id: Date.now().toString() + Math.random().toString(36).substring(7),
-           caseId: c.caseId,
-           eventDate: new Date(c.createdDate || new Date()).toISOString(),
-           source: 'System',
-           eventType: 'Case Created',
-           summary: 'Imported: Bulk Import via File'
-         });
-       }
+      const exists = await Timeline.findOne({ caseId: c.caseId, eventType: 'Case Created' });
+      if (!exists) {
+        timelineEntries.push({
+          id: Date.now().toString() + Math.random().toString(36).substring(7),
+          caseId: c.caseId,
+          eventDate: new Date(c.createdDate || new Date()).toISOString(),
+          source: 'System',
+          eventType: 'Case Created',
+          summary: 'Imported: Bulk Import via File'
+        });
+      }
     }
-    
+
     if (timelineEntries.length > 0) {
       await Timeline.insertMany(timelineEntries);
     }

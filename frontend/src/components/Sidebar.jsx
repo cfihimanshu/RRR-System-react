@@ -16,26 +16,24 @@ import {
   Search,
   ClipboardEdit,
   CircleDollarSign,
-  RefreshCw,
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Menu,
   CheckSquare,
   BarChart,
-  ClipboardList
+  ClipboardList,
+  IndianRupee
 } from 'lucide-react';
 
 const tabAccess = {
   "dashboard": ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
   "new-case": ["Admin", "Operations", "Staff"],
   "case-master": ["Admin", "Operations"],
-  "history": ["Admin", "Operations", "Staff"],
-  "action-log": ["Admin", "Operations", "Staff"],
-  "comm-log": ["Admin", "Operations", "Staff"],
-  "timeline": ["Admin"],
-  "doc-index": ["Admin", "Operations", "Staff"],
-  "case-study": ["Admin", "Operations"],
+  // "history": ["Admin", "Operations", "Staff"],
+  // "action-log": ["Admin", "Operations", "Staff"],
+  // "comm-log": ["Admin", "Operations", "Staff"],
+  // "timeline": ["Admin"],
+  // "doc-index": ["Admin", "Operations", "Staff"],
   "admin-panel": ["Admin"],
   "internal-search": ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
   "reviewer-panel": ["Admin", "Reviewer"],
@@ -43,27 +41,28 @@ const tabAccess = {
   "agreement-gen": ["Admin", "Operations"],
   "my-task": ["Admin", "Operations", "Staff"],
   "sod-eod-reports": ["Admin", "Operations", "Staff"],
-  "work-report": ["Admin", "Operations"]
+  "work-report": ["Admin", "Operations"],
+  "refund-request": ["Admin", "Operations", "Staff"]
 };
 
 const tabsConfig = [
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard },
   { id: 'new-case', label: 'New Case', path: '/new-case', icon: PlusCircle },
-  { id: 'case-master', label: 'Case Master', path: '/case-master', icon: ListTodo },
-  { id: 'history', label: 'History & Update', path: '/history', icon: History },
-  { id: 'action-log', label: 'Action Log', path: '/action-log', icon: Zap },
-  { id: 'comm-log', label: 'Communication', path: '/comm-log', icon: MessageSquare },
-  { id: 'timeline', label: 'Timeline View', path: '/timeline', icon: Clock },
-  { id: 'doc-index', label: 'Document Index', path: '/doc-index', icon: FolderOpen },
-  { id: 'case-study', label: 'Case Study (Draft)', path: '/case-study', icon: FileText },
+  { id: 'case-master', label: 'My Cases', path: '/case-master', icon: ListTodo },
+  // { id: 'history', label: 'History & Update', path: '/history', icon: History },
+  // { id: 'action-log', label: 'Action Log', path: '/action-log', icon: Zap },
+  // { id: 'comm-log',             label: 'Communication',         path: '/comm-log',             icon: MessageSquare },
+  // { id: 'timeline', label: 'Timeline View', path: '/timeline', icon: Clock },
+  // { id: 'doc-index',            label: 'Document Index',        path: '/doc-index',            icon: FolderOpen },
   { id: 'admin-panel', label: 'Admin Panel', path: '/admin-panel', icon: Settings },
-  { id: 'internal-search', label: 'Data Search', path: '/internal-search', icon: Search },
+  { id: 'internal-search', label: 'Records', path: '/internal-search', icon: Search },
   { id: 'reviewer-panel', label: 'Reviewer Dashboard', path: '/reviewer-panel', icon: ClipboardEdit },
-  { id: 'accountant-dashboard', label: 'Accountant Dashboard', path: '/accountant-dashboard', icon: CircleDollarSign },
-  { id: 'agreement-gen', label: 'Agreement Generation ', path: '/agreement-gen', icon: FileText },
-  { id: 'my-task', label: 'My Task', path: '/my-task', icon: CheckSquare },
-  { id: 'sod-eod-reports', label: 'SOD/EOD Reports', path: '/sod-eod-reports', icon: ClipboardList },
+  { id: 'accountant-dashboard', label: 'Accountant', path: '/accountant-dashboard', icon: CircleDollarSign },
+  { id: 'agreement-gen', label: 'Agreement Generation', path: '/agreement-gen', icon: FileText },
+  { id: 'my-task', label: 'My Tasks', path: '/my-task', icon: CheckSquare },
+  { id: 'sod-eod-reports', label: 'Reports', path: '/sod-eod-reports', icon: ClipboardList },
   { id: 'work-report', label: 'Work Report', path: '/work-report', icon: BarChart },
+  { id: 'refund-request', label: 'Submit Refund Request', path: '/refund-request', icon: IndianRupee },
 ];
 
 const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed }) => {
@@ -82,72 +81,119 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed }) => {
     if (user) fetchCount();
   }, [user]);
 
-  const handleClearCache = () => {
-    window.location.reload(true);
-  };
-
   const visibleTabs = tabsConfig.filter(tab =>
     user && tabAccess[tab.id]?.includes(user?.role)
   );
 
   return (
     <>
-      <div className={`print:hidden fixed top-[56px] left-0 bottom-0 z-[90] flex flex-col gap-1.5 overflow-y-auto hide-scrollbar bg-gradient-to-b from-gray-900 to-gray-800 border-r border-white/10 transition-all duration-300 ease-in-out md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isCollapsed ? 'w-[70px] p-2' : 'w-[250px] p-3.5'}`}>
+      {/* Sidebar */}
+      <aside
+        className={`
+          print:hidden flex-shrink-0 flex flex-col
+          bg-[var(--bg-secondary)] border-r border-[var(--border)]
+          transition-all duration-300 ease-in-out
+          h-full overflow-hidden
+          md:translate-x-0
+          fixed md:relative top-[56px] md:top-0 left-0 z-[90]
+          ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          ${isCollapsed ? 'w-[70px]' : 'w-[250px]'}
+        `}
+      >
+        {/* Collapse Toggle Button */}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="hidden md:flex items-center justify-center absolute -right-3 top-6 z-10 w-6 h-6 rounded-full bg-[var(--bg-card)] border-2 border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-all duration-200 shadow-lg"
+          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {isCollapsed
+            ? <ChevronRight size={12} strokeWidth={3} />
+            : <ChevronLeft size={12} strokeWidth={3} />
+          }
+        </button>
 
-        <div className="flex-1 overflow-y-auto flex flex-col gap-1.5 hide-scrollbar mt-2">
+        {/* Nav Items */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 flex flex-col gap-1 px-2 hide-scrollbar">
           {visibleTabs.map(tab => (
             <NavLink
               key={tab.id}
               to={tab.path}
+              end={tab.path === '/'}
               title={isCollapsed ? tab.label : ''}
-              className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 text-[13px] text-gray-300 border-l-4 border-transparent whitespace-nowrap transition-all rounded-lg hover:text-white hover:bg-white/10 ${isCollapsed ? 'justify-center' : ''} ${isActive ? 'text-white font-semibold !border-blue-400 bg-blue-500/25' : ''}`}
+              className={({ isActive }) =>
+                `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[12px] font-semibold tracking-wide transition-all duration-200 cursor-pointer select-none
+                ${isActive
+                  ? 'bg-[var(--accent-soft)] text-[var(--accent)] shadow-[0_0_15px_rgba(249,115,22,0.08)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-card)] hover:text-[var(--text-primary)]'
+                }
+                ${isCollapsed ? 'justify-center' : ''}`
+              }
               onClick={() => {
                 if (window.innerWidth <= 768) setSidebarOpen(false);
               }}
             >
               {({ isActive }) => (
                 <>
-                  <tab.icon size={20} className={`${isActive ? 'text-blue-400' : 'opacity-80'}`} />
-                  {!isCollapsed && <span>{tab.label}</span>}
+                  {/* Active accent bar */}
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[var(--accent)] rounded-full shadow-[0_0_8px_var(--accent)]" />
+                  )}
+                  <tab.icon
+                    size={18}
+                    strokeWidth={isActive ? 2.5 : 2}
+                    className={`flex-shrink-0 transition-colors duration-200
+                      ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'}
+                    `}
+                  />
+                  {!isCollapsed && (
+                    <span className="truncate leading-none">{tab.label}</span>
+                  )}
                 </>
               )}
             </NavLink>
           ))}
-        </div>
+        </nav>
 
         {/* Bottom Actions */}
-        <div className={`mt-auto pt-4 border-t border-white/10 flex flex-col gap-2 shrink-0 ${isCollapsed ? 'items-center' : ''}`}>
+        <div className={`shrink-0 border-t border-[var(--border)] p-2 flex flex-col gap-1.5 ${isCollapsed ? 'items-center' : ''}`}>
+          {/* Case count badge */}
           <div
-            className={`bg-[#2D3748] text-[#E2E8F0] border border-[#4A5568] text-center py-2 rounded-lg text-[13px] font-semibold tracking-wide cursor-default shadow-sm ${isCollapsed ? 'w-10 h-10 flex items-center justify-center p-0 text-[10px]' : 'px-2'}`}
-            title={`${caseCount} cases`}
+            title={`${caseCount} cases tracked`}
+            className={`
+              flex items-center gap-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border)]
+              text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest
+              ${isCollapsed ? 'w-10 h-10 justify-center' : 'px-3 py-2.5 justify-start'}
+            `}
           >
-            {isCollapsed ? caseCount : `${caseCount} cases`}
+            <span className="text-[var(--accent)] font-black">{caseCount}</span>
+            {!isCollapsed && <span>cases tracked</span>}
           </div>
-          <button
-            onClick={handleClearCache}
-            title="Clear Cache"
-            className={`bg-[#1A202C] text-[#A0AEC0] border border-[#2D3748] hover:bg-[#2D3748] hover:text-white transition-colors text-center py-2 rounded-lg text-[13px] font-semibold flex items-center justify-center gap-2 shadow-sm ${isCollapsed ? 'w-10 h-10' : ''}`}
-          >
-            <RefreshCw size={16} />
-            {!isCollapsed && <span>Clear Cache</span>}
-          </button>
+
+
+          {/* Logout */}
           <button
             onClick={logout}
-            title="Logout"
-            className={`bg-[#E53E3E] hover:bg-[#C53030] text-white border border-[#E53E3E] transition-colors text-center py-2 rounded-lg text-[13px] font-semibold flex items-center justify-center gap-2 shadow-sm ${isCollapsed ? 'w-10 h-10' : ''}`}
+            title="Sign Out"
+            className={`
+              flex items-center gap-2 rounded-xl border border-red-500/20
+              bg-red-500/5 text-red-400
+              hover:bg-red-500 hover:text-white hover:border-red-500
+              transition-all text-[11px] font-black uppercase tracking-widest
+              ${isCollapsed ? 'w-10 h-10 justify-center' : 'px-3 py-2.5'}
+            `}
           >
-            <LogOut size={16} />
-            {!isCollapsed && <span>Logout</span>}
+            <LogOut size={14} />
+            {!isCollapsed && <span>Sign Out</span>}
           </button>
         </div>
-      </div>
+      </aside>
 
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="md:hidden fixed inset-0 top-[56px] bg-black/40 z-[80]"
+          className="md:hidden fixed inset-0 top-[56px] bg-black/50 backdrop-blur-sm z-[80]"
           onClick={() => setSidebarOpen(false)}
-        ></div>
+        />
       )}
     </>
   );

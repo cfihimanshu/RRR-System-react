@@ -3,19 +3,22 @@ const mongoose = require('mongoose');
 const actionSchema = new mongoose.Schema({
   actionId: String,
   caseId: String,
-  dateTime: String,
-  dept: String,
+  dateTime: { type: Date, default: Date.now },
+  actionModality: String,
+  operatorNode: String,
+  remarks: String,
+  nextScheduledDate: String,
+  attachment: String,
+  stateChangeAuthorization: {
+    type: String,
+    enum: ['New', 'In-progress', 'Settled', 'Stucked'],
+    default: 'New'
+  },
   doneBy: String,
+  // Keep some old fields for compatibility
   actionType: String,
   summary: String,
-  notes: String,
-  clientResp: String,
-  observation: String,
-  nextAction: String,
-  nextActionBy: String,
-  nextActionDate: String,
-  fileLink: String,
-  remarks: String
-});
+  fileLink: String
+}, { timestamps: true });
 
 module.exports = mongoose.model('Action', actionSchema);

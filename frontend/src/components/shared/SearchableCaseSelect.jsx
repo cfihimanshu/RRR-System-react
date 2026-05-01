@@ -44,11 +44,11 @@ const SearchableCaseSelect = ({ cases, value, onChange, placeholder = "Type or s
 
   return (
     <div className="relative w-full" ref={wrapperRef}>
-      <div className="relative">
+      <div className="relative group">
         <input
           type="text"
           name={name}
-          className="w-full border border-gray-300 rounded-md p-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all pr-10"
+          className="w-full bg-bg-input border-2 border-border rounded-[1.5rem] px-6 py-4 text-sm font-black text-text-primary outline-none focus:border-accent transition-all pr-12 shadow-inner placeholder:text-text-muted/50"
           placeholder={placeholder}
           value={searchTerm}
           onChange={handleInputChange}
@@ -57,30 +57,30 @@ const SearchableCaseSelect = ({ cases, value, onChange, placeholder = "Type or s
           autoComplete="off"
         />
         <div 
-          className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-400"
+          className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-text-muted group-focus-within:text-accent transition-colors"
           onClick={() => setIsOpen(!isOpen)}
         >
-          <svg className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          <svg className={`w-5 h-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7" />
           </svg>
         </div>
       </div>
 
       {isOpen && (
-        <div className="absolute z-[100] w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-2xl max-h-[350px] overflow-y-auto hide-scrollbar animate-in slide-in-from-top-2 duration-200">
+        <div className="absolute z-[100] w-full mt-3 bg-bg-card border-2 border-border rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-h-[350px] overflow-y-auto hide-scrollbar animate-in slide-in-from-top-4 fade-in duration-300 backdrop-blur-xl">
           {filteredCases.length > 0 ? (
             filteredCases.map((c) => (
               <div
                 key={c.caseId}
-                className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                className="px-6 py-4 hover:bg-bg-input cursor-pointer transition-all border-b border-border/50 last:border-0 flex flex-col gap-1"
                 onClick={() => handleSelect(c.caseId)}
               >
-                <div className="font-bold text-blue-700">{c.caseId}</div>
-                <div className="text-[11px] text-gray-500 truncate">{c.companyName || c.clientName}</div>
+                <div className="font-black text-accent uppercase tracking-tighter text-xs">{c.caseId}</div>
+                <div className="text-[10px] text-text-muted font-bold uppercase tracking-wide truncate">{c.companyName || c.clientName}</div>
               </div>
             ))
           ) : (
-            <div className="px-4 py-3 text-sm text-gray-400 italic">No matching cases</div>
+            <div className="px-6 py-6 text-xs text-text-muted font-black uppercase tracking-widest text-center opacity-50 italic">No matching records</div>
           )}
         </div>
       )}

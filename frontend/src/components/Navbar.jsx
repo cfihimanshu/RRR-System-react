@@ -8,33 +8,39 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
   const { user, logout } = useContext(AuthContext);
 
   return (
-    <div className="print:hidden bg-gradient-to-r from-blue-600 to-blue-800 text-white flex items-center px-5 h-14 gap-4 sticky top-0 z-50 shadow-md">
+    <div className="navbar print:hidden shadow-lg">
       {/* Mobile Toggle */}
-      <button className="md:hidden flex items-center justify-center min-w-[40px] px-2 py-1.5 border border-white/20 rounded hover:bg-white/10 transition-colors" onClick={toggleSidebar}>
+      <button className="md:hidden flex items-center justify-center min-w-[40px] px-2 py-1.5 border border-gray-800/70 rounded hover:bg-gray-700/20 transition-colors" onClick={toggleSidebar}>
         <Menu size={20} />
       </button>
 
       {/* Desktop Collapse Toggle */}
       <button 
-        className="hidden md:flex items-center justify-center min-w-[40px] h-10 w-10 hover:bg-white/10 rounded-lg transition-colors" 
+        className="hidden md:flex items-center justify-center min-w-[40px] h-10 w-10 hover:bg-white/5 rounded-lg transition-colors" 
         onClick={toggleCollapse}
         title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
       >
-        <Menu size={22} />
+        <Menu size={22} className="text-gray-400 hover:text-white" />
       </button>
 
       <div className="flex items-center gap-2 cursor-pointer transition-transform hover:scale-105 active:scale-95" onClick={toggleCollapse}>
-        <img src={logo} alt="RRR Engine Logo" className="h-12 md:h-13 w-auto object-contain" />
+        <img src={logo} alt="RRR Engine Logo" className="h-10 md:h-11 w-auto object-contain" />
       </div>
-      <div className="ml-auto flex items-center gap-3 text-sm">
-        <div className="bg-white/15 px-3 py-1 rounded-full text-xs hidden sm:block">
+
+      <div className="ml-auto flex items-center gap-4 text-sm">
+        <div className="clock hidden sm:flex items-center bg-gray-900/50 px-4 py-1.5 rounded-full">
           {format(new Date(), 'dd MMM yyyy, hh:mm a')}
         </div>
-        <span className="opacity-80 hidden md:inline-block">
-          {user?.fullName && <b className="mr-2">{user.fullName}</b>}
-          ({user?.role})
-        </span>
-        <button onClick={logout} className="ml-2 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors shadow-sm">
+        
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/30 hidden md:flex">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+          <span className="text-gray-300 font-medium">
+            {user?.fullName && <b className="text-white mr-1.5">{user.fullName}</b>}
+            <span className="text-[10px] opacity-60 uppercase tracking-wider">{user?.role}</span>
+          </span>
+        </div>
+
+        <button onClick={logout} className="btn btn-primary !py-2 !px-4 !text-[11px] shadow-lg shadow-orange-900/20">
           Logout
         </button>
       </div>

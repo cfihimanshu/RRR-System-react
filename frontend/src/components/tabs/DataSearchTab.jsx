@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
-import { FileSpreadsheet, Search, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, Search, Loader2, Database, ExternalLink, FileText, ArrowLeft } from 'lucide-react';
 
 const DataSearchTab = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -10,6 +10,7 @@ const DataSearchTab = () => {
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [view, setView] = useState('menu'); // 'menu' | 'data-search'
   const { user } = useContext(AuthContext);
 
   // Search logic with debounce
@@ -58,20 +59,58 @@ const DataSearchTab = () => {
     }
   };
 
-  const inputClass = "w-full border border-gray-300 rounded-lg p-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none shadow-sm transition-all bg-white";
+  const inputClass = "w-full bg-bg-card border-2 border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-text-primary focus:border-accent focus:ring-4 focus:ring-accent-soft outline-none shadow-sm transition-all font-medium";
 
   return (
-    <div className="h-full bg-gray-50 p-4 md:p-6 flex flex-col overflow-hidden">
+    <div className="h-full bg-bg-primary p-4 md:p-8 flex flex-col overflow-hidden animate-in fade-in duration-300">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 flex-shrink-0 gap-6 bg-bg-card p-10 rounded-2xl border-2 border-border shadow-sm">
         <div>
-          <h1 className="text-xl font-bold text-gray-800"> Data Search</h1>
-          <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 uppercase tracking-tight">
-            {totalCount} {totalCount === 1000 ? ' (Limit reached)' : 'Records found'}
+          <div className="flex items-center gap-4 mb-4">
+            {view === 'data-search' && (
+              <button
+                onClick={() => setView('menu')}
+                className="p-2.5 bg-bg-input rounded-xl hover:bg-accent-soft text-text-muted hover:text-accent transition-all active:scale-90"
+                title="Back to Records"
+              >
+                <ArrowLeft size={20} strokeWidth={3} />
+              </button>
+            )}
+            <h1 className="text-3xl font-black text-accent tracking-tight uppercase leading-none">
+              {view === 'menu' ? 'Records' : 'Data Search'}
+            </h1>
           </div>
+
+          {view === 'menu' && (
+            <div className="flex flex-wrap items-center gap-4 mt-2">
+              <button
+                onClick={() => setView('data-search')}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-bg-input hover:bg-accent-soft hover:text-accent border border-border hover:border-accent-soft text-text-primary transition-all group font-black text-xs uppercase tracking-widest shadow-sm"
+              >
+                <Database size={16} className="text-text-muted group-hover:text-accent" />
+                Data Search
+              </button>
+
+              <button
+                onClick={() => window.open('https://crm.startupflora.com/web/login', '_blank')}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-bg-input hover:bg-purple-900/20 hover:text-purple-400 border border-border hover:border-purple-500/30 text-text-primary transition-all group font-black text-xs uppercase tracking-widest shadow-sm"
+              >
+                <ExternalLink size={16} className="text-text-muted group-hover:text-purple-400" />
+                Odoo
+              </button>
+
+              <button
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-bg-input/50 border border-border/50 text-text-muted cursor-not-allowed font-black text-xs uppercase tracking-widest"
+                title="Coming Soon"
+              >
+                <FileText size={16} className="opacity-50" />
+                MOU
+              </button>
+            </div>
+          )}
         </div>
 
-        {user?.role === 'Admin' && (
+        {view === 'data-search' && user?.role === 'Admin' && (
           <div className="relative w-full md:w-auto">
             <input
               type="file"
@@ -82,106 +121,126 @@ const DataSearchTab = () => {
             />
             <label
               htmlFor="sample-excel-upload"
-              className={`cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all text-[10px] uppercase tracking-wider ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`cursor-pointer bg-green text-white font-black py-4 px-10 rounded-2xl shadow-sm flex items-center justify-center gap-3 transition-all text-xs uppercase tracking-[0.2em] active:scale-95 ${importing ? 'opacity-50 cursor-wait' : 'hover:bg-green-600 hover:-translate-y-1'}`}
             >
-              <FileSpreadsheet size={16} />
-              {importing ? 'Uploading...' : 'Upload Sample Excel'}
+              <FileSpreadsheet size={20} />
+              {importing ? 'Initializing Upload...' : 'Upload Sample Data'}
             </label>
           </div>
         )}
       </div>
 
-      {/* Search Bar */}
-      <div className="mb-6 max-w-4xl mx-auto w-full flex-shrink-0">
-        <div className="relative">
-          <input
-            type="text"
-            className={inputClass}
-            placeholder="Type Company Name, Contact, BDE or Email to search..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          {loading && (
-            <div className="absolute right-4 top-1/2 -translate-y-1/2">
-              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Results Table - Scrollable Container */}
-      <div className="bg-white rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
-        <div className="overflow-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-          <table className="w-full text-left border-collapse table-auto min-w-[1200px]">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-blue-800 text-white text-[10px] font-bold tracking-wider uppercase">
-                <th className="px-2 py-3 whitespace-nowrap w-[80px]">Date</th>
-                <th className="px-2 py-3">Company Name</th>
-                <th className="px-2 py-3">Contact Person</th>
-                <th className="px-2 py-3 whitespace-nowrap w-[100px]">Contact</th>
-                <th className="px-2 py-3 min-w-[200px]">Email ID</th>
-                <th className="px-2 py-3">Service</th>
-                <th className="px-2 py-3 w-[80px]">BDE</th>
-                <th className="px-2 py-3 text-center">Total (With GST)</th>
-                <th className="px-2 py-3 text-center">Amt (No GST)</th>
-                <th className="px-2 py-3 w-[80px]">Work Status</th>
-                <th className="px-2 py-3 w-[80px]">Dept</th>
-                <th className="px-2 py-3 w-[50px]">MOU Status</th>
-                <th className="px-2 py-3">Remarks</th>
-                <th className="px-2 py-3 text-center">MOU Amt</th>
-              </tr>
-            </thead>
-            <tbody className="text-[11px] text-gray-700 divide-y divide-gray-100">
-              {loading ? (
-                <tr>
-                  <td colSpan="14" className="px-6 py-20 text-center text-gray-500">
-                    <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                      <span className="font-bold text-gray-600 text-sm">Loading data...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : results.length === 0 ? (
-                <tr>
-                  <td colSpan="14" className="px-6 py-20 text-center text-gray-500">
-                    <div className="flex flex-col items-center gap-2">
-                      <Search size={40} className="text-gray-300 mb-2" />
-                      <span>{searchTerm ? "No matching data found." : "No data available in the database. Upload an Excel file to get started."}</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                results.map(r => (
-                  <tr key={r._id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-2 py-3 text-gray-500 whitespace-nowrap">{r.date || '-'}</td>
-                    <td className="px-2 py-3 font-semibold text-gray-900 leading-tight">{r.companyName || '-'}</td>
-                    <td className="px-2 py-3 text-gray-600 leading-tight">{r.contactPerson || '-'}</td>
-                    <td className="px-2 py-3 font-mono text-gray-700 whitespace-nowrap">{r.contact || '-'}</td>
-                    <td className="px-2 py-3 text-blue-600 break-all">{r.emailId || '-'}</td>
-                    <td className="px-2 py-3 leading-tight">{r.service || '-'}</td>
-                    <td className="px-2 py-3 font-medium text-gray-800 leading-tight">{r.bde || '-'}</td>
-                    <td className="px-2 py-3 text-center font-bold">₹{r.totalAmountWithGst || '0'}</td>
-                    <td className="px-2 py-3 text-center text-green-600 font-bold">₹{r.amtWithoutGst || '0'}</td>
-                    <td className="px-2 py-3">
-                      <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border">
-                        {r.workStatus || '-'}
-                      </span>
-                    </td>
-                    <td className="px-2 py-3 font-semibold text-purple-600 leading-tight">{r.department || '-'}</td>
-                    <td className="px-2 py-3">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${r.mouStatus === 'Signed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
-                        {r.mouStatus || '-'}
-                      </span>
-                    </td>
-                    <td className="px-2 py-3 text-gray-500 text-[10px] leading-tight italic max-w-[150px] truncate" title={r.remarks}>{r.remarks || '-'}</td>
-                    <td className="px-2 py-3 text-center font-bold text-indigo-600">₹{r.mouSignedAmount || '0'}</td>
-                  </tr>
-                ))
+      {/* Content Section (Only visible in data-search view) */}
+      {view === 'data-search' && (
+        <>
+          {/* Search Bar */}
+          <div className="mb-10 max-w-6xl mx-auto w-full flex-shrink-0 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="relative group">
+              <div className="absolute left-6 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-accent transition-colors">
+                <Search size={22} strokeWidth={3} />
+              </div>
+              <input
+                type="text"
+                className="w-full bg-bg-card border-2 border-border rounded-2xl pl-16 pr-6 py-5 text-sm font-black text-text-primary focus:border-accent focus:ring-8 focus:ring-accent-soft outline-none shadow-sm transition-all tracking-tight placeholder:text-text-muted/40 uppercase"
+                placeholder="Search: Company, Contact, BDE or Email ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {loading && (
+                <div className="absolute right-6 top-1/2 -translate-y-1/2 bg-bg-card p-2 rounded-xl">
+                  <Loader2 className="w-6 h-6 text-accent animate-spin" />
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
+          </div>
+
+          {/* Results Table - Scrollable Container */}
+          <div className="bg-bg-card rounded-2xl shadow-sm border-2 border-border overflow-hidden flex-1 flex flex-col mb-4">
+            <div className="overflow-auto flex-1 scrollbar-thin scrollbar-thumb-accent-soft">
+              <table className="w-full text-left border-collapse table-auto min-w-[1800px]">
+                <thead className="sticky top-0 z-20">
+                  <tr className="bg-bg-secondary text-text-muted text-[10px] font-black tracking-[0.25em] uppercase border-b-2 border-border">
+                    <th className="px-6 py-6 whitespace-nowrap w-[120px]">TIME</th>
+                    <th className="px-6 py-6">Company Name</th>
+                    <th className="px-6 py-6">Contact Person</th>
+                    <th className="px-6 py-6 whitespace-nowrap w-[150px]">Contact</th>
+                    <th className="px-6 py-6 min-w-[300px]">Email</th>
+                    <th className="px-6 py-6">Service </th>
+                    <th className="px-6 py-6 w-[140px]">BDE</th>
+                    <th className="px-6 py-6 text-center">Total (With GST)</th>
+                    <th className="px-6 py-6 text-center">Amt (No GST)</th>
+                    <th className="px-6 py-6 w-[150px]">Work Status</th>
+                    <th className="px-6 py-6 w-[150px]">Dept </th>
+                    <th className="px-6 py-6 w-[120px]">MOU Status</th>
+                    <th className="px-6 py-6"> Remarks</th>
+                    <th className="px-6 py-6 text-center">MOU Amt</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[11px] text-text-secondary divide-y divide-border">
+                  {loading ? (
+                    <tr>
+                      <td colSpan="14" className="px-6 py-24 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="p-4 bg-bg-input rounded-full">
+                            <Loader2 className="w-10 h-10 text-accent animate-spin" />
+                          </div>
+                          <span className="font-black text-text-muted text-xs uppercase tracking-widest">Compiling Database...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : results.length === 0 ? (
+                    <tr>
+                      <td colSpan="14" className="px-6 py-24 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="p-6 bg-bg-input rounded-full opacity-20">
+                            <Search size={48} className="text-text-muted" />
+                          </div>
+                          <span className="text-text-muted font-black uppercase tracking-widest text-xs">
+                            {searchTerm ? "No matching data found in archives." : "Database empty. Upload Excel to begin indexing."}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    results.map(r => (
+                      <tr key={r._id} className="hover:bg-bg-input/70 transition-all group border-b border-border/50 last:border-0">
+                        <td className="px-6 py-6 text-text-muted whitespace-nowrap font-black uppercase tracking-tighter opacity-60">{r.date || '—'}</td>
+                        <td className="px-6 py-6">
+                          <div className="font-black text-text-primary leading-tight text-sm tracking-tight group-hover:text-accent transition-all capitalize">{r.companyName || '—'}</div>
+                        </td>
+                        <td className="px-6 py-6 text-text-secondary leading-tight font-black uppercase text-[10px] tracking-wide">{r.contactPerson || '—'}</td>
+                        <td className="px-6 py-6">
+                          <span className="font-mono text-text-primary font-black whitespace-nowrap bg-bg-input px-3 py-1.5 rounded-lg border border-border shadow-inner text-[10px]">{r.contact || '—'}</span>
+                        </td>
+                        <td className="px-6 py-6 text-accent font-black break-all group-hover:underline cursor-pointer tracking-tight text-[10px] uppercase opacity-80">{r.emailId || '—'}</td>
+                        <td className="px-6 py-6 leading-tight italic text-text-muted font-medium text-[10px] uppercase">"{r.service || '—'}"</td>
+                        <td className="px-6 py-6">
+                          <span className="font-black text-text-primary leading-tight uppercase text-[10px] tracking-widest bg-bg-input px-3 py-1 rounded-lg border border-border">{r.bde || '—'}</span>
+                        </td>
+                        <td className="px-6 py-6 text-center font-black text-text-primary text-[10px]">₹{r.totalAmountWithGst || '0'}</td>
+                        <td className="px-6 py-6 text-center text-green font-black text-[10px]">₹{r.amtWithoutGst || '0'}</td>
+                        <td className="px-6 py-6">
+                          <span className="bg-bg-secondary text-text-muted px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border-2 border-border shadow-sm">
+                            {r.workStatus || '—'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-6 font-black text-purple leading-tight uppercase text-[10px] tracking-[0.2em]">{r.department || '—'}</td>
+                        <td className="px-6 py-6">
+                          <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border-2 shadow-sm transition-all ${r.mouStatus === 'Signed' ? 'bg-green-soft text-green border-green-soft' : 'bg-bg-input text-text-muted border-border'}`}>
+                            {r.mouStatus || '—'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-6 text-text-muted text-[9px] font-medium leading-relaxed italic max-w-[250px] truncate opacity-70" title={r.remarks}>"{r.remarks || '—'}"</td>
+                        <td className="px-6 py-6 text-center font-black text-accent text-sm tracking-tight bg-accent-soft/10">₹{r.mouSignedAmount || '0'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

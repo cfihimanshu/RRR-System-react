@@ -38,6 +38,7 @@ router.post('/generate', verifyToken, async (req, res) => {
     // We will generate a PDF natively using MS Word via PowerShell
     // Use the system's temp directory which is writable on Vercel (/tmp)
     const tempDir = os.tmpdir();
+    const timestamp = Date.now();
     
     const tempDocxPath = path.join(tempDir, `agreement_${timestamp}.docx`);
     const tempPdfPath = path.join(tempDir, `agreement_${timestamp}.pdf`);

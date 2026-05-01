@@ -42,7 +42,8 @@ const caseSchema = new mongoose.Schema({
   firFileLink: String,
   grievanceNumber: String,
   caseStudyGeneratedAt: String,
-  assignedTo: String // The Full Name of the assigned user
+  assignedTo: String,
+  progressPercentage: { type: Number, default: 0 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Case', caseSchema);

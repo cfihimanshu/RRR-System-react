@@ -74,15 +74,42 @@ app.use('/api/agreements', require('./routes/agreements'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/users', require('./routes/users'));
+app.use('/api/progress', require('./routes/progress'));
 
 app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async (req, res) => {
   try {
     const Case = require('./models/Case');
+    const User = require('./models/User');
     let query = {};
 
-    // Ownership check for non-admins
+    // Get the most up-to-date user info if fullName is missing from token
+    let userName = req.user.fullName;
+    if (!userName) {
+      const dbUser = await User.findById(req.user.id);
+      userName = dbUser?.fullName || dbUser?.name;
+    }
+    userName = userName?.trim();
+
+    // Ownership check for non-admins (Assigned or Initiated)
     if (req.user.role !== 'Admin') {
-      query.assignedTo = req.user.fullName;
+      const dbUser = await User.findById(req.user.id);
+      const possibleNames = [
+        req.user.fullName,
+        dbUser?.fullName,
+        dbUser?.name,
+        req.user.email
+      ].filter(Boolean);
+
+      const regexName = possibleNames.length > 0 ? possibleNames[0] : 'UNKNOWN_USER_FALLBACK';
+
+      query = {
+        $or: [
+          { assignedTo: { $in: possibleNames } },
+          { initiatedBy: { $in: possibleNames } },
+          { assignedTo: { $regex: regexName, $options: 'i' } },
+          { initiatedBy: { $regex: regexName, $options: 'i' } }
+        ]
+      };
     }
 
     const totalCases = await Case.countDocuments(query);

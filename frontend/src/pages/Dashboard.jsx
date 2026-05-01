@@ -22,6 +22,7 @@ import AgreementGenerationTab from '../components/tabs/AgreementGenerationTab';
 import MyTaskTab from '../components/tabs/MyTaskTab';
 import SodEodReportTab from '../components/tabs/SodEodReportTab';
 import WorkReportTab from '../components/tabs/WorkReportTab';
+import RefundRequestTab from '../components/tabs/RefundRequestTab';
 
 const ProtectedRoute = ({ children, allowedRoles, id }) => {
   const { user } = useContext(AuthContext);
@@ -35,7 +36,6 @@ const ProtectedRoute = ({ children, allowedRoles, id }) => {
     "comm-log":             ["Admin", "Operations", "Staff"],
     "timeline":             ["Admin"],
     "doc-index":            ["Admin", "Operations", "Staff"],
-    "case-study":           ["Admin", "Operations"],
     "admin-panel":          ["Admin"],
     "internal-search":      ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
     "reviewer-panel":       ["Admin", "Reviewer"],
@@ -43,7 +43,8 @@ const ProtectedRoute = ({ children, allowedRoles, id }) => {
     "agreement-gen":        ["Admin", "Operations"],
     "my-task":              ["Admin", "Operations", "Staff"],
     "sod-eod-reports":      ["Admin", "Operations", "Staff"],
-    "work-report":          ["Admin", "Operations"]
+    "work-report":          ["Admin", "Operations"],
+    "refund-request":       ["Admin", "Operations", "Staff"]
   };
 
   if (!user) return <Navigate to="/login" />;
@@ -54,10 +55,10 @@ const ProtectedRoute = ({ children, allowedRoles, id }) => {
 
 const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <div className="app-container h-screen bg-gray-50 flex flex-col overflow-hidden">
+    <div className="app-container h-screen flex flex-col overflow-hidden">
       <Navbar 
         toggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
         toggleCollapse={() => setIsCollapsed(!isCollapsed)}
@@ -70,7 +71,7 @@ const Dashboard = () => {
           isCollapsed={isCollapsed}
           setIsCollapsed={setIsCollapsed}
         />
-        <div className={`flex-1 overflow-auto transition-all duration-300 ${isCollapsed ? 'md:ml-[70px]' : 'md:ml-[250px]'}`}>
+        <div className={`flex-1 overflow-auto transition-all duration-300 ease-in-out`}>
           <div className="main h-full p-0 flex flex-col">
           <Routes>
             <Route path="/" element={<DashboardTab />} />
@@ -103,9 +104,6 @@ const Dashboard = () => {
               <ProtectedRoute id="doc-index"><DocIndexTab /></ProtectedRoute>
             } />
             
-            <Route path="/case-study" element={
-              <ProtectedRoute id="case-study"><CaseStudyTab /></ProtectedRoute>
-            } />
             
             <Route path="/admin-panel" element={
               <ProtectedRoute id="admin-panel"><AdminPanelTab /></ProtectedRoute>
@@ -137,6 +135,10 @@ const Dashboard = () => {
             
             <Route path="/work-report" element={
               <ProtectedRoute id="work-report"><WorkReportTab /></ProtectedRoute>
+            } />
+
+            <Route path="/refund-request" element={
+              <ProtectedRoute id="refund-request"><RefundRequestTab /></ProtectedRoute>
             } />
           </Routes>
         </div>

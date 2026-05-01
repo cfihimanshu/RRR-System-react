@@ -26,15 +26,46 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async (req, res) => {
+  console.log("Incoming Refund Request Body:", JSON.stringify(req.body, null, 2));
   try {
+    const { 
+      caseId, 
+      amount, 
+      summary, 
+      bankName, 
+      accHolder, 
+      ifsc, 
+      accNum, 
+      branch, 
+      accType, 
+      requestedByName, 
+      installments 
+    } = req.body;
+
     const doc = new Refund({
-      ...req.body,
-      status: "Pending Review", // Stage 1: Reviewer
+      caseId,
+      amount: String(amount),
+      summary,
+      bankName,
+      accHolder,
+      ifsc,
+      accNum,
+      branch,
+      accType,
+      requestedBy: req.user.email,
+      requestedByName: requestedByName || req.user.fullName || "",
+      installments: Array.isArray(installments) ? installments.map(inst => ({
+        amount: String(inst.amount),
+        dueDate: inst.dueDate,
+        status: inst.status || 'Pending'
+      })) : [],
+      status: "Pending Review",
       lastStatusAtMs: Date.now(),
-      timestamp: new Date().toISOString(),
-      requestedBy: req.user.email
+      timestamp: new Date().toISOString()
     });
+
     await doc.save();
+    console.log("Refund Saved Successfully:", doc._id);
 
     // Notify Reviewers and Admins
     try {
@@ -68,14 +99,8 @@ router.put('/:id', verifyToken, async (req, res) => {
 
     let newStatus = req.body.status;
     
-    // Workflow Transitions logic
-    if (req.user.role === 'Reviewer' && newStatus === 'Approved') {
-      newStatus = 'Pending Admin Approval'; // Moves to Admin
-    } else if (req.user.role === 'Admin' && newStatus === 'Approved') {
-      newStatus = 'Pending Payment'; // Moves to Accountant
-    } else if (req.user.role === 'Accountant' && newStatus === 'Paid') {
-      newStatus = 'Paid'; // Final Stage
-    }
+    // Workflow Security: You can add role-based enforcement here if needed.
+    // For now, we trust the explicit status from the authorized consoles.
 
     const doc = await Refund.findByIdAndUpdate(req.params.id, {
       ...req.body,

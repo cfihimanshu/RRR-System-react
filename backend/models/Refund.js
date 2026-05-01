@@ -6,6 +6,7 @@ const refundSchema = new mongoose.Schema({
   caseId: String,
   amount: String,
   requestedBy: String,
+  requestedByName: String,
   summary: String,
   ifsc: String,
   accNum: String,
@@ -22,6 +23,11 @@ const refundSchema = new mongoose.Schema({
   paymentDate: String,
   paymentProof: String,
   paidBy: String,
+  installments: [{
+    amount: String,
+    dueDate: String,
+    status: { type: String, default: 'Pending' }
+  }],
   lastStatusAtMs: Number,
   timestamp: String
 });
