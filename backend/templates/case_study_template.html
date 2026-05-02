@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 40px;
+            color: #1f2937;
+            background: white;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .top-line {
+            border-top: 1px solid #3b82f6;
+            margin-bottom: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            color: #1e3a8a;
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .sub-header {
+            color: #2563eb;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+
+        .meta-info {
+            font-size: 11px;
+            color: #6b7280;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+
+        section {
+            margin-top: 25px;
+        }
+
+        h2 {
+            color: #1e3a8a;
+            font-size: 15px;
+            font-weight: 700;
+            border-bottom: 1px solid #3b82f6;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            margin-bottom: 20px;
+            border: 1px solid #e5e7eb;
+        }
+
+        td {
+            padding: 10px 15px;
+            border: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+
+        .label-cell {
+            width: 35%;
+            background-color: #f0f7ff;
+            font-weight: 700;
+            color: #374151;
+        }
+
+        .value-cell {
+            background-color: #ffffff;
+            color: #111827;
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 9px;
+            color: #9ca3af;
+            text-align: center;
+        }
+
+        .page-break {
+            page-break-after: always;
+        }
+
+        .bold { font-weight: 700; }
+        .text-blue { color: #1e3a8a; }
+
+        .timeline-container {
+            margin-top: 10px;
+        }
+
+        .timeline-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            gap: 15px;
+        }
+
+        .timeline-date {
+            width: 80px;
+            font-weight: 700;
+            color: #2563eb;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+
+        .timeline-content {
+            font-size: 10px;
+            color: #4b5563;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 9px;
+        }
+        .badge-green { background: #dcfce7; color: #166534; }
+        .badge-orange { background: #ffedd5; color: #9a3412; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="top-line"></div>
+        
+        <header>
+            <h1>CLIENT CASE STUDY</h1>
+            <div class="sub-header">{{complaintType}} — {{companyName}}</div>
+            <div class="meta-info">
+                Reference Number: {{caseId}} | Date Prepared: {{datePrepared}}
+            </div>
+        </header>
+
+        <!-- 1. Client Profile -->
+        <section>
+            <h2>1. Client Profile</h2>
+            <table>
+                <tr>
+                    <td class="label-cell">Company Name</td>
+                    <td class="value-cell">{{companyName}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Contact Person</td>
+                    <td class="value-cell">{{clientName}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Contact Number</td>
+                    <td class="value-cell">{{clientMobile}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Email ID</td>
+                    <td class="value-cell">{{clientEmail}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Acknowledgment No.</td>
+                    <td class="value-cell">{{grievanceNumber}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Client Since</td>
+                    <td class="value-cell">{{clientSince}}</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- 2. Service Details -->
+        <section>
+            <h2>2. Service Details</h2>
+            {{serviceSections}}
+        </section>
+
+        <!-- 3. Financial Summary -->
+        <section>
+            <h2>3. Financial Summary</h2>
+            <table>
+                <tr>
+                    <td class="label-cell">Total Amount Paid by Client</td>
+                    <td class="value-cell bold">₹ {{totalPaid}}/-</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Breakdown</td>
+                    <td class="value-cell">{{breakdown}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Total MOU Amount</td>
+                    <td class="value-cell">{{totalMouText}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Refund Status</td>
+                    <td class="value-cell text-blue bold">{{refundStatus}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Lien Marked On</td>
+                    <td class="value-cell">{{lienDetails}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Bank</td>
+                    <td class="value-cell">{{lienBank}}</td>
+                </tr>
+            </table>
+        </section>
+
+        <section>
+            <h2>4. Client Bank Account Details</h2>
+            <table>
+                <tr>
+                    <td class="label-cell">Account 1</td>
+                    <td class="value-cell">Number: {{acc1No}} | IFSC: {{acc1Ifsc}}</td>
+                </tr>
+                <tr>
+                    <td class="label-cell">Account 2</td>
+                    <td class="value-cell">Number: {{acc2No}} | IFSC: {{acc2Ifsc}}</td>
+                </tr>
+            </table>
+        </section>
+
+        <section>
+            <h2>5. Case Background & Allegations</h2>
+            <div style="font-size: 11px; color: #4b5563; background: #f9fafb; padding: 15px; border-radius: 4px; border: 1px solid #e5e7eb;">
+                <div class="bold text-blue" style="margin-bottom: 5px;">Case Summary:</div>
+                {{caseSummary}}
+                <div class="bold text-blue" style="margin-top: 15px; margin-bottom: 5px;">Primary Allegation:</div>
+                "{{clientAllegation}}"
+            </div>
+        </section>
+
+        <section class="page-break">
+            <h2>6. Key Pending Issue</h2>
+            <div style="font-size: 11px; color: #b91c1c; background: #fef2f2; padding: 15px; border-radius: 4px; border: 1px solid #fee2e2; font-weight: 600;">
+                {{keyPendingIssue}}
+            </div>
+        </section>
+
+        <section>
+            <h2>7. Case Timeline of Events</h2>
+            <div class="timeline-container">
+                {{timelineItems}}
+            </div>
+        </section>
+
+        <section>
+            <h2>8. Recommended Next Steps</h2>
+            <div style="font-size: 11px; color: #1e3a8a; background: #eff6ff; padding: 15px; border-radius: 4px; border: 1px solid #dbeafe; white-space: pre-line; font-weight: 500;">
+                {{recommendedNextSteps}}
+            </div>
+        </section>
+
+        <div class="footer">
+            CONFIDENTIAL — FOR INTERNAL REVIEW ONLY | StartupFlora (Acolyte Technologies) | Reference: {{caseId}}
+        </div>
+    </div>
+</body>
+</html>

@@ -1,6 +1,7 @@
 const express = require('express');
 const Refund = require('../models/Refund');
 const AuditLog = require('../models/AuditLog');
+const Timeline = require('../models/Timeline');
 const User = require('../models/User');
 const { sendEmail } = require('../utils/mailer');
 const { verifyToken } = require('../middleware/auth');
@@ -86,6 +87,16 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       caseId: doc.caseId
     });
 
+    // Add to Timeline
+    await new Timeline({
+      id: Date.now().toString() + Math.random().toString(36).substring(7),
+      caseId: doc.caseId,
+      eventDate: new Date().toISOString(),
+      source: req.user.fullName || req.user.email || 'System',
+      eventType: 'Refund Request',
+      summary: `Submitted refund request for ₹${doc.amount}`
+    }).save();
+
     res.status(201).json(doc);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -132,6 +143,16 @@ router.put('/:id', verifyToken, async (req, res) => {
       description: `Refund status updated to ${doc.status} for case ${doc.caseId}`,
       caseId: doc.caseId
     });
+
+    // Add to Timeline
+    await new Timeline({
+      id: Date.now().toString() + Math.random().toString(36).substring(7),
+      caseId: doc.caseId,
+      eventDate: new Date().toISOString(),
+      source: req.user.fullName || req.user.email || 'System',
+      eventType: 'Refund Update',
+      summary: `Refund status updated to ${doc.status}`
+    }).save();
 
     res.json(doc);
   } catch (error) {

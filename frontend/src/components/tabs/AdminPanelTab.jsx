@@ -87,9 +87,80 @@ const AdminPanelTab = () => {
         <h1 className="text-2xl font-black text-text-primary tracking-tight uppercase">ADMIN PANEL</h1>
 
       </div>
+      {/* SECTION 2: Create New User */}
+      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-4xl my-8 overflow-hidden">
+        <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
+          <div className="w-10 h-10 bg-blue-soft rounded-2xl flex items-center justify-center text-blue">
+            <span className="font-black text-lg">👤</span>
+          </div>
+          <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">Add New User</h2>
+        </div>
+
+        <form className="p-8" onSubmit={handleCreateUser}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+            <div>
+              <label className={labelClass}> FULL NAME</label>
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="Ex: John Doe"
+                value={formData.fullName}
+                onChange={e => setFormData({ ...formData, fullName: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className={labelClass}>EMAIL</label>
+              <input
+                type="email"
+                className={inputClass}
+                placeholder="user@rrr-system.com"
+                value={formData.email}
+                onChange={e => setFormData({ ...formData, email: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className={labelClass}>PASSWORD</label>
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="Secure password"
+                value={formData.password}
+                onChange={e => setFormData({ ...formData, password: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-120 items-end">
+            <div>
+              <label className={labelClass}>ROLE</label>
+              <select
+                className={inputClass}
+                value={formData.role}
+                onChange={e => setFormData({ ...formData, role: e.target.value })}
+                required
+              >
+                <option value="Admin"> Admin</option>
+                <option value="Operations">Operations</option>
+                <option value="Reviewer">Reviewer</option>
+                <option value="Accountant">Accountant</option>
+                <option value="Staff">Staff</option>
+              </select>
+            </div>
+            <div className="flex justify-end">
+              <button type="submit" className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 rounded-2xl shadow-xl shadow-orange-900/20 transition-all text-xs uppercase tracking-[0.2em] active:scale-95">
+                CREATE USER
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
 
       {/* SECTION 1: Refund Requests & Approvals */}
-      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border mb-10 max-w-7xl overflow-hidden">
+      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border mb-10 max-w-5xl overflow-hidden">
         <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
           <div className="w-10 h-10 bg-accent-soft rounded-2xl flex items-center justify-center text-accent">
             <span className="font-black text-lg">💰</span>
@@ -152,79 +223,10 @@ const AdminPanelTab = () => {
         </div>
       </div>
 
-      {/* SECTION 2: Create New User */}
-      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-6xl overflow-hidden">
-        <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
-          <div className="w-10 h-10 bg-blue-soft rounded-2xl flex items-center justify-center text-blue">
-            <span className="font-black text-lg">👤</span>
-          </div>
-          <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">Add New User</h2>
-        </div>
 
-        <form className="p-8" onSubmit={handleCreateUser}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-            <div>
-              <label className={labelClass}> FULL NAME</label>
-              <input
-                type="text"
-                className={inputClass}
-                placeholder="Ex: John Doe"
-                value={formData.fullName}
-                onChange={e => setFormData({ ...formData, fullName: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <label className={labelClass}>EMAIL</label>
-              <input
-                type="email"
-                className={inputClass}
-                placeholder="user@rrr-system.com"
-                value={formData.email}
-                onChange={e => setFormData({ ...formData, email: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <label className={labelClass}>PASSWORD</label>
-              <input
-                type="text"
-                className={inputClass}
-                placeholder="Secure password"
-                value={formData.password}
-                onChange={e => setFormData({ ...formData, password: e.target.value })}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
-            <div>
-              <label className={labelClass}>ROLE</label>
-              <select
-                className={inputClass}
-                value={formData.role}
-                onChange={e => setFormData({ ...formData, role: e.target.value })}
-                required
-              >
-                <option value="Admin">Core Administrator</option>
-                <option value="Operations">Operations Lead</option>
-                <option value="Reviewer">Compliance Reviewer</option>
-                <option value="Accountant">Financial Accountant</option>
-                <option value="Staff">General Staff</option>
-              </select>
-            </div>
-            <div className="flex justify-end">
-              <button type="submit" className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 rounded-2xl shadow-xl shadow-orange-900/20 transition-all text-xs uppercase tracking-[0.2em] active:scale-95">
-                CREATE USER
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
 
       {/* SECTION 3: Global Refund Audit Trail */}
-      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-7xl overflow-hidden mt-10">
+      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-5xl overflow-hidden mt-10">
         <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
           <div className="w-10 h-10 bg-purple-soft rounded-2xl flex items-center justify-center text-purple">
             <span className="font-black text-lg">📋</span>

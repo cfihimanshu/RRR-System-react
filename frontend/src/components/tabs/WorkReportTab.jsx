@@ -248,9 +248,9 @@ const WorkReportTab = () => {
             </table>
           </div>
         )}
-        <div className="px-6 py-3 border-t border-border bg-bg-secondary text-[10px] font-bold text-text-muted uppercase tracking-widest">
+        {/* <div className="px-6 py-3 border-t border-border bg-bg-secondary text-[10px] font-bold text-text-muted uppercase tracking-widest">
           Showing {filteredReports.length} of {reports.length} records
-        </div>
+        </div> */}
       </div>
 
       {/* View Report Modal */}

@@ -40,11 +40,11 @@ const ProtectedRoute = ({ children, allowedRoles, id }) => {
     "internal-search":      ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
     "reviewer-panel":       ["Admin", "Reviewer"],
     "accountant-dashboard": ["Admin", "Accountant"],
-    "agreement-gen":        ["Admin", "Operations"],
+    "agreement-gen":        ["Operations"],
     "my-task":              ["Admin", "Operations", "Staff"],
     "sod-eod-reports":      ["Admin", "Operations", "Staff"],
     "work-report":          ["Admin", "Operations"],
-    "refund-request":       ["Admin", "Operations", "Staff"]
+    "refund-request":       ["Operations", "Staff"]
   };
 
   if (!user) return <Navigate to="/login" />;

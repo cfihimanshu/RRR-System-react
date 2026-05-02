@@ -46,9 +46,9 @@ const FileUpload = ({ onUploadSuccess, label = "Drag & drop or click to upload f
   };
 
   const accentClasses = {
-    accent: 'hover:border-accent group-hover:border-accent',
-    blue: 'hover:border-blue group-hover:border-blue',
-    'text-muted': 'hover:border-text-muted group-hover:border-text-muted'
+    accent: 'border-accent',
+    blue: 'border-blue',
+    'text-muted': 'border-text-muted'
   };
 
   const currentAccentClass = accentClasses[accentColor] || accentClasses.accent;
@@ -57,7 +57,7 @@ const FileUpload = ({ onUploadSuccess, label = "Drag & drop or click to upload f
     <div className={`relative group ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
       <div className={`
         relative border-2 border-dashed rounded-2xl p-6 transition-all duration-300
-        ${fileUrl ? 'border-green bg-green-soft/5' : `border-border bg-bg-input/30 ${currentAccentClass}`}
+        ${fileUrl ? 'border-green bg-green-soft/5' : `${currentAccentClass} bg-bg-input/30`}
         ${uploading ? 'animate-pulse' : ''}
       `}>
         <input 
@@ -70,13 +70,13 @@ const FileUpload = ({ onUploadSuccess, label = "Drag & drop or click to upload f
         <div className="flex flex-col items-center justify-center text-center space-y-3">
           <div className={`
             w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300
-            ${fileUrl ? 'bg-green text-white' : `bg-bg-secondary text-text-muted group-hover:text-accent group-hover:scale-110`}
+            ${fileUrl ? 'bg-green text-white' : `bg-bg-secondary text-accent group-hover:scale-110`}
           `}>
             {fileUrl ? <CheckCircle size={20} /> : (uploading ? <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" /> : <Icon size={20} />)}
           </div>
           
           <div className="space-y-0.5">
-            <p className="text-[10px] font-black text-text-primary uppercase tracking-widest group-hover:text-accent transition-colors">
+            <p className="text-[10px] font-black text-accent uppercase tracking-widest transition-colors">
               {uploading ? 'Uploading...' : (fileUrl ? 'Success' : label)}
             </p>
             {fileName && (

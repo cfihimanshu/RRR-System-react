@@ -61,7 +61,7 @@ const AccountantDashTab = () => {
       <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border overflow-hidden mb-8">
         <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
           <div className="w-1.5 h-6 bg-green rounded-full" />
-          <h3 className="text-sm font-black text-text-primary uppercase tracking-widest">Queue: Ready for Payment </h3>
+          <h3 className="text-sm font-black text-text-primary uppercase tracking-widest">Payments </h3>
         </div>
         <div className="table-wrap overflow-x-auto scrollbar-thin">
           <table className="w-full text-left border-collapse min-w-[1000px]">

@@ -20,7 +20,7 @@ router.get('/', verifyToken, async (req, res) => {
         if (targetCase) {
           await Progress.create({
             caseId,
-            stage: targetCase.currentStatus || 'Case Locked',
+            stage: targetCase.currentStatus || 'Case Logged',
             percentage: targetCase.progressPercentage || 0,
             summary: `Case Registered: ${targetCase.typeOfComplaint} setup complete.`,
             updatedBy: targetCase.initiatedBy || 'System',

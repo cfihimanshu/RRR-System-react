@@ -301,7 +301,7 @@ const AgreementGenerationTab = () => {
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-10 border-t border-border mt-10">
             <button type="submit" className="bg-blue hover:bg-blue-600 text-white font-black py-4 px-10 rounded-xl shadow-xl shadow-blue-900/20 transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em] active:scale-95">
-              <Eye size={18} /> Generate Native PDF
+              <Eye size={18} /> Generate
             </button>
             <button type="button" onClick={handleClear} className="bg-bg-card hover:bg-bg-card-hover text-text-secondary font-black py-4 px-10 border-2 border-border rounded-xl transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em] active:scale-95">
               <RefreshCw size={18} /> Clear Form

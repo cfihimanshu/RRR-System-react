@@ -172,6 +172,28 @@ const User = require('../models/User');
 
 router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async (req, res) => {
   try {
+    const clientMobile = req.body.clientMobile?.trim();
+    const clientName = req.body.clientName?.trim();
+    const companyName = req.body.companyName?.trim();
+    const typeOfComplaint = req.body.typeOfComplaint;
+
+    // Duplicate Check - Strict match on Mobile + Company or Name + Company + Type
+    const existingCase = await Case.findOne({
+      $or: [
+        { clientMobile: clientMobile, companyName: companyName },
+        { clientName: clientName, companyName: companyName, typeOfComplaint: typeOfComplaint }
+      ].filter(q => {
+        // Only include queries that have all required fields for that check
+        if (q.clientMobile && q.companyName) return true;
+        if (q.clientName && q.companyName && q.typeOfComplaint) return true;
+        return false;
+      })
+    });
+
+    if (existingCase) {
+      return res.status(400).json({ error: `Entry already exists! A case with these details was already registered with Case ID: ${existingCase.caseId}. Please search and update the existing case.` });
+    }
+
     const allCases = await Case.find({}, 'caseId');
     const caseId = generateCaseId(req.body.brandName, req.body.companyName, allCases);
     const newCase = new Case({
@@ -273,7 +295,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
     try {
       await Progress.create({
         caseId: caseId,
-        stage: req.body.currentStatus || 'Case Locked',
+        stage: req.body.currentStatus || 'Case Logged',
         percentage: 0,
         summary: 'Case initiated and added to the register.',
         updatedBy: req.user.fullName || req.user.email,
@@ -434,6 +456,26 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
         description: `Case ${req.params.caseId} status updated to ${req.body.currentStatus}`,
         caseId: req.params.caseId
       });
+
+      // Also add to Timeline for Live Activity
+      await new Timeline({
+        id: Date.now().toString() + Math.random().toString(36).substring(7),
+        caseId: req.params.caseId,
+        eventDate: new Date().toISOString(),
+        source: req.user.fullName || req.user.email || 'System',
+        eventType: 'Status Change',
+        summary: `Case status updated to ${req.body.currentStatus}`
+      }).save();
+    } else {
+      // General update timeline entry
+      await new Timeline({
+        id: Date.now().toString() + Math.random().toString(36).substring(7),
+        caseId: req.params.caseId,
+        eventDate: new Date().toISOString(),
+        source: req.user.fullName || req.user.email || 'System',
+        eventType: 'Case Updated',
+        summary: 'Case information modified'
+      }).save();
     }
 
     res.json(updated);
@@ -509,15 +551,38 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
     });
 
     let allCases = await Case.find({}, 'caseId');
+    const existingCasesInDb = await Case.find({}, 'clientMobile clientName companyName typeOfComplaint');
     const finalCases = [];
+    let skippedCount = 0;
 
     for (let row of results) {
+      const cMobile = row.clientMobile?.trim();
+      const cName = row.clientName?.trim();
+      const compName = row.companyName?.trim();
+      const complaintType = row.typeOfComplaint;
+
+      // Check for duplicates in DB or current batch
+      const isDuplicate = existingCasesInDb.some(ex =>
+        (cMobile && ex.clientMobile === cMobile && ex.companyName === compName) ||
+        (cName === ex.clientName && compName === ex.companyName && complaintType === ex.typeOfComplaint)
+      ) || finalCases.some(ex =>
+        (cMobile && ex.clientMobile === cMobile && ex.companyName === compName) ||
+        (cName === ex.clientName && compName === ex.companyName && complaintType === ex.typeOfComplaint)
+      );
+
+      if (isDuplicate) {
+        skippedCount++;
+        continue;
+      }
+
       row.caseId = generateCaseId(row.brandName, row.companyName, allCases);
       allCases.push({ caseId: row.caseId });
       finalCases.push(row);
     }
 
-    await Case.insertMany(finalCases);
+    if (finalCases.length > 0) {
+      await Case.insertMany(finalCases);
+    }
 
     // Create timeline entries only if they don't already exist for these caseIds
     const timelineEntries = [];
@@ -528,7 +593,7 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
           id: Date.now().toString() + Math.random().toString(36).substring(7),
           caseId: c.caseId,
           eventDate: new Date(c.createdDate || new Date()).toISOString(),
-          source: 'System',
+          source: req.user.fullName || req.user.email || 'System',
           eventType: 'Case Created',
           summary: 'Imported: Bulk Import via File'
         });
@@ -539,7 +604,11 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
       await Timeline.insertMany(timelineEntries);
     }
 
-    res.status(201).json({ message: `Successfully imported ${finalCases.length} cases.` });
+    res.json({
+      message: `Import completed: ${finalCases.length} cases imported, ${skippedCount} duplicates skipped.`,
+      imported: finalCases.length,
+      skipped: skippedCount
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

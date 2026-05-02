@@ -169,7 +169,10 @@ const DashboardTab = () => {
         user: item.source || 'System',
         date: new Date(item.eventDate || item.createdAt),
         color: item.eventType?.toLowerCase().includes('mou') ? 'green' :
-          item.eventType?.toLowerCase().includes('escalat') ? 'red' : 'blue'
+          item.eventType?.toLowerCase().includes('escalat') ? 'red' : 
+          item.eventType?.toLowerCase().includes('status') ? 'orange' :
+          item.eventType?.toLowerCase().includes('update') ? 'purple' :
+          item.eventType?.toLowerCase().includes('refund') ? 'green' : 'blue'
       }));
 
       const reportActivities = reportsRes.data.map(item => ({

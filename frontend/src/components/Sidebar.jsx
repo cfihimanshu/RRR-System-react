@@ -38,11 +38,11 @@ const tabAccess = {
   "internal-search": ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
   "reviewer-panel": ["Admin", "Reviewer"],
   "accountant-dashboard": ["Admin", "Accountant"],
-  "agreement-gen": ["Admin", "Operations"],
+  "agreement-gen": ["Operations"],
   "my-task": ["Admin", "Operations", "Staff"],
   "sod-eod-reports": ["Admin", "Operations", "Staff"],
   "work-report": ["Admin", "Operations"],
-  "refund-request": ["Admin", "Operations", "Staff"]
+  "refund-request": ["Operations", "Staff"]
 };
 
 const tabsConfig = [
@@ -62,7 +62,7 @@ const tabsConfig = [
   { id: 'my-task', label: 'My Tasks', path: '/my-task', icon: CheckSquare },
   { id: 'sod-eod-reports', label: 'Reports', path: '/sod-eod-reports', icon: ClipboardList },
   { id: 'work-report', label: 'Work Report', path: '/work-report', icon: BarChart },
-  { id: 'refund-request', label: 'Submit Refund Request', path: '/refund-request', icon: IndianRupee },
+  { id: 'refund-request', label: 'Request', path: '/refund-request', icon: IndianRupee },
 ];
 
 const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed }) => {

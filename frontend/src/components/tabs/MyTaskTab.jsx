@@ -31,6 +31,7 @@ import {
   Trash2,
   ChevronDown
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const MyTaskTab = () => {
   const { user } = useContext(AuthContext);
@@ -204,27 +205,35 @@ const MyTaskTab = () => {
   );
 
   const handleExportTasks = () => {
+    if (filteredTasks.length === 0) return toast.error('No tasks to export');
+
     const headers = ['Task ID', 'Title', 'Priority', 'Assignee', 'Case ID', 'Due Date', 'Status', 'Notes'];
-    const rows = filteredTasks.map(t => [
-      t.taskId || '',
-      (t.title || '').replace(/,/g, ';').replace(/\n/g, ' '),
-      t.priority || '',
-      t.assignee || '',
-      t.caseId || '',
-      t.dueDate || '',
-      t.status || '',
-      (t.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
-    ]);
-    const csvContent = [headers, ...rows].map(row => row.map(v => `"${v}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `My_Tasks_Export_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const data = filteredTasks.map(t => ({
+      'Task ID': t.taskId || '',
+      'Title': t.title || '',
+      'Priority': t.priority || '',
+      'Assignee': t.assignee || '',
+      'Case ID': t.caseId || '',
+      'Due Date': t.dueDate || '',
+      'Status': t.status || '',
+      'Notes': (t.notes || '').replace(/\n/g, ' ')
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Tasks");
+
+    // Auto-size columns
+    const maxWidths = headers.map(h => ({ wch: h.length + 5 }));
+    data.forEach(row => {
+      Object.values(row).forEach((val, i) => {
+        const len = val ? val.toString().length : 0;
+        if (len + 2 > maxWidths[i].wch) maxWidths[i].wch = len + 2;
+      });
+    });
+    worksheet['!cols'] = maxWidths;
+
+    XLSX.writeFile(workbook, `My_Tasks_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const columns = [
@@ -256,7 +265,7 @@ const MyTaskTab = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-bg-primary">
+    <div className="flex flex-col bg-bg-primary">
       {/* Header */}
       <div className="bg-bg-secondary border-b border-border px-4 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
@@ -265,7 +274,7 @@ const MyTaskTab = () => {
           </div>
           <div>
             <h1 className="text-xl md:text-2xl font-black text-text-primary tracking-tight">
-              Task Management Board
+              My Tasks
             </h1>
 
           </div>
@@ -286,7 +295,7 @@ const MyTaskTab = () => {
           )}
           <div className="flex items-center gap-3">
             <button onClick={handleExportTasks} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-bg-card border-2 border-border text-text-secondary px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-bg-card-hover transition-all shadow-sm active:scale-95">
-              <Download size={18} /> Export
+              <Download size={18} /> Export Excel
             </button>
             <button onClick={() => setIsModalOpen(true)} className="btn btn-primary !py-2.5 !px-6 !rounded-xl shadow-lg shadow-orange-900/20">
               <Plus size={20} /> New Task
@@ -295,7 +304,7 @@ const MyTaskTab = () => {
         </div>
       </div>
 
-      <div className="p-4 md:p-8 flex flex-col h-full overflow-y-auto md:overflow-hidden bg-bg-primary">
+      <div className="p-4 md:p-8 flex flex-col flex-1 bg-bg-primary">
         {/* Search Bar */}
         <div className="mb-8 relative max-w-xl">
           <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
@@ -306,9 +315,9 @@ const MyTaskTab = () => {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 h-full md:overflow-hidden pb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 pb-4">
           {columns.map(col => (
-            <div key={col.id} className="flex flex-col h-full min-w-0" onDragOver={onDragOver} onDrop={(e) => onDrop(e, col.id)}>
+            <div key={col.id} className="flex flex-col min-w-0" onDragOver={onDragOver} onDrop={(e) => onDrop(e, col.id)}>
               <div
                 className="flex items-center justify-between mb-4 px-3 py-2 bg-bg-card md:bg-transparent rounded-2xl md:rounded-none border-2 border-border md:border-none cursor-pointer md:cursor-default shadow-sm md:shadow-none"
                 onClick={() => {
@@ -327,7 +336,7 @@ const MyTaskTab = () => {
                 </div>
               </div>
 
-              <div className={`flex-1 bg-bg-card/50 rounded-3xl border-2 border-border p-4 overflow-y-auto md:hide-scrollbar space-y-4 border-dashed min-h-[300px] ${collapsedColumns[col.id] ? 'hidden md:block' : 'block animate-in slide-in-from-top-2 duration-300'}`}>
+              <div className={`flex flex-col bg-bg-card/50 rounded-3xl border-2 border-border p-4 space-y-4 border-dashed min-h-[500px] ${collapsedColumns[col.id] ? 'hidden md:block' : 'block animate-in slide-in-from-top-2 duration-300'}`}>
                 {filteredTasks.filter(t => t.status === col.id).length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-40 text-text-muted opacity-30">
                     <AlertCircle size={32} className="mb-2" />

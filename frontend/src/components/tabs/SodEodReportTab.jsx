@@ -20,6 +20,7 @@ import {
   History,
   Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const SodEodReportTab = () => {
   const { user } = useContext(AuthContext);
@@ -55,30 +56,38 @@ const SodEodReportTab = () => {
   });
 
   const handleExportReports = () => {
+    if (filteredReports.length === 0) return toast.error('No reports to export');
+
     const headers = ['Date', 'Type', 'Submitted By', 'Check-In', 'Check-Out', 'Duration', 'Planned Tasks', 'Work Summary', 'Completion', 'Progress Score', 'Mood'];
-    const rows = filteredReports.map(r => [
-      r.date || '',
-      r.type || '',
-      r.userName || '',
-      r.checkInTime || '',
-      r.checkOutTime || '',
-      r.workDuration || '',
-      (r.plannedTasks || '').replace(/,/g, ';').replace(/\n/g, ' '),
-      (r.workSummary || '').replace(/,/g, ';').replace(/\n/g, ' '),
-      r.completionStatus || '',
-      r.progressScore || '',
-      r.moodEnergy || ''
-    ]);
-    const csvContent = [headers, ...rows].map(row => row.map(v => `"${v}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `SOD_EOD_Reports_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const data = filteredReports.map(r => ({
+      'Date': r.date || '',
+      'Type': r.type || '',
+      'Submitted By': r.userName || '',
+      'Check-In': r.checkInTime || '',
+      'Check-Out': r.checkOutTime || '',
+      'Duration': r.workDuration || '',
+      'Planned Tasks': (r.plannedTasks || '').replace(/\n/g, ' '),
+      'Work Summary': (r.workSummary || '').replace(/\n/g, ' '),
+      'Completion': r.completionStatus || '',
+      'Progress Score': r.progressScore || '',
+      'Mood': r.moodEnergy || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
+    
+    // Auto-size columns
+    const maxWidths = headers.map(h => ({ wch: h.length + 5 }));
+    data.forEach(row => {
+      Object.values(row).forEach((val, i) => {
+        const len = val ? val.toString().length : 0;
+        if (len + 2 > maxWidths[i].wch) maxWidths[i].wch = len + 2;
+      });
+    });
+    worksheet['!cols'] = maxWidths;
+
+    XLSX.writeFile(workbook, `SOD_EOD_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleOpenDetails = (report) => {
@@ -122,7 +131,7 @@ const SodEodReportTab = () => {
               onClick={handleExportReports}
               className="btn btn-primary !py-2.5 !px-6 !rounded-xl shadow-lg shadow-orange-900/20"
             >
-              <Download size={18} /> Export CSV
+              <Download size={18} /> Export Excel
             </button>
           )}
         </div>
@@ -134,7 +143,7 @@ const SodEodReportTab = () => {
           <div className="p-4 md:p-6 border-b border-border flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-accent-soft rounded-lg text-accent"><History size={20} /></div>
-              <h2 className="text-base md:text-lg font-black text-text-primary uppercase tracking-tight">Recent Submission Logs</h2>
+              <h2 className="text-base md:text-lg font-black text-text-primary uppercase tracking-tight">Recent Reports</h2>
             </div>
             <div className="relative w-full lg:max-w-sm">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={16} />

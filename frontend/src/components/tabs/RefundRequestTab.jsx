@@ -245,7 +245,7 @@ const RefundRequestTab = () => {
           </div>
           <div className="md:col-span-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-5 mt-6 pt-8 border-t-2 border-border">
             <button type="submit" className="w-full sm:w-auto bg-green text-white font-black py-4 px-12 rounded-2xl transition-all shadow-xl shadow-green-900/20 text-xs flex items-center justify-center gap-3 uppercase tracking-[0.2em] hover:bg-green-600 active:scale-95">
-              <CheckCircle size={18} /> Initialize Refund Sequence
+              <CheckCircle size={18} /> Submit
             </button>
           </div>
         </form>

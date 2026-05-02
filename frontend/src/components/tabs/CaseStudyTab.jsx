@@ -135,272 +135,169 @@ const CaseStudyTab = ({ caseData = null }) => {
     }
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     const dataToUse = generatedCase || caseData;
     if (!dataToUse) return;
-    const element = document.getElementById('report-to-download');
-    if (!element) return;
 
-    const opt = {
-      margin: [10, 10],
-      filename: `Report_${dataToUse.caseId}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'] }
-    };
+    toast.loading('Generating Standardized PDF...', { id: 'pdf-gen' });
+    try {
+      const response = await api.post('/case-study/generate', { caseId: dataToUse.caseId }, {
+        responseType: 'blob'
+      });
 
-    toast.loading('Generating PDF...', { id: 'pdf-gen' });
-    html2pdf().set(opt).from(element).save().then(() => {
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `CaseStudy_${dataToUse.caseId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
       toast.success('Download started!', { id: 'pdf-gen' });
-    }).catch(err => {
+    } catch (err) {
       console.error(err);
-      toast.error('Failed to generate PDF', { id: 'pdf-gen' });
-    });
+      toast.error('Failed to generate standardized PDF', { id: 'pdf-gen' });
+    }
   };
 
   const generatedCases = cases.filter(c => c.caseStudyGeneratedAt).sort((a, b) => new Date(b.caseStudyGeneratedAt) - new Date(a.caseStudyGeneratedAt));
 
   const ReportContent = ({ data, timeline, actions, comms, docs, isMobile = false }) => {
-    const totalMou = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
     const totalPaid = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
+    const totalMou = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
+    const breakdown = data?.servicesSold?.map(s => `Rs. ${Number(s.serviceAmount || 0).toLocaleString('en-IN')}`).join(' + ') + ` = Rs. ${totalPaid.toLocaleString('en-IN')}`;
+
+    const labelClass = "w-1/3 bg-[#f0f7ff] p-3 border border-gray-200 text-[11px] font-bold text-gray-700 uppercase tracking-tighter";
+    const valueClass = "w-2/3 bg-white p-3 border border-gray-200 text-[11px] font-medium text-gray-900";
 
     return (
-      <div id="report-to-download" className="bg-white text-gray-900 w-full font-sans leading-normal">
-        {/* Main Header */}
-        <div className="bg-[#1e3a8a] text-white text-center py-6">
-          <h1 className="text-3xl font-bold uppercase tracking-[0.2em]">CASE STUDY REPORT</h1>
-        </div>
+      <div id="report-to-download" className="bg-white text-gray-900 w-full font-sans leading-relaxed p-10 max-w-[850px] mx-auto shadow-2xl border border-gray-100">
+        <div className="border-t-[1px] border-[#3b82f6] mb-8"></div>
 
-        {/* Client Sub-Header */}
-        <div className="bg-[#3b82f6] text-white text-center py-8 px-6">
-          <h2 className="text-2xl font-bold mb-1">Client: {data?.companyName || data?.clientName || 'N/A'}</h2>
-          <div className="text-sm opacity-90 space-y-1 font-medium tracking-wide">
-            <div>Reference Number: {data?.caseId || 'N/A'}</div>
-            <div>Date Prepared: {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
-            <div>Prepared by: StartupFlora (Acolyte Technologies)</div>
+        {/* Header */}
+        <header className="text-center mb-10">
+          <h1 className="text-[#1e3a8a] text-3xl font-extrabold uppercase tracking-widest mb-1">CLIENT CASE STUDY</h1>
+          <div className="text-[#2563eb] text-lg font-bold">{data?.typeOfComplaint || 'Case Analysis'} — {data?.companyName || data?.clientName || 'N/A'}</div>
+          <div className="text-[10px] text-gray-500 font-bold mt-2 uppercase tracking-widest">
+            Reference Number: {data?.caseId} | Date Prepared: {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
           </div>
-        </div>
+        </header>
 
-        <div className="p-10 space-y-12">
-          {/* 1. Client Information */}
-          <section>
-            <h3 className="text-[#1e3a8a] text-xl font-bold border-b-2 border-[#1e3a8a] pb-2 mb-6">1. Client Information</h3>
-            <div className="border border-gray-200 rounded-lg overflow-x-auto">
-              <table className="w-full min-w-[600px] text-left text-sm border-collapse">
-                <tbody>
-                  {[
-                    ['Company Name', data?.companyName || '-'],
-                    ['Contact Person', data?.clientName || '-'],
-                    ['Contact Number', data?.clientMobile || '-'],
-                    ['Email ID', data?.clientEmail || '-'],
-                    ['Client Since', data?.createdDate ? new Date(data.createdDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'],
-                    ['Total Services Enrolled', `${data?.servicesSold?.length || 0} Services`],
-                    ['Total Amount Paid', `₹${totalPaid.toLocaleString('en-IN')}/-`],
-                  ].map(([lbl, val], idx) => (
-                    <tr key={lbl} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                      <td className="w-1/3 p-4 font-bold text-gray-700 border-r border-gray-200">{lbl}</td>
-                      <td className="w-2/3 p-4 text-gray-900">{val}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+        {/* 1. Client Profile */}
+        <section className="mb-10">
+          <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">1. Client Profile</h2>
+          <table className="w-full border-collapse border border-gray-200">
+            <tbody>
+              <tr><td className={labelClass}>Company Name</td><td className={valueClass}>{data?.companyName || '-'}</td></tr>
+              <tr><td className={labelClass}>Contact Person</td><td className={valueClass}>{data?.clientName || '-'}</td></tr>
+              <tr><td className={labelClass}>Contact Number</td><td className={valueClass}>{data?.clientMobile || '-'}</td></tr>
+              <tr><td className={labelClass}>Email ID</td><td className={valueClass}>{data?.clientEmail || '-'}</td></tr>
+              <tr><td className={labelClass}>Acknowledgment No.</td><td className={valueClass}>{data?.cyberAckNumbers || data?.grievanceNumber || 'N/A'}</td></tr>
+              <tr><td className={labelClass}>Client Since</td><td className={valueClass}>{data?.createdAt ? new Date(data.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}</td></tr>
+            </tbody>
+          </table>
+        </section>
 
-          {/* 2. Services Enrolled & Current Status */}
-          <section>
-            <h3 className="text-[#1e3a8a] text-xl font-bold border-b-2 border-[#1e3a8a] pb-2 mb-6">2. Services Enrolled & Current Status</h3>
-            <p className="text-xs text-gray-600 mb-4 italic">
-              The following table summarizes all {data?.servicesSold?.length || 0} services availed by the client, their current processing status, MOU amounts, and responsible Business Development Associates (BDAs).
-            </p>
-            <div className="border border-gray-200 rounded-lg overflow-x-auto shadow-sm">
-              <table className="w-full min-w-[700px] text-left text-[11px] border-collapse">
-                <thead className="bg-[#1e3a8a] text-white uppercase tracking-wider">
-                  <tr>
-                    <th className="p-3 border-r border-white/10">#</th>
-                    <th className="p-3 border-r border-white/10">Service Name</th>
-                    <th className="p-3 border-r border-white/10">Status</th>
-                    <th className="p-3 border-r border-white/10">MOU Amount</th>
-                    <th className="p-3 border-r border-white/10">BDA</th>
-                    <th className="p-3">Amount Paid</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {data?.servicesSold?.map((s, idx) => (
-                    <tr key={idx} className="border-b border-gray-100 last:border-0">
-                      <td className="p-3 text-center font-bold text-gray-500 border-r border-gray-100">{idx + 1}</td>
-                      <td className="p-3 font-bold text-gray-800 border-r border-gray-100">{s.serviceName}</td>
-                      <td className="p-3 border-r border-gray-100">
-                        <span className={`font-bold ${s.workStatus === 'Completed' ? 'text-green-600' :
-                          s.workStatus === 'In Progress' ? 'text-blue-600' :
-                            'text-orange-500'
-                          }`}>
-                          {s.workStatus}
-                        </span>
-                      </td>
-                      <td className="p-3 border-r border-gray-100">₹{Number(s.signedMouAmount || 0).toLocaleString('en-IN')}/-</td>
-                      <td className="p-3 border-r border-gray-100 font-medium">{s.bda || '-'}</td>
-                      <td className="p-3 font-bold">₹{Number(s.serviceAmount || 0).toLocaleString('en-IN')}/-</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+        {/* 2. Service Details */}
+        <section className="mb-10">
+          <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">2. Service Details</h2>
+          {data?.servicesSold?.map((s, idx) => (
+            <table key={idx} className="w-full border-collapse border border-gray-200 mb-6 last:mb-0">
+              <tbody>
+                <tr><td className={labelClass}>Service Engaged</td><td className={`${valueClass} font-bold text-gray-950`}>{s.serviceName}</td></tr>
+                <tr>
+                  <td className={labelClass}>Service Status</td>
+                  <td className={valueClass}>
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${s.workStatus === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                      {s.workStatus}
+                    </span>
+                  </td>
+                </tr>
+                <tr><td className={labelClass}>MOU Signed</td><td className={valueClass}>{data?.mouSigned || 'No'}</td></tr>
+                <tr><td className={labelClass}>MOU Signed Amount</td><td className={valueClass}>{s.signedMouAmount ? `Rs. ${Number(s.signedMouAmount).toLocaleString('en-IN')}/-` : 'NA'}</td></tr>
+                <tr><td className={labelClass}>Business Development Associate</td><td className={valueClass}>{s.bda || '-'}</td></tr>
+                <tr><td className={labelClass}>Amount Paid</td><td className={`${valueClass} font-bold text-gray-950`}>Rs. {Number(s.serviceAmount || 0).toLocaleString('en-IN')}/-</td></tr>
+              </tbody>
+            </table>
+          ))}
+        </section>
 
-          {/* 3. Chronological Timeline of Events */}
-          <section className="page-break-before">
-            <h3 className="text-[#1e3a8a] text-xl font-bold border-b-2 border-[#1e3a8a] pb-2 mb-6">3. Chronological Timeline of Events</h3>
-            <p className="text-xs text-gray-600 mb-4 italic">
-              The following timeline documents all key interactions between {data?.companyName || 'the client'} and StartupFlora from onboarding through the current escalation stage.
-            </p>
-            <div className="border border-gray-200 rounded-lg overflow-x-auto shadow-sm">
-              <table className="w-full min-w-[700px] text-left text-[11px] border-collapse">
-                <thead className="bg-[#1e3a8a] text-white uppercase tracking-wider">
-                  <tr>
-                    <th className="p-3 w-32 border-r border-white/10">Date</th>
-                    <th className="p-3 border-r border-white/10">Event</th>
-                    <th className="p-3">Actor/Team</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {timeline.length === 0 ? (
-                    <tr><td colSpan="3" className="p-10 text-center italic text-gray-400">No chronological events recorded.</td></tr>
-                  ) : (
-                    timeline.map((t, idx) => (
-                      <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                        <td className="p-4 font-bold text-gray-700 whitespace-nowrap border-r border-gray-100">
-                          {new Date(t.eventDate || t.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </td>
-                        <td className="p-4 text-gray-800 leading-relaxed font-medium border-r border-gray-100">{t.summary}</td>
-                        <td className="p-4 font-bold text-gray-600 italic">{t.source || 'System'}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+        {/* 3. Financial Summary */}
+        <section className="mb-10">
+          <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">3. Financial Summary</h2>
+          <table className="w-full border-collapse border border-gray-200">
+            <tbody>
+              <tr><td className={labelClass}>Total Amount Paid by Client</td><td className={`${valueClass} font-black text-gray-950`}>Rs. {totalPaid.toLocaleString('en-IN')}/-</td></tr>
+              <tr><td className={labelClass}>Breakdown</td><td className={valueClass}>{breakdown}</td></tr>
+              <tr><td className={labelClass}>Total MOU Amount</td><td className={valueClass}>{totalMou > 0 ? `Rs. ${totalMou.toLocaleString('en-IN')}/-` : 'NA (No MOU signed)'}</td></tr>
+              <tr><td className={labelClass}>Refund Status</td><td className={`${valueClass} text-[#1e3a8a] font-black uppercase tracking-widest`}>{data?.refundStatus || 'Analysis Pending'}</td></tr>
+              <tr><td className={labelClass}>Lien Marked On</td><td className={valueClass}>{data?.lienMarkedOn || 'No Active Lien Recorded'}</td></tr>
+              <tr><td className={labelClass}>Bank</td><td className={valueClass}>{data?.lienBank || 'N/A'}</td></tr>
+            </tbody>
+          </table>
+        </section>
 
-          {/* 4. Client Concerns & Escalation Summary */}
-          <section className="page-break-before">
-            <h3 className="text-[#1e3a8a] text-xl font-bold border-b-2 border-[#1e3a8a] pb-2 mb-6">4. Client Concerns & Escalation Summary</h3>
-            <div className="border border-gray-200 rounded-lg overflow-x-auto shadow-sm">
-              <table className="w-full min-w-[600px] text-left text-xs border-collapse">
-                <thead className="bg-[#e53e3e] text-white uppercase tracking-widest">
-                  <tr>
-                    <th className="p-4 w-1/3 border-r border-white/10">Area of Concern</th>
-                    <th className="p-4">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  <tr>
-                    <td className="p-4 font-black text-red-700 bg-red-50 border-r border-gray-200 uppercase text-[10px] tracking-wider">Primary Allegation</td>
-                    <td className="p-4 text-gray-800 italic leading-relaxed">"{data?.clientAllegation || 'No specific allegations recorded.'}"</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 font-black text-red-700 bg-red-50 border-r border-gray-200 uppercase text-[10px] tracking-wider">Case Summary</td>
-                    <td className="p-4 text-gray-800 italic leading-relaxed">"{data?.caseSummary || data?.summary || 'No summary provided.'}"</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 font-black text-red-700 bg-red-50 border-r border-gray-200 uppercase text-[10px] tracking-wider">Social Media Risk</td>
-                    <td className="p-4 font-bold text-gray-900">{data?.smRisk || 'None'}</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 font-black text-red-700 bg-red-50 border-r border-gray-200 uppercase text-[10px] tracking-wider">Legal Threat</td>
-                    <td className="p-4 font-bold text-gray-900">{data?.policeThreat || 'None'}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+        {/* 4. Bank Details */}
+        <section className="mb-10">
+          <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">4. Client Bank Account Details</h2>
+          <table className="w-full border-collapse border border-gray-200">
+            <tbody>
+              <tr><td className={labelClass}>Account 1</td><td className={valueClass}>Number: {data?.bankAccountDetails?.acc1No || '—'} | IFSC: {data?.bankAccountDetails?.acc1Ifsc || '—'}</td></tr>
+              <tr><td className={labelClass}>Account 2</td><td className={valueClass}>Number: {data?.bankAccountDetails?.acc2No || '—'} | IFSC: {data?.bankAccountDetails?.acc2Ifsc || '—'}</td></tr>
+            </tbody>
+          </table>
+        </section>
 
-          {/* 5. Financial Summary */}
-          <section>
-            <h3 className="text-[#1e3a8a] text-xl font-bold border-b-2 border-[#1e3a8a] pb-2 mb-6">5. Financial Summary</h3>
-            <div className="border border-gray-200 rounded-lg overflow-x-auto shadow-sm">
-              <table className="w-full min-w-[600px] text-left text-sm border-collapse">
-                <thead className="bg-[#1e3a8a] text-white font-bold uppercase text-[10px]">
-                  <tr>
-                    <th className="p-4 border-r border-white/10">Service</th>
-                    <th className="p-4 border-r border-white/10">MOU Amount</th>
-                    <th className="p-4">Amount Paid</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {data?.servicesSold?.map((s, idx) => (
-                    <tr key={idx}>
-                      <td className="p-4 text-gray-800 border-r border-gray-100">{idx + 1}. {s.serviceName}</td>
-                      <td className="p-4 text-gray-700 border-r border-gray-100 text-right">₹{Number(s.signedMouAmount || 0).toLocaleString('en-IN')}/-</td>
-                      <td className="p-4 text-gray-900 font-bold text-right">₹{Number(s.serviceAmount || 0).toLocaleString('en-IN')}/-</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-[#1e3a8a] text-white font-black">
-                  <tr>
-                    <td className="p-4 uppercase tracking-widest border-r border-white/10">TOTAL</td>
-                    <td className="p-4 text-right border-r border-white/10">₹{totalMou.toLocaleString('en-IN')}/-</td>
-                    <td className="p-4 text-right">₹{totalPaid.toLocaleString('en-IN')}/-</td>
-                  </tr>
-                </tfoot>
-              </table>
+        {/* 5. Case Background */}
+        <section className="mb-10">
+          <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">5. Case Background & Allegations</h2>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 space-y-4">
+            <div>
+              <div className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-1">Case Summary:</div>
+              <div className="text-[11px] text-gray-600 leading-relaxed italic">{data?.caseSummary || 'No summary available.'}</div>
             </div>
-          </section>
-
-          {/* 6. Current Status & Pending Actions */}
-          <section className="page-break-before">
-            <h3 className="text-[#1e3a8a] text-xl font-bold border-b-2 border-[#1e3a8a] pb-2 mb-6">6. Current Status & Pending Actions</h3>
-            <div className="grid grid-cols-2 gap-0 border border-gray-200 rounded-lg overflow-hidden">
-              <div className="bg-green-50/50 p-6 border-r border-gray-200">
-                <div className="bg-[#166534] text-white text-[10px] font-black uppercase tracking-widest p-3 text-center mb-6 rounded shadow-sm">Completed / Delivered</div>
-                <ul className="space-y-4">
-                  {data?.servicesSold?.filter(s => s.workStatus === 'Completed').map((s, idx) => (
-                    <li key={idx} className="flex items-start gap-2 text-xs font-bold text-gray-800">
-                      <span className="text-green-600 mt-1">•</span>
-                      {s.serviceName}
-                    </li>
-                  ))}
-                  {data?.servicesSold?.filter(s => s.workStatus === 'Completed').length === 0 && <li className="text-xs italic text-gray-400 text-center py-4">No completed services.</li>}
-                </ul>
-              </div>
-              <div className="bg-red-50/50 p-6">
-                <div className="bg-[#991b1b] text-white text-[10px] font-black uppercase tracking-widest p-3 text-center mb-6 rounded shadow-sm">Pending / On Hold / Disputed</div>
-                <ul className="space-y-4">
-                  {data?.servicesSold?.filter(s => s.workStatus !== 'Completed').map((s, idx) => (
-                    <li key={idx} className="flex items-start gap-2 text-xs font-bold text-red-900">
-                      <span className="text-red-600 mt-1">•</span>
-                      {s.serviceName} — {s.workStatus}
-                    </li>
-                  ))}
-                  {data?.smRisk === 'High' && <li className="flex items-start gap-2 text-xs font-bold text-red-900"><span className="text-red-600 mt-1">•</span> Social Media Risk: High</li>}
-                  {data?.policeThreat === 'High' && <li className="flex items-start gap-2 text-xs font-bold text-red-900"><span className="text-red-600 mt-1">•</span> Police / Cyber Threat: High</li>}
-                </ul>
-              </div>
-            </div>
-          </section>
-
-          {/* 7. Recommended Next Steps */}
-          <section>
-            <h3 className="text-[#1e3a8a] text-xl font-bold border-b-2 border-[#1e3a8a] pb-2 mb-6">7. Recommended Next Steps</h3>
-            <div className="space-y-6 text-sm text-gray-800 leading-relaxed">
-              <p><strong>Immediate Acknowledgement:</strong> Formally acknowledge receipt of client's concerns and all previous communications in writing within 24-48 hours.</p>
-              <p><strong>Internal Investigation:</strong> Expedite and conclude the internal inquiry regarding the sales team's conduct and service delivery metrics. Share findings with the client.</p>
-              <p><strong>Refund Resolution:</strong> Determine the refundable amount based on services actually rendered vs. outstanding, and propose a structured settlement plan if applicable.</p>
-              <p><strong>Legal Risk Mitigation:</strong> Engage legal counsel to respond to any formal notices and avoid further delays in resolution.</p>
-            </div>
-          </section>
-
-          {/* Footer Branding */}
-          <div className="pt-12 border-t border-gray-100 mt-20 flex justify-between items-end opacity-50">
-            <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
-              CONFIDENTIAL — INTERNAL USE ONLY | StartupFlora (Acolyte Technologies)
-            </div>
-            <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-right">
-              Case Reference: {data?.caseId} | Generated: {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+            <div>
+              <div className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-1">Primary Allegation:</div>
+              <div className="text-[11px] text-gray-900 font-bold border-l-2 border-red-200 pl-3">"{data?.clientAllegation || 'No specific allegations recorded.'}"</div>
             </div>
           </div>
-        </div>
+        </section>
+
+        {/* 6. Key Pending Issue */}
+        <section className="mb-10">
+          <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">6. Key Pending Issue</h2>
+          <div className="bg-red-50 border border-red-100 rounded-lg p-5 text-[11px] font-bold text-red-700 uppercase tracking-wide">
+            {data?.keyPendingIssue || 'No critical pending issues recorded.'}
+          </div>
+        </section>
+
+        {/* 7. Timeline */}
+        <section className="mb-10">
+          <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">7. Case Timeline of Events</h2>
+          <div className="space-y-3">
+            {timeline.map((t, idx) => (
+              <div key={idx} className="flex gap-6 items-start pb-3 border-b border-gray-50 last:border-0">
+                <div className="w-20 text-[10px] font-bold text-[#2563eb] pt-1">{new Date(t.eventDate || t.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
+                <div className="flex-1">
+                  <div className="text-[11px] font-bold text-gray-800">{t.summary}</div>
+                  <div className="text-[8px] text-gray-400 font-black uppercase mt-0.5 tracking-widest">Source: {t.source || 'System'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 8. Recommended Steps */}
+        <section className="mb-10">
+          <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">8. Recommended Next Steps</h2>
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 text-[11px] font-medium text-[#1e3a8a] leading-relaxed whitespace-pre-line">
+            {data?.recommendedNextSteps || '1. Continue standard follow-up.\n2. Monitor for further escalations.'}
+          </div>
+        </section>
+
+        <footer className="mt-20 pt-8 border-t border-gray-100 text-center text-[9px] text-gray-400 font-black uppercase tracking-widest opacity-60">
+          CONFIDENTIAL — FOR INTERNAL REVIEW ONLY | StartupFlora (Acolyte Technologies) | Reference: {data?.caseId}
+        </footer>
       </div>
     );
   };

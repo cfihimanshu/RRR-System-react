@@ -220,8 +220,8 @@ const NewCaseTab = () => {
     e.preventDefault();
 
     // Validations
-    if (formData.clientEmail && !formData.clientEmail.includes('@')) {
-      return toast.error('Email must be a valid address containing @', { icon: '📧' });
+    if (formData.clientEmail && !formData.clientEmail.toLowerCase().endsWith('@')) {
+      return toast.error('Email must be a @ address', { icon: '📧' });
     }
 
     const cleanMobile = formData.clientMobile.replace(/\s+/g, '');
@@ -275,7 +275,7 @@ const NewCaseTab = () => {
     <div className="section active w-full pb-10 px-4 bg-bg-primary">
       <div className="mb-6">
         <h2 className="text-2xl font-black text-text-primary uppercase tracking-tight">
-          {editCase ? 'Edit Case' : 'New Case Registration'}
+          {editCase ? 'Edit Case' : 'New Case '}
         </h2>
 
       </div>
@@ -473,16 +473,16 @@ const NewCaseTab = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             <div>
               <label className={`${labelClass} after:content-['*'] after:text-red`}>Client Name</label>
-              <input type="text" className={inputClass} name="clientName" value={formData.clientName} onChange={handleChange} placeholder="Full name" required />
+              <input type="text" className={`${inputClass} h-12`} name="clientName" value={formData.clientName} onChange={handleChange} placeholder="Full name" required />
             </div>
             <div>
               <label className={labelClass}>Mobile</label>
-              <input type="text" className={`${inputClass} ${errors.clientMobile ? 'border-red bg-red-soft' : ''}`} name="clientMobile" value={formData.clientMobile} onChange={handleChange} placeholder="10 Digit Number" required />
+              <input type="text" className={`${inputClass} h-12 ${errors.clientMobile ? 'border-red bg-red-soft' : ''}`} name="clientMobile" value={formData.clientMobile} onChange={handleChange} placeholder="10 Digit Number" required />
               {errors.clientMobile && <p className="text-[9px] text-red font-black mt-2 uppercase tracking-widest">{errors.clientMobile}</p>}
             </div>
             <div>
               <label className={labelClass}>Email</label>
-              <input type="email" className={`${inputClass} ${errors.clientEmail ? 'border-red bg-red-soft' : ''}`} name="clientEmail" value={formData.clientEmail || ''} onChange={handleChange} placeholder="example@gmail.com" />
+              <input type="email" className={`${inputClass} h-12 ${errors.clientEmail ? 'border-red bg-red-soft' : ''}`} name="clientEmail" value={formData.clientEmail || ''} onChange={handleChange} placeholder="example@gmail.com" />
               {errors.clientEmail && <p className="text-[9px] text-red font-black mt-2 uppercase tracking-widest">{errors.clientEmail}</p>}
             </div>
             <div>
@@ -493,7 +493,7 @@ const NewCaseTab = () => {
                 value={formData.state}
                 onChange={handleChange}
                 placeholder="Search state..."
-                className="!bg-bg-input !border-border"
+                className="!bg-bg-input !border-border h-12"
               />
             </div>
           </div>
@@ -505,22 +505,22 @@ const NewCaseTab = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             <div>
               <label className={labelClass}>Total Amount Paid (₹)</label>
-              <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" />
+              <input type="text" className={`${inputClass} h-12 !bg-bg-secondary !border-dashed font-black`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" />
             </div>
             <div>
               <label className={labelClass}>MOU Signed?</label>
-              <select className={inputClass} name="mouSigned" value={formData.mouSigned || 'No'} onChange={handleChange}>
+              <select className={`${inputClass} h-12`} name="mouSigned" value={formData.mouSigned || 'No'} onChange={handleChange}>
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
               </select>
             </div>
             <div>
               <label className={labelClass}>Total MOU Value (₹)</label>
-              <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" />
+              <input type="text" className={`${inputClass} h-12 !bg-bg-secondary !border-dashed font-black`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" />
             </div>
             <div>
               <label className={labelClass}>Amount In Dispute (₹)</label>
-              <input type="text" className={`${inputClass} bg-blue-soft font-black text-blue border-blue-soft`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" />
+              <input type="text" className={`${inputClass} h-12 bg-blue-soft font-black text-blue border-blue-soft`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" />
             </div>
           </div>
         </div>
@@ -571,7 +571,7 @@ const NewCaseTab = () => {
 
           <div className="bg-bg-secondary border-2 border-border rounded-2xl p-4 sm:p-8">
             <label className="block text-[11px] font-black text-text-muted mb-6 uppercase tracking-widest"> Proofs</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="flex items-center justify-between bg-bg-card border-2 border-border p-4 rounded-2xl">
                 <div className="flex items-center gap-3">
                   <PhoneIncoming size={16} className="text-accent" />
@@ -619,7 +619,7 @@ const NewCaseTab = () => {
         {/* Team Assignment */}
         <div className={cardClass}>
           <h3 className={sectionTitleClass}><Users size={18} className="text-purple" /> Team Assignment</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
               <label className={labelClass}>Initiated By</label>
               <select className={inputClass} name="initiatedBy" value={formData.initiatedBy || ''} onChange={handleChange}>

@@ -121,7 +121,7 @@ const DataSearchTab = () => {
             />
             <label
               htmlFor="sample-excel-upload"
-              className={`cursor-pointer bg-green text-white font-black py-4 px-10 rounded-2xl shadow-sm flex items-center justify-center gap-3 transition-all text-xs uppercase tracking-[0.2em] active:scale-95 ${importing ? 'opacity-50 cursor-wait' : 'hover:bg-green-600 hover:-translate-y-1'}`}
+              className={`cursor-pointer bg-green text-white font-black py-3 px-5 rounded-2xl shadow-sm flex items-center justify-center gap-3 transition-all text-xs uppercase tracking-[0.2em] active:scale-95 ${importing ? 'opacity-50 cursor-wait' : 'hover:bg-green-600 hover:-translate-y-1'}`}
             >
               <FileSpreadsheet size={20} />
               {importing ? 'Initializing Upload...' : 'Upload Sample Data'}

@@ -23,7 +23,7 @@ router.post('/', verifyToken, async (req, res) => {
         id: Date.now().toString(),
         caseId: doc.caseId,
         eventDate: doc.eventDate,
-        source: req.user.fullName || 'History',
+        source: req.user.fullName || req.user.email || 'System',
         eventType: doc.histType,
         summary: doc.summary
     });

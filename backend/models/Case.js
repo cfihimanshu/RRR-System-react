@@ -43,7 +43,19 @@ const caseSchema = new mongoose.Schema({
   grievanceNumber: String,
   caseStudyGeneratedAt: String,
   assignedTo: String,
-  progressPercentage: { type: Number, default: 0 }
+  progressPercentage: { type: Number, default: 0 },
+  // Case Study Template Fields
+  lienMarkedOn: String,
+  lienBank: String,
+  refundStatus: String,
+  bankAccountDetails: {
+    acc1No: String,
+    acc1Ifsc: String,
+    acc2No: String,
+    acc2Ifsc: String
+  },
+  keyPendingIssue: String,
+  recommendedNextSteps: String
 }, { timestamps: true });
 
 module.exports = mongoose.model('Case', caseSchema);
