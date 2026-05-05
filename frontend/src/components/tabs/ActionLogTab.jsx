@@ -290,7 +290,7 @@ const ActionLogTab = () => {
             />
           </div>
         </div>
-      </Modal>
+      </Modal>x
     </div>
   );
 };

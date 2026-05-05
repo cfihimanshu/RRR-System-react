@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import api from '../../api/axios';
+import { AuthContext } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import FileUpload from '../shared/FileUpload';
 import SearchableSelect from '../shared/SearchableSelect';
+import Modal from '../shared/Modal';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -43,6 +45,7 @@ const indianStates = [
 ];
 
 const NewCaseTab = () => {
+  const { user } = useContext(AuthContext);
   const location = useLocation();
   const navigate = useNavigate();
   const editCase = location.state?.editCase || null;
@@ -70,6 +73,8 @@ const NewCaseTab = () => {
   const [serviceMode, setServiceMode] = useState('Single Service');
   const [services, setServices] = useState([{ ...initialService }]);
   const [cyberAcks, setCyberAcks] = useState(['']);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateCase, setDuplicateCase] = useState(null);
 
   useEffect(() => {
     if (editCase) {
@@ -141,6 +146,13 @@ const NewCaseTab = () => {
     fetchUsers();
   }, []);
 
+  // Ensure initiatedBy is blank for Staff users on new cases
+  useEffect(() => {
+    if (!editCase && user?.role?.toLowerCase() === 'staff') {
+      setFormData(prev => ({ ...prev, initiatedBy: '' }));
+    }
+  }, [user, editCase]);
+
   // Auto-calculate financial details from services
   useEffect(() => {
     const totalPaid = services.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0);
@@ -175,6 +187,10 @@ const NewCaseTab = () => {
 
     if (name === 'totalMouValue') {
       updates.engagementNote = `This is a multi-stage consultancy and execution support engagement. ₹${value || '0'} was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.`;
+    }
+
+    if (name === 'initiatedBy') {
+      updates.assignedTo = value;
     }
 
     // Inline Validations
@@ -220,7 +236,7 @@ const NewCaseTab = () => {
     e.preventDefault();
 
     // Validations
-    if (formData.clientEmail && !formData.clientEmail.toLowerCase().endsWith('@')) {
+    if (formData.clientEmail && !formData.clientEmail.includes('@')) {
       return toast.error('Email must be a @ address', { icon: '📧' });
     }
 
@@ -262,7 +278,12 @@ const NewCaseTab = () => {
         setCyberAcks(['']);
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to create case');
+      if (err.response?.status === 400 && err.response?.data?.existingCase) {
+        setDuplicateCase(err.response.data.existingCase);
+        setShowDuplicateModal(true);
+      } else {
+        toast.error(err.response?.data?.error || 'Failed to create case');
+      }
     }
   };
 
@@ -311,6 +332,7 @@ const NewCaseTab = () => {
                 <option value="Office Visit">Office Visit</option>
                 <option value="Social Media">Social Media</option>
                 <option value="Toll Free">Toll Free</option>
+                <option value="Notice">Notice</option>
               </select>
             </div>
             <div>
@@ -325,6 +347,7 @@ const NewCaseTab = () => {
                 <option value="Escalation">Escalation</option>
                 <option value="General Query">General Query</option>
                 <option value="Lien">Lien</option>
+                <option value="TollFree">TollFree</option>
               </select>
             </div>
             <div>
@@ -451,9 +474,8 @@ const NewCaseTab = () => {
                   <label className={labelClass}>Department</label>
                   <select className={inputClass} value={svc.department} onChange={e => handleServiceChange(idx, 'department', e.target.value)}>
                     <option value="Operations">Operations</option>
-                    <option value="Legal">Legal</option>
-                    <option value="Accounts">Accounts</option>
-                    <option value="Tech">Tech</option>
+                    <option value="Digital Marketing">Digital Marketing</option>
+                    <option value="Loan">Loan</option>
                   </select>
                 </div>
               </div>
@@ -622,10 +644,17 @@ const NewCaseTab = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
               <label className={labelClass}>Initiated By</label>
-              <select className={inputClass} name="initiatedBy" value={formData.initiatedBy || ''} onChange={handleChange}>
+              <select 
+                className={`${inputClass} ${user?.role?.toLowerCase() === 'staff' ? 'bg-bg-secondary cursor-not-allowed opacity-50' : ''}`} 
+                name="initiatedBy" 
+                value={formData.initiatedBy || ''} 
+                onChange={handleChange}
+                disabled={user?.role?.toLowerCase() === 'staff'}
+              >
                 <option value="">-- Select --</option>
-                {userList.filter(u => u.role?.toLowerCase() !== 'admin').map(u => (
-                  <option key={u.email} value={u.fullName}>{u.fullName} ({u.role})</option>
+                {/* Only show Operations users in Initiated By dropdown for Admin/Ops */}
+                {user?.role?.toLowerCase() !== 'staff' && userList.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
+                  <option key={u.email} value={u.fullName}>{u.fullName}</option>
                 ))}
               </select>
             </div>
@@ -665,6 +694,68 @@ const NewCaseTab = () => {
         </div>
 
       </form>
+
+      {/* Duplicate Case Modal */}
+      <Modal
+        isOpen={showDuplicateModal}
+        onClose={() => setShowDuplicateModal(false)}
+        title="⚠️ Existing Case Found"
+      >
+        <div className="p-8">
+          <div className="bg-red/10 border-2 border-red/20 rounded-2xl p-6 mb-8 flex items-start gap-4">
+            <AlertTriangle className="text-red shrink-0" size={24} />
+            <div>
+              <p className="text-sm font-black text-red uppercase tracking-wider mb-1">Duplicate Entry Detected</p>
+              <p className="text-xs font-medium text-text-secondary leading-relaxed">
+                A case with these details already exists in the system. Please review the existing information below to avoid duplicate records.
+              </p>
+            </div>
+          </div>
+
+          {duplicateCase && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-bg-input p-4 rounded-2xl border border-border">
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Case ID</p>
+                <p className="text-sm font-black text-accent uppercase">{duplicateCase.caseId}</p>
+              </div>
+              <div className="bg-bg-input p-4 rounded-2xl border border-border">
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Status</p>
+                <p className="text-sm font-black text-text-primary uppercase">{duplicateCase.currentStatus}</p>
+              </div>
+              <div className="bg-bg-input p-4 rounded-2xl border border-border col-span-2">
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Company Name</p>
+                <p className="text-sm font-black text-text-primary uppercase">{duplicateCase.companyName}</p>
+              </div>
+              <div className="bg-bg-input p-4 rounded-2xl border border-border">
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Client Name</p>
+                <p className="text-sm font-black text-text-primary uppercase">{duplicateCase.clientName}</p>
+              </div>
+              <div className="bg-bg-input p-4 rounded-2xl border border-border">
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Initiated By</p>
+                <p className="text-sm font-black text-text-primary uppercase">{duplicateCase.initiatedBy || 'N/A'}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-10 flex gap-4">
+            <button 
+              onClick={() => {
+                setShowDuplicateModal(false);
+                navigate(`/case-master?search=${duplicateCase.caseId}`);
+              }}
+              className="flex-1 bg-accent text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest shadow-lg shadow-orange-900/20 active:scale-95 transition-all"
+            >
+              View Existing Case
+            </button>
+            <button 
+              onClick={() => setShowDuplicateModal(false)}
+              className="flex-1 bg-bg-input text-text-primary font-black py-4 rounded-2xl text-xs uppercase tracking-widest border border-border active:scale-95 transition-all"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

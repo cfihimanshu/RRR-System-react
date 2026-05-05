@@ -39,8 +39,8 @@ const tabAccess = {
   "reviewer-panel": ["Admin", "Reviewer"],
   "accountant-dashboard": ["Admin", "Accountant"],
   "agreement-gen": ["Operations"],
-  "my-task": ["Admin", "Operations", "Staff"],
-  "sod-eod-reports": ["Admin", "Operations", "Staff"],
+  "my-task": ["Admin", "Operations", "Staff", "Accountant"],
+  "sod-eod-reports": ["Admin", "Operations", "Staff", "Accountant"],
   "work-report": ["Admin", "Operations"],
   "refund-request": ["Operations", "Staff"]
 };

@@ -4,6 +4,7 @@ const AuditLog = require('../models/AuditLog');
 const Timeline = require('../models/Timeline');
 const User = require('../models/User');
 const { sendEmail } = require('../utils/mailer');
+const { createNotification } = require('../utils/notificationHelper');
 const { verifyToken } = require('../middleware/auth');
 const { roleGuard } = require('../middleware/roleGuard');
 const router = express.Router();
@@ -70,10 +71,14 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
 
     // Notify Reviewers and Admins
     try {
-      const staffToNotify = await User.find({ role: { $in: ['Reviewer', 'Admin'] } });
-      const emails = staffToNotify.map(u => u.email).join(',');
+      const staffToNotify = ['Reviewer', 'Admin'];
+      const users = await User.find({ role: { $in: staffToNotify } });
+      const emails = users.map(u => u.email).join(',');
       if (emails) {
         sendEmail(emails, `New Refund Request: ${doc.caseId}`, `A new refund request for ₹${doc.amount} has been submitted by ${doc.requestedBy} and is pending review.`).catch(e => console.error('Refund Notification Error:', e));
+        
+        // Add Notification
+        createNotification(staffToNotify, `New Refund Request: ${doc.caseId}`, `A new refund request for ₹${doc.amount} has been submitted by ${doc.requestedByName} and is pending review.`, 'Refund', `/case-master?search=${doc.caseId}`);
       }
     } catch (e) { console.error('Refund Notification Error:', e); }
     
@@ -124,13 +129,20 @@ router.put('/:id', verifyToken, async (req, res) => {
       if (doc.status === 'Pending Admin Approval') {
         const admins = await User.find({ role: 'Admin' });
         const emails = admins.map(u => u.email).join(',');
-        if (emails) sendEmail(emails, `Refund Approval Required: ${doc.caseId}`, `Reviewer has approved a refund for ₹${doc.amount}. Final Admin approval is pending.`).catch(e => console.error('Refund Admin Alert Error:', e));
+        if (emails) {
+          sendEmail(emails, `Refund Approval Required: ${doc.caseId}`, `Reviewer has approved a refund for ₹${doc.amount}. Final Admin approval is pending.`).catch(e => console.error('Refund Admin Alert Error:', e));
+          createNotification('Admin', 'Refund Approval Required', `Reviewer has approved a refund for ₹${doc.amount} on case ${doc.caseId}.`, 'Refund', `/case-master?search=${doc.caseId}`);
+        }
       } else if (doc.status === 'Pending Payment') {
         const accountants = await User.find({ role: 'Accountant' });
         const emails = accountants.map(u => u.email).join(',');
-        if (emails) sendEmail(emails, `New Payment Task: ${doc.caseId}`, `Admin has approved a refund for ₹${doc.amount}. Please process the payment.`).catch(e => console.error('Refund Payment Alert Error:', e));
+        if (emails) {
+          sendEmail(emails, `New Payment Task: ${doc.caseId}`, `Admin has approved a refund for ₹${doc.amount}. Please process the payment.`).catch(e => console.error('Refund Payment Alert Error:', e));
+          createNotification('Accountant', 'New Payment Task', `Admin approved a refund for ₹${doc.amount} on case ${doc.caseId}. Please process payment.`, 'Refund', `/case-master?search=${doc.caseId}`);
+        }
       } else if (doc.status === 'Paid' || doc.status === 'Rejected') {
         sendEmail(doc.requestedBy, `Refund Request Update: ${doc.caseId}`, `Your refund request for ₹${doc.amount} has been ${doc.status}. ${doc.remark ? `\nRemark: ${doc.remark}` : ''}`).catch(e => console.error('Refund Requester Alert Error:', e));
+        createNotification(doc.requestedBy, `Refund ${doc.status}`, `Your refund request for ₹${doc.amount} on case ${doc.caseId} has been ${doc.status}.`, 'Refund', `/case-master?search=${doc.caseId}`);
       }
     } catch (e) { console.error('Refund Update Notification Error:', e); }
     

@@ -70,6 +70,31 @@ const initialService = {
   department: 'Operations'
 };
 
+// Normalize legacy/incorrect status values to correct display labels
+const normalizeStatus = (status, assignedTo, initiatedBy) => {
+  const legacyMap = {
+    'New': 'Case Logged',
+    'Intake': 'Case Logged',
+    'Case Intake': 'Case Logged',
+    'Open': 'Case Logged',
+    'Registered': 'Case Logged',
+    'Pending': 'Case Logged',
+    'Active': 'Assigned',
+    'In Progress': 'Negotiation',
+    'Resolved': 'Settled',
+    'Done': 'Settled',
+    'Complete': 'Settled',
+    'Completed': 'Settled',
+  };
+  const normalized = legacyMap[status] || status || 'Case Logged';
+  // If normalized is still 'Case Logged' but has an assignee OR initiator, call it 'Assigned'
+  if (normalized === 'Case Logged' && ((assignedTo && assignedTo.trim() !== '') || (initiatedBy && initiatedBy.trim() !== ''))) {
+    return 'Assigned';
+  }
+  return normalized;
+};
+
+
 // Modernized Case Master with Integrated Detail View
 const CaseMasterTab = () => {
   const [cases, setCases] = useState([]);
@@ -165,13 +190,17 @@ const CaseMasterTab = () => {
     status: 'All Status',
     priority: 'All Priority',
     assignee: 'All Assignees',
-    date: null
+    typeOfComplaint: 'All Types',
+    date: null,
+    unassignedOnly: false
   });
   const [appliedFilters, setAppliedFilters] = useState({
     status: 'All Status',
     priority: 'All Priority',
     assignee: 'All Assignees',
-    date: null
+    typeOfComplaint: 'All Types',
+    date: null,
+    unassignedOnly: false
   });
   const { user } = useContext(AuthContext);
 
@@ -265,6 +294,16 @@ const CaseMasterTab = () => {
       setSearchTerm(location.state.searchId);
       window.history.replaceState({}, document.title);
     }
+    if (location.state?.unassignedOnly) {
+      setAppliedFilters(prev => ({ ...prev, unassignedOnly: true }));
+      setTempFilters(prev => ({ ...prev, unassignedOnly: true }));
+      window.history.replaceState({}, document.title);
+    }
+    if (location.state?.typeFilter) {
+      setAppliedFilters(prev => ({ ...prev, typeOfComplaint: location.state.typeFilter }));
+      setTempFilters(prev => ({ ...prev, typeOfComplaint: location.state.typeFilter }));
+      window.history.replaceState({}, document.title);
+    }
   }, [location.state]);
 
   const handleImportCSV = async (e) => {
@@ -351,14 +390,18 @@ const CaseMasterTab = () => {
       (c.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
 
     let matchStatus = false;
+    const normalizedCaseStatus = normalizeStatus(c.currentStatus || c.status, c.assignedTo);
+
     if (appliedFilters.status === 'All Status') {
       matchStatus = true;
     } else if (appliedFilters.status === 'Active') {
-      matchStatus = c.currentStatus !== 'Closed' && c.currentStatus !== 'Settled';
+      matchStatus = normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed';
     } else if (appliedFilters.status === 'Closed') {
-      matchStatus = c.currentStatus === 'Closed' || c.currentStatus === 'Settled';
+      matchStatus = normalizedCaseStatus === 'Settled' || normalizedCaseStatus === 'Closed';
+    } else if (appliedFilters.status === 'Unassigned') {
+      matchStatus = !c.assignedTo || c.assignedTo.trim() === '';
     } else {
-      matchStatus = c.status === appliedFilters.status || c.currentStatus === appliedFilters.status;
+      matchStatus = normalizedCaseStatus === appliedFilters.status;
     }
 
     const matchPriority = appliedFilters.priority === 'All Priority' || c.priority === appliedFilters.priority;
@@ -373,7 +416,10 @@ const CaseMasterTab = () => {
       matchDate = caseDate === appliedFilters.date;
     }
 
-    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate;
+    const matchUnassigned = !appliedFilters.unassignedOnly || (!c.initiatedBy || c.initiatedBy.trim() === '');
+    const matchType = appliedFilters.typeOfComplaint === 'All Types' || c.typeOfComplaint === appliedFilters.typeOfComplaint;
+
+    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchUnassigned && matchType;
   });
 
   const handleApplyFilters = () => {
@@ -386,12 +432,38 @@ const CaseMasterTab = () => {
       status: 'All Status',
       priority: 'All Priority',
       assignee: 'All Assignees',
-      date: null
+      typeOfComplaint: 'All Types',
+      date: null,
+      unassignedOnly: false
     };
     setTempFilters(reset);
     setAppliedFilters(reset);
     setIsFilterOpen(false);
   };
+
+  // Keep progress form in sync with current case status
+  useEffect(() => {
+    if (viewCase) {
+      const isAssigned = viewCase.assignedTo && viewCase.assignedTo.trim() !== '';
+      const currentStatus = viewCase.currentStatus || 'New';
+
+      let stage = currentStatus === 'New' ? 'Case Logged' : currentStatus;
+      let percentage = viewCase.progressPercentage || 10;
+
+      // Auto-switch to Assigned if it's assigned but still in Logged stage
+      if (isAssigned && (stage === 'Case Logged' || stage === 'New')) {
+        stage = 'Assigned';
+        percentage = 25;
+      }
+
+      setProgressFormData(prev => ({
+        ...prev,
+        stage,
+        percentage
+      }));
+    }
+  }, [viewCase?.currentStatus, viewCase?.assignedTo]);
+
 
   const handleViewCase = async (c) => {
     setViewCase(c);
@@ -444,9 +516,13 @@ const CaseMasterTab = () => {
       recommendedNextSteps: c.recommendedNextSteps || ''
     });
 
+    const isAssignedInit = c.initiatedBy && c.initiatedBy.toLowerCase() !== 'system' && c.initiatedBy.trim() !== '';
+    const initialStageFallback = (c.currentStatus === 'Case Logged' || !c.currentStatus) && isAssignedInit ? 'Assigned' : (c.currentStatus || 'Case Logged');
+    const initialPctFallback = initialStageFallback === 'Assigned' ? 40 : (c.progressPercentage || 0);
+
     setProgressFormData({
-      stage: c.currentStatus || 'Case Logged',
-      percentage: c.progressPercentage || 0,
+      stage: initialStageFallback,
+      percentage: initialPctFallback,
       summary: '',
       nextAction: '',
       blockers: '',
@@ -576,10 +652,19 @@ const CaseMasterTab = () => {
       await api.put(`/cases/${viewCase.caseId}`, payload);
       toast.success('Case profile updated successfully', { id: loadingToast });
       fetchCases();
-      // Optional: Refresh the viewCase data if needed
-      const res = await api.get(`/cases`);
+
+      // Refresh the viewCase data to reflect backend auto-updates (like status changed to Assigned)
+      const res = await api.get('/cases');
       const updatedCase = res.data.find(c => c.caseId === viewCase.caseId);
-      if (updatedCase) setViewCase(updatedCase);
+      if (updatedCase) {
+        setViewCase(updatedCase);
+        // Sync progress form immediately
+        setProgressFormData(prev => ({
+          ...prev,
+          stage: updatedCase.currentStatus === 'New' ? 'Case Logged' : updatedCase.currentStatus,
+          percentage: updatedCase.progressPercentage || 10
+        }));
+      }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to update case', { id: loadingToast });
     }
@@ -640,7 +725,14 @@ const CaseMasterTab = () => {
         const latest = res.data.logs[0];
 
         const stageOrder = ['Case Logged', 'Assigned', 'Agreement', 'Negotiation', 'Resolution'];
-        const stage = latest.stage || 'Case Logged';
+        let stage = latest.stage || 'Case Logged';
+
+        // Auto-upgrade to Assigned if initiatedBy is a real user and we are still at Case Logged
+        const isAssigned = viewCase?.initiatedBy && viewCase.initiatedBy.toLowerCase() !== 'system' && viewCase.initiatedBy.trim() !== '';
+        if (stage === 'Case Logged' && isAssigned) {
+          stage = 'Assigned';
+        }
+
         const stageIndex = stageOrder.indexOf(stage);
         const newPercentage = stageIndex >= 0 ? (stageIndex + 1) * 20 : Math.floor((latest.percentage || 0) / 20) * 20;
 
@@ -650,20 +742,24 @@ const CaseMasterTab = () => {
           stage
         }));
 
-        if (res.data.checklist && res.data.checklist.length > 0) {
+        if (res.data.checklist && res.data.checklist.length > 0 && stage === latest.stage) {
           setChecklist(res.data.checklist);
         } else {
           setChecklist(buildChecklistForStage(stage));
         }
       } else {
         // Auto-initialize if empty (Fail-safe)
+        const isAssigned = viewCase?.initiatedBy && viewCase.initiatedBy.toLowerCase() !== 'system' && viewCase.initiatedBy.trim() !== '';
+        const initialStage = (viewCase?.currentStatus === 'Case Logged' && isAssigned) ? 'Assigned' : (viewCase?.currentStatus || 'Case Logged');
+        const initialPercentage = initialStage === 'Assigned' ? 40 : 20;
+
         const initialLog = {
           caseId,
-          stage: viewCase?.currentStatus || 'Case Logged',
-          percentage: 20,
+          stage: initialStage,
+          percentage: initialPercentage,
           summary: `Case Registered: ${viewCase?.typeOfComplaint || 'Inquiry'} setup complete.`,
           updatedBy: viewCase?.initiatedBy || user?.fullName || user?.email,
-          checklist: buildChecklistForStage(viewCase?.currentStatus || 'Case Logged')
+          checklist: buildChecklistForStage(initialStage)
         };
         await api.post('/progress', initialLog);
         // Refresh
@@ -1017,16 +1113,16 @@ const CaseMasterTab = () => {
             <div className="relative">
               <button
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.date
+                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.date || appliedFilters.unassignedOnly
                   ? 'bg-accent text-white border-accent shadow-sm'
                   : 'bg-bg-card text-text-secondary border-border hover:bg-bg-card-hover'
                   }`}
               >
                 <Filter size={16} />
                 Filters
-                {(appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.date) && (
+                {(appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.typeOfComplaint !== 'All Types' || appliedFilters.date || appliedFilters.unassignedOnly) && (
                   <span className="bg-white text-accent rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">
-                    {[appliedFilters.status !== 'All Status', appliedFilters.priority !== 'All Priority', appliedFilters.assignee !== 'All Assignees', !!appliedFilters.date].filter(Boolean).length}
+                    {[appliedFilters.status !== 'All Status', appliedFilters.priority !== 'All Priority', appliedFilters.assignee !== 'All Assignees', appliedFilters.typeOfComplaint !== 'All Types', !!appliedFilters.date, appliedFilters.unassignedOnly].filter(Boolean).length}
                   </span>
                 )}
               </button>
@@ -1038,7 +1134,7 @@ const CaseMasterTab = () => {
                     <div className="flex flex-1 min-h-[300px] md:min-h-[350px]">
                       {/* Left Sidebar */}
                       <div className="w-[100px] md:w-1/3 bg-bg-secondary border-r border-border py-4">
-                        {['Status', 'Priority', 'Assignees', 'Date'].map((type) => (
+                        {['Status', 'Priority', 'Assignees', 'Type', 'Date', 'Assignment'].map((type) => (
                           <button
                             key={type}
                             onClick={() => setActiveFilterType(type)}
@@ -1057,7 +1153,7 @@ const CaseMasterTab = () => {
                       <div className="w-2/3 p-6 overflow-y-auto max-h-[400px] bg-bg-card">
                         {activeFilterType === 'Status' && (
                           <div className="space-y-3">
-                            {['All Status', 'New', 'In-progress', 'Settled', 'Stucked'].map((s) => (
+                            {['All Status', 'Unassigned', 'Case Logged', 'Assigned', 'Negotiation', 'Settled', 'Stucked'].map((s) => (
                               <label key={s} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
                                 <input
                                   type="radio"
@@ -1116,6 +1212,23 @@ const CaseMasterTab = () => {
                           </div>
                         )}
 
+                        {activeFilterType === 'Type' && (
+                          <div className="space-y-3">
+                            {['All Types', 'Legal Notice', 'Cyber Complaint', 'Consumer Complaint', 'FIR', 'Litigation', 'Escalation', 'General Query', 'Lien', 'TollFree'].map((t) => (
+                              <label key={t} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                <input
+                                  type="radio"
+                                  name="typeOfComplaint"
+                                  checked={tempFilters.typeOfComplaint === t}
+                                  onChange={() => setTempFilters({ ...tempFilters, typeOfComplaint: t })}
+                                  className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input"
+                                />
+                                <span className={`text-sm font-bold ${tempFilters.typeOfComplaint === t ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{t}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+
                         {activeFilterType === 'Date' && (
                           <div className="calendar-container dark-calendar">
                             <Calendar
@@ -1149,6 +1262,23 @@ const CaseMasterTab = () => {
                                 </button>
                               </div>
                             )}
+                          </div>
+                        )}
+
+                        {activeFilterType === 'Assignment' && (
+                          <div className="space-y-3">
+                            <label className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                              <input
+                                type="checkbox"
+                                checked={tempFilters.unassignedOnly}
+                                onChange={(e) => setTempFilters({ ...tempFilters, unassignedOnly: e.target.checked })}
+                                className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                              />
+                              <div className="flex flex-col">
+                                <span className={`text-sm font-bold ${tempFilters.unassignedOnly ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>Show Only Unassigned</span>
+                                <span className="text-[10px] text-text-muted font-bold uppercase tracking-tight">Cases with missing Initiator</span>
+                              </div>
+                            </label>
                           </div>
                         )}
                       </div>
@@ -1222,7 +1352,7 @@ const CaseMasterTab = () => {
               <div className="flex flex-wrap items-center gap-2 text-[10px] text-text-muted font-bold mt-1">
                 <span>CFI247</span>
                 <ChevronRight size={10} />
-                <span>My Cases</span>
+                <button onClick={() => setViewCase(null)} className="hover:text-accent transition-colors">My Cases</button>
                 <ChevronRight size={10} />
                 <span className="text-accent">Case Detail</span>
               </div>
@@ -1230,6 +1360,7 @@ const CaseMasterTab = () => {
             <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
               <div className="text-right hidden sm:block mr-4">
                 <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">{format(new Date(), 'eee hh:mm aaa')}</div>
+
               </div>
               <button
                 onClick={() => navigate('/new-case')}
@@ -1256,13 +1387,21 @@ const CaseMasterTab = () => {
                   <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${viewCase.priority === 'High' ? 'bg-red-soft text-red' : 'bg-yellow-soft text-yellow'}`}>
                     {viewCase.priority || 'NORMAL'}
                   </span>
-                  <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
-                    ESCALATED
-                  </span>
+
                 </div>
-                <h2 className="text-2xl font-black text-text-primary uppercase tracking-tight">
-                  {viewCase.typeOfComplaint || 'Payment Dispute'} — {viewCase.companyName}
-                </h2>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+                  <h2 className="text-2xl font-black text-text-primary uppercase tracking-tight max-w-4xl">
+                    {viewCase.typeOfComplaint || 'Payment Dispute'} — {viewCase.companyName}
+                  </h2>
+                  {((activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Resolution' || viewCase.progressPercentage >= 100) && viewCase.currentStatus !== 'Settled' && (
+                    <button
+                      onClick={handleMarkResolved}
+                      className="bg-green text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+                    >
+                      <CheckCircle size={14} strokeWidth={3} /> Mark Case Resolved
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex gap-3">
                 {!isEditing && activeDetailTab === 'Case Details' && (
@@ -1283,7 +1422,18 @@ const CaseMasterTab = () => {
               <div className="flex w-full rounded-lg overflow-hidden h-10 ">
                 {['Case Logged', 'Assigned', 'Agreement', 'Negotiation', 'Resolution'].map((step, idx) => {
                   const steps = ['Case Logged', 'Assigned', 'Agreement', 'Negotiation', 'Resolution'];
-                  const currentIdx = steps.indexOf(viewCase.currentStatus) === -1 ? 1 : steps.indexOf(viewCase.currentStatus);
+
+                  // If on Progress Update tab, show the current selection in the form
+                  const displayStatus = activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus;
+
+                  let currentIdx = steps.indexOf(displayStatus);
+                  if (currentIdx === -1) {
+                    if (displayStatus === 'Settled' || viewCase.progressPercentage >= 100) {
+                      currentIdx = 5; // All steps completed
+                    } else {
+                      currentIdx = 0;
+                    }
+                  }
                   const isCompleted = idx < currentIdx;
                   const isActive = idx === currentIdx;
 
@@ -1380,6 +1530,7 @@ const CaseMasterTab = () => {
                         <option value="Office Visit">Office Visit</option>
                         <option value="Social Media">Social Media</option>
                         <option value="Toll Free">Toll Free</option>
+                        <option value="Notice">Notice</option>
                       </select>
                     </div>
                     <div>
@@ -1394,6 +1545,7 @@ const CaseMasterTab = () => {
                         <option value="Escalation">Escalation</option>
                         <option value="General Query">General Query</option>
                         <option value="Lien">Lien</option>
+                        <option value="TollFree">TollFree</option>
                       </select>
                     </div>
                     <div>
@@ -1403,16 +1555,14 @@ const CaseMasterTab = () => {
                         <option value="Startupflora">Startupflora</option>
                       </select>
                     </div>
-                  </div>
 
-                  {/* Conditional Complaint Fields */}
-                  {(formData.typeOfComplaint === 'Cyber Complaint' || formData.typeOfComplaint === 'FIR' || formData.typeOfComplaint === 'Consumer Complaint') && (
-                    <div className="mt-6 pt-6 border-t border-border bg-red-soft/20 -mx-8 px-8 pb-4">
-                      {formData.typeOfComplaint === 'Cyber Complaint' && (
-                        <div className="mb-4">
-                          <label className={labelClass}>Acknowledgment Numbers</label>
+                    {/* Conditional Complaint Fields Integrated into Grid */}
+                    {formData.typeOfComplaint === 'Cyber Complaint' && (
+                      <div className="lg:col-span-2">
+                        <label className={labelClass}>Acknowledgment Numbers</label>
+                        <div className="space-y-3">
                           {cyberAcks.map((ack, idx) => (
-                            <div key={idx} className="flex gap-3 mb-3">
+                            <div key={idx} className="flex gap-3">
                               <input
                                 type="text"
                                 className={inputClass}
@@ -1427,29 +1577,32 @@ const CaseMasterTab = () => {
                             </div>
                           ))}
                           {isEditing && (
-                            <button type="button" onClick={addCyberAck} className="text-xs text-accent font-black hover:underline mt-1 uppercase tracking-widest">+ Add Another Number</button>
+                            <button type="button" onClick={addCyberAck} className="text-[10px] text-accent font-black hover:underline uppercase tracking-widest">+ Add Number</button>
                           )}
                         </div>
-                      )}
-                      {formData.typeOfComplaint === 'FIR' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-                          <div>
-                            <label className={labelClass}>FIR Number</label>
-                            <input type="text" className={inputClass} name="firNumber" value={formData.firNumber} onChange={handleFormChange} disabled={!isEditing} />
-                          </div>
-                          <div>
-                            <FileUpload onUploadSuccess={(url) => setFormData(p => ({ ...p, firFileLink: url }))} label="Upload FIR Document" disabled={!isEditing} />
-                          </div>
+                      </div>
+                    )}
+
+                    {formData.typeOfComplaint === 'FIR' && (
+                      <>
+                        <div>
+                          <label className={labelClass}>FIR Number</label>
+                          <input type="text" className={inputClass} name="firNumber" value={formData.firNumber} onChange={handleFormChange} disabled={!isEditing} />
                         </div>
-                      )}
-                      {formData.typeOfComplaint === 'Consumer Complaint' && (
-                        <div className="mb-4">
-                          <label className={labelClass}>Grievance Number</label>
-                          <input type="text" className={inputClass} name="grievanceNumber" value={formData.grievanceNumber} onChange={handleFormChange} disabled={!isEditing} />
+                        <div>
+                          <label className={labelClass}>FIR Document</label>
+                          <FileUpload onUploadSuccess={(url) => setFormData(p => ({ ...p, firFileLink: url }))} label="Upload" disabled={!isEditing} compact={true} />
                         </div>
-                      )}
-                    </div>
-                  )}
+                      </>
+                    )}
+
+                    {formData.typeOfComplaint === 'Consumer Complaint' && (
+                      <div className="lg:col-span-2">
+                        <label className={labelClass}>Grievance Number</label>
+                        <input type="text" className={inputClass} name="grievanceNumber" value={formData.grievanceNumber} onChange={handleFormChange} disabled={!isEditing} />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Services Sold Configuration */}
@@ -1690,63 +1843,6 @@ const CaseMasterTab = () => {
                   </div>
                 </div>
 
-                {/* Case Study Intelligence (For PDF Generation) */}
-                <div className={cardClass}>
-                  <h3 className={sectionTitleClass}><Zap size={18} className="text-accent" /> Case Study Intelligence</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                    <div>
-                      <label className={labelClass}>Lien Marked On (Details)</label>
-                      <input type="text" className={inputClass} name="lienMarkedOn" value={formData.lienMarkedOn || ''} onChange={handleFormChange} placeholder="e.g. Acc No: ... - Rs. 5,000" disabled={!isEditing} />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Lien Bank / IFSC</label>
-                      <input type="text" className={inputClass} name="lienBank" value={formData.lienBank || ''} onChange={handleFormChange} placeholder="e.g. Axis Bank | UTIB0001645" disabled={!isEditing} />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Refund Status</label>
-                      <input type="text" className={inputClass} name="refundStatus" value={formData.refundStatus || ''} onChange={handleFormChange} placeholder="e.g. Fully Refunded / Pending" disabled={!isEditing} />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-bg-secondary p-6 rounded-2xl border-2 border-dashed border-border">
-                    <div className="col-span-full mb-2">
-                      <h4 className="text-[10px] font-black text-accent uppercase tracking-widest flex items-center gap-2">
-                        <Users size={14} /> Client Bank Details
-                      </h4>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelClass}>Acc 1 Number</label>
-                        <input type="text" className={inputClass} name="acc1No" value={formData.acc1No || ''} onChange={handleFormChange} disabled={!isEditing} />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Acc 1 IFSC</label>
-                        <input type="text" className={inputClass} name="acc1Ifsc" value={formData.acc1Ifsc || ''} onChange={handleFormChange} disabled={!isEditing} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelClass}>Acc 2 Number</label>
-                        <input type="text" className={inputClass} name="acc2No" value={formData.acc2No || ''} onChange={handleFormChange} disabled={!isEditing} />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Acc 2 IFSC</label>
-                        <input type="text" className={inputClass} name="acc2Ifsc" value={formData.acc2Ifsc || ''} onChange={handleFormChange} disabled={!isEditing} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className={labelClass}>Key Pending Issue</label>
-                      <textarea className={`${inputClass} min-h-[80px]`} name="keyPendingIssue" value={formData.keyPendingIssue || ''} onChange={handleFormChange} placeholder="e.g. Unresolved Lien on Company Account..." disabled={!isEditing}></textarea>
-                    </div>
-                    <div>
-                      <label className={labelClass}>Recommended Next Steps</label>
-                      <textarea className={`${inputClass} min-h-[80px]`} name="recommendedNextSteps" value={formData.recommendedNextSteps || ''} onChange={handleFormChange} placeholder="e.g. Follow up with Cyber Cell..." disabled={!isEditing}></textarea>
-                    </div>
-                  </div>
-                </div>
 
                 {isEditing && (
                   <div className="flex justify-end gap-4 pt-6 border-t border-border">
@@ -1997,7 +2093,7 @@ const CaseMasterTab = () => {
                         <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1">Document Type</label>
                         <SearchableSelect
                           name="mouType"
-                          options={['Legal Notice', 'Payment Receipt', 'MOU/Agreement', 'Whatsapp', 'Email', 'Police Complaint', 'Meeting', 'Refund Proof', 'Other']}
+                          options={['Legal Notice', 'Payment Receipt', 'Agreement', 'Whatsapp', 'Email', 'Police Complaint', 'Meeting', 'Refund Proof', 'Other']}
                           value={mouFormData.mouType}
                           onChange={(e) => setMouFormData({ ...mouFormData, mouType: e.target.value })}
                           placeholder="Select Document Type..."
@@ -2102,22 +2198,20 @@ const CaseMasterTab = () => {
                             </tr>
                           ) : (
                             caseDocs.map(doc => {
-                              let label = 'DOCUMENT';
+                              let label = doc.docType || 'DOCUMENT';
                               let colorClass = 'bg-bg-secondary text-text-muted';
                               let Icon = FileText;
 
-                              if (doc.docType?.includes('MOU')) {
-                                label = 'MOU';
+                              const typeLower = (doc.docType || '').toLowerCase();
+
+                              if (typeLower.includes('mou') || typeLower.includes('agreement')) {
                                 colorClass = 'bg-yellow-soft text-yellow';
-                              } else if (doc.docType === 'Email' || doc.docType === 'Whatsapp') {
-                                label = doc.docType.toUpperCase();
+                              } else if (typeLower.includes('email') || typeLower.includes('whatsapp')) {
                                 colorClass = 'bg-blue-soft text-blue';
-                                Icon = Mail;
-                              } else if (doc.docType === 'Legal Notice' || doc.docType === 'Police Complaint') {
-                                label = 'LEGAL';
+                                Icon = typeLower.includes('email') ? Mail : MessageCircle;
+                              } else if (typeLower.includes('legal') || typeLower.includes('police') || typeLower.includes('complaint')) {
                                 colorClass = 'bg-red-soft text-red';
-                              } else if (doc.docType === 'Payment Receipt' || doc.docType === 'Refund Proof') {
-                                label = 'FINANCE';
+                              } else if (typeLower.includes('payment') || typeLower.includes('refund') || typeLower.includes('receipt') || typeLower.includes('finance')) {
                                 colorClass = 'bg-green-soft text-green';
                               }
 
@@ -2649,7 +2743,7 @@ const CaseMasterTab = () => {
                   <th className="px-2 py-3 w-[7%]">Amount Paid</th>
                   <th className="px-2 py-3 w-[5%]">Priority</th>
                   <th className="px-2 py-3 w-[5%]">Status</th>
-                  {user?.role === 'Admin' && <th className="px-2 py-3 w-[10%]">Assigned To</th>}
+                  <th className="px-2 py-3 w-[10%]">Assigned To</th>
                   <th className="px-2 py-4 w-[8%]">Last Update</th>
                   <th className="px-2 py-4 w-[15%] text-center">Actions</th>
                 </tr>
@@ -2755,12 +2849,36 @@ const CaseRow = memo(({
           {c.priority || 'Medium'}
         </span>
       </td>
-      <td className="px-3 py-5">
-        <span className="bg-accent-soft text-accent border border-accent-soft px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
-          {c.currentStatus || 'New'}
-        </span>
+      <td className="px-3 py-5 min-w-[120px]">
+        {(() => {
+          const displayStatus = normalizeStatus(c.currentStatus, c.assignedTo, c.initiatedBy);
+          const isAssigned = (c.assignedTo && c.assignedTo.trim() !== '') || (c.initiatedBy && c.initiatedBy.trim() !== '');
+          const pct = (isAssigned && (c.progressPercentage || 0) < 25) ? 25 : (c.progressPercentage || 10);
+          const badgeClass =
+            (displayStatus === 'Settled' || displayStatus === 'Closed') ? 'bg-green-soft text-green border-green-soft' :
+              displayStatus === 'Escalated' ? 'bg-red-soft text-red border-red-soft' :
+                displayStatus === 'Assigned' ? 'bg-blue-soft text-blue border-blue-soft' :
+                  displayStatus === 'Negotiation' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
+                    displayStatus === 'Resolution' ? 'bg-purple-soft text-purple-400 border-purple-soft' :
+                      'bg-accent-soft text-accent border-accent-soft';
+          return (
+            <div className="flex flex-col gap-1.5">
+              <span className={`w-fit px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${badgeClass}`}>
+                {displayStatus}
+              </span>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-border/80 rounded-full h-1 overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-500 ${pct === 100 ? 'bg-green' : 'bg-accent'}`} style={{ width: `${pct}%` }}></div>
+                </div>
+                <span className="text-[8px] font-black text-text-muted">{pct}%</span>
+              </div>
+            </div>
+          );
+        })()}
       </td>
-      {user?.role === 'Admin' && <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-black text-[10px] uppercase tracking-wider">{c.assignedTo || c.initiatedBy || '-'}</td>}
+      <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-black text-[10px] uppercase tracking-wider">
+        {c.assignedTo || c.initiatedBy || '-'}
+      </td>
       <td className="px-3 py-5 text-text-muted">
         {c.lastUpdateDate ? (
           <>
@@ -2805,7 +2923,7 @@ const CaseRow = memo(({
             <div className="flex gap-2 w-full">
               <select
                 className="flex-1 bg-[#0f172a] border-2 border-[#1e293b] rounded-xl text-[9px] px-2 py-2.5 outline-none focus:border-accent shadow-sm min-w-0 text-blue-400 font-black uppercase tracking-widest cursor-pointer"
-                value={assignmentInput !== undefined ? assignmentInput : (c.assignedTo || '')}
+                value={assignmentInput !== undefined ? assignmentInput : (c.assignedTo || c.initiatedBy || '')}
                 onChange={(e) => handleAssignmentInputChange(c.caseId, e.target.value)}
               >
                 <option value="">Assign</option>

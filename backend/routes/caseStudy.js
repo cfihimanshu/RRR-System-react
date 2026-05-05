@@ -22,7 +22,7 @@ router.post('/generate', verifyToken, async (req, res) => {
     // Calculate totals
     const totalPaid = caseData.servicesSold?.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
     const totalMou = caseData.servicesSold?.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
-    const breakdown = caseData.servicesSold?.map(s => `Rs. ${Number(s.serviceAmount || 0).toLocaleString('en-IN')}`).join(' + ') + ` = Rs. ${totalPaid.toLocaleString('en-IN')}`;
+
 
     // Prepare dynamic sections for Services
     const serviceSections = caseData.servicesSold?.map((s, i) => `
@@ -58,7 +58,7 @@ router.post('/generate', verifyToken, async (req, res) => {
       '{{complaintType}}': caseData.typeOfComplaint || 'Case Analysis',
       '{{datePrepared}}': new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
       '{{totalPaid}}': totalPaid.toLocaleString('en-IN'),
-      '{{breakdown}}': breakdown,
+      // '{{breakdown}}': breakdown,
       '{{totalMouText}}': totalMou > 0 ? `Rs. ${totalMou.toLocaleString('en-IN')}/-` : 'NA (No MOU signed)',
       '{{refundStatus}}': caseData.refundStatus || 'Analysis Pending',
       '{{lienDetails}}': caseData.lienMarkedOn || 'No Active Lien Recorded',

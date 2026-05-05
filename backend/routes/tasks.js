@@ -3,6 +3,8 @@ const router = express.Router();
 const Task = require('../models/Task');
 const Case = require('../models/Case');
 const { verifyToken } = require('../middleware/auth');
+const { createNotification } = require('../utils/notificationHelper');
+const User = require('../models/User');
 
 // Get all tasks - only from Task collection (no case merging)
 router.get('/', verifyToken, async (req, res) => {
@@ -47,6 +49,17 @@ router.post('/', verifyToken, async (req, res) => {
       createdBy: req.user.email
     });
     await newTask.save();
+    
+    // Notify Assignee
+    try {
+      const assigneeUser = await User.findOne({ 
+        fullName: { $regex: new RegExp(`^\\s*${req.body.assignee.trim()}\\s*$`, 'i') } 
+      });
+      if (assigneeUser) {
+        createNotification(assigneeUser.email, 'New Task Assigned', `Task ${newTask.taskId}: ${newTask.title}`, 'Task', '/my-task');
+      }
+    } catch (e) { console.error('Task Notification Error:', e); }
+
     res.status(201).json(newTask);
   } catch (error) {
     res.status(500).json({ error: error.message });

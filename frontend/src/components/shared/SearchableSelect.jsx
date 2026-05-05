@@ -8,9 +8,10 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
   const [isTyping, setIsTyping] = useState(false);
 
   useEffect(() => {
-    setSearchTerm(value || '');
-    setIsTyping(false);
-  }, [value]);
+    if (!isTyping) {
+      setSearchTerm(value || '');
+    }
+  }, [value, isTyping]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -23,8 +24,16 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [wrapperRef]);
 
-  const filteredOptions = isTyping
-    ? options.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredOptions = searchTerm && isTyping
+    ? options
+        .filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
+        .sort((a, b) => {
+          const aStarts = a.toLowerCase().startsWith(searchTerm.toLowerCase());
+          const bStarts = b.toLowerCase().startsWith(searchTerm.toLowerCase());
+          if (aStarts && !bStarts) return -1;
+          if (!aStarts && bStarts) return 1;
+          return a.localeCompare(b);
+        })
     : options;
 
   const handleSelect = (opt) => {

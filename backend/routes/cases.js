@@ -14,6 +14,9 @@ const History = require('../models/History');
 const Progress = require('../models/Progress');
 const { verifyToken } = require('../middleware/auth');
 const { roleGuard } = require('../middleware/roleGuard');
+const { createNotification } = require('../utils/notificationHelper');
+const { sendEmail } = require('../utils/mailer');
+const User = require('../models/User');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -115,25 +118,23 @@ router.get('/', verifyToken, async (req, res) => {
   try {
     let query = {};
 
-    // Logic: Admin sees all. Others see only their assigned or initiated cases.
+    // Logic: Admin sees all. Others see only their assigned or unassigned-initiated cases.
     if (req.user.role !== 'Admin') {
       const User = require('../models/User');
-      const dbUser = await User.findById(req.user.id);
-      const possibleNames = [
-        req.user.fullName,
-        dbUser?.fullName,
-        dbUser?.name,
-        req.user.email
-      ].filter(Boolean);
-
-      const regexName = possibleNames.length > 0 ? possibleNames[0] : 'UNKNOWN_USER_FALLBACK';
+      const dbUser = await User.findById(req.user.id).lean();
+      const userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
+      const esc = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nameRegex = { $regex: new RegExp(`^\\s*${esc}\\s*$`, 'i') };
 
       query = {
         $or: [
-          { assignedTo: { $in: possibleNames } },
-          { initiatedBy: { $in: possibleNames } },
-          { assignedTo: { $regex: regexName, $options: 'i' } },
-          { initiatedBy: { $regex: regexName, $options: 'i' } }
+          { assignedTo: nameRegex },
+          { 
+            $and: [
+              { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
+              { initiatedBy: nameRegex }
+            ]
+          }
         ]
       };
     }
@@ -167,8 +168,6 @@ router.get('/available-dates', verifyToken, async (req, res) => {
   }
 });
 
-const { sendEmail } = require('../utils/mailer');
-const User = require('../models/User');
 
 router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async (req, res) => {
   try {
@@ -189,19 +188,26 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
         return false;
       })
     });
-
     if (existingCase) {
-      return res.status(400).json({ error: `Entry already exists! A case with these details was already registered with Case ID: ${existingCase.caseId}. Please search and update the existing case.` });
+      return res.status(400).json({ 
+        error: `Entry already exists! A case with these details was already registered with Case ID: ${existingCase.caseId}.`,
+        existingCase: existingCase 
+      });
     }
 
     const allCases = await Case.find({}, 'caseId');
     const caseId = generateCaseId(req.body.brandName, req.body.companyName, allCases);
+    
+    // Auto-assign to initiator if provided
+    const assignedTo = req.body.assignedTo || req.body.initiatedBy || "";
+
     const newCase = new Case({
       ...req.body,
       caseId,
+      assignedTo,
       createdDate: req.body.createdDate || new Date().toISOString(),
       lastUpdateDate: new Date().toISOString(),
-      initiatedBy: req.body.initiatedBy || req.user.fullName
+      initiatedBy: req.body.initiatedBy || ""
     });
     await newCase.save();
 
@@ -244,6 +250,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
           </div>
         `;
         sendEmail(emails, subject, '', html).catch(err => console.error('Admin Case Alert Error:', err));
+        createNotification('Admin', isCritical ? '🚨 Critical Case Created' : '📋 New Case Created', `A new case ${caseId} (${req.body.typeOfComplaint}) has been registered by ${req.body.initiatedBy || req.user.fullName}.`, isCritical ? 'Critical' : 'Case', `/case-master?search=${caseId}`);
       }
     } catch (err) { console.error('Admin Case Alert Error:', err); }
 
@@ -257,8 +264,8 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       caseId: caseId
     });
 
-    // Auto-generate Task for the user who initiated the case
-    const initiatedUser = req.body.initiatedBy || req.user.fullName;
+    // Auto-generate Task for the user who initiated the case if explicitly assigned
+    const initiatedUser = req.body.initiatedBy || "";
     if (initiatedUser) {
       try {
         const existingTaskCount = await Task.countDocuments({ caseId: caseId });
@@ -368,6 +375,12 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
 
     const isAssigning = req.body.assignedTo && req.body.assignedTo !== existingCase.assignedTo;
 
+    // Auto-update status to "Assigned" if it was just "New" or "Case Logged"
+    if (isAssigning && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged')) {
+      req.body.currentStatus = 'Assigned';
+      req.body.progressPercentage = 25;
+    }
+
     // Strip immutable/system fields from update payload to prevent MongoDB errors
     const { _id, __v, caseId: bodyCaseId, createdAt, updatedAt, ...updateData } = req.body;
 
@@ -407,6 +420,7 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
             </div>
           `;
           sendEmail(assignee.email, sub, '', html).catch(err => console.error('Assignee Email Error:', err));
+          createNotification(assignee.email, 'New Case Assigned', `Case ${caseId} has been assigned to you by ${req.user.fullName}.`, 'Assignment', `/case-master?search=${caseId}`);
         } else {
           console.warn('Assignee NOT found in database for name:', req.body.assignedTo);
         }
@@ -423,6 +437,27 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
             </div>
           `;
           sendEmail(adminEmails, sub, '', html).catch(err => console.error('Admin Assignment Alert Error:', err));
+          createNotification('Admin', 'Case Assignment Update', `Case ${caseId} has been assigned to ${req.body.assignedTo} by ${req.user.fullName}.`, 'Assignment', `/case-master?search=${caseId}`);
+        }
+
+        // Auto-create a Progress Log for the assignment if we auto-updated the status
+        if (req.body.currentStatus === 'Assigned') {
+          const Progress = require('../models/Progress');
+          await Progress.create({
+            caseId: caseId,
+            stage: 'Assigned',
+            percentage: 25,
+            summary: `Case assigned to ${req.body.assignedTo} for initial analysis and review.`,
+            updatedBy: req.user.fullName || req.user.email || 'System',
+            checklist: [
+              { id: 1, label: 'Initial contact made', completed: false },
+              { id: 2, label: 'Documents received', completed: false },
+              { id: 3, label: 'MOU draft prepared', completed: false },
+              { id: 4, label: 'Signed MOU received', completed: false },
+              { id: 5, label: 'Final settlement agreed', completed: false },
+              { id: 6, label: 'Case closed', completed: false }
+            ]
+          });
         }
       } catch (err) { console.error('Assignment Notification Error:', err); }
     } else {
@@ -442,8 +477,9 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
             </div>
           `;
           await sendEmail(adminEmails, sub, '', html);
+          createNotification('Admin', 'Case Updated', `Case ${caseId} was updated by ${req.user.fullName}. Status: ${updated.currentStatus}`, 'Update', `/case-master?search=${caseId}`);
         }
-      } catch (err) { console.error('Edit Notification Error:', err); }
+    } catch (err) { console.error('Edit Notification Error:', err); }
     }
 
     if (req.body.currentStatus) {

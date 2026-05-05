@@ -1,4 +1,7 @@
 require('dotenv').config();
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+dns.setDefaultResultOrder('ipv4first');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -75,6 +78,7 @@ app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/progress', require('./routes/progress'));
+app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/case-study', require('./routes/caseStudy'));
 
 app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async (req, res) => {
@@ -83,42 +87,44 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const User = require('./models/User');
     let query = {};
 
-    // Get the most up-to-date user info if fullName is missing from token
-    let userName = req.user.fullName;
-    if (!userName) {
-      const dbUser = await User.findById(req.user.id);
-      userName = dbUser?.fullName || dbUser?.name;
-    }
-    userName = userName?.trim();
+    // Always fetch the latest user record from DB (so name is always fresh)
+    const dbUser = await User.findById(req.user.id).lean();
+    let userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
 
-    // Ownership check for non-admins (Assigned or Initiated)
+    // Non-admin: total cases = Assigned to me OR (Unassigned AND Initiated by me)
     if (req.user.role !== 'Admin') {
-      const dbUser = await User.findById(req.user.id);
-      const possibleNames = [
-        req.user.fullName,
-        dbUser?.fullName,
-        dbUser?.name,
-        req.user.email
-      ].filter(Boolean);
-
-      const regexName = possibleNames.length > 0 ? possibleNames[0] : 'UNKNOWN_USER_FALLBACK';
-
+      const esc = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nameRegex = { $regex: new RegExp(`^\\s*${esc}\\s*$`, 'i') };
       query = {
         $or: [
-          { assignedTo: { $in: possibleNames } },
-          { initiatedBy: { $in: possibleNames } },
-          { assignedTo: { $regex: regexName, $options: 'i' } },
-          { initiatedBy: { $regex: regexName, $options: 'i' } }
+          { assignedTo: nameRegex },
+          {
+            $and: [
+              { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
+              { initiatedBy: nameRegex }
+            ]
+          }
         ]
       };
     }
 
     const totalCases = await Case.countDocuments(query);
+
     const openCases = await Case.countDocuments({ ...query, currentStatus: { $ne: 'Closed' } });
-    const settledCases = await Case.countDocuments({ ...query, currentStatus: 'Settled' });
+    const settledCases = await Case.countDocuments({ ...query, currentStatus: { $in: ['Settled', 'Closed'] } });
     const highPriority = await Case.countDocuments({ ...query, priority: 'High', currentStatus: { $ne: 'Closed' } });
     const mediumPriority = await Case.countDocuments({ ...query, priority: 'Medium', currentStatus: { $ne: 'Closed' } });
     const lowPriority = await Case.countDocuments({ ...query, priority: 'Low', currentStatus: { $ne: 'Closed' } });
+
+    // Unassigned Cases (Initiated By is blank)
+    const unassignedCount = await Case.countDocuments({
+      ...query,
+      $or: [
+        { initiatedBy: { $regex: /^\s*$/ } },
+        { initiatedBy: { $exists: false } },
+        { initiatedBy: null }
+      ]
+    });
 
     const today = new Date().toISOString().split('T')[0];
     const overdueActions = await Case.find({ ...query, nextActionDate: { $lt: today }, currentStatus: { $ne: 'Closed' } });
@@ -136,19 +142,168 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const refundsForSum = await Refund.find(refundQuery);
     const totalRefundAmount = refundsForSum.reduce((sum, r) => sum + Number(r.amount || 0), 0);
 
+    let teamPerformance = [];
+    if (req.user.role === 'Admin') {
+      const allUsers = await User.find({ role: 'Operations' }).lean();
+      teamPerformance = await Promise.all(allUsers.map(async (u) => {
+        const uName = (u.fullName || u.name || '').trim();
+        if (!uName) return null;
+
+        const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const esc = escapeRegExp(uName);
+        const nameRegex = { $regex: new RegExp(`^\\s*${esc}\\s*$`, 'i') };
+        const ownerFilter = {
+          $or: [
+            { assignedTo: nameRegex },
+            {
+              $and: [
+                { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
+                { initiatedBy: nameRegex }
+              ]
+            }
+          ]
+        };
+
+        // Total cases (assigned or unassigned-initiated)
+        const assigned = await Case.countDocuments(ownerFilter);
+
+        // Pending cases (not Closed)
+        const pending = await Case.countDocuments({ ...ownerFilter, currentStatus: { $ne: 'Closed' } });
+
+        // Closed Today
+        const closedToday = await Case.countDocuments({
+          ...ownerFilter,
+          currentStatus: 'Closed',
+          lastUpdateDate: { $regex: new RegExp(`^${today}`) }
+        });
+
+        // Generate initials
+        const parts = uName.split(' ').filter(Boolean);
+        const initials = parts.length > 1
+          ? (parts[0][0] + parts[1][0]).toUpperCase()
+          : (parts[0] ? parts[0].substring(0, 2).toUpperCase() : 'U');
+
+        // Generate a pseudo-random color based on name length
+        const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#6366f1'];
+        const color = colors[uName.length % colors.length];
+
+        return {
+          id: u._id,
+          name: uName,
+          role: u.role,
+          initials,
+          color,
+          assigned,
+          pending,
+          closedToday
+        };
+      }));
+
+      teamPerformance = teamPerformance.filter(Boolean).sort((a, b) => b.assigned - a.assigned);
+    }
+
     const recentCases = await Case.find(query).sort({ createdAt: -1 }).limit(10);
 
-    res.json({ 
-      totalCases, 
-      openCases, 
-      settledCases, 
-      highPriority, 
-      mediumPriority, 
-      lowPriority, 
-      overdueActions, 
-      dueSoonActions, 
+    // Fetch Dynamic Case Type Wise Data (Aggregated from DB)
+    const caseTypeAggregation = await Case.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: '$typeOfComplaint',
+          count: { $sum: 1 },
+          totalAmount: {
+            $sum: {
+              $convert: {
+                input: { $ifNull: ['$totalAmtPaid', '0'] },
+                to: 'double',
+                onError: 0,
+                onNull: 0
+              }
+            }
+          }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const caseTypeWiseData = caseTypeAggregation.map(item => ({
+      caseType: item._id || 'Unknown',
+      count: item.count,
+      totalAmount: item.totalAmount || 0
+    }));
+
+    // Fetch Dynamic Source of Complaint Data (Aggregated from DB)
+    const sourceAggregation = await Case.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: '$sourceOfComplaint',
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const sourceWiseData = sourceAggregation.map(item => ({
+      source: item._id || 'Unknown',
+      count: item.count
+    }));
+
+    // Fetch 7-day Trend Data
+    const trendData = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toISOString().split('T')[0]; // YYYY-MM-DD
+      const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+      const startOfDay = new Date(new Date(d).setHours(0, 0, 0, 0));
+      const endOfDay = new Date(new Date(d).setHours(23, 59, 59, 999));
+
+      // New cases created on this day
+      const newCasesCount = await Case.countDocuments({
+        ...query,
+        createdAt: { $gte: startOfDay, $lte: endOfDay }
+      });
+
+      // Closed cases on this day
+      const closedCasesCount = await Case.countDocuments({
+        ...query,
+        currentStatus: { $in: ['Settled', 'Closed'] },
+        lastUpdateDate: { $regex: new RegExp(`^${dayStr}`) }
+      });
+
+      // High Priority cases created on this day
+      const highPriorityCount = await Case.countDocuments({
+        ...query,
+        priority: 'High',
+        createdAt: { $gte: startOfDay, $lte: endOfDay }
+      });
+
+      trendData.push({
+        date: label,
+        newCases: newCasesCount,
+        closedCases: closedCasesCount,
+        highPriority: highPriorityCount
+      });
+    }
+
+    res.json({
+      totalCases,
+      openCases,
+      settledCases,
+      highPriority,
+      mediumPriority,
+      lowPriority,
+      overdueActions,
+      dueSoonActions,
       recentCases,
-      totalRefundAmount 
+      teamPerformance,
+      totalRefundAmount,
+      caseTypeWiseData,
+      sourceWiseData,
+      unassignedCount,
+      trendData
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

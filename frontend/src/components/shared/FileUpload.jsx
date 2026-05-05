@@ -63,6 +63,7 @@ const FileUpload = ({ onUploadSuccess, label = "Drag & drop or click to upload f
         <input 
           type="file" 
           onChange={handleFileChange} 
+          onClick={(e) => (e.target.value = null)}
           disabled={uploading || disabled} 
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
         />

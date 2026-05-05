@@ -90,12 +90,13 @@ const MyTaskTab = () => {
     try {
       const res = await api.get('/users');
       let opsUsers = res.data.filter(u =>
-        (u.role === 'Operations' || u.role === 'Staff' || u.role === 'Admin') &&
+        (u.role === 'Operations' || u.role === 'Staff' || u.role === 'Admin' || u.role === 'Accountant') &&
         u.fullName &&
-        !['User', 'Staff', 'Admin', 'Admin User', 'Test User', 'Accountant', 'Reviewer'].includes(u.fullName.trim())
+        u.email !== user?.email && // Exclude the logged-in user from the general list
+        !['User', 'Staff', 'Admin', 'Admin User', 'Test User', 'Reviewer'].includes(u.fullName.trim())
       );
 
-      if (user?.fullName && !opsUsers.some(u => u.fullName === user.fullName)) {
+      if (user?.role !== 'Admin' && user?.fullName && !opsUsers.some(u => u.fullName === user.fullName)) {
         opsUsers = [{ _id: 'current-user', fullName: user.fullName, role: user.role }, ...opsUsers];
       }
 
@@ -245,7 +246,15 @@ const MyTaskTab = () => {
   const handleCreateTask = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/tasks', newTask);
+      // Use description (details) as title if title is empty
+      const titleFromDesc = newTask.description?.split('\n')[0].substring(0, 50) || 'Untitled Task';
+      const taskPayload = {
+        ...newTask,
+        title: newTask.title || titleFromDesc,
+        details: newTask.description // Map description to details for backend model
+      };
+
+      await api.post('/tasks', taskPayload);
       toast.success('Task created successfully');
       setIsModalOpen(false);
       setNewTask({
@@ -261,6 +270,7 @@ const MyTaskTab = () => {
       fetchTasks();
     } catch (err) {
       toast.error('Failed to create task');
+      console.error(err);
     }
   };
 
@@ -529,18 +539,6 @@ const MyTaskTab = () => {
       >
         <form onSubmit={handleCreateTask} className="p-8 bg-bg-card">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="md:col-span-2">
-              <label className="block text-[11px] font-black text-text-muted uppercase tracking-widest mb-2">Task Title</label>
-              <input
-                type="text"
-                className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-3 text-sm font-bold text-text-primary outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft transition-all"
-                placeholder="Enter task title..."
-                value={newTask.title}
-                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                required
-              />
-            </div>
-
             <div>
               <label className="block text-[11px] font-black text-text-muted uppercase tracking-widest mb-2">Link Case ID</label>
               <SearchableCaseSelect
@@ -591,7 +589,7 @@ const MyTaskTab = () => {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-[11px] font-black text-text-muted uppercase tracking-widest mb-2">Task Details / Brief</label>
+              <label className="block text-[11px] font-black text-text-muted uppercase tracking-widest mb-2">Task Details </label>
               <textarea
                 className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-3 text-sm font-medium text-text-primary outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft transition-all min-h-[100px]"
                 placeholder="Describe the task in detail..."
