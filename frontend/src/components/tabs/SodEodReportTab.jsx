@@ -165,15 +165,14 @@ const SodEodReportTab = () => {
                   <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-center">Type</th>
                   <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest">Timing</th>
                   <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest">Work Detail Summary</th>
-                  <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-center">Performance / Energy</th>
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {loading ? (
-                  <tr><td colSpan="6" className="py-20 text-center"><div className="animate-spin inline-block w-8 h-8 border-4 border-accent border-t-transparent rounded-full" /></td></tr>
+                  <tr><td colSpan="5" className="py-20 text-center"><div className="animate-spin inline-block w-8 h-8 border-4 border-accent border-t-transparent rounded-full" /></td></tr>
                 ) : filteredReports.length === 0 ? (
-                  <tr><td colSpan="6" className="py-20 text-center text-text-muted font-bold">No reports found for this period.</td></tr>
+                  <tr><td colSpan="5" className="py-20 text-center text-text-muted font-bold">No reports found for this period.</td></tr>
                 ) : filteredReports.map((report) => (
                   <tr key={report._id} className="hover:bg-bg-card-hover transition-colors group">
                     <td className="px-8 py-6">
@@ -196,19 +195,6 @@ const SodEodReportTab = () => {
                       <p className="text-xs font-medium text-text-muted line-clamp-2 max-w-xs italic">
                         {report.plannedTasks || report.workSummary || '---'}
                       </p>
-                    </td>
-                    <td className="px-6 py-6">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-400 uppercase tracking-tighter">
-                          <Zap size={12} fill="currentColor" />
-                          {report.moodEnergy || report.progressScore || '---'}
-                        </div>
-                        {report.progressScore && (
-                          <div className="w-16 h-1 bg-bg-input rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-500" style={{ width: `${report.progressScore}%` }} />
-                          </div>
-                        )}
-                      </div>
                     </td>
                     <td className="px-8 py-6 text-right">
                       <button

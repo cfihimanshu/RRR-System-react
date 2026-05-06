@@ -118,10 +118,10 @@ const DocIndexTab = () => {
               <select className={inputClass} value={formData.docType} onChange={e => setFormData({ ...formData, docType: e.target.value })} required>
                 <option value="Legal Notice">Legal Notice</option>
                 <option value="Payment Receipt">Payment Receipt</option>
-                <option value="MOI/Aggrement">MOI/Aggrement</option>
+                <option value="MOU/Agreement">MOU/Agreement</option>
                 <option value="Whatsapp">Whatsapp</option>
                 <option value="Email">Email</option>
-                <option value="Police Complaint">Police Complaint</option>
+                <option value="Complaint Copy">Complaint Copy</option>
                 <option value="Meeting">Meeting</option>
                 <option value="Refund Proof">Refund Proof</option>
                 <option value="Other">Other</option>
@@ -208,7 +208,7 @@ const DocIndexTab = () => {
                       </td>
                       <td className="px-4 py-4 font-black text-accent whitespace-nowrap align-top text-[10px] tracking-tighter">{d.caseId}</td>
                       <td className="px-4 py-4 whitespace-nowrap align-top text-text-muted font-bold italic">
-                        {d.uploadDate ? new Date(d.uploadDate).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '-'}
+                        {d.uploadDate ? new Date(d.uploadDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '-'}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap align-top">
                         <span className="bg-bg-input text-text-muted px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-border">{d.sourceForm || 'Manual'}</span>

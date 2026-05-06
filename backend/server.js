@@ -111,18 +111,17 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const totalCases = await Case.countDocuments(query);
 
     const openCases = await Case.countDocuments({ ...query, currentStatus: { $ne: 'Closed' } });
-    const settledCases = await Case.countDocuments({ ...query, currentStatus: { $in: ['Settled', 'Closed'] } });
-    const highPriority = await Case.countDocuments({ ...query, priority: 'High', currentStatus: { $ne: 'Closed' } });
-    const mediumPriority = await Case.countDocuments({ ...query, priority: 'Medium', currentStatus: { $ne: 'Closed' } });
-    const lowPriority = await Case.countDocuments({ ...query, priority: 'Low', currentStatus: { $ne: 'Closed' } });
+    const settledCases = await Case.countDocuments({ ...query, currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure'] } });
+    const highPriority = await Case.countDocuments({ ...query, priority: 'High', currentStatus: { $nin: ['Closed', 'Closure'] } });
+    const mediumPriority = await Case.countDocuments({ ...query, priority: 'Medium', currentStatus: { $nin: ['Closed', 'Closure'] } });
+    const lowPriority = await Case.countDocuments({ ...query, priority: 'Low', currentStatus: { $nin: ['Closed', 'Closure'] } });
 
-    // Unassigned Cases (Initiated By is blank)
+    // Unassigned Cases (Both Initiated By and Assigned To are blank)
     const unassignedCount = await Case.countDocuments({
       ...query,
-      $or: [
-        { initiatedBy: { $regex: /^\s*$/ } },
-        { initiatedBy: { $exists: false } },
-        { initiatedBy: null }
+      $and: [
+        { $or: [{ initiatedBy: { $regex: /^\s*$/ } }, { initiatedBy: { $exists: false } }, { initiatedBy: null }] },
+        { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] }
       ]
     });
 

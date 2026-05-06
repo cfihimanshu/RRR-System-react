@@ -106,6 +106,7 @@ const NewCaseTab = () => {
           firNumber: editCase.firNumber || '',
           firFileLink: editCase.firFileLink || '',
           grievanceNumber: editCase.grievanceNumber || '',
+          importDocumentLink: editCase.importDocumentLink || '',
           proofCallRec: editCase.proofCallRec || 'No',
           proofWaChat: editCase.proofWaChat || 'No',
           proofVideoCall: editCase.proofVideoCall || 'No',
@@ -189,8 +190,18 @@ const NewCaseTab = () => {
       updates.engagementNote = `This is a multi-stage consultancy and execution support engagement. ₹${value || '0'} was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.`;
     }
 
+    if (name === 'typeOfComplaint' && !['Legal Notice', 'Cyber Complaint', 'Consumer Complaint'].includes(value)) {
+      updates.importDocumentLink = '';
+    }
+
     if (name === 'initiatedBy') {
-      updates.assignedTo = value;
+      const cleanVal = value?.toLowerCase() === 'staff' ? '' : value;
+      updates.initiatedBy = cleanVal;
+      updates.assignedTo = cleanVal;
+    }
+
+    if (name === 'assignedTo') {
+      updates.assignedTo = value?.toLowerCase() === 'staff' ? '' : value;
     }
 
     // Inline Validations
@@ -306,7 +317,7 @@ const NewCaseTab = () => {
         {/* Company & Case Info */}
         <div className={cardClass}>
           <h3 className={sectionTitleClass}><Building2 size={18} className="text-accent" /> Company & Case Info</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-4 gap-6">
             <div>
               <label className={`${labelClass} after:content-['*'] after:text-red`}>Company Name</label>
               <input type="text" className={inputClass} name="companyName" value={formData.companyName || ''} onChange={handleChange} placeholder="e.g. ABC Solutions Pvt Ltd" required />
@@ -347,7 +358,7 @@ const NewCaseTab = () => {
                 <option value="Escalation">Escalation</option>
                 <option value="General Query">General Query</option>
                 <option value="Lien">Lien</option>
-                <option value="TollFree">TollFree</option>
+
               </select>
             </div>
             <div>
@@ -357,50 +368,59 @@ const NewCaseTab = () => {
                 <option value="Startupflora">Startupflora</option>
               </select>
             </div>
-          </div>
-
-          {/* Conditional Complaint Fields */}
-          {(formData.typeOfComplaint === 'Cyber Complaint' || formData.typeOfComplaint === 'FIR' || formData.typeOfComplaint === 'Consumer Complaint') && (
-            <div className="mt-6 pt-6 border-t border-border bg-red-soft/20 -mx-8 px-8 pb-4">
-              {formData.typeOfComplaint === 'Cyber Complaint' && (
-                <div className="mb-4">
-                  <label className={labelClass}>Cyber Acknowledgment Numbers</label>
-                  {cyberAcks.map((ack, idx) => (
-                    <div key={idx} className="flex gap-3 mb-3">
-                      <input
-                        type="text"
-                        className={inputClass}
-                        placeholder="e.g. 1234567890"
-                        value={ack}
-                        onChange={(e) => handleCyberAckChange(idx, e.target.value)}
-                      />
-                      {cyberAcks.length > 1 && (
-                        <button type="button" onClick={() => removeCyberAck(idx)} className="bg-red-soft text-red px-4 rounded-xl font-black hover:bg-red hover:text-white transition-all">×</button>
-                      )}
+            {['Legal Notice', 'Cyber Complaint', 'Consumer Complaint'].includes(formData.typeOfComplaint) && (
+              <div>
+                <label className={labelClass}>Import Document ({formData.typeOfComplaint})</label>
+                <FileUpload
+                  onUploadSuccess={(url) => setFormData(prev => ({ ...prev, importDocumentLink: url }))}
+                  label={`Upload ${formData.typeOfComplaint} Proof`}
+                  accentColor="blue"
+                  compact={true}
+                />
+              </div>
+            )}
+            {(formData.typeOfComplaint === 'Cyber Complaint' || formData.typeOfComplaint === 'FIR' || formData.typeOfComplaint === 'Consumer Complaint') && (
+              <div className="md:col-span-2">
+                {formData.typeOfComplaint === 'Cyber Complaint' && (
+                  <div>
+                    <label className={labelClass}>Cyber Acknowledgment Numbers</label>
+                    {cyberAcks.map((ack, idx) => (
+                      <div key={idx} className="flex gap-3 mb-3">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          placeholder="e.g. 1234567890"
+                          value={ack}
+                          onChange={(e) => handleCyberAckChange(idx, e.target.value)}
+                        />
+                        {cyberAcks.length > 1 && (
+                          <button type="button" onClick={() => removeCyberAck(idx)} className="bg-red-soft text-red px-4 rounded-xl font-black hover:bg-red hover:text-white transition-all">×</button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={addCyberAck} className="text-xs text-accent font-black hover:underline mt-1 uppercase tracking-widest">+ Add Another Number</button>
+                  </div>
+                )}
+                {formData.typeOfComplaint === 'FIR' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className={labelClass}>FIR Number</label>
+                      <input type="text" className={inputClass} name="firNumber" value={formData.firNumber} onChange={handleChange} />
                     </div>
-                  ))}
-                  <button type="button" onClick={addCyberAck} className="text-xs text-accent font-black hover:underline mt-1 uppercase tracking-widest">+ Add Another Number</button>
-                </div>
-              )}
-              {formData.typeOfComplaint === 'FIR' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-                  <div>
-                    <label className={labelClass}>FIR Number</label>
-                    <input type="text" className={inputClass} name="firNumber" value={formData.firNumber} onChange={handleChange} />
+                    <div>
+                      <FileUpload onUploadSuccess={(url) => setFormData(p => ({ ...p, firFileLink: url }))} label="Upload FIR Document" compact={true} />
+                    </div>
                   </div>
+                )}
+                {formData.typeOfComplaint === 'Consumer Complaint' && (
                   <div>
-                    <FileUpload onUploadSuccess={(url) => setFormData(p => ({ ...p, firFileLink: url }))} label="Upload FIR Document" />
+                    <label className={labelClass}>Grievance Number</label>
+                    <input type="text" className={inputClass} name="grievanceNumber" value={formData.grievanceNumber} onChange={handleChange} />
                   </div>
-                </div>
-              )}
-              {formData.typeOfComplaint === 'Consumer Complaint' && (
-                <div className="mb-4">
-                  <label className={labelClass}>Grievance Number</label>
-                  <input type="text" className={inputClass} name="grievanceNumber" value={formData.grievanceNumber} onChange={handleChange} />
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Services Sold Configuration */}
@@ -644,10 +664,10 @@ const NewCaseTab = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
               <label className={labelClass}>Initiated By</label>
-              <select 
-                className={`${inputClass} ${user?.role?.toLowerCase() === 'staff' ? 'bg-bg-secondary cursor-not-allowed opacity-50' : ''}`} 
-                name="initiatedBy" 
-                value={formData.initiatedBy || ''} 
+              <select
+                className={`${inputClass} ${user?.role?.toLowerCase() === 'staff' ? 'bg-bg-secondary cursor-not-allowed opacity-50' : ''}`}
+                name="initiatedBy"
+                value={formData.initiatedBy || ''}
                 onChange={handleChange}
                 disabled={user?.role?.toLowerCase() === 'staff'}
               >
@@ -738,7 +758,7 @@ const NewCaseTab = () => {
           )}
 
           <div className="mt-10 flex gap-4">
-            <button 
+            <button
               onClick={() => {
                 setShowDuplicateModal(false);
                 navigate(`/case-master?search=${duplicateCase.caseId}`);
@@ -747,7 +767,7 @@ const NewCaseTab = () => {
             >
               View Existing Case
             </button>
-            <button 
+            <button
               onClick={() => setShowDuplicateModal(false)}
               className="flex-1 bg-bg-input text-text-primary font-black py-4 rounded-2xl text-xs uppercase tracking-widest border border-border active:scale-95 transition-all"
             >

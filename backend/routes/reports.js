@@ -59,7 +59,7 @@ router.get('/stats', verifyToken, async (req, res) => {
     const totalCasesCount = await Case.countDocuments(caseQuery);
     const completedCasesCount = await Case.countDocuments({ 
       ...caseQuery, 
-      currentStatus: { $in: ['Closed', 'Settled'] } 
+      currentStatus: { $in: ['Closed', 'Settled', 'Settlement', 'Closure'] } 
     });
 
     const sodToday = await Report.countDocuments({ ...query, type: 'SOD', createdAt: { $gte: today } });

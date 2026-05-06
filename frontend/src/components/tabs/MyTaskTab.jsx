@@ -96,7 +96,8 @@ const MyTaskTab = () => {
         !['User', 'Staff', 'Admin', 'Admin User', 'Test User', 'Reviewer'].includes(u.fullName.trim())
       );
 
-      if (user?.role !== 'Admin' && user?.fullName && !opsUsers.some(u => u.fullName === user.fullName)) {
+      // Ensure current user is always in the list for assignment
+      if (user?.fullName && !opsUsers.some(u => u.fullName === user.fullName)) {
         opsUsers = [{ _id: 'current-user', fullName: user.fullName, role: user.role }, ...opsUsers];
       }
 
@@ -125,9 +126,12 @@ const MyTaskTab = () => {
 
   useEffect(() => {
     if (isModalOpen && user?.fullName) {
-      setNewTask(prev => ({ ...prev, assignee: prev.assignee || user.fullName }));
+      setNewTask(prev => ({ 
+        ...prev, 
+        assignee: user.role === 'Admin' ? (prev.assignee || '') : user.fullName 
+      }));
     }
-  }, [isModalOpen, user?.fullName]);
+  }, [isModalOpen, user?.fullName, user?.role]);
 
   const handleOpenTaskPanel = (task) => {
     setSelectedTask(task);
@@ -553,15 +557,22 @@ const MyTaskTab = () => {
             <div>
               <label className="block text-[11px] font-black text-text-muted uppercase tracking-widest mb-2">Assign To</label>
               <select
-                className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-3 text-sm font-bold text-text-primary outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft transition-all cursor-pointer"
+                className={`w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-3 text-sm font-bold text-text-primary outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft transition-all ${user?.role !== 'Admin' ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
                 value={newTask.assignee}
                 onChange={(e) => setNewTask({ ...newTask, assignee: e.target.value })}
                 required
+                disabled={user?.role !== 'Admin'}
               >
-                <option value="">Select User</option>
-                {users.map(u => (
-                  <option key={u._id} value={u.fullName}>{u.fullName}</option>
-                ))}
+                {user?.role === 'Admin' ? (
+                  <>
+                    <option value="">Select User</option>
+                    {users.map(u => (
+                      <option key={u._id} value={u.fullName}>{u.fullName}</option>
+                    ))}
+                  </>
+                ) : (
+                  <option value={user?.fullName}>{user?.fullName}</option>
+                )}
               </select>
             </div>
 

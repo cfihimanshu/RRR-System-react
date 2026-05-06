@@ -438,7 +438,9 @@ const DashboardTab = () => {
         date: today,
         userName: user?.fullName,
         userEmail: user?.email,
-        plannedTasks: reportType === 'SOD' ? reportFormData.plannedTasks : '',
+        plannedTasks: reportType === 'SOD' 
+          ? (reportFormData.sodTasks?.map(t => `${t.type === 'Case ID' ? 'Case Follow-up' : 'Task'}: ${t.caseId || t.task} (${t.mode})`).join('\n') || reportFormData.plannedTasks) 
+          : '',
         workSummary: reportType === 'EOD' ? reportFormData.workSummary : ''
       };
 

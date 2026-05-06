@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import FileUpload from '../shared/FileUpload';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
@@ -81,12 +81,20 @@ const normalizeStatus = (status, assignedTo, initiatedBy) => {
     'Pending': 'Case Logged',
     'Active': 'Assigned',
     'In Progress': 'Negotiation',
-    'Resolved': 'Settled',
-    'Done': 'Settled',
-    'Complete': 'Settled',
-    'Completed': 'Settled',
+    'Resolution': 'Closure',
+    'Resolved': 'Closure',
+    'Done': 'Closure',
+    'Complete': 'Closure',
+    'Completed': 'Closure',
+    'Settled': 'Settlement',
   };
-  const normalized = legacyMap[status] || status || 'Case Logged';
+  let normalized = legacyMap[status] || status || 'Case Logged';
+
+  // Keep unassigned cases unassigned when no staff assignee exists
+  if (status === 'Active' && (!assignedTo || assignedTo.trim() === '')) {
+    normalized = 'Case Logged';
+  }
+
   // If normalized is still 'Case Logged' but has an assignee OR initiator, call it 'Assigned'
   if (normalized === 'Case Logged' && ((assignedTo && assignedTo.trim() !== '') || (initiatedBy && initiatedBy.trim() !== ''))) {
     return 'Assigned';
@@ -139,9 +147,10 @@ const CaseMasterTab = () => {
   const stageChecklistMap = {
     'Case Logged': [1],
     'Assigned': [1, 2],
-    'Agreement': [1, 2, 3],
+    'Analysis': [1, 2, 3],
     'Negotiation': [1, 2, 3, 4],
-    'Resolution': [1, 2, 3, 4, 5, 6]
+    'Settlement': [1, 2, 3, 4, 5],
+    'Closure': [1, 2, 3, 4, 5, 6]
   };
 
   const buildChecklistForStage = (stage) => checklistTemplate.map((item) => ({
@@ -160,11 +169,13 @@ const CaseMasterTab = () => {
   });
   const [mouFormData, setMouFormData] = useState({
     mouType: 'Legal Notice',
+    otherType: '',
     mouDate: '',
     signatoryName: '',
     remarks: '',
     fileLink: ''
   });
+  const [mouUploadKey, setMouUploadKey] = useState(0);
   const [emailFormData, setEmailFormData] = useState({
     subject: '',
     emailDate: '',
@@ -191,16 +202,14 @@ const CaseMasterTab = () => {
     priority: 'All Priority',
     assignee: 'All Assignees',
     typeOfComplaint: 'All Types',
-    date: null,
-    unassignedOnly: false
+    date: null
   });
   const [appliedFilters, setAppliedFilters] = useState({
     status: 'All Status',
     priority: 'All Priority',
     assignee: 'All Assignees',
     typeOfComplaint: 'All Types',
-    date: null,
-    unassignedOnly: false
+    date: null
   });
   const { user } = useContext(AuthContext);
 
@@ -212,6 +221,7 @@ const CaseMasterTab = () => {
     clientName: '', clientMobile: '', clientEmail: '', state: '',
     totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '',
     smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
+    importDocumentLink: '',
     proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
     initiatedBy: '', accountable: '', legalOfficer: '', accounts: '',
     firNumber: '', firFileLink: '', grievanceNumber: '',
@@ -231,6 +241,49 @@ const CaseMasterTab = () => {
   const labelClass = "block text-[11px] font-black text-text-muted uppercase tracking-[0.1em] mb-2";
   const sectionTitleClass = "text-md font-black flex items-center gap-2 mb-6 text-accent uppercase tracking-wider";
   const cardClass = "bg-bg-card rounded-2xl border-2 border-border p-8 mb-8 shadow-sm transition-all duration-300";
+
+  // Consolidate all case-related events for a full audit trail
+  const fullHistory = useMemo(() => {
+    if (!viewCase) return [];
+
+    const commTypes = ['Call', 'WhatsApp', 'Email', 'Meeting', 'SMS', 'Legal Notice'];
+
+    const events = [
+      // 1. Core Timeline Logs (Backend tracks Comms, Progress, Actions here)
+      ...timelineLogs.map(log => ({
+        id: log._id || `tl-${log.createdAt}`,
+        date: log.eventDate || log.createdAt || new Date().toISOString(),
+        type: log.eventType?.toLowerCase().includes('document') ? 'DOCUMENT' :
+          commTypes.includes(log.eventType) ? 'COMMUNICATION' :
+            (log.eventType?.toLowerCase().includes('status') || log.eventType?.toLowerCase().includes('stage') || log.eventType === 'Progress Update') ? 'PROGRESS' :
+              (log.eventType === 'Manual Action' || log.eventType === 'Action Logged') ? 'ACTION' : 'SYSTEM',
+        action: log.eventType || 'System Update',
+        details: log.summary,
+        user: log.source || 'System'
+      })),
+
+      // 2. Document Indexing (Documents are tracked in a separate collection without timeline entries)
+      ...caseDocs.map(doc => ({
+        id: doc._id,
+        date: doc.uploadDate || doc.createdAt || new Date().toISOString(),
+        type: 'DOCUMENT',
+        action: `Document Indexed: ${doc.docType || 'Unknown'}`,
+        details: `File: ${doc.fileLink?.split('/').pop() || 'Untitled'}${doc.remarks ? ` - ${doc.remarks}` : ''}`,
+        user: doc.uploadedBy || 'System'
+      }))
+    ];
+
+    // De-duplicate "Case Created" events - keep only the EARLIEST one (actual creation)
+    const creationEvents = events.filter(e => e.action === 'Case Created');
+    let finalEvents = events;
+    if (creationEvents.length > 1) {
+      const earliest = creationEvents.sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+      finalEvents = events.filter(e => e.action !== 'Case Created' || e.id === earliest.id);
+    }
+
+    // Sort by date descending (latest first)
+    return finalEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [viewCase, timelineLogs, caseDocs]);
 
   const fetchCases = async () => {
     try {
@@ -294,14 +347,14 @@ const CaseMasterTab = () => {
       setSearchTerm(location.state.searchId);
       window.history.replaceState({}, document.title);
     }
-    if (location.state?.unassignedOnly) {
-      setAppliedFilters(prev => ({ ...prev, unassignedOnly: true }));
-      setTempFilters(prev => ({ ...prev, unassignedOnly: true }));
-      window.history.replaceState({}, document.title);
-    }
     if (location.state?.typeFilter) {
       setAppliedFilters(prev => ({ ...prev, typeOfComplaint: location.state.typeFilter }));
       setTempFilters(prev => ({ ...prev, typeOfComplaint: location.state.typeFilter }));
+      window.history.replaceState({}, document.title);
+    }
+    if (location.state?.unassignedOnly) {
+      setAppliedFilters(prev => ({ ...prev, status: 'Unassigned' }));
+      setTempFilters(prev => ({ ...prev, status: 'Unassigned' }));
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
@@ -336,24 +389,18 @@ const CaseMasterTab = () => {
   const handleExportExcel = () => {
     if (cases.length === 0) return toast.error('No data to export');
 
-    const headers = ['Case ID', 'Created', 'Company', 'Client', 'Services', 'Amount Paid', 'Priority', 'Status', 'Assigned To'];
-    const data = cases.map(c => {
-      const svcs = Array.isArray(c.servicesSold)
-        ? c.servicesSold.map(s => s.serviceName).join(' | ')
-        : (c.servicesSold || '');
-
-      return {
-        'Case ID': c.caseId,
-        'Created': c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '',
-        'Company': c.companyName,
-        'Client': c.clientName,
-        'Services': svcs,
-        'Amount Paid': c.totalAmtPaid || '0',
-        'Priority': c.priority,
-        'Status': c.currentStatus || c.status || 'Active',
-        'Assigned To': c.assignedTo || c.initiatedBy || ''
-      };
-    });
+    const headers = ['Case ID', 'Created', 'Company', 'Client', 'Type of Complaint', 'Amount Paid', 'Priority', 'Status', 'Assigned To'];
+    const data = cases.map(c => ({
+      'Case ID': c.caseId,
+      'Created': c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '',
+      'Company': c.companyName,
+      'Client': c.clientName,
+      'Type of Complaint': c.typeOfComplaint || '-',
+      'Amount Paid': c.totalAmtPaid || '0',
+      'Priority': c.priority,
+      'Status': c.currentStatus || c.status || 'Active',
+      'Assigned To': c.assignedTo || c.initiatedBy || ''
+    }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -390,16 +437,20 @@ const CaseMasterTab = () => {
       (c.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
 
     let matchStatus = false;
-    const normalizedCaseStatus = normalizeStatus(c.currentStatus || c.status, c.assignedTo);
+    const normalizedCaseStatus = normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy);
 
     if (appliedFilters.status === 'All Status') {
       matchStatus = true;
     } else if (appliedFilters.status === 'Active') {
-      matchStatus = normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed';
+      matchStatus = normalizedCaseStatus !== 'Settlement' && normalizedCaseStatus !== 'Closure' && normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed';
     } else if (appliedFilters.status === 'Closed') {
-      matchStatus = normalizedCaseStatus === 'Settled' || normalizedCaseStatus === 'Closed';
+      matchStatus = normalizedCaseStatus === 'Settlement' || normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Settled' || normalizedCaseStatus === 'Closed';
     } else if (appliedFilters.status === 'Unassigned') {
-      matchStatus = !c.assignedTo || c.assignedTo.trim() === '';
+      const initiatedByValue = c.initiatedBy?.toString?.() || '';
+      const assignedToValue = c.assignedTo?.toString?.() || '';
+      const isInitiatedByBlank = initiatedByValue.trim() === '' || initiatedByValue.trim().toLowerCase() === 'null' || initiatedByValue.trim().toLowerCase() === 'undefined';
+      const isAssignedToBlank = assignedToValue.trim() === '' || assignedToValue.trim().toLowerCase() === 'null' || assignedToValue.trim().toLowerCase() === 'undefined';
+      matchStatus = isInitiatedByBlank && isAssignedToBlank;
     } else {
       matchStatus = normalizedCaseStatus === appliedFilters.status;
     }
@@ -416,10 +467,9 @@ const CaseMasterTab = () => {
       matchDate = caseDate === appliedFilters.date;
     }
 
-    const matchUnassigned = !appliedFilters.unassignedOnly || (!c.initiatedBy || c.initiatedBy.trim() === '');
     const matchType = appliedFilters.typeOfComplaint === 'All Types' || c.typeOfComplaint === appliedFilters.typeOfComplaint;
 
-    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchUnassigned && matchType;
+    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchType;
   });
 
   const handleApplyFilters = () => {
@@ -433,8 +483,7 @@ const CaseMasterTab = () => {
       priority: 'All Priority',
       assignee: 'All Assignees',
       typeOfComplaint: 'All Types',
-      date: null,
-      unassignedOnly: false
+      date: null
     };
     setTempFilters(reset);
     setAppliedFilters(reset);
@@ -470,6 +519,7 @@ const CaseMasterTab = () => {
     setActiveDetailTab('Case Study');
     setTimelineLogs([]);
     setCaseComms([]);
+    setCaseDocs([]);
 
     // Initialize editable form data
     setFormData({
@@ -512,6 +562,7 @@ const CaseMasterTab = () => {
       acc1Ifsc: c.bankAccountDetails?.acc1Ifsc || '',
       acc2No: c.bankAccountDetails?.acc2No || '',
       acc2Ifsc: c.bankAccountDetails?.acc2Ifsc || '',
+      importDocumentLink: c.importDocumentLink || '',
       keyPendingIssue: c.keyPendingIssue || '',
       recommendedNextSteps: c.recommendedNextSteps || ''
     });
@@ -717,6 +768,15 @@ const CaseMasterTab = () => {
     }
   }, []);
 
+  const fetchTimelineLogs = useCallback(async (caseId) => {
+    try {
+      const res = await api.get(`/timeline?caseId=${caseId}`);
+      setTimelineLogs(res.data);
+    } catch (err) {
+      console.error('Failed to fetch timeline logs', err);
+    }
+  }, []);
+
   const fetchProgressData = useCallback(async (caseId) => {
     try {
       const res = await api.get(`/progress?caseId=${caseId}`);
@@ -807,10 +867,14 @@ const CaseMasterTab = () => {
   useEffect(() => {
     if (viewCase) {
       if (activeDetailTab === 'Communications') fetchCaseComms(viewCase.caseId);
-      if (activeDetailTab === 'Documents & MOU') fetchCaseDocs(viewCase.caseId);
+      if (activeDetailTab === 'Documents') fetchCaseDocs(viewCase.caseId);
       if (activeDetailTab === 'Progress Update') fetchProgressData(viewCase.caseId);
+      if (activeDetailTab === 'History') {
+        fetchTimelineLogs(viewCase.caseId);
+        fetchCaseDocs(viewCase.caseId);
+      }
     }
-  }, [viewCase, activeDetailTab, fetchCaseComms, fetchCaseDocs, fetchProgressData]);
+  }, [viewCase, activeDetailTab, fetchCaseComms, fetchCaseDocs, fetchProgressData, fetchTimelineLogs]);
 
   const handleProgressSubmit = async (e) => {
     e.preventDefault();
@@ -907,24 +971,29 @@ const CaseMasterTab = () => {
     e.preventDefault();
     if (!mouFormData.fileLink) return toast.error('MOU file is required');
 
+    const finalDocType = mouFormData.mouType === 'Other' ? mouFormData.otherType : mouFormData.mouType;
+    if (mouFormData.mouType === 'Other' && !mouFormData.otherType) return toast.error('Please specify the document type');
+
     const loadingToast = toast.loading('Uploading MOU...');
     try {
       await api.post('/documents', {
         caseId: viewCase.caseId,
-        docType: 'MOU / Agreement',
-        summary: `MOU: ${mouFormData.mouType} - ${mouFormData.signatoryName}`,
+        docType: finalDocType,
+        summary: `${finalDocType} - ${mouFormData.signatoryName}`,
         fileLink: mouFormData.fileLink,
         remarks: `${mouFormData.remarks} (Date: ${mouFormData.mouDate})`,
         uploadedBy: user?.email || 'System'
       });
       toast.success('MOU uploaded successfully', { id: loadingToast });
       setMouFormData({
-        mouType: 'Signed MOU (Final)',
+        mouType: 'Legal Notice',
+        otherType: '',
         mouDate: '',
         signatoryName: viewCase?.clientName || '',
         remarks: '',
         fileLink: ''
       });
+      setMouUploadKey(prev => prev + 1);
       fetchCaseDocs(viewCase.caseId);
     } catch (err) {
       toast.error('Failed to upload MOU', { id: loadingToast });
@@ -954,8 +1023,7 @@ const CaseMasterTab = () => {
       });
       fetchActionLogs(viewCase.caseId);
       // Also update timeline
-      const resTime = await api.get(`/timeline?caseId=${viewCase.caseId}`);
-      setTimelineLogs(resTime.data);
+      fetchTimelineLogs(viewCase.caseId);
     } catch (err) {
       toast.error('Failed to save action log', { id: loadingToast });
     }
@@ -1113,16 +1181,16 @@ const CaseMasterTab = () => {
             <div className="relative">
               <button
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.date || appliedFilters.unassignedOnly
+                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.date
                   ? 'bg-accent text-white border-accent shadow-sm'
                   : 'bg-bg-card text-text-secondary border-border hover:bg-bg-card-hover'
                   }`}
               >
                 <Filter size={16} />
                 Filters
-                {(appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.typeOfComplaint !== 'All Types' || appliedFilters.date || appliedFilters.unassignedOnly) && (
+                {(appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.typeOfComplaint !== 'All Types' || appliedFilters.date) && (
                   <span className="bg-white text-accent rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">
-                    {[appliedFilters.status !== 'All Status', appliedFilters.priority !== 'All Priority', appliedFilters.assignee !== 'All Assignees', appliedFilters.typeOfComplaint !== 'All Types', !!appliedFilters.date, appliedFilters.unassignedOnly].filter(Boolean).length}
+                    {[appliedFilters.status !== 'All Status', appliedFilters.priority !== 'All Priority', appliedFilters.assignee !== 'All Assignees', appliedFilters.typeOfComplaint !== 'All Types', !!appliedFilters.date].filter(Boolean).length}
                   </span>
                 )}
               </button>
@@ -1134,7 +1202,7 @@ const CaseMasterTab = () => {
                     <div className="flex flex-1 min-h-[300px] md:min-h-[350px]">
                       {/* Left Sidebar */}
                       <div className="w-[100px] md:w-1/3 bg-bg-secondary border-r border-border py-4">
-                        {['Status', 'Priority', 'Assignees', 'Type', 'Date', 'Assignment'].map((type) => (
+                        {['Status', 'Priority', 'Assignees', 'Type', 'Date'].map((type) => (
                           <button
                             key={type}
                             onClick={() => setActiveFilterType(type)}
@@ -1153,7 +1221,7 @@ const CaseMasterTab = () => {
                       <div className="w-2/3 p-6 overflow-y-auto max-h-[400px] bg-bg-card">
                         {activeFilterType === 'Status' && (
                           <div className="space-y-3">
-                            {['All Status', 'Unassigned', 'Case Logged', 'Assigned', 'Negotiation', 'Settled', 'Stucked'].map((s) => (
+                            {['All Status', 'Unassigned', 'Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure', 'Stucked'].map((s) => (
                               <label key={s} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
                                 <input
                                   type="radio"
@@ -1165,6 +1233,10 @@ const CaseMasterTab = () => {
                                 <span className={`text-sm font-bold ${tempFilters.status === s ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{s}</span>
                               </label>
                             ))}
+                            <div className="mt-4 p-4 rounded-2xl bg-bg-secondary border border-border text-[11px] text-text-muted">
+                              <p className="font-black uppercase tracking-[0.2em] mb-2 text-[10px] text-text-primary">Unassigned status</p>
+                              <p>Shows cases where both the Initiator and Assigned To fields are blank. This identifies cases that haven't been picked up or recorded by anyone yet.</p>
+                            </div>
                           </div>
                         )}
 
@@ -1265,22 +1337,6 @@ const CaseMasterTab = () => {
                           </div>
                         )}
 
-                        {activeFilterType === 'Assignment' && (
-                          <div className="space-y-3">
-                            <label className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
-                              <input
-                                type="checkbox"
-                                checked={tempFilters.unassignedOnly}
-                                onChange={(e) => setTempFilters({ ...tempFilters, unassignedOnly: e.target.checked })}
-                                className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
-                              />
-                              <div className="flex flex-col">
-                                <span className={`text-sm font-bold ${tempFilters.unassignedOnly ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>Show Only Unassigned</span>
-                                <span className="text-[10px] text-text-muted font-bold uppercase tracking-tight">Cases with missing Initiator</span>
-                              </div>
-                            </label>
-                          </div>
-                        )}
                       </div>
                     </div>
                     {/* Footer */}
@@ -1393,7 +1449,7 @@ const CaseMasterTab = () => {
                   <h2 className="text-2xl font-black text-text-primary uppercase tracking-tight max-w-4xl">
                     {viewCase.typeOfComplaint || 'Payment Dispute'} — {viewCase.companyName}
                   </h2>
-                  {((activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Resolution' || viewCase.progressPercentage >= 100) && viewCase.currentStatus !== 'Settled' && (
+                  {((activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Closure' || (activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Resolution' || viewCase.progressPercentage >= 100) && viewCase.currentStatus !== 'Settled' && viewCase.currentStatus !== 'Closure' && (
                     <button
                       onClick={handleMarkResolved}
                       className="bg-green text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
@@ -1420,15 +1476,15 @@ const CaseMasterTab = () => {
             <div className="mb-10">
               <div className="text-[9px] font-black text-white uppercase tracking-[0.2em] mb-4 opacity-50">Case Progress</div>
               <div className="flex w-full rounded-lg overflow-hidden h-10 ">
-                {['Case Logged', 'Assigned', 'Agreement', 'Negotiation', 'Resolution'].map((step, idx) => {
-                  const steps = ['Case Logged', 'Assigned', 'Agreement', 'Negotiation', 'Resolution'];
+                {['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'].map((step, idx) => {
+                  const steps = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
 
                   // If on Progress Update tab, show the current selection in the form
                   const displayStatus = activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus;
 
                   let currentIdx = steps.indexOf(displayStatus);
                   if (currentIdx === -1) {
-                    if (displayStatus === 'Settled' || viewCase.progressPercentage >= 100) {
+                    if (displayStatus === 'Settlement' || displayStatus === 'Closure' || displayStatus === 'Settled' || viewCase.progressPercentage >= 100) {
                       currentIdx = 5; // All steps completed
                     } else {
                       currentIdx = 0;
@@ -1545,7 +1601,7 @@ const CaseMasterTab = () => {
                         <option value="Escalation">Escalation</option>
                         <option value="General Query">General Query</option>
                         <option value="Lien">Lien</option>
-                        <option value="TollFree">TollFree</option>
+
                       </select>
                     </div>
                     <div>
@@ -1600,6 +1656,13 @@ const CaseMasterTab = () => {
                       <div className="lg:col-span-2">
                         <label className={labelClass}>Grievance Number</label>
                         <input type="text" className={inputClass} name="grievanceNumber" value={formData.grievanceNumber} onChange={handleFormChange} disabled={!isEditing} />
+                      </div>
+                    )}
+
+                    {formData.typeOfComplaint === 'Legal Notice' && (
+                      <div className="lg:col-span-2">
+                        <label className={labelClass}>Legal Notice Upload</label>
+                        <FileUpload onUploadSuccess={(url) => setFormData(prev => ({ ...prev, importDocumentLink: url }))} label="Upload" disabled={!isEditing} compact={true} />
                       </div>
                     )}
                   </div>
@@ -2093,7 +2156,7 @@ const CaseMasterTab = () => {
                         <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1">Document Type</label>
                         <SearchableSelect
                           name="mouType"
-                          options={['Legal Notice', 'Payment Receipt', 'Agreement', 'Whatsapp', 'Email', 'Police Complaint', 'Meeting', 'Refund Proof', 'Other']}
+                          options={['Legal Notice', 'Payment Receipt', 'MOU/Agreement', 'Whatsapp', 'Email', 'Complaint Copy', 'Meeting', 'Refund Proof', 'Other']}
                           value={mouFormData.mouType}
                           onChange={(e) => setMouFormData({ ...mouFormData, mouType: e.target.value })}
                           placeholder="Select Document Type..."
@@ -2101,9 +2164,24 @@ const CaseMasterTab = () => {
                         />
                       </div>
 
+                      {mouFormData.mouType === 'Other' && (
+                        <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-300">
+                          <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">SPECIFY DOCUMENT TYPE</label>
+                          <input
+                            type="text"
+                            value={mouFormData.otherType}
+                            onChange={(e) => setMouFormData({ ...mouFormData, otherType: e.target.value })}
+                            placeholder="e.g. Identity Proof, Court Order, etc."
+                            className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-4 text-xs font-black text-text-primary outline-none focus:border-accent shadow-inner"
+                            required
+                          />
+                        </div>
+                      )}
+
                       <div className="space-y-3">
                         <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">UPLOAD DOCUMENT</label>
                         <FileUpload
+                          key={mouUploadKey}
                           onUploadSuccess={(url) => setMouFormData({ ...mouFormData, fileLink: url })}
                           label="Click to upload or drag & drop. PDF, DOCX - Max 20MB"
                           icon={FileText}
@@ -2234,7 +2312,7 @@ const CaseMasterTab = () => {
                                     </span>
                                   </td>
                                   <td className="px-4 py-4 text-[9px] font-bold text-text-muted">
-                                    {doc.createdAt ? format(new Date(doc.createdAt), 'dd MMM yy') : '--'}
+                                    {doc.uploadDate || doc.createdAt ? format(new Date(doc.uploadDate || doc.createdAt), 'dd MMM yy') : '--'}
                                   </td>
                                   <td className="px-4 py-4">
                                     <div className="text-[9px] text-text-secondary line-clamp-2 max-w-[150px]" title={doc.remarks}>
@@ -2443,9 +2521,19 @@ const CaseMasterTab = () => {
                       className="w-full bg-bg-input border-2 rounded-xl px-3 py-2 text-[10px] font-black outline-none transition-all border-border text-text-secondary"
                       value={progressFormData.stage}
                       onChange={(e) => {
-                        const stageOrder = ['Case Logged', 'Assigned', 'Agreement', 'Negotiation', 'Resolution'];
+                        const stageOrder = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
                         const newStage = e.target.value;
-                        const newPercentage = (stageOrder.indexOf(newStage) + 1) * 20;
+
+                        // Custom percentages for smoother tracking
+                        const percentages = {
+                          'Case Logged': 10,
+                          'Assigned': 25,
+                          'Analysis': 40,
+                          'Negotiation': 60,
+                          'Settlement': 85,
+                          'Closure': 100
+                        };
+                        const newPercentage = percentages[newStage] || 0;
                         const updatedChecklist = buildChecklistForStage(newStage);
 
                         setProgressFormData({
@@ -2458,34 +2546,14 @@ const CaseMasterTab = () => {
                     >
                       <option value="Case Logged">Case Logged</option>
                       <option value="Assigned">Assigned</option>
-                      <option value="Agreement">Agreement</option>
+                      <option value="Analysis">Analysis</option>
                       <option value="Negotiation">Negotiation</option>
-                      <option value="Resolution">Resolution</option>
+                      <option value="Settlement">Settlement</option>
+                      <option value="Closure">Closure</option>
                     </select>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center px-1">
-                      <label className="text-[9px] font-black text-text-muted uppercase tracking-widest after:content-['*'] after:text-red after:ml-0.5">PROGRESS %</label>
-                      <span className="text-[10px] font-black text-accent">{progressFormData.percentage}%</span>
-                    </div>
-                    <div className="relative pt-1">
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={progressFormData.percentage}
-                        readOnly
-                        disabled
-                        className="w-full h-1.5 bg-bg-input rounded-lg appearance-none cursor-default accent-accent transition-all opacity-50"
-                      />
-                      <div className="flex justify-between mt-2">
-                        <span className="text-[8px] font-black text-text-muted uppercase tracking-widest">0%</span>
-                        <span className="text-[8px] font-black text-accent uppercase tracking-widest">{progressFormData.percentage}%</span>
-                        <span className="text-[8px] font-black text-text-muted uppercase tracking-widest">100%</span>
-                      </div>
-                    </div>
-                  </div>
+
 
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">UPDATE SUMMARY</label>
@@ -2576,7 +2644,7 @@ const CaseMasterTab = () => {
                           <div key={idx} className="relative pl-6">
                             <div className={`absolute left-0 top-1.5 w-2.5 h-2.5 rounded-full -translate-x-1/2 z-10 border-2 border-bg-card ${color}`} />
                             <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">
-                              {format(new Date(log.createdAt), 'dd MMM')} — <span className="text-accent">{log.percentage}% complete</span>
+                              {log.uploadDate || log.createdAt ? format(new Date(log.uploadDate || log.createdAt), 'dd MMM yy') : '--'}
                             </div>
                             <p className="text-[11px] font-bold text-text-secondary leading-relaxed mb-1">{log.summary}</p>
                             <div className="text-[9px] font-black text-accent uppercase tracking-widest opacity-80">Updated by: {log.updatedBy === user?.email ? 'You' : log.updatedBy?.split('@')[0] || 'System'}</div>
@@ -2659,42 +2727,60 @@ const CaseMasterTab = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {timelineLogs.length === 0 ? (
+                      {fullHistory.length === 0 ? (
                         <tr>
                           <td colSpan="5" className="px-6 py-20 text-center text-text-muted text-[10px] font-black uppercase tracking-widest">
                             No history records found
                           </td>
                         </tr>
                       ) : (
-                        timelineLogs.map((log) => {
-                          let typeLabel = 'SYSTEM';
+                        fullHistory.map((log) => {
                           let typeColor = 'border-green text-green bg-green-soft/20';
 
-                          if (log.eventType?.toLowerCase().includes('document')) {
-                            typeLabel = 'DOCUMENT';
-                            typeColor = 'border-blue text-blue bg-blue-soft/20';
-                          } else if (log.eventType?.toLowerCase().includes('escalat') || log.eventType?.toLowerCase().includes('status')) {
-                            typeLabel = 'ESCALATION';
-                            typeColor = 'border-red text-red bg-red-soft/20';
+                          switch (log.type) {
+                            case 'DOCUMENT':
+                              typeColor = 'border-blue text-blue bg-blue-soft/20';
+                              break;
+                            case 'COMMUNICATION':
+                              typeColor = 'border-purple text-purple-400 bg-purple-soft/20';
+                              break;
+                            case 'PROGRESS':
+                              typeColor = 'border-accent text-accent bg-accent-soft/20';
+                              break;
+                            case 'ACTION':
+                              typeColor = 'border-yellow text-yellow bg-yellow-soft/20';
+                              break;
+                            case 'SYSTEM':
+                              typeColor = 'border-green text-green bg-green-soft/20';
+                              break;
+                            default:
+                              typeColor = 'border-text-muted text-text-muted bg-bg-secondary';
                           }
 
                           return (
-                            <tr key={log._id || Math.random()} className="hover:bg-bg-input/50 transition-colors">
+                            <tr key={log.id || Math.random()} className="hover:bg-bg-input/50 transition-colors">
                               <td className="px-6 py-4 text-[10px] font-black text-text-muted">
-                                {format(new Date(log.eventDate || log.createdAt), 'dd MMM HH:mm')}
+                                {(() => {
+                                  try {
+                                    const d = new Date(log.date);
+                                    return isNaN(d.getTime()) ? 'N/A' : format(d, 'dd MMM HH:mm');
+                                  } catch (e) {
+                                    return 'N/A';
+                                  }
+                                })()}
                               </td>
-                              <td className="px-6 py-4 text-[11px] font-bold text-text-primary">
-                                {log.eventType || 'System Update'}
+                              <td className="px-6 py-4 text-[11px] font-bold text-text-primary uppercase tracking-tight">
+                                {log.action}
                               </td>
-                              <td className="px-6 py-4 text-[10px] text-text-secondary">
-                                {log.summary}
+                              <td className="px-6 py-4 text-[10px] text-text-secondary leading-relaxed max-w-md">
+                                {log.details}
                               </td>
                               <td className="px-6 py-4 text-[10px] font-bold text-text-primary">
-                                {log.source || 'System'}
+                                {log.user?.split('@')[0] || 'System'}
                               </td>
                               <td className="px-6 py-4">
                                 <span className={`px-3 py-1.5 rounded-full text-[7px] font-black uppercase tracking-widest border ${typeColor}`}>
-                                  {typeLabel}
+                                  {log.type}
                                 </span>
                               </td>
                             </tr>
@@ -2739,7 +2825,7 @@ const CaseMasterTab = () => {
                   <th className="px-2 py-3 w-[8%]">Created</th>
                   <th className="px-2 py-3 w-[10%]">Company</th>
                   <th className="px-2 py-3 w-[10%]">Client</th>
-                  <th className="px-2 py-3 w-[10%]">Services</th>
+                  <th className="px-2 py-3 w-[10%]">Type of Complaint</th>
                   <th className="px-2 py-3 w-[7%]">Amount Paid</th>
                   <th className="px-2 py-3 w-[5%]">Priority</th>
                   <th className="px-2 py-3 w-[5%]">Status</th>
@@ -2839,7 +2925,7 @@ const CaseRow = memo(({
         <div className="font-black text-text-primary leading-tight break-words text-sm">{c.clientName || '-'}</div>
         {c.clientMobile && <div className="text-[10px] text-text-muted font-bold mt-1 tracking-wider">{c.clientMobile}</div>}
       </td>
-      <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-muted italic text-[11px]" title={svcs}>{svcs}</td>
+      <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-medium uppercase tracking-[0.01em] text-[11px]">{c.typeOfComplaint || '-'}</td>
       <td className="px-3 py-5 font-black text-text-primary whitespace-nowrap">₹{Number(c.totalAmtPaid || 0).toLocaleString('en-IN')}</td>
       <td className="px-3 py-5">
         <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${c.priority === 'High' ? 'bg-red-soft text-red' :
@@ -2866,12 +2952,6 @@ const CaseRow = memo(({
               <span className={`w-fit px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${badgeClass}`}>
                 {displayStatus}
               </span>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 bg-border/80 rounded-full h-1 overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-500 ${pct === 100 ? 'bg-green' : 'bg-accent'}`} style={{ width: `${pct}%` }}></div>
-                </div>
-                <span className="text-[8px] font-black text-text-muted">{pct}%</span>
-              </div>
             </div>
           );
         })()}

@@ -146,4 +146,35 @@ router.get('/users', verifyToken, roleGuard(['Admin', 'Operations']), async (req
   }
 });
 
+// Update a user's role (Admin only)
+router.put('/users/:id/role', verifyToken, roleGuard(['Admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+    if (!['Admin', 'Operations', 'Staff', 'Reviewer', 'Accountant'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role selected' });
+    }
+
+    const userToUpdate = await User.findById(id);
+    if (!userToUpdate) return res.status(404).json({ error: 'User not found' });
+
+    userToUpdate.role = role;
+    await userToUpdate.save();
+
+    await AuditLog.create({
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      user: req.user.email,
+      role: req.user.role,
+      category: 'User Management',
+      description: `Updated role for ${userToUpdate.email} to ${role}`,
+      caseId: ''
+    });
+
+    res.json({ message: 'User role updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

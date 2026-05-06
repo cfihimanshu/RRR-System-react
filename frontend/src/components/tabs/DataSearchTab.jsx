@@ -64,7 +64,7 @@ const DataSearchTab = () => {
   return (
     <div className="h-full bg-bg-primary p-4 md:p-8 flex flex-col overflow-hidden animate-in fade-in duration-300">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 flex-shrink-0 gap-6 bg-bg-card p-10 rounded-2xl border-2 border-border shadow-sm">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-6 px-4">
         <div>
           <div className="flex items-center gap-4 mb-4">
             {view === 'data-search' && (
@@ -134,14 +134,14 @@ const DataSearchTab = () => {
       {view === 'data-search' && (
         <>
           {/* Search Bar */}
-          <div className="mb-10 max-w-6xl mx-auto w-full flex-shrink-0 animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="mb-6 max-w-6xl mx-auto w-full flex-shrink-0 animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="relative group">
               <div className="absolute left-6 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-accent transition-colors">
                 <Search size={22} strokeWidth={3} />
               </div>
               <input
                 type="text"
-                className="w-full bg-bg-card border-2 border-border rounded-2xl pl-16 pr-6 py-5 text-sm font-black text-text-primary focus:border-accent focus:ring-8 focus:ring-accent-soft outline-none shadow-sm transition-all tracking-tight placeholder:text-text-muted/40 uppercase"
+                className="w-full bg-bg-card border-2 border-border rounded-2xl pl-16 pr-6 py-3.5 text-sm font-black text-text-primary focus:border-accent focus:ring-8 focus:ring-accent-soft outline-none shadow-sm transition-all tracking-tight placeholder:text-text-muted/40 uppercase"
                 placeholder="Search: Company, Contact, BDE or Email ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -204,34 +204,34 @@ const DataSearchTab = () => {
                   ) : (
                     results.map(r => (
                       <tr key={r._id} className="hover:bg-bg-input/70 transition-all group border-b border-border/50 last:border-0">
-                        <td className="px-6 py-6 text-text-muted whitespace-nowrap font-black uppercase tracking-tighter opacity-60">{r.date || '—'}</td>
-                        <td className="px-6 py-6">
+                        <td className="px-6 py-4 text-text-muted whitespace-nowrap font-black uppercase tracking-tighter opacity-60">{r.date || '—'}</td>
+                        <td className="px-6 py-4">
                           <div className="font-black text-text-primary leading-tight text-sm tracking-tight group-hover:text-accent transition-all capitalize">{r.companyName || '—'}</div>
                         </td>
-                        <td className="px-6 py-6 text-text-secondary leading-tight font-black uppercase text-[10px] tracking-wide">{r.contactPerson || '—'}</td>
-                        <td className="px-6 py-6">
+                        <td className="px-6 py-4 text-text-secondary leading-tight font-black uppercase text-[10px] tracking-wide">{r.contactPerson || '—'}</td>
+                        <td className="px-6 py-4">
                           <span className="font-mono text-text-primary font-black whitespace-nowrap bg-bg-input px-3 py-1.5 rounded-lg border border-border shadow-inner text-[10px]">{r.contact || '—'}</span>
                         </td>
-                        <td className="px-6 py-6 text-accent font-black break-all group-hover:underline cursor-pointer tracking-tight text-[10px] uppercase opacity-80">{r.emailId || '—'}</td>
-                        <td className="px-6 py-6 leading-tight italic text-text-muted font-medium text-[10px] uppercase">"{r.service || '—'}"</td>
-                        <td className="px-6 py-6">
+                        <td className="px-6 py-4 text-accent font-black break-all group-hover:underline cursor-pointer tracking-tight text-[10px] uppercase opacity-80">{r.emailId || '—'}</td>
+                        <td className="px-6 py-4 leading-tight italic text-text-muted font-medium text-[10px] uppercase">"{r.service || '—'}"</td>
+                        <td className="px-6 py-4">
                           <span className="font-black text-text-primary leading-tight uppercase text-[10px] tracking-widest bg-bg-input px-3 py-1 rounded-lg border border-border">{r.bde || '—'}</span>
                         </td>
-                        <td className="px-6 py-6 text-center font-black text-text-primary text-[10px]">₹{r.totalAmountWithGst || '0'}</td>
-                        <td className="px-6 py-6 text-center text-green font-black text-[10px]">₹{r.amtWithoutGst || '0'}</td>
-                        <td className="px-6 py-6">
+                        <td className="px-6 py-4 text-center font-black text-text-primary text-[10px]">₹{r.totalAmountWithGst || '0'}</td>
+                        <td className="px-6 py-4 text-center text-green font-black text-[10px]">₹{r.amtWithoutGst || '0'}</td>
+                        <td className="px-6 py-4">
                           <span className="bg-bg-secondary text-text-muted px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border-2 border-border shadow-sm">
                             {r.workStatus || '—'}
                           </span>
                         </td>
-                        <td className="px-6 py-6 font-black text-purple leading-tight uppercase text-[10px] tracking-[0.2em]">{r.department || '—'}</td>
-                        <td className="px-6 py-6">
+                        <td className="px-6 py-4 font-black text-purple leading-tight uppercase text-[10px] tracking-[0.2em]">{r.department || '—'}</td>
+                        <td className="px-6 py-4">
                           <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border-2 shadow-sm transition-all ${r.mouStatus === 'Signed' ? 'bg-green-soft text-green border-green-soft' : 'bg-bg-input text-text-muted border-border'}`}>
                             {r.mouStatus || '—'}
                           </span>
                         </td>
-                        <td className="px-6 py-6 text-text-muted text-[9px] font-medium leading-relaxed italic max-w-[250px] truncate opacity-70" title={r.remarks}>"{r.remarks || '—'}"</td>
-                        <td className="px-6 py-6 text-center font-black text-accent text-sm tracking-tight bg-accent-soft/10">₹{r.mouSignedAmount || '0'}</td>
+                        <td className="px-6 py-4 text-text-muted text-[9px] font-medium leading-relaxed italic max-w-[250px] truncate opacity-70" title={r.remarks}>"{r.remarks || '—'}"</td>
+                        <td className="px-6 py-4 text-center font-black text-accent text-sm tracking-tight bg-accent-soft/10">₹{r.mouSignedAmount || '0'}</td>
                       </tr>
                     ))
                   )}

@@ -5,6 +5,7 @@ import { Menu, Bell, Check, Trash2, ExternalLink } from 'lucide-react';
 import api from '../api/axios';
 import logo from '../assets/logo.png';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
   const { user, logout } = useContext(AuthContext);
@@ -12,11 +13,46 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+  const lastNotifiedRef = useRef(null); // Keep track of the last notification ID toasted
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (isInitial = false) => {
     try {
       const res = await api.get('/notifications');
-      setNotifications(res.data);
+      const newNotifications = res.data;
+      
+      // Check for new unread notifications to show toast
+      if (!isInitial && newNotifications.length > 0) {
+        const latestUnread = newNotifications.find(n => !n.isRead);
+        if (latestUnread && latestUnread._id !== lastNotifiedRef.current) {
+          toast((t) => (
+            <div className="flex flex-col gap-1 cursor-pointer" onClick={() => {
+              toast.dismiss(t.id);
+              navigate(latestUnread.link || '/');
+            }}>
+              <p className="text-[11px] font-black uppercase tracking-widest text-accent">New Notification</p>
+              <p className="text-xs font-bold text-white line-clamp-1">{latestUnread.title}</p>
+              <p className="text-[10px] text-gray-400 line-clamp-2">{latestUnread.message}</p>
+            </div>
+          ), {
+            duration: 4000,
+            position: 'top-right',
+            style: {
+              background: '#0f172a',
+              border: '1px solid #334155',
+              padding: '12px',
+              borderRadius: '16px'
+            },
+            icon: <Bell size={18} className="text-accent" />
+          });
+          lastNotifiedRef.current = latestUnread._id;
+        }
+      } else if (isInitial && newNotifications.length > 0) {
+        // Just set the initial ref to the latest notification ID
+        const latest = newNotifications[0];
+        lastNotifiedRef.current = latest._id;
+      }
+
+      setNotifications(newNotifications);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     }
@@ -24,8 +60,8 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
 
   useEffect(() => {
     if (user) {
-      fetchNotifications();
-      const interval = setInterval(fetchNotifications, 60000); // Fetch every minute
+      fetchNotifications(true);
+      const interval = setInterval(() => fetchNotifications(false), 30000); // Polling every 30 seconds
       return () => clearInterval(interval);
     }
   }, [user]);

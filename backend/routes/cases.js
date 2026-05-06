@@ -73,6 +73,37 @@ async function updateRelatedModels(oldId, newId) {
   ]);
 }
 
+async function createDocumentIfNotExists({ caseId, docType, fileLink, sourceForm, uploadedBy }) {
+  if (!caseId || !docType || !fileLink) return null;
+
+  const existing = await Document.findOne({ caseId, docType, fileLink });
+  if (existing) return existing;
+
+  const existingCount = await Document.countDocuments({ caseId });
+  const docId = `DOC-${caseId}-${String(existingCount + 1).padStart(3, '0')}`;
+  const document = await Document.create({
+    caseId,
+    docId,
+    uploadDate: new Date().toISOString(),
+    sourceForm: sourceForm || 'New Case',
+    docType,
+    fileLink,
+    uploadedBy: uploadedBy || 'System'
+  });
+
+  await AuditLog.create({
+    id: Date.now().toString(),
+    timestamp: new Date().toISOString(),
+    user: uploadedBy || 'System',
+    role: 'System',
+    category: 'Document Indexed',
+    description: `Indexed ${docType} for case ${caseId}`,
+    caseId: caseId
+  });
+
+  return document;
+}
+
 // --- BULK ADMIN ROUTES (Must be before standard routes to avoid overlap) ---
 router.delete('/bulk/delete-all', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
@@ -199,17 +230,50 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
     const caseId = generateCaseId(req.body.brandName, req.body.companyName, allCases);
     
     // Auto-assign to initiator if provided
-    const assignedTo = req.body.assignedTo || req.body.initiatedBy || "";
+    const forbiddenNames = ['staff', 'rajda mansuri'];
+    let initiatedBy = forbiddenNames.includes(req.body.initiatedBy?.toLowerCase()) ? "" : (req.body.initiatedBy || "");
+    let assignedTo = forbiddenNames.includes(req.body.assignedTo?.toLowerCase()) ? "" : (req.body.assignedTo || initiatedBy || "");
+    
+    // If we have an initiator, the case is no longer 'Unassigned' -> Set to Assigned
+    let currentStatus = req.body.currentStatus || 'Case Logged';
+    let progressPercentage = req.body.progressPercentage || 0;
+    
+    if (initiatedBy && (currentStatus === 'New' || currentStatus === 'Case Logged')) {
+      currentStatus = 'Assigned';
+      progressPercentage = 25;
+    }
 
     const newCase = new Case({
       ...req.body,
       caseId,
       assignedTo,
+      initiatedBy,
+      currentStatus,
+      progressPercentage,
       createdDate: req.body.createdDate || new Date().toISOString(),
-      lastUpdateDate: new Date().toISOString(),
-      initiatedBy: req.body.initiatedBy || ""
+      lastUpdateDate: new Date().toISOString()
     });
     await newCase.save();
+
+    const uploader = req.user.fullName || req.user.email || 'System';
+    if (req.body.typeOfComplaint === 'FIR' && req.body.firFileLink) {
+      await createDocumentIfNotExists({
+        caseId,
+        docType: 'FIR Document',
+        fileLink: req.body.firFileLink,
+        sourceForm: 'New Case',
+        uploadedBy: uploader
+      });
+    }
+    if (['Legal Notice', 'Cyber Complaint', 'Consumer Complaint'].includes(req.body.typeOfComplaint) && req.body.importDocumentLink) {
+      await createDocumentIfNotExists({
+        caseId,
+        docType: req.body.typeOfComplaint,
+        fileLink: req.body.importDocumentLink,
+        sourceForm: 'New Case',
+        uploadedBy: uploader
+      });
+    }
 
     // Send New Case Alert Email to Admin (for ALL cases)
     try {
@@ -374,11 +438,17 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
     }
 
     const isAssigning = req.body.assignedTo && req.body.assignedTo !== existingCase.assignedTo;
+    const isInitiating = req.body.initiatedBy && req.body.initiatedBy !== existingCase.initiatedBy;
 
     // Auto-update status to "Assigned" if it was just "New" or "Case Logged"
-    if (isAssigning && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged')) {
+    if ((isAssigning || isInitiating) && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged')) {
       req.body.currentStatus = 'Assigned';
       req.body.progressPercentage = 25;
+    }
+
+    // Auto-populate assignedTo if initiatedBy is set but assignedTo is empty
+    if (req.body.initiatedBy && (!req.body.assignedTo || req.body.assignedTo.trim() === '')) {
+      req.body.assignedTo = req.body.initiatedBy;
     }
 
     // Strip immutable/system fields from update payload to prevent MongoDB errors
@@ -389,6 +459,30 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
       { ...updateData, lastUpdateDate: new Date().toISOString() },
       { new: true }
     );
+
+    const uploader = req.user.fullName || req.user.email || 'System';
+    const updatedType = req.body.typeOfComplaint || existingCase.typeOfComplaint;
+    const firFileLink = req.body.firFileLink ?? existingCase.firFileLink;
+    const importDocumentLink = req.body.importDocumentLink ?? existingCase.importDocumentLink;
+
+    if (updatedType === 'FIR' && firFileLink) {
+      await createDocumentIfNotExists({
+        caseId,
+        docType: 'FIR Document',
+        fileLink: firFileLink,
+        sourceForm: 'Case Update',
+        uploadedBy: uploader
+      });
+    }
+    if (updatedType === 'Legal Notice' && importDocumentLink) {
+      await createDocumentIfNotExists({
+        caseId,
+        docType: 'Legal Notice',
+        fileLink: importDocumentLink,
+        sourceForm: 'Case Update',
+        uploadedBy: uploader
+      });
+    }
 
     // Assignment Notifications
     if (isAssigning) {
@@ -570,7 +664,7 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
         amtInDispute: getVal(['disputeamount', 'dispute', 'conflictamount', 'amountindispute']),
         caseSummary: getVal(['summary', 'description', 'caseinfo', 'narrative', 'details']),
         clientAllegation: getVal(['allegation', 'clientallegation', 'claims']),
-        initiatedBy: getVal(['initiatedby', 'salesperson', 'createdby', 'initiator']),
+        initiatedBy: ['staff', 'rajda mansuri'].includes(getVal(['initiatedby', 'salesperson', 'createdby', 'initiator'])?.toLowerCase()) ? '' : getVal(['initiatedby', 'salesperson', 'createdby', 'initiator']),
         servicesSold: getVal(['services', 'product', 'service', 'servicename']) ? [{
           serviceName: getVal(['services', 'product', 'service', 'servicename']),
           serviceAmount: getVal(['serviceamount', 'price', 'cost']),
@@ -581,7 +675,7 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
         }] : [],
         engagementNote: getVal(['engagementnote', 'notes', 'comments', 'engagement']),
         nextActionDate: getVal(['nextactiondate', 'nextfollowup', 'followup'], true),
-        assignedTo: getVal(['assignedto', 'owner', 'assignee', 'handler']),
+        assignedTo: ['staff', 'rajda mansuri'].includes(getVal(['assignedto', 'owner', 'assignee', 'handler'])?.toLowerCase()) ? '' : getVal(['assignedto', 'owner', 'assignee', 'handler']),
         createdDate: getVal(['createddate', 'date', 'creationdate'], true) || new Date().toISOString()
       });
     });
@@ -612,6 +706,16 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
       }
 
       row.caseId = generateCaseId(row.brandName, row.companyName, allCases);
+      
+      // Sync assignment and status during import
+      if (row.initiatedBy && (!row.assignedTo || row.assignedTo.trim() === '')) {
+        row.assignedTo = row.initiatedBy;
+      }
+      if ((row.initiatedBy || row.assignedTo) && (!row.currentStatus || row.currentStatus === 'New' || row.currentStatus === 'Case Logged')) {
+        row.currentStatus = 'Assigned';
+        row.progressPercentage = 25;
+      }
+
       allCases.push({ caseId: row.caseId });
       finalCases.push(row);
     }

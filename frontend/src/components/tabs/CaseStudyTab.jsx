@@ -360,10 +360,10 @@ const CaseStudyTab = ({ caseData = null }) => {
                 <div className="p-6 bg-bg-card border-b border-border flex justify-between items-center shadow-sm z-10 mb-8 rounded-2xl">
                   <div className="flex gap-4">
                     <button onClick={() => setShowDocsModal(true)} className="bg-blue-soft text-blue px-6 py-3 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">
-                      <Inbox size={18} /> View Documents
+                      <Inbox size={18} /> View Documents ({docs.length})
                     </button>
                     <button onClick={() => setShowCommsModal(true)} className="bg-orange-soft text-accent px-6 py-3 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">
-                      <MessageSquare size={18} /> View Communications
+                      <MessageSquare size={18} /> View Communications ({comms.filter(c => c.fileLink).length})
                     </button>
                   </div>
                   <div className="flex gap-4">
@@ -580,10 +580,10 @@ const CaseStudyTab = ({ caseData = null }) => {
                 <div className="p-6 bg-bg-card border-b border-border flex justify-between items-center shadow-sm z-10">
                   <div className="flex gap-4">
                     <button onClick={() => setShowDocsModal(true)} className="bg-blue-soft text-blue px-6 py-3 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">
-                      <Inbox size={18} /> View Documents
+                      <Inbox size={18} /> View Documents ({docs.length})
                     </button>
                     <button onClick={() => setShowCommsModal(true)} className="bg-orange-soft text-accent px-6 py-3 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">
-                      <MessageSquare size={18} /> View Communications
+                      <MessageSquare size={18} /> View Communications ({comms.filter(c => c.fileLink).length})
                     </button>
                   </div>
                   <div className="flex gap-4">

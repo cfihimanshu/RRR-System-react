@@ -9,6 +9,8 @@ const AdminPanelTab = () => {
   const [formData, setFormData] = useState({ email: '', password: '', role: 'Admin', fullName: '' });
   const [pendingRefunds, setPendingRefunds] = useState([]);
   const [allRefunds, setAllRefunds] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [roleUpdates, setRoleUpdates] = useState({});
   const [selectedRefund, setSelectedRefund] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const { user } = useContext(AuthContext);
@@ -31,9 +33,20 @@ const AdminPanelTab = () => {
     }
   };
 
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get('/auth/users');
+      setUsers(res.data);
+      setRoleUpdates(res.data.reduce((acc, item) => ({ ...acc, [item._id]: item.role }), {}));
+    } catch (err) {
+      console.error('Failed to fetch users', err);
+    }
+  };
+
   useEffect(() => {
     fetchPendingRefunds();
     fetchAllRefunds();
+    fetchUsers();
   }, []);
 
   const handleCreateUser = async (e) => {
@@ -42,8 +55,31 @@ const AdminPanelTab = () => {
       await api.post('/auth/create-user', formData);
       toast.success('User created successfully');
       setFormData({ email: '', password: '', role: 'Admin', fullName: '' });
+      fetchUsers();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to create user');
+    }
+  };
+
+  const handleChangeUserRole = (userId, role) => {
+    setRoleUpdates(prev => ({ ...prev, [userId]: role }));
+  };
+
+  const handleUpdateUserRole = async (userId) => {
+    const newRole = roleUpdates[userId];
+    const userItem = users.find(u => u._id === userId);
+    if (!userItem) return;
+    if (newRole === userItem.role) {
+      toast('No role change detected');
+      return;
+    }
+
+    try {
+      await api.put(`/auth/users/${userId}/role`, { role: newRole });
+      toast.success('User role updated');
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update role');
     }
   };
 
@@ -88,7 +124,7 @@ const AdminPanelTab = () => {
 
       </div>
       {/* SECTION 2: Create New User */}
-      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-4xl my-8 overflow-hidden">
+      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-full my-8 overflow-hidden">
         <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
           <div className="w-10 h-10 bg-blue-soft rounded-2xl flex items-center justify-center text-blue">
             <span className="font-black text-lg">👤</span>
@@ -96,7 +132,9 @@ const AdminPanelTab = () => {
           <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">Add New User</h2>
         </div>
 
-        <form className="p-8" onSubmit={handleCreateUser}>
+        <div className="p-8 grid grid-cols-1 xl:grid-cols-[minmax(320px,1fr)_minmax(430px,1.3fr)] gap-8">
+          <div className="bg-bg-card rounded-[2rem] border-2 border-border p-6">
+            <form className="space-y-8" onSubmit={handleCreateUser}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
             <div>
               <label className={labelClass}> FULL NAME</label>
@@ -142,7 +180,7 @@ const AdminPanelTab = () => {
                 onChange={e => setFormData({ ...formData, role: e.target.value })}
                 required
               >
-                <option value="Admin"> Admin</option>
+                <option value="Admin">Admin</option>
                 <option value="Operations">Operations</option>
                 <option value="Reviewer">Reviewer</option>
                 <option value="Accountant">Accountant</option>
@@ -158,6 +196,67 @@ const AdminPanelTab = () => {
         </form>
       </div>
 
+      <div className="bg-bg-card rounded-[2rem] border-2 border-border p-6 overflow-x-auto">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-accent-soft rounded-2xl flex items-center justify-center text-accent">
+            <span className="font-black text-lg">🔧</span>
+          </div>
+          <div>
+            <h3 className="text-base font-black text-text-primary uppercase tracking-tight">Change User Role</h3>
+            <p className="text-[10px] text-text-muted uppercase tracking-[0.2em] mt-1">Select a new role and submit to update a user.</p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[600px]">
+            <thead>
+              <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
+                <th className="px-4 py-4">User Name</th>
+                <th className="px-4 py-4">Current Role</th>
+                <th className="px-4 py-4">New Role</th>
+                <th className="px-4 py-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="px-4 py-10 text-center text-text-muted uppercase tracking-[0.2em]">No users available for role change.</td>
+                </tr>
+              ) : (
+                users.map(u => (
+                  <tr key={u._id} className="hover:bg-bg-input/30 transition-all">
+                    <td className="px-4 py-4 font-black text-text-primary uppercase tracking-tight">{u.fullName}</td>
+                    <td className="px-4 py-4 font-bold text-text-muted">{u.role}</td>
+                    <td className="px-4 py-4">
+                      <select
+                        className={inputClass}
+                        value={roleUpdates[u._id] || u.role}
+                        onChange={e => handleChangeUserRole(u._id, e.target.value)}
+                      >
+                        <option value="Admin">Admin</option>
+                        <option value="Operations">Operations</option>
+                        <option value="Reviewer">Reviewer</option>
+                        <option value="Accountant">Accountant</option>
+                        <option value="Staff">Staff</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        onClick={() => handleUpdateUserRole(u._id)}
+                        className="bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-2xl transition-all active:scale-95"
+                      >
+                        Update
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 
       {/* SECTION 1: Refund Requests & Approvals */}
       <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border mb-10 max-w-5xl overflow-hidden">
