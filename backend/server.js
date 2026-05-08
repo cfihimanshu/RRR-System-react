@@ -60,7 +60,7 @@ const corsOptions = {
   maxAge: 86400,
 };
 
-app.use(cors(corsOptions));
+// app.use(cors(corsOptions)); // Disabled to rely on manual CORS handling below
 
 app.use((req, res, next) => {
   const origin = req.headers.origin || 'no-origin';
