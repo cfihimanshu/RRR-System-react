@@ -31,18 +31,34 @@ const allowedOrigins = [
 ].filter(Boolean);
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    console.log('CORS Origin:', origin);
+  origin: function(origin, callback) {
+    console.log('CORS Origin Request:', origin);
     callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
-  optionsSuccessStatus: 204,
+  exposedHeaders: ['Content-Length', 'X-JSON-Response'],
+  optionsSuccessStatus: 200,
+  preflightContinue: false,
 };
 
 app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions));
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  res.header('Access-Control-Allow-Origin', origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With');
+  res.header('Access-Control-Expose-Headers', 'Content-Length, X-JSON-Response');
+  
+  if (req.method === 'OPTIONS') {
+    console.log('✓ Preflight OPTIONS handled for:', origin);
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
