@@ -81,6 +81,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 const connectToDatabase = async () => {
+  if (mongoose.connection.readyState >= 1) {
+    return; // Already connected or connecting
+  }
   try {
     await mongoose.connect(process.env.MONGO_URI, {
       serverSelectionTimeoutMS: 5000, // Reduced to 5s so it fails faster on Vercel
@@ -93,8 +96,7 @@ const connectToDatabase = async () => {
     console.log('MongoDB Connected');
   } catch (err) {
     console.error('DATABASE CONNECTION ERROR:', err.message);
-    // DO NOT process.exit(1) here! It kills Vercel serverless functions abruptly,
-    // causing 500 errors without CORS headers and preventing logs from flushing.
+    throw err;
   }
 };
 
@@ -104,6 +106,18 @@ mongoose.connection.on('disconnected', () => {
 
 mongoose.connection.on('error', err => {
   console.error('MongoDB connection error:', err);
+});
+
+// Vercel Serverless Middleware: Ensure DB is connected before processing any API route
+app.use(async (req, res, next) => {
+  if (process.env.VERCEL) {
+    try {
+      await connectToDatabase();
+    } catch (err) {
+      return res.status(500).json({ error: "Database connection failed on Vercel", details: err.message });
+    }
+  }
+  next();
 });
 
 // Routes
