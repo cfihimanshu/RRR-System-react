@@ -8,11 +8,77 @@ const { verifyToken } = require('../middleware/auth');
 // Get all reports or user-specific reports
 router.get('/', verifyToken, async (req, res) => {
   try {
-    let query = {};
+    let matchQuery = {};
     if (req.user.role !== 'Admin') {
-      query.userEmail = req.user.email;
+      matchQuery.userEmail = req.user.email;
     }
-    const reports = await Report.find(query).sort({ createdAt: -1 });
+
+    const reports = await Report.aggregate([
+      { $match: matchQuery },
+      { $sort: { createdAt: -1 } },
+      {
+        $lookup: {
+          from: 'timelines',
+          let: { rDate: '$date', rUser: '$userName', rEmail: '$userEmail' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $regexMatch: { input: '$eventDate', regex: { $concat: ['^', '$$rDate'] } } },
+                    { 
+                      $or: [
+                        { $eq: ['$source', '$$rUser'] },
+                        { $eq: ['$source', '$$rEmail'] }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                commCount: {
+                  $sum: {
+                    $cond: [{ $in: ['$eventType', ['Call', 'Email', 'Whatsapp', 'Meeting']] }, 1, 0]
+                  }
+                },
+                docCount: {
+                  $sum: {
+                    $cond: [{ $eq: ['$eventType', 'Document Upload'] }, 1, 0]
+                  }
+                },
+                progressCount: {
+                  $sum: {
+                    $cond: [{ $eq: ['$eventType', 'Progress Update'] }, 1, 0]
+                  }
+                }
+              }
+            }
+          ],
+          as: 'activityCounts'
+        }
+      },
+      {
+        $addFields: {
+          activityCounts: { $arrayElemAt: ['$activityCounts', 0] }
+        }
+      },
+      {
+        $addFields: {
+          commCount: { $ifNull: ['$activityCounts.commCount', 0] },
+          docCount: { $ifNull: ['$activityCounts.docCount', 0] },
+          progressCount: { $ifNull: ['$activityCounts.progressCount', 0] }
+        }
+      },
+      {
+        $project: {
+          activityCounts: 0
+        }
+      }
+    ]);
+
     res.json(reports);
   } catch (error) {
     res.status(500).json({ error: error.message });

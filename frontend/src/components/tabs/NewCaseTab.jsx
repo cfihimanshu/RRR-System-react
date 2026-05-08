@@ -21,7 +21,8 @@ import {
   Video,
   Mail,
   Plus,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react';
 
 const initialService = {
@@ -44,23 +45,29 @@ const indianStates = [
   "Ladakh", "Jammu and Kashmir"
 ];
 
+const initialFormData = {
+  companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
+  typeOfComplaint: '', brandName: '',
+  engagementNote: 'This is a multi-stage consultancy and execution support engagement. ₹0 was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.',
+  clientName: '', clientMobile: '', clientEmail: '', state: '',
+  totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '',
+  smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
+  proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
+  initiatedBy: '', accountable: '', legalOfficer: '', accounts: '',
+  firNumber: '', firFileLink: '', grievanceNumber: '',
+  assignedTo: ''
+};
+
 const NewCaseTab = () => {
   const { user } = useContext(AuthContext);
   const location = useLocation();
   const navigate = useNavigate();
   const editCase = location.state?.editCase || null;
 
-  const [formData, setFormData] = useState({
-    companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
-    typeOfComplaint: '', brandName: '',
-    engagementNote: 'This is a multi-stage consultancy and execution support engagement. ₹0 was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.',
-    clientName: '', clientMobile: '', clientEmail: '', state: '',
-    totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '',
-    smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
-    proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
-    initiatedBy: '', accountable: '', legalOfficer: '', accounts: '',
-    firNumber: '', firFileLink: '', grievanceNumber: '',
-    assignedTo: '' // New field
+  const [formData, setFormData] = useState(() => {
+    if (editCase) return initialFormData;
+    const saved = localStorage.getItem('rrr_new_case_form');
+    return saved ? JSON.parse(saved) : initialFormData;
   });
 
   const [errors, setErrors] = useState({
@@ -70,14 +77,30 @@ const NewCaseTab = () => {
 
   const [userList, setUserList] = useState([]); // List of users for dropdown
 
-  const [serviceMode, setServiceMode] = useState('Single Service');
-  const [services, setServices] = useState([{ ...initialService }]);
-  const [cyberAcks, setCyberAcks] = useState(['']);
+  const [serviceMode, setServiceMode] = useState(() => {
+    if (editCase) return 'Single Service';
+    const saved = localStorage.getItem('rrr_new_case_mode');
+    return saved || 'Single Service';
+  });
+
+  const [services, setServices] = useState(() => {
+    if (editCase) return [{ ...initialService }];
+    const saved = localStorage.getItem('rrr_new_case_services');
+    return saved ? JSON.parse(saved) : [{ ...initialService }];
+  });
+
+  const [cyberAcks, setCyberAcks] = useState(() => {
+    if (editCase) return [''];
+    const saved = localStorage.getItem('rrr_new_case_acks');
+    return saved ? JSON.parse(saved) : [''];
+  });
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateCase, setDuplicateCase] = useState(null);
+  const [visibleSteps, setVisibleSteps] = useState(1);
 
   useEffect(() => {
     if (editCase) {
+      setVisibleSteps(7);
       setFormData(prev => {
         const data = { ...prev, ...editCase };
         return {
@@ -133,6 +156,39 @@ const NewCaseTab = () => {
       }
     }
   }, [editCase]);
+  
+  // Persistence save hooks stay the same, but the initial load is now handled in useState initialization
+
+  useEffect(() => {
+    if (!editCase) {
+      localStorage.setItem('rrr_new_case_form', JSON.stringify(formData));
+    }
+  }, [formData, editCase]);
+
+  useEffect(() => {
+    if (!editCase) {
+      localStorage.setItem('rrr_new_case_services', JSON.stringify(services));
+    }
+  }, [services, editCase]);
+
+  useEffect(() => {
+    if (!editCase) {
+      localStorage.setItem('rrr_new_case_mode', serviceMode);
+    }
+  }, [serviceMode, editCase]);
+
+  useEffect(() => {
+    if (!editCase) {
+      localStorage.setItem('rrr_new_case_acks', JSON.stringify(cyberAcks));
+    }
+  }, [cyberAcks, editCase]);
+
+  const clearFormPersistence = () => {
+    localStorage.removeItem('rrr_new_case_form');
+    localStorage.removeItem('rrr_new_case_services');
+    localStorage.removeItem('rrr_new_case_mode');
+    localStorage.removeItem('rrr_new_case_acks');
+  };
 
   // Fetch users for assignment dropdown
   useEffect(() => {
@@ -273,6 +329,7 @@ const NewCaseTab = () => {
       } else {
         await api.post('/cases', payload);
         toast.success('Case created successfully');
+        clearFormPersistence();
         setFormData({
           companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
           typeOfComplaint: '', brandName: '', engagementNote: '',
@@ -296,6 +353,34 @@ const NewCaseTab = () => {
         toast.error(err.response?.data?.error || 'Failed to create case');
       }
     }
+  };
+
+  const handleNextStep = (currentStep) => {
+    let missingFields = [];
+
+    if (currentStep === 1) {
+      if (!formData.companyName) missingFields.push('Company Name');
+      if (!formData.priority) missingFields.push('Priority');
+      if (!formData.typeOfComplaint) missingFields.push('Type of Complaint');
+      if (!formData.brandName) missingFields.push('Brand Name');
+    }
+    
+    if (currentStep === 3) {
+      if (!formData.clientName) missingFields.push('Client Name');
+      if (!formData.clientMobile) missingFields.push('Mobile');
+      else if (errors.clientMobile) missingFields.push('Valid Mobile (10 digits)');
+    }
+
+    if (currentStep === 6) {
+      if (!formData.caseSummary) missingFields.push('Case Summary');
+    }
+
+    if (missingFields.length > 0) {
+      toast.error(`Please fill required fields: ${missingFields.join(', ')}`, { icon: '⚠️' });
+      return;
+    }
+
+    setVisibleSteps(currentStep + 1);
   };
 
   const inputClass = "w-full border border-border rounded-xl px-4 py-3 text-sm focus:border-accent focus:ring-1 focus:ring-accent-soft outline-none transition-all bg-bg-input text-text-primary font-medium placeholder:text-text-muted shadow-inner";
@@ -423,8 +508,17 @@ const NewCaseTab = () => {
           </div>
         </div>
 
+        {visibleSteps === 1 && (
+          <div className="flex justify-center mb-8 -mt-2 animate-enter">
+            <button type="button" onClick={() => handleNextStep(1)} className="bg-bg-input border border-border text-text-primary px-8 py-3 rounded-xl font-black uppercase tracking-widest text-[11px] hover:border-accent hover:text-accent transition-all flex items-center gap-2 shadow-sm">
+              Next: Services Configuration <ChevronDown size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Services Sold Configuration */}
-        <div className={`${cardClass} border-yellow-soft/50 shadow-[0_0_10px_rgba(250,204,21,0.05)]`}>
+        {visibleSteps >= 2 && (
+          <div className={`${cardClass} border-yellow-soft/50 shadow-[0_0_10px_rgba(250,204,21,0.05)] animate-enter`}>
           <h3 className={sectionTitleClass}><Wrench size={18} className="text-yellow" /> Services Sold Configuration</h3>
 
           <div className="flex flex-col lg:flex-row gap-6 mb-8 border-b border-border pb-8">
@@ -508,9 +602,19 @@ const NewCaseTab = () => {
             </button>
           )}
         </div>
+        )}
+
+        {visibleSteps === 2 && (
+          <div className="flex justify-center mb-8 -mt-2 animate-enter">
+            <button type="button" onClick={() => handleNextStep(2)} className="bg-bg-input border border-border text-text-primary px-8 py-3 rounded-xl font-black uppercase tracking-widest text-[11px] hover:border-accent hover:text-accent transition-all flex items-center gap-2 shadow-sm">
+              Next: Client Information <ChevronDown size={16} />
+            </button>
+          </div>
+        )}
 
         {/* Client Information */}
-        <div className={cardClass}>
+        {visibleSteps >= 3 && (
+        <div className={`${cardClass} animate-enter`}>
           <h3 className={sectionTitleClass}><User size={18} className="text-blue" /> Client Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             <div>
@@ -540,9 +644,19 @@ const NewCaseTab = () => {
             </div>
           </div>
         </div>
+        )}
+
+        {visibleSteps === 3 && (
+          <div className="flex justify-center mb-8 -mt-2 animate-enter">
+            <button type="button" onClick={() => handleNextStep(3)} className="bg-bg-input border border-border text-text-primary px-8 py-3 rounded-xl font-black uppercase tracking-widest text-[11px] hover:border-accent hover:text-accent transition-all flex items-center gap-2 shadow-sm">
+              Next: Financial Details <ChevronDown size={16} />
+            </button>
+          </div>
+        )}
 
         {/* Financial Details */}
-        <div className={cardClass}>
+        {visibleSteps >= 4 && (
+        <div className={`${cardClass} animate-enter`}>
           <h3 className={sectionTitleClass}><IndianRupee size={18} className="text-yellow" /> Financial Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             <div>
@@ -566,9 +680,19 @@ const NewCaseTab = () => {
             </div>
           </div>
         </div>
+        )}
+
+        {visibleSteps === 4 && (
+          <div className="flex justify-center mb-8 -mt-2 animate-enter">
+            <button type="button" onClick={() => handleNextStep(4)} className="bg-bg-input border border-border text-text-primary px-8 py-3 rounded-xl font-black uppercase tracking-widest text-[11px] hover:border-accent hover:text-accent transition-all flex items-center gap-2 shadow-sm">
+              Next: Risk & Threat Assessment <ChevronDown size={16} />
+            </button>
+          </div>
+        )}
 
         {/* Risk & Threat Assessment */}
-        <div className={cardClass}>
+        {visibleSteps >= 5 && (
+        <div className={`${cardClass} animate-enter`}>
           <h3 className={sectionTitleClass}><AlertTriangle size={18} className="text-red" /> Risk & Threat Assessment</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             <div>
@@ -596,9 +720,19 @@ const NewCaseTab = () => {
             </div>
           </div>
         </div>
+        )}
+
+        {visibleSteps === 5 && (
+          <div className="flex justify-center mb-8 -mt-2 animate-enter">
+            <button type="button" onClick={() => handleNextStep(5)} className="bg-bg-input border border-border text-text-primary px-8 py-3 rounded-xl font-black uppercase tracking-widest text-[11px] hover:border-accent hover:text-accent transition-all flex items-center gap-2 shadow-sm">
+              Next: Case Narrative <ChevronDown size={16} />
+            </button>
+          </div>
+        )}
 
         {/* Case Narrative */}
-        <div className={cardClass}>
+        {visibleSteps >= 6 && (
+        <div className={`${cardClass} animate-enter`}>
           <h3 className={sectionTitleClass}><FileText size={18} className="text-text-muted" /> Case Narrative</h3>
           <div className="grid grid-cols-1 gap-6 mb-8">
             <div>
@@ -657,9 +791,20 @@ const NewCaseTab = () => {
             </div>
           </div>
         </div>
+        )}
+
+        {visibleSteps === 6 && (
+          <div className="flex justify-center mb-8 -mt-2 animate-enter">
+            <button type="button" onClick={() => handleNextStep(6)} className="bg-bg-input border border-border text-text-primary px-8 py-3 rounded-xl font-black uppercase tracking-widest text-[11px] hover:border-accent hover:text-accent transition-all flex items-center gap-2 shadow-sm">
+              Next: Team Assignment & Submit <ChevronDown size={16} />
+            </button>
+          </div>
+        )}
 
         {/* Team Assignment */}
-        <div className={cardClass}>
+        {visibleSteps >= 7 && (
+          <>
+        <div className={`${cardClass} animate-enter`}>
           <h3 className={sectionTitleClass}><Users size={18} className="text-purple" /> Team Assignment</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
@@ -712,6 +857,8 @@ const NewCaseTab = () => {
             <Trash2 size={20} /> {editCase ? 'Cancel Edit' : 'Reset Form'}
           </button>
         </div>
+          </>
+        )}
 
       </form>
 

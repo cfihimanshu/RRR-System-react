@@ -126,9 +126,9 @@ const MyTaskTab = () => {
 
   useEffect(() => {
     if (isModalOpen && user?.fullName) {
-      setNewTask(prev => ({ 
-        ...prev, 
-        assignee: user.role === 'Admin' ? (prev.assignee || '') : user.fullName 
+      setNewTask(prev => ({
+        ...prev,
+        assignee: user.role === 'Admin' ? (prev.assignee || '') : user.fullName
       }));
     }
   }, [isModalOpen, user?.fullName, user?.role]);
@@ -142,16 +142,30 @@ const MyTaskTab = () => {
     }
   };
 
-  const handleUpdateTask = async (taskId, updates) => {
+  const handleUpdateTask = async (taskId, updates, silent = false) => {
     try {
       const res = await api.put(`/tasks/${taskId}`, updates);
       setTasks(prev => prev.map(t => t._id === taskId ? { ...t, ...res.data } : t));
       if (selectedTask?._id === taskId) {
         setSelectedTask(prev => ({ ...prev, ...res.data }));
       }
-      toast.success('Task updated');
+      if (!silent) toast.success('Task updated');
     } catch (err) {
-      toast.error('Update failed');
+      if (!silent) toast.error('Update failed');
+    }
+  };
+
+  const handleLocalUpdate = (updates) => {
+    setSelectedTask(prev => ({ ...prev, ...updates }));
+  };
+
+  const handlePersistSelectedTask = async () => {
+    if (!selectedTask) return;
+    try {
+      await handleUpdateTask(selectedTask._id, selectedTask);
+      setIsSidePanelOpen(false);
+    } catch (err) {
+      console.error('Persistence failed:', err);
     }
   };
 
@@ -203,11 +217,19 @@ const MyTaskTab = () => {
     updateTaskStatus(id, status);
   };
 
-  const filteredTasks = tasks.filter(t =>
-    t.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.caseId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.assignee?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const [dateFilter, setDateFilter] = useState('');
+
+  const filteredTasks = tasks.filter(t => {
+    const matchesSearch = t.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.caseId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.assignee?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Robust date matching: check dueDate first, fallback to createdAt date
+    const taskCreatedAtDate = t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : null;
+    const matchesDate = dateFilter ? (t.dueDate === dateFilter || taskCreatedAtDate === dateFilter) : true;
+
+    return matchesSearch && matchesDate;
+  });
 
   const handleExportTasks = () => {
     if (filteredTasks.length === 0) return toast.error('No tasks to export');
@@ -319,14 +341,33 @@ const MyTaskTab = () => {
       </div>
 
       <div className="p-4 md:p-8 flex flex-col flex-1 bg-bg-primary">
-        {/* Search Bar */}
-        <div className="mb-8 relative max-w-xl">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text" placeholder="Search by task title, case ID or assignee..."
-            className="w-full pl-12 pr-4 py-3 bg-bg-card border-2 border-border rounded-2xl text-sm text-text-primary outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft transition-all shadow-sm font-medium"
-            value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        {/* Search & Filter Bar */}
+        <div className="mb-8 flex flex-col md:flex-row gap-4 max-w-3xl">
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text" placeholder="Search by task title, case ID or assignee..."
+              className="w-full pl-12 pr-4 py-3 bg-bg-card border-2 border-border rounded-2xl text-sm text-text-primary outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft transition-all shadow-sm font-medium"
+              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="relative w-full md:w-48">
+            <input
+              type="date"
+              className="w-full px-4 py-3 bg-bg-card border-2 border-border rounded-2xl text-sm text-text-primary outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft transition-all shadow-sm font-medium"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+            />
+            {dateFilter && (
+              <button
+                onClick={() => setDateFilter('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-bg-secondary rounded-lg text-text-muted hover:text-red hover:bg-red-soft transition-colors"
+                title="Clear Date"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 pb-4">
@@ -382,8 +423,18 @@ const MyTaskTab = () => {
                           <div className="w-6 h-6 bg-accent rounded-lg flex items-center justify-center text-white text-[8px] font-black shadow-sm">{task.assignee?.charAt(0)}</div>
                           <span className="text-[10px] font-bold text-text-secondary">{task.assignee}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {task.dueDate && <span className="text-[9px] font-bold text-text-muted flex items-center gap-1"><Calendar size={16} className="text-white" /> {task.dueDate}</span>}
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold text-text-muted flex items-center gap-1">
+                              <Calendar size={12} className="text-accent" />
+                              {task.dueDate || (task.createdAt ? new Date(task.createdAt).toLocaleDateString('en-IN') : 'No Date')}
+                            </span>
+                            {task.createdAt && (
+                              <span className="text-[9px] font-bold text-accent flex items-center gap-1 bg-accent/5 px-2 py-0.5 ">
+                                <Clock size={10} /> {new Date(task.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              </span>
+                            )}
+                          </div>
                           <ArrowRight size={14} className="text-text-muted group-hover:text-accent transition-colors" />
                         </div>
                       </div>
@@ -483,9 +534,14 @@ const MyTaskTab = () => {
                     type="datetime-local"
                     className="flex-1 bg-bg-input border-2 border-border rounded-2xl px-5 py-3 text-xs font-black text-text-primary outline-none focus:border-accent transition-all shadow-sm"
                     value={selectedTask.reminderDateTime || ''}
-                    onChange={(e) => handleUpdateTask(selectedTask._id, { reminderDateTime: e.target.value })}
+                    onChange={(e) => handleLocalUpdate({ reminderDateTime: e.target.value })}
                   />
-                  <button className="bg-accent text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-accent-hover transition-all shadow-lg active:scale-95">Set</button>
+                  <button
+                    onClick={() => handleUpdateTask(selectedTask._id, { reminderDateTime: selectedTask.reminderDateTime })}
+                    className="bg-accent text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-accent-hover transition-all shadow-lg active:scale-95"
+                  >
+                    Set
+                  </button>
                 </div>
                 {selectedTask.reminderDateTime && (
                   <div className="flex items-center gap-2 text-green-600 font-bold text-[10px] bg-green-50 px-3 py-2 rounded-xl border border-green-100 w-fit">
@@ -504,7 +560,7 @@ const MyTaskTab = () => {
                   className="w-full bg-bg-input border-2 border-border rounded-[2rem] p-6 text-sm font-medium text-text-primary outline-none focus:border-accent focus:bg-bg-card transition-all min-h-[150px] shadow-sm placeholder:text-text-muted"
                   placeholder="Add progress notes, observations, or next steps..."
                   value={selectedTask.notes || ''}
-                  onChange={(e) => handleUpdateTask(selectedTask._id, { notes: e.target.value })}
+                  onChange={(e) => handleLocalUpdate({ notes: e.target.value })}
                 />
               </div>
             </div>
@@ -512,7 +568,7 @@ const MyTaskTab = () => {
             {/* Side Panel Footer */}
             <div className="p-8 bg-bg-card border-t border-border flex gap-4">
               <button
-                onClick={() => setIsSidePanelOpen(false)}
+                onClick={handlePersistSelectedTask}
                 className="flex-1 py-4 bg-accent text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-orange-900/20 hover:bg-accent-hover hover:-translate-y-1 active:translate-y-0 transition-all"
               >
                 Save & Exit

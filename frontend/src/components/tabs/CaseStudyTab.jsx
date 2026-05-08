@@ -141,25 +141,58 @@ const CaseStudyTab = ({ caseData = null }) => {
     const dataToUse = generatedCase || caseData;
     if (!dataToUse) return;
 
-    toast.loading('Generating Standardized PDF...', { id: 'pdf-gen' });
+    const element = document.getElementById('report-to-download');
+    if (!element) return toast.error('Preview not found to generate PDF');
+
+    toast.loading('Generating PDF from preview...', { id: 'pdf-gen' });
     try {
-      const response = await api.post('/case-study/generate', { caseId: dataToUse.caseId }, {
-        responseType: 'blob'
-      });
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: `CaseStudy_${dataToUse.caseId}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `CaseStudy_${dataToUse.caseId}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      toast.success('Download started!', { id: 'pdf-gen' });
+      await html2pdf().from(element).set(opt).save();
+      toast.success('Download complete!', { id: 'pdf-gen' });
     } catch (err) {
       console.error(err);
-      toast.error('Failed to generate standardized PDF', { id: 'pdf-gen' });
+      toast.error('Failed to generate PDF', { id: 'pdf-gen' });
     }
+  };
+
+  const handlePrint = () => {
+    const reportContent = document.getElementById('report-to-download');
+    if (!reportContent) return toast.error('Print content not found');
+
+    const printWrapper = document.createElement('div');
+    printWrapper.id = 'temp-print-wrapper';
+    printWrapper.style.position = 'absolute';
+    printWrapper.style.top = '0';
+    printWrapper.style.left = '0';
+    printWrapper.style.width = '100%';
+    printWrapper.style.backgroundColor = 'white';
+    printWrapper.style.zIndex = '999999';
+    printWrapper.innerHTML = reportContent.outerHTML;
+
+    const style = document.createElement('style');
+    style.id = 'temp-print-style';
+    style.innerHTML = `
+      @media print {
+        #root { display: none !important; }
+        body { background: white !important; margin: 0; padding: 0; }
+        .page-break-before { page-break-before: always !important; }
+      }
+    `;
+
+    document.body.appendChild(style);
+    document.body.appendChild(printWrapper);
+
+    window.print();
+
+    document.body.removeChild(printWrapper);
+    document.body.removeChild(style);
   };
 
   const generatedCases = cases.filter(c => c.caseStudyGeneratedAt).sort((a, b) => new Date(b.caseStudyGeneratedAt) - new Date(a.caseStudyGeneratedAt));
@@ -272,7 +305,11 @@ const CaseStudyTab = ({ caseData = null }) => {
               {data?.clientAllegation && (
                 <div>
                   <div className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-1">Primary Allegation:</div>
-                  <div className="text-[11px] text-gray-900 font-bold border-l-2 border-red-200 pl-3">"{data.clientAllegation}"</div>
+                  <ul className="text-[11px] text-gray-900 font-bold border-l-2 border-red-200 pl-4 list-disc list-inside space-y-1">
+                    {data.clientAllegation.split('\n').filter(line => line.trim() !== '').map((line, idx) => (
+                      <li key={idx}>{line.trim()}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>
@@ -312,6 +349,70 @@ const CaseStudyTab = ({ caseData = null }) => {
             <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 text-[11px] font-medium text-[#1e3a8a] leading-relaxed whitespace-pre-line">
               {data.recommendedNextSteps}
             </div>
+          </section>
+        )}
+
+        {/* 9. Communication Logs */}
+        {comms && comms.length > 0 && (
+          <section className="mb-10 page-break-before">
+            <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">{sectionNum++}. Communication Logs</h2>
+            <table className="w-full border-collapse border border-gray-200 text-[10px]">
+              <thead className="bg-white border-b border-gray-300">
+                <tr>
+                  <th className="bg-white p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a] w-24">Date</th>
+                  <th className="bg-white p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a] w-24">Mode/Dir</th>
+                  <th className="bg-white p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a]">From/To</th>
+                  <th className="bg-white p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a]">Summary</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {comms.map((c, i) => {
+                  const rawDate = c.dateTime || c.createdAt || data?.createdAt;
+                  const dateObj = new Date(rawDate);
+                  const displayDate = (!rawDate) ? '—' : (isNaN(dateObj.getTime()) ? rawDate : dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }));
+                  return (
+                  <tr key={i}>
+                    <td className="bg-white p-2 border border-gray-200 text-gray-700">{displayDate}</td>
+                    <td className="bg-white p-2 border border-gray-200 font-medium text-gray-900">{c.mode} / {c.direction}</td>
+                    <td className="bg-white p-2 border border-gray-200 text-gray-700">{c.fromTo || '—'}</td>
+                    <td className="bg-white p-2 border border-gray-200 text-gray-700 italic">{c.summary}</td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {/* 10. Document Logs */}
+        {docs && docs.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">{sectionNum++}. Case Documents Index</h2>
+            <table className="w-full border-collapse border border-gray-200 text-[10px]">
+              <thead className="bg-white border-b border-gray-300">
+                <tr>
+                  <th className="bg-white p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a] w-24">Date</th>
+                  <th className="bg-white p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a] w-32">Type</th>
+                  <th className="bg-white p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a]">Summary</th>
+                  <th className="bg-white p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a]">Remarks</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {docs.map((d, i) => {
+                  const rawDate = d.uploadDate || d.createdAt || data?.createdAt;
+                  const dateObj = new Date(rawDate);
+                  const displayDate = (!rawDate) ? '—' : (isNaN(dateObj.getTime()) ? rawDate : dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }));
+                  return (
+                  <tr key={i}>
+                    <td className="bg-white p-2 border border-gray-200 text-gray-700">{displayDate}</td>
+                    <td className="bg-white p-2 border border-gray-200 font-medium text-gray-900">{d.docType || d.sourceForm || '—'}</td>
+                    <td className="bg-white p-2 border border-gray-200 text-gray-900 font-bold">{d.fileSummary || '—'}</td>
+                    <td className="bg-white p-2 border border-gray-200 text-gray-700 italic">{d.remarks || '—'}</td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </section>
         )}
 
@@ -359,18 +460,18 @@ const CaseStudyTab = ({ caseData = null }) => {
               <div className="flex flex-col h-full">
                 <div className="p-6 bg-bg-card border-b border-border flex justify-between items-center shadow-sm z-10 mb-8 rounded-2xl">
                   <div className="flex gap-4">
-                    <button onClick={() => setShowDocsModal(true)} className="bg-blue-soft text-blue px-6 py-3 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">
+                    <button onClick={() => setShowDocsModal(true)} className="bg-blue-soft text-blue px-6 py-3 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-blue-900/10 hover:-translate-y-0.5">
                       <Inbox size={18} /> View Documents ({docs.length})
                     </button>
-                    <button onClick={() => setShowCommsModal(true)} className="bg-orange-soft text-accent px-6 py-3 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">
-                      <MessageSquare size={18} /> View Communications ({comms.filter(c => c.fileLink).length})
+                    <button onClick={() => setShowCommsModal(true)} className="bg-orange-soft text-accent px-6 py-3 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-orange-900/10 hover:-translate-y-0.5">
+                      <MessageSquare size={18} /> View Communications ({comms.length})
                     </button>
                   </div>
                   <div className="flex gap-4">
                     <button onClick={handleDownloadPDF} className="bg-green hover:bg-green-600 text-white px-8 py-3 rounded-2xl shadow-xl shadow-green-900/20 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 group">
                       <FileDown size={18} className="group-hover:scale-110 transition-transform" /> Export PDF
                     </button>
-                    <button onClick={() => window.print()} className="bg-bg-input hover:bg-bg-card-hover text-text-primary border-2 border-border px-8 py-3 rounded-2xl transition-all flex items-center gap-3 text-[10px] font-black uppercase tracking-widest active:scale-95">
+                    <button onClick={handlePrint} className="bg-bg-input hover:bg-bg-card-hover text-text-primary border-2 border-border px-8 py-3 rounded-2xl transition-all flex items-center gap-3 text-[10px] font-black uppercase tracking-widest active:scale-95">
                       <Printer size={18} /> Print Record
                     </button>
                   </div>
@@ -476,32 +577,41 @@ const CaseStudyTab = ({ caseData = null }) => {
                     </button>
                   </div>
                   <div className="p-8 max-h-[60vh] overflow-y-auto scrollbar-thin">
-                    {comms.filter(c => c.fileLink).length === 0 ? (
+                    {comms.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-20 opacity-30 text-center">
                         <MessageSquare size={48} className="mb-4" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">No attachments found in communications</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest">No communications recorded</p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-4">
-                        {comms.filter(c => c.fileLink).map((comm, idx) => (
-                          <a
+                        {comms.map((comm, idx) => (
+                          <div
                             key={idx}
-                            href={comm.fileLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between p-5 bg-bg-card border-2 border-border rounded-2xl hover:border-accent/50 transition-all group"
+                            className="flex flex-col p-5 bg-bg-card border-2 border-border rounded-2xl hover:border-accent/50 transition-all group"
                           >
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-accent group-hover:bg-accent group-hover:text-white transition-all">
-                                <FileText size={20} />
+                            <div className="flex items-center justify-between mb-3 border-b border-border/50 pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${comm.direction === 'Incoming' ? 'bg-green-soft text-green' : 'bg-blue-soft text-blue'}`}>
+                                  {comm.direction === 'Incoming' ? <Inbox size={18} /> : <MessageSquare size={18} />}
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-black text-white uppercase tracking-tight line-clamp-1">{comm.mode || 'Email'}</p>
+                                  <p className="text-[8px] text-text-muted font-bold uppercase mt-0.5">{new Date(comm.dateTime || comm.createdAt).toLocaleDateString()} • {comm.fromTo || 'Client'}</p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-[10px] font-black text-white uppercase tracking-tight line-clamp-1">{comm.summary || 'Attached File'}</p>
-                                <p className="text-[8px] text-text-muted font-bold uppercase mt-0.5">{comm.mode || 'Email'} • {new Date(comm.dateTime).toLocaleDateString()}</p>
-                              </div>
+                              {comm.fileLink && (
+                                <a 
+                                  href={comm.fileLink} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="bg-accent text-white px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-accent-hover transition-all"
+                                >
+                                  <Eye size={12} /> VIEW FILE
+                                </a>
+                              )}
                             </div>
-                            <Eye size={16} className="text-text-muted group-hover:text-accent transition-all flex-shrink-0" />
-                          </a>
+                            <p className="text-[11px] text-text-secondary italic leading-relaxed">"{comm.summary}"</p>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -583,12 +693,12 @@ const CaseStudyTab = ({ caseData = null }) => {
                       <Inbox size={18} /> View Documents ({docs.length})
                     </button>
                     <button onClick={() => setShowCommsModal(true)} className="bg-orange-soft text-accent px-6 py-3 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">
-                      <MessageSquare size={18} /> View Communications ({comms.filter(c => c.fileLink).length})
+                      <MessageSquare size={18} /> View Communications ({comms.length})
                     </button>
                   </div>
                   <div className="flex gap-4">
                     <button onClick={handleDownloadPDF} className="bg-green hover:bg-green-600 text-white px-8 py-3 rounded-2xl shadow-xl shadow-green-900/20 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 group"><FileDown size={18} className="group-hover:scale-110 transition-transform" /> Export PDF</button>
-                    <button onClick={() => window.print()} className="bg-bg-input hover:bg-bg-card-hover text-text-primary border-2 border-border px-8 py-3 rounded-2xl transition-all flex items-center gap-3 text-[10px] font-black uppercase tracking-widest active:scale-95"><Printer size={18} /> Print Record</button>
+                    <button onClick={handlePrint} className="bg-bg-input hover:bg-bg-card-hover text-text-primary border-2 border-border px-8 py-3 rounded-2xl transition-all flex items-center gap-3 text-[10px] font-black uppercase tracking-widest active:scale-95"><Printer size={18} /> Print Record</button>
                   </div>
                 </div>
                 <div className="flex-1 overflow-auto bg-bg-input p-12 scrollbar-thin">

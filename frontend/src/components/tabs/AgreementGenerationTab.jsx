@@ -5,6 +5,7 @@ import api from '../../api/axios';
 
 const AgreementGenerationTab = () => {
   const [formData, setFormData] = useState({
+    templateId: '1Xlkl7KkF0YgYM1ZDu-FusPi_nY4IT5Hr68SbCOPB3bA', // Default ID
     date: '',
     firstPartyCompany: '',
     clientName: '',
@@ -96,7 +97,7 @@ const AgreementGenerationTab = () => {
       return;
     }
 
-    const loadingToast = toast.loading('Generating Perfect PDF... (Using MS Word Engine)');
+    const loadingToast = toast.loading('Fetching Template from Google Docs & Generating PDF...');
     try {
       // Helper to convert number to words (for small counts)
       const numberToWords = (n) => {
@@ -144,7 +145,8 @@ const AgreementGenerationTab = () => {
         Installments: formattedInstallments,
         FirstPartyName: formData.firstPartySignatory || '',
         SecondCompany: formData.secondCompany || '',
-        SecondPartyName: formData.secondPartySignatory || ''
+        SecondPartyName: formData.secondPartySignatory || '',
+        templateId: formData.templateId || ''
       };
 
       const response = await api.post('/agreements/generate', templateData, {
@@ -166,19 +168,49 @@ const AgreementGenerationTab = () => {
 
     } catch (error) {
       console.error(error);
-      toast.error('Failed to generate PDF. Is MS Word installed on the server?', { id: loadingToast });
+      if (error.response && error.response.data instanceof Blob) {
+        error.response.data.text().then(text => {
+          try {
+            const json = JSON.parse(text);
+            toast.error(json.error || 'Failed to generate PDF.', { id: loadingToast });
+          } catch (e) {
+            toast.error('Failed to generate PDF.', { id: loadingToast });
+          }
+        });
+      } else {
+        toast.error('Failed to generate PDF.', { id: loadingToast });
+      }
     }
   };
 
   const handleDownloadPDF = () => {
-    if (!generatedPdfBlob) return;
-    const url = window.URL.createObjectURL(generatedPdfBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `${formData.clientName ? formData.clientName.replace(/\s+/g, '_') : 'Settlement'}_Agreement.pdf`);
-    document.body.appendChild(link);
-    link.click();
-    link.parentNode.removeChild(link);
+    if (!generatedPdfBlob) {
+      toast.error('No PDF generated yet');
+      return;
+    }
+
+    try {
+      const url = URL.createObjectURL(generatedPdfBlob);
+      const link = document.createElement('a');
+      link.style.display = 'none';
+      link.href = url;
+      link.download = `${formData.clientName ? formData.clientName.replace(/\s+/g, '_') : 'Settlement'}_Agreement.pdf`;
+
+      // Append to body, click, and remove
+      document.body.appendChild(link);
+      link.click();
+
+      // Cleanup after a small delay to ensure click is registered
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
+
+      toast.success('PDF download started!');
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error('Failed to download PDF');
+    }
   };
 
   const inputClass = "w-full bg-bg-input border-2 border-border rounded-xl px-5 py-4 text-xs text-text-primary focus:border-accent focus:ring-4 focus:ring-accent-soft outline-none transition-all font-black placeholder:text-text-muted/40 shadow-sm";

@@ -11,7 +11,7 @@ const { roleGuard } = require('../middleware/roleGuard');
 const router = express.Router();
 
 router.post('/login', async (req, res) => {
- 
+
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
@@ -22,7 +22,7 @@ router.post('/login', async (req, res) => {
 
     const tokenName = user.fullName || user.name || "User";
     const token = jwt.sign({ id: user._id, email: user.email, role: user.role, fullName: tokenName }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    
+
     await AuditLog.create({
       id: Date.now().toString(),
       timestamp: new Date().toISOString(),
@@ -32,10 +32,10 @@ router.post('/login', async (req, res) => {
       description: 'User logged in',
       caseId: ''
     });
-    
+
     // Ensure we send back a name even for older users
     const displayName = user.fullName || user.name || "";
-    
+
     res.json({ token, role: user.role, email: user.email, fullName: displayName });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -58,7 +58,7 @@ const { sendEmail } = require('../utils/mailer');
 router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     const { email, password, role, fullName, name } = req.body;
-    
+
     // Support both keys for maximum compatibility
     const finalName = fullName || name || "New User";
 
@@ -66,13 +66,13 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
     if (existing) return res.status(400).json({ error: 'User already exists' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new User({ 
-      email, 
-      password: hashedPassword, 
-      role, 
-      fullName: finalName 
+    const newUser = new User({
+      email,
+      password: hashedPassword,
+      role,
+      fullName: finalName
     });
-    
+
     await newUser.save();
 
     // Send Welcome Email
@@ -89,7 +89,7 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
             <p style="margin: 5px 0;"><strong>Password:</strong> ${password}</p>
             <p style="margin: 5px 0;"><strong>Role:</strong> ${role}</p>
           </div>
-          <p>Please log in at: <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}">RRR Engine Dashboard</a></p>
+          <p>Please log in at: <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}">RRR Engine Dashboard</a></p>
           <p style="color: #666; font-size: 12px; border-top: 1px solid #eee; pt: 10px; margin-top: 20px;">
             Note: This is an automated message. Please change your password after your first login for security.
           </p>

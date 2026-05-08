@@ -87,7 +87,16 @@ router.post('/', verifyToken, async (req, res) => {
       eventDate: new Date().toISOString(),
       source: req.user.fullName || req.user.email || 'System',
       eventType: 'Progress Update',
-      summary: `Progress Updated: ${summary} (${stage || 'N/A'})`
+      summary: `Progress Updated: ${summary} (${stage || 'N/A'})`,
+      details: summary,
+      metadata: {
+        stage,
+        percentage,
+        nextAction,
+        blockers,
+        followUpDate,
+        escalateTo
+      }
     });
     await timelineEvent.save();
 

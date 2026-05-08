@@ -119,10 +119,6 @@ const DocIndexTab = () => {
                 <option value="Legal Notice">Legal Notice</option>
                 <option value="Payment Receipt">Payment Receipt</option>
                 <option value="MOU/Agreement">MOU/Agreement</option>
-                <option value="Whatsapp">Whatsapp</option>
-                <option value="Email">Email</option>
-                <option value="Complaint Copy">Complaint Copy</option>
-                <option value="Meeting">Meeting</option>
                 <option value="Refund Proof">Refund Proof</option>
                 <option value="Other">Other</option>
               </select>
@@ -143,10 +139,10 @@ const DocIndexTab = () => {
             <div className="bg-bg-input border-2 border-border border-dashed rounded-[2rem] p-8 mb-4 text-center transition-all hover:bg-bg-input/80 hover:border-accent-soft">
               <FileUpload onUploadSuccess={(url) => setFormData({ ...formData, fileLink: url })} label="Securely upload file from local storage" />
             </div>
-            <div className="relative">
+            {/* <div className="relative">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted text-[10px] font-black uppercase tracking-widest border-r border-border pr-4">External URL</div>
               <input type="text" className={`${inputClass} pl-36`} placeholder="Or paste a Google Drive / cloud storage link..." value={formData.fileUrlStr} onChange={e => setFormData({ ...formData, fileUrlStr: e.target.value })} />
-            </div>
+            </div> */}
           </div>
 
           <div>

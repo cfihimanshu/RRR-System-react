@@ -31,6 +31,23 @@ router.post('/', verifyToken, async (req, res) => {
       caseId: doc.caseId
     });
 
+    const Timeline = require('../models/Timeline');
+    await Timeline.create({
+      id: Date.now().toString(),
+      caseId: doc.caseId,
+      eventDate: new Date().toISOString(),
+      source: req.user.fullName || req.user.email || 'System',
+      eventType: 'Document Upload',
+      summary: `Document Uploaded: ${doc.docType}`,
+      details: `File: ${doc.fileLink?.split('/').pop() || doc.fileSummary || 'Unnamed'}. Remarks: ${doc.remarks || 'None'}`,
+      metadata: {
+        docType: doc.docType,
+        fileSummary: doc.fileSummary,
+        fileLink: doc.fileLink,
+        remarks: doc.remarks
+      }
+    });
+
     res.status(201).json(doc);
   } catch (error) {
     res.status(500).json({ error: error.message });

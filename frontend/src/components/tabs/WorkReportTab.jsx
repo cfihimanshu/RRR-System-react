@@ -15,7 +15,8 @@ import {
   Send,
   Calendar,
   Filter,
-  RefreshCw
+  RefreshCw,
+  ChevronDown
 } from 'lucide-react';
 
 const WorkReportTab = () => {
@@ -26,6 +27,8 @@ const WorkReportTab = () => {
   const [viewingReport, setViewingReport] = useState(null);
   const [filterType, setFilterType] = useState('All');
   const [filterDate, setFilterDate] = useState('');
+  const [dayActivities, setDayActivities] = useState([]);
+  const [fetchingActivities, setFetchingActivities] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -61,6 +64,30 @@ const WorkReportTab = () => {
     if (hasSod && hasEod) return 'Fully Completed';
     if (hasSod || hasEod) return 'Incomplete';
     return 'Pending';
+  };
+
+  const handleViewReport = async (report) => {
+    if (viewingReport?._id === report._id) {
+      setViewingReport(null);
+      return;
+    }
+    setViewingReport(report);
+    setFetchingActivities(true);
+    setDayActivities([]);
+    try {
+      // Fetch activities for that specific day and user
+      const res = await api.get(`/timeline?date=${report.date}&userEmail=${report.userEmail}`);
+      // Filter by source to ensure it's the specific user's activity
+      const myActivities = res.data.filter(act => 
+        (act.source || '').toLowerCase().includes((report.userName || '').toLowerCase()) || 
+        (act.source || '').toLowerCase().includes((report.userEmail || '').toLowerCase())
+      );
+      setDayActivities(myActivities);
+    } catch (err) {
+      console.error('Failed to fetch day activities:', err);
+    } finally {
+      setFetchingActivities(false);
+    }
   };
 
   // ── Download as CSV ──
@@ -180,145 +207,171 @@ const WorkReportTab = () => {
                   <th className="px-5 py-3.5">Submitted By</th>
                   <th className="px-5 py-3.5">Check-In</th>
                   <th className="px-5 py-3.5">Check-Out</th>
-                  <th className="px-5 py-3.5">Duration</th>
-                  <th className="px-5 py-3.5">Planned Task</th>
+                  <th className="px-5 py-3.5 text-left">Duration</th>
+                  <th className="px-5 py-3.5 text-left">Planned Task</th>
                   <th className="px-5 py-3.5">Completion</th>
                   <th className="px-5 py-3.5">Score</th>
-                  <th className="px-5 py-3.5 text-center">Action</th>
+                  <th className="px-5 py-3.5 text-center">Other activity</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border text-[12px] text-text-primary">
                 {filteredReports.map(report => (
-                  <tr key={report._id} className="hover:bg-bg-card-hover transition-colors group">
-                    <td className="px-5 py-3.5 font-bold text-text-primary whitespace-nowrap">{report.date || '—'}</td>
-                    <td className="px-5 py-3.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${report.type === 'SOD' ? 'bg-blue-soft text-blue-400' : 'bg-purple-soft text-purple-400'}`}>
-                        {report.type === 'SOD' ? <Send size={9} /> : <FileText size={9} />}
-                        {report.type}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 font-semibold text-text-secondary">{report.userName || '—'}</td>
-                    <td className="px-5 py-3.5 font-bold text-green-400">{report.checkInTime || '—'}</td>
-                    <td className="px-5 py-3.5 font-bold text-blue-400">{report.checkOutTime || '—'}</td>
-                    <td className="px-5 py-3.5">
-                      {report.workDuration ? (
-                        <span className="font-black text-gray-800">{report.workDuration}</span>
-                      ) : <span className="text-gray-300 italic">—</span>}
-                    </td>
-                    <td className="px-5 py-3.5 max-w-[180px]">
-                      <p className="truncate text-gray-600" title={report.plannedTasks}>
-                        {report.plannedTasks || <span className="text-gray-300 italic">—</span>}
-                      </p>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      {(() => {
-                        const completionStatus = getCompletionStatus(report.date, report.userEmail);
-                        return (
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${completionStatus === 'Fully Completed' ? 'bg-green-100 text-green-700' :
+                  <React.Fragment key={report._id}>
+                    <tr
+                      className={`hover:bg-bg-card-hover transition-colors group cursor-pointer ${viewingReport?._id === report._id ? 'bg-bg-input ring-1 ring-accent/20' : ''}`}
+                      onClick={() => handleViewReport(report)}
+                    >
+                      <td className="px-5 py-3.5 font-bold text-text-primary whitespace-nowrap">{report.date || '—'}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${report.type === 'SOD' ? 'bg-blue-soft text-blue-400' : 'bg-purple-soft text-purple-400'}`}>
+                          {report.type === 'SOD' ? <Send size={9} /> : <FileText size={9} />}
+                          {report.type}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 font-semibold text-text-secondary">{report.userName || '—'}</td>
+                      <td className="px-5 py-3.5 font-bold text-green-400">{report.checkInTime || '—'}</td>
+                      <td className="px-5 py-3.5 font-bold text-blue-400">{report.checkOutTime || '—'}</td>
+                      <td className="px-5 py-3.5">
+                        {report.workDuration ? (
+                          <span className="font-black text-text-primary">{report.workDuration}</span>
+                        ) : <span className="text-text-muted italic">—</span>}
+                      </td>
+                      <td className="px-5 py-3.5 max-w-[250px]">
+                        <p className="truncate text-gray-600" title={report.plannedTasks}>
+                          {report.plannedTasks || <span className="text-gray-300 italic">—</span>}
+                        </p>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {(() => {
+                          const completionStatus = getCompletionStatus(report.date, report.userEmail);
+                          return (
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${completionStatus === 'Fully Completed' ? 'bg-green-100 text-green-700' :
                               completionStatus === 'Incomplete' ? 'bg-yellow-100 text-yellow-700' :
                                 'bg-gray-100 text-gray-700'
-                            }`}>
-                            {completionStatus}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-5 py-4">
-                      {report.progressScore ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 bg-bg-input rounded-full overflow-hidden">
-                            <div className="h-full bg-blue rounded-full" style={{ width: `${(report.progressScore / 10) * 100}%` }} />
+                              }`}>
+                              {completionStatus}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-5 py-4">
+                        {report.progressScore ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-1.5 bg-bg-input rounded-full overflow-hidden">
+                              <div className="h-full bg-blue rounded-full" style={{ width: `${(report.progressScore / 10) * 100}%` }} />
+                            </div>
+                            <span className="font-black text-text-secondary text-[10px]">{report.progressScore}/10</span>
                           </div>
-                          <span className="font-black text-text-secondary text-[10px]">{report.progressScore}/10</span>
-                        </div>
-                      ) : <span className="text-text-muted italic">—</span>}
-                    </td>
-                    <td className="px-5 py-3.5 text-center">
-                      <button
-                        onClick={() => setViewingReport(report)}
-                        className="p-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all group-hover:scale-110"
-                        title="View Details"
-                      >
-                        <Eye size={14} />
-                      </button>
-                    </td>
-                  </tr>
+                        ) : <span className="text-text-muted italic">—</span>}
+                      </td>
+                      <td className="px-5 py-3.5 text-center">
+                        <button
+                          className={`p-2 rounded-xl transition-all ${viewingReport?._id === report._id ? 'bg-accent text-white rotate-180' : 'bg-bg-input text-text-muted hover:text-accent'}`}
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                      </td>
+                    </tr>
+
+                    {/* Expandable Activity Content */}
+                    {viewingReport?._id === report._id && (
+                      <tr className="bg-bg-input/30">
+                        <td colSpan="10" className="px-8 py-6">
+                          <div className="animate-in slide-in-from-top-2 duration-300">
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                              {/* Communications */}
+                              <div className="bg-bg-card border border-border rounded-2xl overflow-hidden flex flex-col min-h-[300px] max-h-[500px]">
+                                <div className="px-4 py-3 border-b border-border bg-blue-soft/20 flex items-center gap-2">
+                                  <Send size={12} className="text-blue" />
+                                  <h3 className="text-[10px] font-black text-text-primary uppercase tracking-widest">Communications</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
+                                  {fetchingActivities ? (
+                                    <div className="h-full flex items-center justify-center italic text-[9px] uppercase font-bold tracking-widest opacity-50">Loading...</div>
+                                  ) : dayActivities.filter(a => ['Call', 'Email', 'Whatsapp', 'Meeting'].includes(a.eventType)).length === 0 ? (
+                                    <div className="h-full flex items-center justify-center italic text-[9px] uppercase font-bold tracking-widest opacity-30">No activities</div>
+                                  ) : (
+                                    dayActivities.filter(a => ['Call', 'Email', 'Whatsapp', 'Meeting'].includes(a.eventType)).map((act, i) => (
+                                      <div key={i} className="p-3 bg-bg-input rounded-xl border border-border/50">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-[8px] font-black text-blue uppercase">{act.eventType}</span>
+                                          <span className="text-[8px] font-bold text-text-muted">{act.caseId}</span>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-text-primary">{act.summary}</p>
+                                        {act.details && <p className="text-[8px] text-text-muted italic mt-1 leading-tight">{act.details}</p>}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Documents */}
+                              <div className="bg-bg-card border border-border rounded-2xl overflow-hidden flex flex-col min-h-[300px] max-h-[500px]">
+                                <div className="px-4 py-3 border-b border-border bg-green-soft/20 flex items-center gap-2">
+                                  <FileText size={12} className="text-green" />
+                                  <h3 className="text-[10px] font-black text-text-primary uppercase tracking-widest">Documents</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
+                                  {fetchingActivities ? (
+                                    <div className="h-full flex items-center justify-center italic text-[9px] uppercase font-bold tracking-widest opacity-50">Loading...</div>
+                                  ) : dayActivities.filter(a => a.eventType === 'Document Upload').length === 0 ? (
+                                    <div className="h-full flex items-center justify-center italic text-[9px] uppercase font-bold tracking-widest opacity-30">No uploads</div>
+                                  ) : (
+                                    dayActivities.filter(a => a.eventType === 'Document Upload').map((act, i) => (
+                                      <div key={i} className="p-3 bg-bg-input rounded-xl border border-border/50">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-[8px] font-black text-green uppercase">DOCUMENT</span>
+                                          <span className="text-[8px] font-bold text-text-muted">{act.caseId}</span>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-text-primary">{act.summary}</p>
+                                        {act.metadata?.fileLink && (
+                                          <a href={act.metadata.fileLink} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[8px] font-black text-accent uppercase hover:underline">
+                                            <Eye size={10} /> View
+                                          </a>
+                                        )}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Progress */}
+                              <div className="bg-bg-card border border-border rounded-2xl overflow-hidden flex flex-col min-h-[300px] max-h-[500px]">
+                                <div className="px-4 py-3 border-b border-border bg-purple-soft/20 flex items-center gap-2">
+                                  <TrendingUp size={12} className="text-purple" />
+                                  <h3 className="text-[10px] font-black text-text-primary uppercase tracking-widest">Progress Updates</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
+                                  {fetchingActivities ? (
+                                    <div className="h-full flex items-center justify-center italic text-[9px] uppercase font-bold tracking-widest opacity-50">Loading...</div>
+                                  ) : dayActivities.filter(a => a.eventType === 'Progress Update').length === 0 ? (
+                                    <div className="h-full flex items-center justify-center italic text-[9px] uppercase font-bold tracking-widest opacity-30">No updates</div>
+                                  ) : (
+                                    dayActivities.filter(a => a.eventType === 'Progress Update').map((act, i) => (
+                                      <div key={i} className="p-3 bg-bg-input rounded-xl border border-border/50">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-[8px] font-black text-purple uppercase">PROGRESS</span>
+                                          <span className="text-[8px] font-bold text-text-muted">{act.caseId}</span>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-text-primary">{act.summary}</p>
+                                        {act.metadata?.stage && <div className="text-[8px] font-black text-purple uppercase mt-1">Stage: {act.metadata.stage}</div>}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        {/* <div className="px-6 py-3 border-t border-border bg-bg-secondary text-[10px] font-bold text-text-muted uppercase tracking-widest">
-          Showing {filteredReports.length} of {reports.length} records
-        </div> */}
       </div>
-
-      {/* View Report Modal */}
-      {viewingReport && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={() => setViewingReport(null)}>
-          <div className="bg-bg-card border border-border rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className={`p-6 flex items-center justify-between text-white ${viewingReport.type === 'SOD' ? 'bg-blue-600' : 'bg-purple-600'}`}>
-              <div>
-                <h2 className="text-lg font-black flex items-center gap-2">
-                  {viewingReport.type === 'SOD' ? <Send size={18} /> : <FileText size={18} />}
-                  {viewingReport.type} Report — {viewingReport.date}
-                </h2>
-                <p className="text-[10px] opacity-75 font-bold uppercase tracking-widest mt-0.5">By {viewingReport.userName}</p>
-              </div>
-              <button onClick={() => setViewingReport(null)} className="hover:bg-white/20 p-2 rounded-full transition-all"><X size={20} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-bg-card">
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Check-In', value: viewingReport.checkInTime },
-                  { label: 'Check-Out', value: viewingReport.checkOutTime },
-                  { label: 'Duration', value: viewingReport.workDuration },
-                  { label: 'Completion', value: viewingReport.completionStatus },
-                  { label: 'Progress Score', value: viewingReport.progressScore ? `${viewingReport.progressScore}/10` : null },
-                  { label: 'Mood / Energy', value: viewingReport.moodEnergy },
-                ].map(item => item.value ? (
-                  <div key={item.label} className="bg-bg-input rounded-2xl p-4 border border-border">
-                    <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">{item.label}</div>
-                    <div className="font-black text-text-primary text-sm">{item.value}</div>
-                  </div>
-                ) : null)}
-              </div>
-              {viewingReport.plannedTasks && (
-                <div className="bg-accent-soft rounded-2xl p-5 border border-accent-soft">
-                  <div className="text-[9px] font-black text-accent uppercase tracking-widest mb-2">Planned Tasks</div>
-                  <p className="text-sm text-text-primary font-medium leading-relaxed whitespace-pre-wrap">{viewingReport.plannedTasks}</p>
-                </div>
-              )}
-              {viewingReport.sodCaseIds?.length > 0 && (
-                <div className="bg-bg-input rounded-2xl p-4 border border-border">
-                  <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-2">Selected Cases</div>
-                  <div className="flex flex-wrap gap-2">
-                    {viewingReport.sodCaseIds.map(cid => (
-                      <span key={cid} className="bg-accent text-white text-[10px] font-black px-3 py-1 rounded-lg uppercase">{cid}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {viewingReport.workSummary && (
-                <div className="bg-blue-soft rounded-2xl p-5 border border-blue-soft">
-                  <div className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2">Work Summary</div>
-                  <p className="text-sm text-text-primary font-medium leading-relaxed whitespace-pre-wrap">{viewingReport.workSummary}</p>
-                </div>
-              )}
-              {viewingReport.challenges && (
-                <div className="bg-red-soft rounded-2xl p-5 border border-red-soft">
-                  <div className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-2">Challenges / Blockers</div>
-                  <p className="text-sm text-text-primary font-medium leading-relaxed whitespace-pre-wrap">{viewingReport.challenges}</p>
-                </div>
-              )}
-            </div>
-            <div className="p-5 border-t border-border bg-bg-card flex justify-end gap-3">
-              <button onClick={() => setViewingReport(null)} className="px-6 py-2.5 bg-bg-secondary text-text-primary border border-border rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-bg-input transition-all">Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };
@@ -330,7 +383,7 @@ const StatCard = ({ icon, title, value, subtext, trend, isProgress }) => (
         {icon}
       </div>
       <div className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter ${trend === 'LIVE' ? 'bg-green-soft text-green animate-pulse' :
-          trend === 'ONGOING' ? 'bg-yellow-soft text-yellow animate-pulse' : 'bg-blue-soft text-blue'
+        trend === 'ONGOING' ? 'bg-yellow-soft text-yellow animate-pulse' : 'bg-blue-soft text-blue'
         }`}>
         {trend}
       </div>

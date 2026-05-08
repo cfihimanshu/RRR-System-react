@@ -160,7 +160,7 @@ router.get('/', verifyToken, async (req, res) => {
       query = {
         $or: [
           { assignedTo: nameRegex },
-          { 
+          {
             $and: [
               { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
               { initiatedBy: nameRegex }
@@ -220,25 +220,26 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       })
     });
     if (existingCase) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: `Entry already exists! A case with these details was already registered with Case ID: ${existingCase.caseId}.`,
-        existingCase: existingCase 
+        existingCase: existingCase
       });
     }
 
     const allCases = await Case.find({}, 'caseId');
     const caseId = generateCaseId(req.body.brandName, req.body.companyName, allCases);
-    
+
     // Auto-assign to initiator if provided
-    const forbiddenNames = ['staff', 'rajda mansuri'];
+    const forbiddenNames = ['staff', 'rajda mansuri', 'system'];
     let initiatedBy = forbiddenNames.includes(req.body.initiatedBy?.toLowerCase()) ? "" : (req.body.initiatedBy || "");
     let assignedTo = forbiddenNames.includes(req.body.assignedTo?.toLowerCase()) ? "" : (req.body.assignedTo || initiatedBy || "");
-    
+
     // If we have an initiator, the case is no longer 'Unassigned' -> Set to Assigned
     let currentStatus = req.body.currentStatus || 'Case Logged';
     let progressPercentage = req.body.progressPercentage || 0;
-    
-    if (initiatedBy && (currentStatus === 'New' || currentStatus === 'Case Logged')) {
+
+    const isAssigned = (assignedTo && assignedTo.trim() !== '') || (initiatedBy && initiatedBy.trim() !== '');
+    if (isAssigned && (currentStatus === 'New' || currentStatus === 'Case Logged')) {
       currentStatus = 'Assigned';
       progressPercentage = 25;
     }
@@ -309,7 +310,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
             </div>
 
             <div style="margin-top: 25px; text-align: center;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}" style="background: #1a73e8; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Case in Dashboard</a>
+              <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}" style="background: #1a73e8; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Case in Dashboard</a>
             </div>
           </div>
         `;
@@ -441,7 +442,8 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
     const isInitiating = req.body.initiatedBy && req.body.initiatedBy !== existingCase.initiatedBy;
 
     // Auto-update status to "Assigned" if it was just "New" or "Case Logged"
-    if ((isAssigning || isInitiating) && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged')) {
+    const hasAssignee = (req.body.assignedTo && req.body.assignedTo.trim() !== '') || (req.body.initiatedBy && req.body.initiatedBy.trim() !== '');
+    if (hasAssignee && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged')) {
       req.body.currentStatus = 'Assigned';
       req.body.progressPercentage = 25;
     }
@@ -510,7 +512,7 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
                 <strong>Client:</strong> ${updated.clientName}<br>
                 <strong>Type:</strong> ${updated.typeOfComplaint}
               </div>
-              <p><a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}" style="color: #1a73e8; font-weight: bold;">Login to Dashboard</a> to view details.</p>
+              <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}" style="color: #1a73e8; font-weight: bold;">Login to Dashboard</a> to view details.</p>
             </div>
           `;
           sendEmail(assignee.email, sub, '', html).catch(err => console.error('Assignee Email Error:', err));
@@ -573,7 +575,7 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
           await sendEmail(adminEmails, sub, '', html);
           createNotification('Admin', 'Case Updated', `Case ${caseId} was updated by ${req.user.fullName}. Status: ${updated.currentStatus}`, 'Update', `/case-master?search=${caseId}`);
         }
-    } catch (err) { console.error('Edit Notification Error:', err); }
+      } catch (err) { console.error('Edit Notification Error:', err); }
     }
 
     if (req.body.currentStatus) {
@@ -617,9 +619,40 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
 router.delete('/:caseId', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     const { caseId } = req.params;
-    await Case.findOneAndDelete({ caseId });
+    
+    // Fetch the case first to have details for the email
+    const deletedCase = await Case.findOneAndDelete({ caseId });
+    if (!deletedCase) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+    
     await Timeline.deleteMany({ caseId });
-    res.json({ message: 'Case and associated timeline deleted' });
+    
+    // Send email to Admin
+    try {
+      const admins = await User.find({ role: 'Admin' });
+      const adminEmails = admins.map(u => u.email).join(',');
+      if (adminEmails) {
+        const sub = `🚨 CRITICAL: Case Deleted - ${caseId}`;
+        const html = `
+          <div style="font-family: sans-serif; padding: 20px; border: 1px solid #dc3545; border-radius: 10px;">
+            <h3 style="color: #dc3545;">Case Deletion Notification</h3>
+            <p>Case <strong>${caseId}</strong> was permanently deleted by <strong>${req.user.fullName || req.user.email}</strong>.</p>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px;">
+              <h4 style="margin-top: 0; color: #333;">Deleted Case Details:</h4>
+              <p style="margin: 5px 0;"><strong>Client/Company:</strong> ${deletedCase.clientName || 'N/A'} ${deletedCase.companyName ? `(${deletedCase.companyName})` : ''}</p>
+              <p style="margin: 5px 0;"><strong>Type of Complaint:</strong> ${deletedCase.typeOfComplaint || 'N/A'}</p>
+              <p style="margin: 5px 0;"><strong>Last Status:</strong> ${deletedCase.currentStatus || 'N/A'}</p>
+              <p style="margin: 5px 0;"><strong>Total Amount Paid:</strong> ₹${deletedCase.totalAmtPaid || '0'}</p>
+            </div>
+            <p style="font-size: 11px; color: #666; margin-top: 20px;">This action cannot be undone. This is an automated security alert.</p>
+          </div>
+        `;
+        sendEmail(adminEmails, sub, '', html).catch(err => console.error('Admin Delete Alert Error:', err));
+      }
+    } catch (err) { console.error('Delete Notification Error:', err); }
+
+    res.json({ message: 'Case and associated timeline deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -706,7 +739,7 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
       }
 
       row.caseId = generateCaseId(row.brandName, row.companyName, allCases);
-      
+
       // Sync assignment and status during import
       if (row.initiatedBy && (!row.assignedTo || row.assignedTo.trim() === '')) {
         row.assignedTo = row.initiatedBy;

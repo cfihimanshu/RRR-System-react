@@ -43,7 +43,7 @@ const CommLogTab = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedCase) return toast.error('Please select a case first');
-    if (!formData.summary) return toast.error('Summary is required');
+    if (!formData.summary || formData.summary.trim() === '') return toast.error('Summary is required');
 
     try {
       const finalFileLink = formData.fileUrlStr || formData.fileLink;
@@ -66,7 +66,7 @@ const CommLogTab = () => {
         exactDemand: '', refundDemanded: '0', legalThreat: 'No', smMentioned: 'No',
         fileLink: '', fileUrlStr: '', loggedBy: user?.name || user?.email || ''
       });
-      fetchComms();
+      setSelectedCase('');
     } catch (err) {
       toast.error('Failed to log communication');
       console.error(err);
@@ -182,7 +182,7 @@ const CommLogTab = () => {
           </div>
 
           <button type="submit" className="mt-4 bg-accent hover:bg-accent-hover text-white font-black py-4 px-6 rounded-2xl shadow-sm flex items-center justify-center gap-3 transition-all text-xs uppercase tracking-[0.2em] active:scale-95">
-            <Check size={18} /> Log Communication
+            <Check size={18} /> Submit
           </button>
         </form>
       </div>

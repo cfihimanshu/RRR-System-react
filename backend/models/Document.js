@@ -10,6 +10,6 @@ const documentSchema = new mongoose.Schema({
   fileLink: String,
   uploadedBy: String,
   remarks: String
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Document', documentSchema);

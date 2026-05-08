@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../api/axios';
 import { Badge } from '../shared/Badge';
 import { AuthContext } from '../../context/AuthContext';
@@ -68,6 +68,15 @@ const DashboardTab = () => {
   const [activities, setActivities] = useState([]);
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('openSod') === 'true') {
+      setIsReportModalOpen(true);
+      setReportType('SOD');
+    }
+  }, [location.search]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -89,15 +98,15 @@ const DashboardTab = () => {
     workDuration: '',
     completionStatus: 'Fully Completed',
     workSummary: '',
-    progressScore: '8',
-    moodEnergy: 'High Energy',
+    progressScore: '',
+    moodEnergy: '',
     challenges: '',
     sodCaseId: '',
     sodTaskTitle: '',
     sodCaseIds: [],
     sodTaskIds: [],
     eodCompletedTaskIds: [],
-    sodTasks: [{ type: 'Case ID', caseId: '', task: '', mode: 'Call' }] // Updated type
+    sodTasks: [{ type: 'Case ID', caseId: '', task: '', mode: '' }] // Updated type and empty mode
   });
 
   const [expandedTaskIds, setExpandedTaskIds] = useState([]);
@@ -195,10 +204,8 @@ const DashboardTab = () => {
         .filter(item => {
           if (user?.role === 'Admin') return true;
           const myNames = [user?.fullName, user?.email].filter(Boolean);
-          // Show if I performed the action OR if it's on a case I'm responsible for
-          return myNames.includes(item.source) ||
-            myNames.includes(item.assignedTo) ||
-            myNames.includes(item.initiatedBy);
+          // Show only activities PERFORMED by the user
+          return myNames.includes(item.source);
         })
         .map(item => ({
           id: item._id,
@@ -295,7 +302,7 @@ const DashboardTab = () => {
   const addSodTaskRow = () => {
     setReportFormData(prev => ({
       ...prev,
-      sodTasks: [...(prev.sodTasks || []), { type: 'Case ID', caseId: '', task: '', mode: 'Call' }]
+      sodTasks: [...(prev.sodTasks || []), { type: 'Case ID', caseId: '', task: '', mode: '' }]
     }));
   };
 
@@ -441,7 +448,10 @@ const DashboardTab = () => {
         plannedTasks: reportType === 'SOD' 
           ? (reportFormData.sodTasks?.map(t => `${t.type === 'Case ID' ? 'Case Follow-up' : 'Task'}: ${t.caseId || t.task} (${t.mode})`).join('\n') || reportFormData.plannedTasks) 
           : '',
-        workSummary: reportType === 'EOD' ? reportFormData.workSummary : ''
+        workSummary: reportType === 'EOD' ? reportFormData.workSummary : '',
+        completionStatus: reportType === 'EOD' ? reportFormData.completionStatus : 'Incomplete',
+        progressScore: reportType === 'EOD' ? reportFormData.progressScore : '',
+        moodEnergy: reportType === 'EOD' ? reportFormData.moodEnergy : ''
       };
 
       await api.post('/reports', payload);
@@ -464,14 +474,15 @@ const DashboardTab = () => {
         workDuration: '',
         completionStatus: 'Fully Completed',
         workSummary: '',
-        progressScore: '8',
-        moodEnergy: 'High Energy',
+        progressScore: '',
+        moodEnergy: '',
         challenges: '',
         sodCaseId: '',
         sodTaskTitle: '',
         sodCaseIds: [],
         sodTaskIds: [],
-        eodCompletedTaskIds: []
+        eodCompletedTaskIds: [],
+        sodTasks: [{ type: 'Case ID', caseId: '', task: '', mode: '' }]
       });
 
       if (reportType === 'SOD') {
@@ -490,6 +501,7 @@ const DashboardTab = () => {
               details: `Session Task: ${taskDescription}\nMode: ${t.mode}\nType: ${t.type}\nCreated on ${date} at ${time}`,
               priority: 'Medium',
               assignee: user?.fullName,
+              dueDate: today, // Added due date
               caseId: isCaseTask ? t.caseId : '',
               status: 'To Do',
               source: 'SOD Auto'
@@ -729,6 +741,7 @@ const DashboardTab = () => {
                                   onChange={(val) => updateSodTaskRow(index, 'caseId', val)}
                                   cases={userCases}
                                   className="h-full"
+                                  required={true}
                                 />
                               ) : (
                                 <input
@@ -747,14 +760,22 @@ const DashboardTab = () => {
                           <div className="flex-1 space-y-2">
                             <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Mode</label>
                             <select
+                              required
                               className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-3 text-[11px] font-black text-text-primary outline-none focus:border-accent transition-all uppercase tracking-widest cursor-pointer h-[48px]"
                               value={t.mode}
                               onChange={(e) => updateSodTaskRow(index, 'mode', e.target.value)}
                             >
+                              <option value="" disabled>Select Mode</option>
                               <option value="Call">Call</option>
                               <option value="Email">Email</option>
                               <option value="Whatsapp">Whatsapp</option>
                               <option value="Meeting">Meeting</option>
+                              {t.type === 'Case ID' && (
+                                <>
+                                  <option value="Case uploaded">Case uploaded</option>
+                                  <option value="Document Uploaded">Document Uploaded</option>
+                                </>
+                              )}
                             </select>
                           </div>
 
@@ -777,19 +798,54 @@ const DashboardTab = () => {
                 </>
               ) : (
                 <>
-                  {/* <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
                     <div>
-                      <label className="block text-[10px] font-black text-text-muted uppercase mb-3 tracking-[0.2em] ml-1 flex items-center gap-2">
-                        <Clock size={12} className="text-purple" />Total Work Duration
+                      <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] ml-1 flex items-center gap-2">
+                        <CheckCircle size={12} className="text-purple" /> Completion Status
+                      </label>
+                      <select
+                        className="w-full border-2 border-border rounded-2xl p-4 text-sm bg-bg-input font-black text-text-primary outline-none focus:border-purple transition-all"
+                        value={reportFormData.completionStatus}
+                        onChange={(e) => setReportFormData({ ...reportFormData, completionStatus: e.target.value })}
+                      >
+                        <option value="Fully Completed">Fully Completed</option>
+                        <option value="Partially Completed">Partially Completed</option>
+                        <option value="Under Review">Under Review</option>
+                        <option value="Incomplete">Incomplete</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] ml-1 flex items-center gap-2">
+                        <TrendingUp size={12} className="text-purple" /> Progress Score (1-10)
                       </label>
                       <input
-                        type="text"
-                        readOnly
-                        value={reportFormData.workDuration}
-                        className="w-full border-2 border-purple-soft/50 rounded-2xl p-4 text-sm bg-purple-soft font-black text-purple outline-none shadow-sm"
+                        type="number"
+                        min="1"
+                        max="10"
+                        className="w-full border-2 border-border rounded-2xl p-4 text-sm bg-bg-input font-black text-text-primary outline-none focus:border-purple transition-all"
+                        value={reportFormData.progressScore}
+                        onChange={(e) => setReportFormData({ ...reportFormData, progressScore: e.target.value })}
+                        placeholder="Rate your day"
                       />
                     </div>
-                  </div> */}
+                    <div>
+                      <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] ml-1 flex items-center gap-2">
+                        <Zap size={12} className="text-purple" /> Mood / Energy
+                      </label>
+                      <select
+                        className="w-full border-2 border-border rounded-2xl p-4 text-sm bg-bg-input font-black text-text-primary outline-none focus:border-purple transition-all"
+                        value={reportFormData.moodEnergy}
+                        onChange={(e) => setReportFormData({ ...reportFormData, moodEnergy: e.target.value })}
+                      >
+                        <option value="">Select Mood</option>
+                        <option value="High Energy">High Energy</option>
+                        <option value="Focused">Focused</option>
+                        <option value="Normal">Normal</option>
+                        <option value="Tired">Tired</option>
+                        <option value="Low Energy">Low Energy</option>
+                      </select>
+                    </div>
+                  </div>
 
 
                   <div className="space-y-4">
@@ -896,7 +952,7 @@ const DashboardTab = () => {
       )}
 
       {/* Main Dashboard Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 md:gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-3 sm:gap-4 md:gap-6 mb-8">
         <div className="stat cursor-pointer hover:border-blue-300 transition-all" onClick={() => navigate('/case-master')}>
           <div className="stat-icon bg-purple-soft text-purple">
             <Folder size={18} />
@@ -934,6 +990,16 @@ const DashboardTab = () => {
           <div>
             <div className="val text-orange-300">{stats?.mediumPriority || 0}</div>
             <div className="lbl">Medium Priority</div>
+          </div>
+        </div>
+
+        <div className="stat cursor-pointer hover:border-yellow-300 transition-all" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Low' } })}>
+          <div className="stat-icon bg-yellow-500/10 text-yellow-500">
+            <AlertCircle size={18} />
+          </div>
+          <div>
+            <div className="val text-yellow-300">{stats?.lowPriority || 0}</div>
+            <div className="lbl">Low Priority</div>
           </div>
         </div>
 

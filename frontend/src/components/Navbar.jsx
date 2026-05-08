@@ -13,7 +13,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
-  const lastNotifiedRef = useRef(null); // Keep track of the last notification ID toasted
+  const notifiedIdsRef = useRef(new Set()); // Keep track of all notification IDs we've already toasted
 
   const fetchNotifications = async (isInitial = false) => {
     try {
@@ -21,38 +21,57 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
       const newNotifications = res.data;
       
       // Check for new unread notifications to show toast
-      if (!isInitial && newNotifications.length > 0) {
-        const latestUnread = newNotifications.find(n => !n.isRead);
-        if (latestUnread && latestUnread._id !== lastNotifiedRef.current) {
-          toast((t) => (
-            <div className="flex flex-col gap-1 cursor-pointer" onClick={() => {
-              toast.dismiss(t.id);
-              navigate(latestUnread.link || '/');
-            }}>
-              <p className="text-[11px] font-black uppercase tracking-widest text-accent">New Notification</p>
-              <p className="text-xs font-bold text-white line-clamp-1">{latestUnread.title}</p>
-              <p className="text-[10px] text-gray-400 line-clamp-2">{latestUnread.message}</p>
-            </div>
-          ), {
-            duration: 4000,
-            position: 'top-right',
-            style: {
-              background: '#0f172a',
-              border: '1px solid #334155',
-              padding: '12px',
-              borderRadius: '16px'
-            },
-            icon: <Bell size={18} className="text-accent" />
+      if (newNotifications.length > 0) {
+        if (isInitial) {
+          // Add all current unread to the set so we don't toast them on initial load
+          newNotifications.filter(n => !n.isRead).forEach(n => notifiedIdsRef.current.add(n._id));
+        } else {
+          // Find unread notifications that we haven't toasted yet
+          const unreadToToast = newNotifications.filter(n => !n.isRead && !notifiedIdsRef.current.has(n._id));
+          
+          unreadToToast.forEach(notif => {
+            toast.custom((t) => (
+              <div 
+                className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-slate-900 border border-slate-700 shadow-2xl rounded-2xl pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+              >
+                <div className="flex-1 w-0 p-4 cursor-pointer" onClick={() => { toast.dismiss(t.id); markAsRead(notif._id); if(notif.link) navigate(notif.link); }}>
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 pt-0.5">
+                      <Bell size={20} className="text-accent animate-swing" />
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-accent mb-1">New Notification</p>
+                      <p className="text-sm font-bold text-white mb-1">{notif.title}</p>
+                      <p className="text-xs text-gray-400 line-clamp-2">{notif.message}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex border-l border-slate-700">
+                  <button
+                    onClick={() => toast.dismiss(t.id)}
+                    className="w-full border border-transparent rounded-none rounded-r-2xl p-4 flex items-center justify-center text-sm font-medium text-gray-400 hover:text-white focus:outline-none"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ), { duration: 5000, position: 'top-right' });
+            
+            notifiedIdsRef.current.add(notif._id);
           });
-          lastNotifiedRef.current = latestUnread._id;
         }
-      } else if (isInitial && newNotifications.length > 0) {
-        // Just set the initial ref to the latest notification ID
-        const latest = newNotifications[0];
-        lastNotifiedRef.current = latest._id;
       }
 
-      setNotifications(newNotifications);
+      // Preserve read state for system notifications
+      setNotifications(prev => {
+        const readSystemIds = new Set(prev.filter(n => n.isSystem && n.isRead).map(n => n._id));
+        return newNotifications.map(n => {
+          if (n.isSystem && readSystemIds.has(n._id)) {
+            return { ...n, isRead: true };
+          }
+          return n;
+        });
+      });
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     }
@@ -61,7 +80,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
   useEffect(() => {
     if (user) {
       fetchNotifications(true);
-      const interval = setInterval(() => fetchNotifications(false), 30000); // Polling every 30 seconds
+      const interval = setInterval(() => fetchNotifications(false), 5000); // Polling every 5 seconds
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -170,7 +189,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
                       {!n.isRead && <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent" />}
                       <div className="flex justify-between items-start gap-2 mb-1">
                         <span className="text-[11px] font-black text-text-primary uppercase tracking-tight">{n.title}</span>
-                        <span className="text-[9px] text-text-muted whitespace-nowrap">{format(new Date(n.createdAt), 'hh:mm a')}</span>
+                        <span className="text-[9px] text-white font-bold bg-blue-600/50 px-1.5 py-0.5 rounded whitespace-nowrap">{format(new Date(n.createdAt), 'hh:mm a')}</span>
                       </div>
                       <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2 mb-2">{n.message}</p>
                       {n.link && (

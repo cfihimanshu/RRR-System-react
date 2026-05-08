@@ -27,7 +27,15 @@ router.post('/', verifyToken, async (req, res) => {
         eventDate: doc.dateTime,
         source: req.user.fullName || req.user.email || 'System',
         eventType: doc.mode,
-        summary: doc.summary
+        summary: doc.summary,
+        details: `${doc.mode} ${doc.direction} with ${doc.fromTo}. Summary: ${doc.summary}`,
+        metadata: {
+          direction: doc.direction,
+          fromTo: doc.fromTo,
+          exactDemand: doc.exactDemand,
+          legalThreat: doc.legalThreat,
+          smMentioned: doc.smMentioned
+        }
     });
     await timeline.save();
 

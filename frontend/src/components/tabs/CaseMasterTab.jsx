@@ -95,8 +95,11 @@ const normalizeStatus = (status, assignedTo, initiatedBy) => {
     normalized = 'Case Logged';
   }
 
-  // If normalized is still 'Case Logged' but has an assignee OR initiator, call it 'Assigned'
-  if (normalized === 'Case Logged' && ((assignedTo && assignedTo.trim() !== '') || (initiatedBy && initiatedBy.trim() !== ''))) {
+  // If normalized is still 'Case Logged' but has an assignee OR a real initiator, call it 'Assigned'
+  const hasRealAssignee = (assignedTo && assignedTo.trim() !== '');
+  const hasRealInitiator = (initiatedBy && initiatedBy.toLowerCase() !== 'system' && initiatedBy.trim() !== '');
+  
+  if (normalized === 'Case Logged' && (hasRealAssignee || hasRealInitiator)) {
     return 'Assigned';
   }
   return normalized;
@@ -357,7 +360,23 @@ const CaseMasterTab = () => {
       setTempFilters(prev => ({ ...prev, status: 'Unassigned' }));
       window.history.replaceState({}, document.title);
     }
-  }, [location.state]);
+
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.has('search')) {
+      setSearchTerm(searchParams.get('search'));
+    }
+  }, [location.state, location.search]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.has('search') && cases.length > 0) {
+      const searchId = searchParams.get('search');
+      const foundCase = cases.find(c => c.caseId === searchId);
+      if (foundCase && (!viewCase || viewCase.caseId !== searchId)) {
+        handleViewCase(foundCase);
+      }
+    }
+  }, [location.search, cases]);
 
   const handleImportCSV = async (e) => {
     const file = e.target.files[0];
@@ -387,10 +406,10 @@ const CaseMasterTab = () => {
   };
 
   const handleExportExcel = () => {
-    if (cases.length === 0) return toast.error('No data to export');
+    if (filteredCases.length === 0) return toast.error('No data to export');
 
     const headers = ['Case ID', 'Created', 'Company', 'Client', 'Type of Complaint', 'Amount Paid', 'Priority', 'Status', 'Assigned To'];
-    const data = cases.map(c => ({
+    const data = filteredCases.map(c => ({
       'Case ID': c.caseId,
       'Created': c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '',
       'Company': c.companyName,
@@ -567,8 +586,8 @@ const CaseMasterTab = () => {
       recommendedNextSteps: c.recommendedNextSteps || ''
     });
 
-    const isAssignedInit = c.initiatedBy && c.initiatedBy.toLowerCase() !== 'system' && c.initiatedBy.trim() !== '';
-    const initialStageFallback = (c.currentStatus === 'Case Logged' || !c.currentStatus) && isAssignedInit ? 'Assigned' : (c.currentStatus || 'Case Logged');
+    const isAssigned = (c.assignedTo && c.assignedTo.trim() !== '') || (c.initiatedBy && c.initiatedBy.toLowerCase() !== 'system' && c.initiatedBy.trim() !== '');
+    const initialStageFallback = (c.currentStatus === 'Case Logged' || !c.currentStatus) && isAssigned ? 'Assigned' : (c.currentStatus || 'Case Logged');
     const initialPctFallback = initialStageFallback === 'Assigned' ? 40 : (c.progressPercentage || 0);
 
     setProgressFormData({
@@ -951,8 +970,10 @@ const CaseMasterTab = () => {
       await api.post('/documents', {
         ...docFormData,
         caseId: viewCase.caseId,
+        fileSummary: docFormData.summary,
         uploadedBy: user?.fullName || user?.email,
-        source: 'Manual Upload'
+        uploadDate: new Date().toISOString(),
+        sourceForm: 'Manual Upload'
       });
       toast.success('Document indexed successfully', { id: loadingToast });
       setDocFormData({
@@ -979,10 +1000,13 @@ const CaseMasterTab = () => {
       await api.post('/documents', {
         caseId: viewCase.caseId,
         docType: finalDocType,
-        summary: `${finalDocType} - ${mouFormData.signatoryName}`,
+        docDate: mouFormData.mouDate,
+        fileSummary: `${finalDocType} - ${mouFormData.signatoryName}`,
         fileLink: mouFormData.fileLink,
-        remarks: `${mouFormData.remarks} (Date: ${mouFormData.mouDate})`,
-        uploadedBy: user?.email || 'System'
+        remarks: mouFormData.remarks,
+        uploadedBy: user?.email || 'System',
+        uploadDate: new Date().toISOString(),
+        sourceForm: 'MOU Upload'
       });
       toast.success('MOU uploaded successfully', { id: loadingToast });
       setMouFormData({
@@ -1039,10 +1063,13 @@ const CaseMasterTab = () => {
         await api.post('/documents', {
           caseId: viewCase.caseId,
           docType: 'Email Proof',
-          summary: `Email: ${emailFormData.subject}`,
+          docDate: emailFormData.emailDate,
+          fileSummary: `Email: ${emailFormData.subject}`,
           fileLink: emailFormData.emailFileLink,
           remarks: `Email Date: ${emailFormData.emailDate}`,
-          uploadedBy: user?.email || 'System'
+          uploadedBy: user?.email || 'System',
+          uploadDate: new Date().toISOString(),
+          sourceForm: 'Email Upload'
         });
       }
 
@@ -1050,10 +1077,13 @@ const CaseMasterTab = () => {
         await api.post('/documents', {
           caseId: viewCase.caseId,
           docType: 'Others',
-          summary: `Supporting Docs for Email: ${emailFormData.subject}`,
+          docDate: emailFormData.emailDate,
+          fileSummary: `Supporting Docs for Email: ${emailFormData.subject}`,
           fileLink: emailFormData.otherDocsLink,
           remarks: `Related to email dated ${emailFormData.emailDate}`,
-          uploadedBy: user?.email || 'System'
+          uploadedBy: user?.email || 'System',
+          uploadDate: new Date().toISOString(),
+          sourceForm: 'Email Upload'
         });
       }
 
@@ -1233,10 +1263,6 @@ const CaseMasterTab = () => {
                                 <span className={`text-sm font-bold ${tempFilters.status === s ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{s}</span>
                               </label>
                             ))}
-                            <div className="mt-4 p-4 rounded-2xl bg-bg-secondary border border-border text-[11px] text-text-muted">
-                              <p className="font-black uppercase tracking-[0.2em] mb-2 text-[10px] text-text-primary">Unassigned status</p>
-                              <p>Shows cases where both the Initiator and Assigned To fields are blank. This identifies cases that haven't been picked up or recorded by anyone yet.</p>
-                            </div>
                           </div>
                         )}
 
@@ -1480,7 +1506,7 @@ const CaseMasterTab = () => {
                   const steps = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
 
                   // If on Progress Update tab, show the current selection in the form
-                  const displayStatus = activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus;
+                  const displayStatus = activeDetailTab === 'Progress Update' ? progressFormData.stage : normalizeStatus(viewCase.currentStatus, viewCase.assignedTo, viewCase.initiatedBy);
 
                   let currentIdx = steps.indexOf(displayStatus);
                   if (currentIdx === -1) {
@@ -2063,12 +2089,11 @@ const CaseMasterTab = () => {
                           </div>
                         </div>
                         <div className="bg-bg-input/50 border-2 border-dashed border-border rounded-2xl p-6 space-y-4">
-                          <label className="text-[9px] font-black text-text-muted uppercase tracking-widest block mb-2">ATTACH PROOF FILE (OR PASTE URL)</label>
+                          <label className="text-[9px] font-black text-text-muted uppercase tracking-widest block mb-2">ATTACH PROOF FILE</label>
                           <div className="mb-4">
-                            <label className="block text-[9px] font-black text-text-muted uppercase tracking-widest mb-3 ml-1">ATTACHMENT</label>
                             <FileUpload onUploadSuccess={(url) => setCommFormData({ ...commFormData, fileLink: url })} label="Click to browse or drag & drop (Max 10MB)" />
                           </div>
-                          <div className="relative group">
+                          {/* <div className="relative group">
                             <input
                               type="text"
                               value={commFormData.fileLink}
@@ -2076,11 +2101,11 @@ const CaseMasterTab = () => {
                               placeholder="Or paste Google Drive / URL link..."
                               className="w-full bg-bg-card border-2 border-border rounded-xl px-5 py-3 text-[10px] font-black text-text-primary outline-none focus:border-accent transition-all shadow-inner"
                             />
-                          </div>
+                          </div> */}
                         </div>
 
                         <button type="submit" className="bg-accent hover:bg-accent-hover text-white font-black py-5 px-8 rounded-2xl shadow-lg shadow-orange-900/10 text-xs uppercase tracking-[0.25em] transition-all active:scale-95 w-full flex items-center justify-center gap-3">
-                          <Check size={18} /> Log Communication
+                          Submit
                         </button>
                         <div className="text-center pt-2">
                           <span className="text-[9px] font-black text-text-muted uppercase tracking-widest bg-bg-card border border-border px-4 py-2 rounded-lg">
@@ -2112,11 +2137,17 @@ const CaseMasterTab = () => {
                                     {comm.direction}
                                   </span>
                                 </div>
-                                <p className="text-[11px] font-medium text-text-secondary line-clamp-2 italic leading-relaxed">"{comm.summary}"</p>
-                                <div className="mt-3 flex items-center justify-between border-t border-border pt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <p className="text-[11px] font-medium text-text-secondary italic leading-relaxed whitespace-pre-wrap">"{comm.summary}"</p>
+                                <div className="mt-3 flex items-center justify-between border-t border-border pt-3 transition-all">
                                   <span className="text-[9px] font-black text-accent uppercase tracking-widest">{comm.mode} via {comm.fromTo || 'Client'}</span>
-                                  <div className="flex gap-2">
-                                    <div className="w-1 h-1 bg-accent rounded-full" />
+                                  <div className="flex gap-2 items-center">
+                                    {comm.fileLink ? (
+                                      <a href={comm.fileLink} target="_blank" rel="noreferrer" className="text-accent hover:text-white bg-accent/10 hover:bg-accent p-1.5 rounded-md transition-all flex items-center gap-1" title="View Attachment">
+                                        <Paperclip size={10} /> <span className="text-[8px] font-bold">VIEW FILE</span>
+                                      </a>
+                                    ) : (
+                                      <div className="w-1 h-1 bg-accent rounded-full" />
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -2156,7 +2187,7 @@ const CaseMasterTab = () => {
                         <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1">Document Type</label>
                         <SearchableSelect
                           name="mouType"
-                          options={['Legal Notice', 'Payment Receipt', 'MOU/Agreement', 'Whatsapp', 'Email', 'Complaint Copy', 'Meeting', 'Refund Proof', 'Other']}
+                          options={['Legal Notice', 'Payment Receipt', 'MOU/Agreement', 'Complaint Copy', 'Refund Proof', 'Other']}
                           value={mouFormData.mouType}
                           onChange={(e) => setMouFormData({ ...mouFormData, mouType: e.target.value })}
                           placeholder="Select Document Type..."
@@ -2293,6 +2324,24 @@ const CaseMasterTab = () => {
                                 colorClass = 'bg-green-soft text-green';
                               }
 
+                              // Enhanced Date Logic
+                              const getDisplayDate = () => {
+                                const dateSources = [doc.docDate, doc.uploadDate, doc.createdAt];
+                                for (let src of dateSources) {
+                                  if (src) {
+                                    const d = new Date(src);
+                                    if (!isNaN(d.getTime())) return format(d, 'dd MMM yy');
+                                  }
+                                }
+                                // Fallback: Try to extract from remarks "(Date: YYYY-MM-DD)"
+                                const match = doc.remarks?.match(/\(Date: (\d{4}-\d{2}-\d{2})\)/);
+                                if (match) {
+                                  const d = new Date(match[1]);
+                                  if (!isNaN(d.getTime())) return format(d, 'dd MMM yy');
+                                }
+                                return '--';
+                              };
+
                               return (
                                 <tr key={doc._id} className="hover:bg-bg-input/50 transition-all group border-b border-border last:border-0">
                                   <td className="px-4 py-4 font-mono text-[9px] text-accent font-black">
@@ -2302,7 +2351,7 @@ const CaseMasterTab = () => {
                                     <div className="flex items-center gap-2">
                                       <Icon size={12} className="text-text-muted" />
                                       <span className="text-[10px] font-bold text-text-primary truncate max-w-[120px]" title={doc.fileLink?.split('/').pop()}>
-                                        {doc.fileLink?.split('/').pop() || doc.summary}
+                                        {doc.fileLink?.split('/').pop() || doc.fileSummary || 'No Name'}
                                       </span>
                                     </div>
                                   </td>
@@ -2311,8 +2360,8 @@ const CaseMasterTab = () => {
                                       {label}
                                     </span>
                                   </td>
-                                  <td className="px-4 py-4 text-[9px] font-bold text-text-muted">
-                                    {doc.uploadDate || doc.createdAt ? format(new Date(doc.uploadDate || doc.createdAt), 'dd MMM yy') : '--'}
+                                  <td className="px-4 py-4 text-[9px] font-bold text-text-muted whitespace-nowrap">
+                                    {getDisplayDate()}
                                   </td>
                                   <td className="px-4 py-4">
                                     <div className="text-[9px] text-text-secondary line-clamp-2 max-w-[150px]" title={doc.remarks}>

@@ -46,7 +46,8 @@ router.get('/', verifyToken, async (req, res) => {
             type: 'Reminder',
             createdAt: t.reminderDateTime,
             isRead: false,
-            isSystem: true
+            isSystem: true,
+            link: '/my-task'
           });
         }
       }
@@ -64,7 +65,8 @@ router.get('/', verifyToken, async (req, res) => {
           type: 'Task',
           createdAt: new Date(),
           isRead: false,
-          isSystem: true
+          isSystem: true,
+          link: '/my-task'
         });
       }
     } else if (fullName) {
@@ -80,7 +82,8 @@ router.get('/', verifyToken, async (req, res) => {
           type: 'Task',
           createdAt: new Date(),
           isRead: false,
-          isSystem: true
+          isSystem: true,
+          link: '/my-task'
         });
       }
     }
@@ -96,7 +99,8 @@ router.get('/', verifyToken, async (req, res) => {
           type: 'Alert',
           createdAt: new Date(),
           isRead: false,
-          isSystem: true
+          isSystem: true,
+          link: '/?openSod=true'
         });
       }
     }

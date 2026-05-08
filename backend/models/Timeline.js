@@ -6,7 +6,9 @@ const timelineSchema = new mongoose.Schema({
   eventDate: { type: String, index: true },
   source: String,
   eventType: String,
-  summary: String
-});
+  summary: String,
+  details: String,
+  metadata: mongoose.Schema.Types.Mixed
+}, { timestamps: true });
 
 module.exports = mongoose.model('Timeline', timelineSchema);
