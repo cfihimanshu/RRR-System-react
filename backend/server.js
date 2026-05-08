@@ -1,9 +1,6 @@
 require('dotenv').config();
 const dns = require('dns');
-// Only override DNS servers locally, as it breaks AWS Lambda/Vercel internal telemetry and DNS
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
-  dns.setServers(['8.8.8.8', '8.8.4.4']);
-}
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 dns.setDefaultResultOrder('ipv4first');
 const express = require('express');
 const mongoose = require('mongoose');
@@ -35,19 +32,19 @@ const allowedOrigins = [
 console.log('✓ Allowed Origins for CORS:', allowedOrigins);
 
 const corsOptions = {
-  origin: function(origin, callback) {
+  origin: function (origin, callback) {
     console.log(`[CORS] Incoming Origin: "${origin}"`);
-    
+
     if (!origin) {
       console.log('[CORS] No origin (likely same-origin request) - allowing');
       return callback(null, true);
     }
-    
+
     if (allowedOrigins.includes(origin)) {
       console.log(`[CORS] ✓ Origin "${origin}" is allowed`);
       return callback(null, true);
     }
-    
+
     console.warn(`[CORS] ✗ Origin "${origin}" NOT in whitelist`);
     callback(null, true);
   },
@@ -60,23 +57,23 @@ const corsOptions = {
   maxAge: 86400,
 };
 
-// app.use(cors(corsOptions)); // Disabled to rely on manual CORS handling below
+app.use(cors(corsOptions));
 
 app.use((req, res, next) => {
   const origin = req.headers.origin || 'no-origin';
   const method = req.method;
-  
+
   res.header('Access-Control-Allow-Origin', origin);
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With');
   res.header('Access-Control-Max-Age', '86400');
-  
+
   if (method === 'OPTIONS') {
     console.log(`[CORS] ✓ Preflight OPTIONS request from "${origin}" - responding 200`);
     return res.sendStatus(200);
   }
-  
+
   next();
 });
 
@@ -84,22 +81,19 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 const connectToDatabase = async () => {
-  if (mongoose.connection.readyState >= 1) {
-    return; // Already connected or connecting
-  }
   try {
     await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 10000, 
-      bufferTimeoutMS: 20000,
-      connectTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 10000,
+      bufferTimeoutMS: 30000,
+      connectTimeoutMS: 15000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
       retryWrites: true,
     });
     console.log('MongoDB Connected');
   } catch (err) {
-    console.error('DATABASE CONNECTION ERROR:', err.message);
-    throw err;
+    console.error('DATABASE CONNECTION ERROR:', err);
+    process.exit(1);
   }
 };
 
@@ -109,18 +103,6 @@ mongoose.connection.on('disconnected', () => {
 
 mongoose.connection.on('error', err => {
   console.error('MongoDB connection error:', err);
-});
-
-// Vercel Serverless Middleware: Ensure DB is connected before processing any API route
-app.use(async (req, res, next) => {
-  if (process.env.VERCEL) {
-    try {
-      await connectToDatabase();
-    } catch (err) {
-      return res.status(500).json({ error: "Database connection failed on Vercel", details: err.message });
-    }
-  }
-  next();
 });
 
 // Routes
@@ -380,23 +362,11 @@ const PORT = process.env.PORT || 5000;
 const { initScheduler } = require('./utils/scheduler');
 
 const startServer = async () => {
-  try {
-    await connectToDatabase();
-  } catch (err) {
-    console.error("Startup DB error (non-fatal for Vercel):", err.message);
-  }
-  
-  // Only listen and start schedulers if not deployed on Vercel.
-  // Vercel handles requests directly via module.exports and does not support node-cron background tasks.
-  if (!process.env.VERCEL) {
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      initScheduler(); // Start background automations
-    });
-  }
+  await connectToDatabase();
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    initScheduler(); // Start background automations
+  });
 };
 
 startServer();
-
-// Export app for Vercel Serverless Functions
-module.exports = app;
