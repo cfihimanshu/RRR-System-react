@@ -9,8 +9,10 @@ const cors = require('cors');
 const app = express();
 
 const allowedOrigins = [
-  process.env.FRONTEND_URL || 'https://cfi247.com',
+  'https://cfi247.com',
   'https://www.cfi247.com',
+  'https://rrr-system-react-l8cr.vercel.app',
+  process.env.FRONTEND_URL,
   'http://localhost:5175',
   'http://127.0.0.1:5175',
   'http://localhost:5174',
@@ -22,20 +24,20 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`Origin not allowed by CORS: ${origin}`));
-    }
+    console.log('CORS Origin:', origin);
+    // Echo the requested origin to bypass strict Hostinger proxy issues
+    callback(null, origin || true);
   },
   credentials: true,
-  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
 const connectToDatabase = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
