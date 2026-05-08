@@ -1040,7 +1040,7 @@ const DashboardTab = () => {
 
                 <div className="p-6 flex-1 flex flex-col items-center justify-center">
                   <div className="relative w-48 h-48 mb-6">
-                    <ResponsiveContainer width="100%" height="100%" minWidth={180} minHeight={180}>
+                    <ResponsiveContainer width="100%" height={190} minWidth={180}>
                       <PieChart>
                         <Pie
                           data={stats?.caseTypeWiseData || []}
@@ -1142,7 +1142,7 @@ const DashboardTab = () => {
                   </div>
                 </div>
                 <div className="p-6 h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%" minHeight={240}>
+                  <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={stats?.trendData || []} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e2738" vertical={false} />
                       <XAxis

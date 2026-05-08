@@ -8,6 +8,14 @@ const cors = require('cors');
 
 const app = express();
 
+const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter(name => !process.env[name]);
+if (missingEnvVars.length > 0) {
+  console.error('Missing required environment variables:', missingEnvVars.join(', '));
+  console.error('Set these in your host environment or deployment settings before starting the server.');
+  process.exit(1);
+}
+
 const allowedOrigins = [
   'https://cfi247.com',
   'https://www.cfi247.com',
@@ -25,8 +33,9 @@ const allowedOrigins = [
 const corsOptions = {
   origin: (origin, callback) => {
     console.log('CORS Origin:', origin);
-    // Echo the requested origin to bypass strict Hostinger proxy issues
-    callback(null, origin || true);
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -38,6 +47,7 @@ app.options(/.*/, cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
 const connectToDatabase = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
@@ -309,6 +319,11 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err);
+  res.status(500).json({ error: err?.message || 'Internal Server Error' });
 });
 
 const PORT = process.env.PORT || 5000;
