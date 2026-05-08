@@ -83,17 +83,18 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 const connectToDatabase = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 10000,
-      bufferTimeoutMS: 30000,
-      connectTimeoutMS: 15000,
+      serverSelectionTimeoutMS: 5000, // Reduced to 5s so it fails faster on Vercel
+      bufferTimeoutMS: 10000,
+      connectTimeoutMS: 5000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
       retryWrites: true,
     });
     console.log('MongoDB Connected');
   } catch (err) {
-    console.error('DATABASE CONNECTION ERROR:', err);
-    process.exit(1);
+    console.error('DATABASE CONNECTION ERROR:', err.message);
+    // DO NOT process.exit(1) here! It kills Vercel serverless functions abruptly,
+    // causing 500 errors without CORS headers and preventing logs from flushing.
   }
 };
 
