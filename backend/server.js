@@ -363,10 +363,19 @@ const { initScheduler } = require('./utils/scheduler');
 
 const startServer = async () => {
   await connectToDatabase();
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    initScheduler(); // Start background automations
-  });
+  // Only listen if not deployed on Vercel, or if we are forced to.
+  // Vercel handles requests directly via module.exports
+  if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      initScheduler(); // Start background automations
+    });
+  } else {
+    initScheduler();
+  }
 };
 
-startServer();
+startServer().catch(err => console.error("Startup error:", err));
+
+// Export app for Vercel Serverless Functions
+module.exports = app;
