@@ -1,6 +1,9 @@
 require('dotenv').config();
 const dns = require('dns');
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+// Only override DNS servers locally, as it breaks AWS Lambda/Vercel internal telemetry and DNS
+if (!process.env.VERCEL) {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+}
 dns.setDefaultResultOrder('ipv4first');
 const express = require('express');
 const mongoose = require('mongoose');
@@ -124,6 +127,15 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/progress', require('./routes/progress'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/case-study', require('./routes/caseStudy'));
+
+app.get('/api/test-db', async (req, res) => {
+  try {
+    await connectToDatabase();
+    res.json({ status: "success", message: "Database connected successfully", readyState: mongoose.connection.readyState });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: "Database connection failed", error: err.message });
+  }
+});
 
 app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async (req, res) => {
   try {
@@ -362,11 +374,21 @@ const PORT = process.env.PORT || 5000;
 const { initScheduler } = require('./utils/scheduler');
 
 const startServer = async () => {
-  await connectToDatabase();
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    initScheduler(); // Start background automations
-  });
+  try {
+    await connectToDatabase();
+  } catch (err) {
+    console.error("Startup DB error (non-fatal for Vercel):", err.message);
+  }
+  
+  if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      initScheduler(); // Start background automations
+    });
+  }
 };
 
 startServer();
+
+// Export app for Vercel Serverless Functions
+module.exports = app;
