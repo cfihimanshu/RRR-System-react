@@ -96,7 +96,7 @@ const connectToDatabase = async () => {
     console.log('MongoDB Connected');
   } catch (err) {
     console.error('DATABASE CONNECTION ERROR:', err);
-    process.exit(1);
+    throw err; // Throw instead of exiting
   }
 };
 
@@ -106,6 +106,20 @@ mongoose.connection.on('disconnected', () => {
 
 mongoose.connection.on('error', err => {
   console.error('MongoDB connection error:', err);
+});
+
+app.use(async (req, res, next) => {
+  if (process.env.VERCEL) {
+    try {
+      if (mongoose.connection.readyState !== 1) {
+        console.log('[DB] Connecting to database on Vercel...');
+        await connectToDatabase();
+      }
+    } catch (err) {
+      return res.status(500).json({ error: "Database connection failed on Vercel", details: err.message });
+    }
+  }
+  next();
 });
 
 // Routes
