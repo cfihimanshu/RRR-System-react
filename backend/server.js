@@ -1,6 +1,9 @@
 require('dotenv').config();
 const dns = require('dns');
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+// Only override DNS servers locally, as it breaks AWS Lambda/Vercel internal telemetry and DNS
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+}
 dns.setDefaultResultOrder('ipv4first');
 const express = require('express');
 const mongoose = require('mongoose');
@@ -86,9 +89,9 @@ const connectToDatabase = async () => {
   }
   try {
     await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000, // Reduced to 5s so it fails faster on Vercel
-      bufferTimeoutMS: 10000,
-      connectTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 10000, 
+      bufferTimeoutMS: 20000,
+      connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
       retryWrites: true,
@@ -377,20 +380,23 @@ const PORT = process.env.PORT || 5000;
 const { initScheduler } = require('./utils/scheduler');
 
 const startServer = async () => {
-  await connectToDatabase();
-  // Only listen if not deployed on Vercel, or if we are forced to.
-  // Vercel handles requests directly via module.exports
-  if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  try {
+    await connectToDatabase();
+  } catch (err) {
+    console.error("Startup DB error (non-fatal for Vercel):", err.message);
+  }
+  
+  // Only listen and start schedulers if not deployed on Vercel.
+  // Vercel handles requests directly via module.exports and does not support node-cron background tasks.
+  if (!process.env.VERCEL) {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       initScheduler(); // Start background automations
     });
-  } else {
-    initScheduler();
   }
 };
 
-startServer().catch(err => console.error("Startup error:", err));
+startServer();
 
 // Export app for Vercel Serverless Functions
 module.exports = app;
