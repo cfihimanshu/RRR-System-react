@@ -20,19 +20,32 @@ const allowedOrigins = [
   'https://cfi247.com',
   'https://www.cfi247.com',
   'https://rrr-system-react-l8cr.vercel.app',
-  process.env.FRONTEND_URL,
-  'http://localhost:5175',
-  'http://127.0.0.1:5175',
-  'http://localhost:5174',
-  'http://127.0.0.1:5174',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+  'http://localhost:5175',
+  'http://127.0.0.1:5175',
   'http://localhost:3000',
 ].filter(Boolean);
 
+console.log('✓ Allowed Origins for CORS:', allowedOrigins);
+
 const corsOptions = {
   origin: function(origin, callback) {
-    console.log('CORS Origin Request:', origin);
+    console.log(`[CORS] Incoming Origin: "${origin}"`);
+    
+    if (!origin) {
+      console.log('[CORS] No origin (likely same-origin request) - allowing');
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      console.log(`[CORS] ✓ Origin "${origin}" is allowed`);
+      return callback(null, true);
+    }
+    
+    console.warn(`[CORS] ✗ Origin "${origin}" NOT in whitelist`);
     callback(null, true);
   },
   credentials: true,
@@ -41,22 +54,26 @@ const corsOptions = {
   exposedHeaders: ['Content-Length', 'X-JSON-Response'],
   optionsSuccessStatus: 200,
   preflightContinue: false,
+  maxAge: 86400,
 };
 
 app.use(cors(corsOptions));
 
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  res.header('Access-Control-Allow-Origin', origin || '*');
+  const origin = req.headers.origin || 'no-origin';
+  const method = req.method;
+  
+  res.header('Access-Control-Allow-Origin', origin);
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With');
-  res.header('Access-Control-Expose-Headers', 'Content-Length, X-JSON-Response');
+  res.header('Access-Control-Max-Age', '86400');
   
-  if (req.method === 'OPTIONS') {
-    console.log('✓ Preflight OPTIONS handled for:', origin);
+  if (method === 'OPTIONS') {
+    console.log(`[CORS] ✓ Preflight OPTIONS request from "${origin}" - responding 200`);
     return res.sendStatus(200);
   }
+  
   next();
 });
 
