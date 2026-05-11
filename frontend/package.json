@@ -12,6 +12,7 @@
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
     "axios": "^1.15.2",
+    "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "docx-preview": "^0.3.7",
     "html2pdf.js": "^0.14.0",

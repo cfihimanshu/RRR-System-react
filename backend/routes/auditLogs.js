@@ -1,9 +1,10 @@
 const express = require('express');
 const AuditLog = require('../models/AuditLog');
 const { verifyToken } = require('../middleware/auth');
+const { roleGuard } = require('../middleware/roleGuard');
 const router = express.Router();
 
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     const docs = await AuditLog.find().sort({ timestamp: -1 });
     res.json(docs);

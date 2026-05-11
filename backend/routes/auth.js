@@ -21,7 +21,13 @@ router.post('/login', async (req, res) => {
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
     const tokenName = user.fullName || user.name || "User";
-    const token = jwt.sign({ id: user._id, email: user.email, role: user.role, fullName: tokenName }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ 
+      id: user._id, 
+      email: user.email, 
+      role: user.role, 
+      fullName: tokenName,
+      canAccessRecords: user.canAccessRecords 
+    }, process.env.JWT_SECRET, { expiresIn: '6h' });
 
     await AuditLog.create({
       id: Date.now().toString(),
@@ -36,7 +42,13 @@ router.post('/login', async (req, res) => {
     // Ensure we send back a name even for older users
     const displayName = user.fullName || user.name || "";
 
-    res.json({ token, role: user.role, email: user.email, fullName: displayName });
+    res.json({ 
+      token, 
+      role: user.role, 
+      email: user.email, 
+      fullName: displayName,
+      canAccessRecords: user.canAccessRecords
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -70,7 +82,8 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
       email,
       password: hashedPassword,
       role,
-      fullName: finalName
+      fullName: finalName,
+      canAccessRecords: role === 'Admin' // Admins get access by default
     });
 
     await newUser.save();
@@ -139,7 +152,7 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
 // Get all users for assignment dropdown (Admin/Operations only)
 router.get('/users', verifyToken, roleGuard(['Admin', 'Operations']), async (req, res) => {
   try {
-    const users = await User.find({}, 'fullName email role').sort({ fullName: 1 });
+    const users = await User.find({}, 'fullName email role canAccessRecords').sort({ fullName: 1 });
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -172,6 +185,118 @@ router.put('/users/:id/role', verifyToken, roleGuard(['Admin']), async (req, res
     });
 
     res.json({ message: 'User role updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Toggle Records module access (Admin only)
+router.put('/users/:id/records-access', verifyToken, roleGuard(['Admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { canAccessRecords } = req.body;
+    
+    const userToUpdate = await User.findById(id);
+    if (!userToUpdate) return res.status(404).json({ error: 'User not found' });
+
+    userToUpdate.canAccessRecords = canAccessRecords;
+    await userToUpdate.save();
+
+    await AuditLog.create({
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      user: req.user.email,
+      role: req.user.role,
+      category: 'User Management',
+      description: `Updated Records access for ${userToUpdate.email} to ${canAccessRecords}`,
+      caseId: ''
+    });
+
+    res.json({ message: `Records access ${canAccessRecords ? 'enabled' : 'disabled'} successfully` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Change password (Logged-in user)
+router.post('/change-password', verifyToken, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) return res.status(401).json({ error: 'Incorrect current password' });
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    await AuditLog.create({
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      user: user.email,
+      role: user.role,
+      category: 'Security',
+      description: 'User changed their password',
+      caseId: ''
+    });
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Forgot password (request reset)
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ error: 'User with this email not found' });
+
+    // Generate a secure temporary password
+    const tempPassword = Math.random().toString(36).slice(-8).toUpperCase();
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    
+    user.password = hashedPassword;
+    await user.save();
+
+    // Send the temporary password via email
+    try {
+      const subject = '🔐 Password Reset - RRR Engine';
+      const html = `
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+          <h2 style="color: #d97706;">Password Reset Request</h2>
+          <p>Hello <strong>${user.fullName || 'User'}</strong>,</p>
+          <p>You have requested a password reset. Below is your temporary login password:</p>
+          <div style="background: #fff7ed; padding: 15px; border: 1px solid #ffedd5; border-radius: 10px; margin: 20px 0; text-align: center;">
+            <p style="margin: 0; font-size: 24px; font-weight: 900; letter-spacing: 4px; color: #d97706;">${tempPassword}</p>
+          </div>
+          <p style="color: #ef4444; font-weight: bold;">Important: Please log in using this temporary password and change it immediately from your dashboard security settings.</p>
+          <p style="color: #666; font-size: 12px; border-top: 1px solid #eee; padding-top: 10px; margin-top: 20px;">
+            If you did not request this, please contact your Administrator immediately.
+          </p>
+        </div>
+      `;
+      await sendEmail(email, subject, '', html);
+      console.log(`Password reset email sent to ${email}`);
+    } catch (mailErr) {
+      console.error('Failed to send reset email:', mailErr);
+      return res.status(500).json({ error: 'Failed to send reset email. Please contact Admin.' });
+    }
+
+    await AuditLog.create({
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      user: email,
+      role: user.role,
+      category: 'Security',
+      description: 'User requested password reset (Temporary password sent)',
+      caseId: ''
+    });
+
+    res.json({ message: 'Temporary password sent to your email.' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

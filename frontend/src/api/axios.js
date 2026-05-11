@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { decryptData } from '../utils/cryptoUtils';
 
 const api = axios.create({
   baseURL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -18,7 +19,17 @@ api.interceptors.request.use(
 );
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Automatically decrypt if the response is wrapped in our encryption object
+    if (response.data && response.data._enc) {
+      const decrypted = decryptData(response.data._enc);
+      // If decryption worked, use the decrypted data
+      if (decrypted !== null && decrypted !== undefined) {
+        response.data = decrypted;
+      }
+    }
+    return response;
+  },
   (error) => {
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('rrr_token');

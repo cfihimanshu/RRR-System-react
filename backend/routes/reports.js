@@ -61,15 +61,37 @@ router.get('/', verifyToken, async (req, res) => {
         }
       },
       {
+        $lookup: {
+          from: 'tasks',
+          let: { rDate: '$date', rUser: '$userName' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: [{ $dateToString: { format: "%Y-%m-%d", date: "$updatedAt" } }, "$$rDate"] },
+                    { $eq: ["$assignee", "$$rUser"] }
+                  ]
+                }
+              }
+            },
+            { $count: "count" }
+          ],
+          as: 'taskActivity'
+        }
+      },
+      {
         $addFields: {
-          activityCounts: { $arrayElemAt: ['$activityCounts', 0] }
+          activityCounts: { $arrayElemAt: ['$activityCounts', 0] },
+          taskActivity: { $arrayElemAt: ['$taskActivity', 0] }
         }
       },
       {
         $addFields: {
           commCount: { $ifNull: ['$activityCounts.commCount', 0] },
           docCount: { $ifNull: ['$activityCounts.docCount', 0] },
-          progressCount: { $ifNull: ['$activityCounts.progressCount', 0] }
+          progressCount: { $ifNull: ['$activityCounts.progressCount', 0] },
+          taskCount: { $ifNull: ['$taskActivity.count', 0] }
         }
       },
       {
@@ -123,9 +145,14 @@ router.get('/stats', verifyToken, async (req, res) => {
     const manualCompletedCount = await Task.countDocuments({ ...taskQuery, status: 'Completed' });
     
     const totalCasesCount = await Case.countDocuments(caseQuery);
-    const completedCasesCount = await Case.countDocuments({ 
+    const settledCasesCount = await Case.countDocuments({ 
       ...caseQuery, 
-      currentStatus: { $in: ['Closed', 'Settled', 'Settlement', 'Closure'] } 
+      currentStatus: { $in: ['Settled', 'Settlement'] } 
+    });
+
+    const closedCasesCount = await Case.countDocuments({ 
+      ...caseQuery, 
+      currentStatus: { $in: ['Closed', 'Closure'] } 
     });
 
     const sodToday = await Report.countDocuments({ ...query, type: 'SOD', createdAt: { $gte: today } });
@@ -145,11 +172,12 @@ router.get('/stats', verifyToken, async (req, res) => {
 
     res.json({
       tasksAssigned: manualTasksCount + totalCasesCount,
-      tasksCompleted: manualCompletedCount + completedCasesCount,
+      tasksCompleted: manualCompletedCount + settledCasesCount + closedCasesCount,
       sodToday,
       eodToday,
       totalCases: totalCasesCount,
-      settledCases: completedCasesCount,
+      settledCases: settledCasesCount,
+      closedCases: closedCasesCount,
       workingHours: workingHours.toFixed(2),
       role: req.user.role
     });

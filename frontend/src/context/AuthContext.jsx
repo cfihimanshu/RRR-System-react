@@ -9,47 +9,57 @@ export const AuthProvider = ({ children }) => {
     const role = localStorage.getItem('rrr_user_role');
     const email = localStorage.getItem('rrr_user_email');
     const fullName = localStorage.getItem('rrr_user_fullName');
-    return (role && email) ? { role, email, fullName } : null;
+    const canAccessRecords = localStorage.getItem('rrr_user_canAccessRecords') === 'true';
+    return (role && email) ? { role, email, fullName, canAccessRecords } : null;
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let timer;
     const syncUser = async () => {
       if (token) {
         try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          const expiryTime = payload.exp * 1000;
+          const remainingTime = expiryTime - Date.now();
+
+          if (remainingTime <= 0) {
+            logout();
+          } else {
+            timer = setTimeout(() => {
+              logout();
+              window.location.href = '/login';
+            }, remainingTime);
+          }
+
           const res = await api.get('/auth/me');
-          const userData = {
+          setUser({
             role: res.data.role,
             email: res.data.email,
-            fullName: res.data.fullName || res.data.name || ''
-          };
-          setUser(userData);
-          // Update localStorage with fresh DB data
-          localStorage.setItem('rrr_user_role', userData.role);
-          localStorage.setItem('rrr_user_email', userData.email);
-          localStorage.setItem('rrr_user_fullName', userData.fullName);
+            fullName: res.data.fullName || res.data.name || '',
+            canAccessRecords: res.data.canAccessRecords
+          });
         } catch (err) {
-          console.error('User sync failed:', err);
-          if (err.response?.status === 401 || err.response?.status === 404) {
-            logout();
-          }
+          if (err.response?.status === 401) logout();
         }
       }
       setLoading(false);
     };
 
     syncUser();
+    return () => timer && clearTimeout(timer);
   }, [token]);
 
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
-    const { token: newToken, role, email: userEmail, fullName } = res.data;
+    const { token: newToken, role, email: userEmail, fullName, canAccessRecords } = res.data;
     localStorage.setItem('rrr_token', newToken);
     localStorage.setItem('rrr_user_role', role);
     localStorage.setItem('rrr_user_email', userEmail);
     localStorage.setItem('rrr_user_fullName', fullName || '');
+    localStorage.setItem('rrr_user_canAccessRecords', canAccessRecords);
     setToken(newToken);
-    setUser({ role, email: userEmail, fullName: fullName || '' });
+    setUser({ role, email: userEmail, fullName: fullName || '', canAccessRecords });
   };
 
   const logout = () => {
@@ -57,6 +67,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('rrr_user_role');
     localStorage.removeItem('rrr_user_email');
     localStorage.removeItem('rrr_user_fullName');
+    localStorage.removeItem('rrr_user_canAccessRecords');
     setToken(null);
     setUser(null);
   };

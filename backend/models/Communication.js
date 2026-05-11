@@ -13,7 +13,9 @@ const communicationSchema = new mongoose.Schema({
   legalThreat: String,
   smMentioned: String,
   fileLink: String,
-  loggedBy: String
+  loggedBy: String,
+  demandAmount: { type: Number, default: 0 },
+  amountSaved: { type: Number, default: 0 }
 });
 
 module.exports = mongoose.model('Communication', communicationSchema);

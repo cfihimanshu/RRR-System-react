@@ -3,6 +3,10 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import { AuthContext } from '../context/AuthContext';
+import { LogOut, AlertTriangle, X, Key, ShieldCheck } from 'lucide-react';
+import { TAB_ACCESS } from '../config/tabAccess';
+import api from '../api/axios';
+import toast from 'react-hot-toast';
 
 // Import tabs
 import DashboardTab from '../components/tabs/DashboardTab';
@@ -27,28 +31,12 @@ import RefundRequestTab from '../components/tabs/RefundRequestTab';
 const ProtectedRoute = ({ children, allowedRoles, id }) => {
   const { user } = useContext(AuthContext);
   
-  const tabAccess = {
-    "dashboard":            ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
-    "new-case":             ["Admin", "Operations", "Staff"],
-    "case-master":          ["Admin", "Operations"],
-    "history":              ["Admin", "Operations", "Staff"],
-    "action-log":           ["Admin", "Operations", "Staff"],
-    "comm-log":             ["Admin", "Operations", "Staff"],
-    "timeline":             ["Admin"],
-    "doc-index":            ["Admin", "Operations", "Staff"],
-    "admin-panel":          ["Admin"],
-    "internal-search":      ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
-    "reviewer-panel":       ["Admin", "Reviewer"],
-    "accountant-dashboard": ["Admin", "Accountant"],
-    "agreement-gen":        ["Operations"],
-    "my-task":              ["Admin", "Operations", "Staff", "Accountant"],
-    "sod-eod-reports":      ["Admin", "Operations", "Staff", "Accountant"],
-    "work-report":          ["Admin", "Operations"],
-    "refund-request":       ["Operations", "Staff"]
-  };
-
   if (!user) return <Navigate to="/login" />;
-  if (!tabAccess[id]?.includes(user?.role)) return <Navigate to="/" />;
+  
+  // Allow access if user has explicit module permission OR role-based access
+  const hasAccess = (id === 'internal-search' && user.canAccessRecords) || TAB_ACCESS[id]?.includes(user?.role);
+  
+  if (!hasAccess) return <Navigate to="/" />;
   
   return children;
 };
@@ -56,6 +44,9 @@ const ProtectedRoute = ({ children, allowedRoles, id }) => {
 const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const { logout } = useContext(AuthContext);
 
   return (
     <div className="app-container h-screen flex flex-col overflow-hidden">
@@ -63,6 +54,8 @@ const Dashboard = () => {
         toggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
         toggleCollapse={() => setIsCollapsed(!isCollapsed)}
         isCollapsed={isCollapsed}
+        onLogoutClick={() => setShowLogoutModal(true)}
+        onChangePasswordClick={() => setShowPasswordModal(true)}
       />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar 
@@ -70,6 +63,8 @@ const Dashboard = () => {
           setSidebarOpen={setSidebarOpen} 
           isCollapsed={isCollapsed}
           setIsCollapsed={setIsCollapsed}
+          onLogoutClick={() => setShowLogoutModal(true)}
+          onChangePasswordClick={() => setShowPasswordModal(true)}
         />
         <div className={`flex-1 overflow-auto transition-all duration-300 ease-in-out`}>
           <div className="main h-full p-0 flex flex-col">
@@ -140,12 +135,172 @@ const Dashboard = () => {
             <Route path="/refund-request" element={
               <ProtectedRoute id="refund-request"><RefundRequestTab /></ProtectedRoute>
             } />
+
+            {/* Catch-all for unauthorized or non-existent URLs */}
+            <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </div>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl border border-slate-200 animate-zoom-in relative">
+            <div className="p-10 text-center">
+              <div className="w-24 h-24 bg-red-50 rounded-[32px] flex items-center justify-center mx-auto mb-8 shadow-inner">
+                <LogOut size={40} className="text-red-500" />
+              </div>
+              
+              <h3 className="text-2xl font-black text-slate-900 mb-3 uppercase tracking-tight">Confirm Sign Out</h3>
+              <p className="text-sm text-slate-500 font-medium px-4">Are you sure you want to end your current session? You'll need to login again to access your dashboard.</p>
+              
+              <div className="grid grid-cols-2 gap-4 mt-12">
+                <button 
+                  onClick={() => setShowLogoutModal(false)}
+                  className="py-4 px-6 rounded-2xl bg-slate-50 text-slate-500 font-black text-[10px] uppercase tracking-[0.15em] hover:bg-slate-100 hover:text-slate-700 transition-all active:scale-95 border border-slate-200/50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowLogoutModal(false);
+                    logout();
+                  }}
+                  className="py-4 px-6 rounded-2xl bg-red-600 text-white font-black text-[10px] uppercase tracking-[0.15em] hover:bg-red-700 shadow-xl shadow-red-900/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <LogOut size={14} /> Log Out
+                </button>
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => setShowLogoutModal(false)}
+              className="absolute top-6 right-6 p-2 text-slate-300 hover:text-slate-500 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />}
+      </div>
     </div>
-  </div>
-);
+  );
+};
+
+const ChangePasswordModal = ({ onClose }) => {
+  const [formData, setFormData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (formData.newPassword !== formData.confirmPassword) {
+      return toast.error("Passwords do not match");
+    }
+    if (formData.newPassword.length < 6) {
+      return toast.error("Password must be at least 6 characters");
+    }
+
+    setLoading(true);
+    try {
+      await api.post('/auth/change-password', {
+        oldPassword: formData.oldPassword,
+        newPassword: formData.newPassword
+      });
+      toast.success("Password updated successfully");
+      onClose();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to update password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-fade-in">
+      <div className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl border border-slate-200 animate-zoom-in relative">
+        <div className="p-8">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center shadow-inner border border-amber-100">
+              <Key size={24} className="text-amber-500" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Security</h3>
+              <p className="text-xs text-slate-500 font-medium">Update your account password</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Current Password</label>
+              <input 
+                type="password" 
+                required
+                className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-amber-500/50 focus:bg-white outline-none transition-all text-sm font-bold"
+                placeholder="••••••••"
+                value={formData.oldPassword}
+                onChange={e => setFormData({ ...formData, oldPassword: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">New Password</label>
+              <input 
+                type="password" 
+                required
+                className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-amber-500/50 focus:bg-white outline-none transition-all text-sm font-bold"
+                placeholder="••••••••"
+                value={formData.newPassword}
+                onChange={e => setFormData({ ...formData, newPassword: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Confirm New Password</label>
+              <input 
+                type="password" 
+                required
+                className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-amber-500/50 focus:bg-white outline-none transition-all text-sm font-bold"
+                placeholder="••••••••"
+                value={formData.confirmPassword}
+                onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button 
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                disabled={loading}
+                className="flex-1 py-4 rounded-2xl bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-xl shadow-slate-900/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                {loading ? 'Updating...' : (
+                  <>
+                    <ShieldCheck size={14} /> Update Password
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <button 
+          onClick={onClose}
+          className="absolute top-6 right-6 p-2 text-slate-300 hover:text-slate-500 transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+    </div>
+  );
 };
 
 export default Dashboard;

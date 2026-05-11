@@ -42,7 +42,11 @@ import {
   Scale,
   Gavel,
   ShieldAlert,
-  Hammer
+  Hammer,
+  FolderPlus,
+  FileUp,
+  PhoneOutgoing,
+  Activity
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
@@ -196,49 +200,62 @@ const DashboardTab = () => {
 
   const fetchActivities = async () => {
     try {
-      const [tlRes, reportsRes] = await Promise.all([
+      const [tlRes, reportsRes] = await Promise.allSettled([
         api.get('/timeline'),
         api.get('/reports')
       ]);
 
-      const tlActivities = tlRes.data
-        .filter(item => {
-          if (user?.role === 'Admin') return true;
-          const myNames = [user?.fullName, user?.email].filter(Boolean);
-          // Show only activities PERFORMED by the user
-          return myNames.includes(item.source);
-        })
-        .map(item => ({
-          id: item._id,
-          type: 'timeline',
-          title: item.summary,
-          subtitle: `${item.caseId} — ${item.eventType}`,
-          user: item.source || 'System',
-          date: new Date(item.eventDate || item.createdAt),
-          color: item.eventType?.toLowerCase().includes('mou') ? 'green' :
-            item.eventType?.toLowerCase().includes('escalat') ? 'red' :
-              item.eventType?.toLowerCase().includes('status') ? 'orange' :
-                item.eventType?.toLowerCase().includes('update') ? 'purple' :
-                  item.eventType?.toLowerCase().includes('refund') ? 'green' : 'blue'
-        }));
+      const tlData = tlRes.status === 'fulfilled' ? tlRes.value.data : [];
+      const reportsData = reportsRes.status === 'fulfilled' ? reportsRes.value.data : [];
 
-      const reportActivities = reportsRes.data
+      const tlActivities = (Array.isArray(tlData) ? tlData : [])
         .filter(item => {
           if (user?.role === 'Admin') return true;
-          return item.userEmail === user?.email || item.userName === user?.fullName;
+          const myNames = [user?.fullName, user?.email].filter(Boolean).map(n => n.toLowerCase().trim());
+          const source = (item.source || '').toLowerCase().trim();
+          return myNames.includes(source);
         })
-        .map(item => ({
-          id: item._id,
-          type: 'report',
-          title: `${item.type} Submitted Successfully`,
-          subtitle: item.userEmail,
-          user: item.userName || item.userEmail,
-          date: new Date(item.createdAt),
-          color: item.type === 'SOD' ? 'purple' : 'orange'
-        }));
+        .map(item => {
+          const itemDate = new Date(item.createdAt);
+          return {
+            id: item._id,
+            type: 'timeline',
+            title: item.summary || item.eventType || 'System Activity',
+            subtitle: `${item.caseId || 'General'} — ${item.eventType || 'Update'}`,
+            user: item.source || 'System',
+            date: isNaN(itemDate.getTime()) ? new Date() : itemDate,
+            color: item.eventType?.toLowerCase().includes('mou') ? 'green' :
+              item.eventType?.toLowerCase().includes('escalat') ? 'red' :
+                item.eventType?.toLowerCase().includes('status') ? 'orange' :
+                  item.eventType?.toLowerCase().includes('update') ? 'purple' :
+                    item.eventType?.toLowerCase().includes('refund') ? 'green' : 'blue'
+          };
+        });
+
+      const reportActivities = (Array.isArray(reportsData) ? reportsData : [])
+        .filter(item => {
+          if (user?.role === 'Admin') return true;
+          const myEmail = user?.email?.toLowerCase().trim();
+          const myName = user?.fullName?.toLowerCase().trim();
+          const itemEmail = (item.userEmail || '').toLowerCase().trim();
+          const itemName = (item.userName || '').toLowerCase().trim();
+          return itemEmail === myEmail || itemName === myName;
+        })
+        .map(item => {
+          const itemDate = new Date(item.createdAt);
+          return {
+            id: item._id,
+            type: 'report',
+            title: `${item.type || 'Report'} Submitted`,
+            subtitle: item.userEmail || 'User Report',
+            user: item.userName || item.userEmail || 'User',
+            date: isNaN(itemDate.getTime()) ? new Date() : itemDate,
+            color: item.type === 'SOD' ? 'purple' : 'orange'
+          };
+        });
 
       const merged = [...tlActivities, ...reportActivities]
-        .sort((a, b) => b.date - a.date)
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
         .slice(0, 50);
 
       setActivities(merged);
@@ -527,10 +544,10 @@ const DashboardTab = () => {
     }
   };
 
-  if (!stats) return <div className="section active"><div className="empty-state">Loading...</div></div>;
+  if (!stats) return <div className="section active bg-[#f8fafc] h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div></div>;
 
   return (
-    <div className="section active w-full pb-10 px-4">
+    <div className="section active w-full pb-10 px-4 bg-[#f8fafc]">
       <div className="section-header flex flex-col lg:flex-row justify-between items-start lg:items-center mb-10 w-full gap-6 pt-4">
         <div className="flex-1 text-left">
           <div className="section-title text-xl md:text-2xl lg:text-3xl font-semibold text-text-primary tracking-tight leading-tight">
@@ -955,25 +972,93 @@ const DashboardTab = () => {
         </div>
       )}
 
+      {/* Today's Overview Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div
+          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-purple/30 transition-all cursor-pointer"
+          onClick={() => navigate('/case-master', { state: { dateFilter: new Date().toISOString().split('T')[0] } })}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-purple-soft rounded-xl text-purple">
+              <FolderPlus size={16} />
+            </div>
+            <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">Case Logged Today</div>
+          </div>
+          <div className="text-2xl font-black text-text-primary ml-1">{stats?.casesCreatedToday || 0}</div>
+        </div>
+
+        <div
+          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-blue/30 transition-all cursor-pointer"
+          onClick={() => navigate('/timeline', { state: { dateFilter: new Date().toISOString().split('T')[0], typeFilter: 'Document Upload' } })}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-blue-soft rounded-xl text-blue">
+              <FileUp size={16} />
+            </div>
+            <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">Document Uploaded</div>
+          </div>
+          <div className="text-2xl font-black text-text-primary ml-1">{stats?.documentsUploadedToday || 0}</div>
+        </div>
+
+        <div
+          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-green/30 transition-all cursor-pointer"
+          onClick={() => navigate('/timeline', { state: { dateFilter: new Date().toISOString().split('T')[0], typeFilter: 'Communication' } })}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-green-soft rounded-xl text-green">
+              <PhoneOutgoing size={16} />
+            </div>
+            <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">Communication</div>
+          </div>
+          <div className="text-2xl font-black text-text-primary ml-1">{stats?.communicationsToday || 0}</div>
+        </div>
+
+        <div
+          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-orange/30 transition-all cursor-pointer"
+          onClick={() => navigate('/timeline', { state: { dateFilter: new Date().toISOString().split('T')[0], typeFilter: 'Progress Update' } })}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-accent-soft rounded-xl text-accent">
+              <Activity size={16} />
+            </div>
+            <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">Progress Updated</div>
+          </div>
+          <div className="text-2xl font-black text-text-primary ml-1">{stats?.progressUpdatesToday || 0}</div>
+        </div>
+      </div>
+
       {/* Main Dashboard Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-7 gap-3 sm:gap-4 md:gap-6 mb-8">
-        <div className="stat cursor-pointer hover:border-blue-300 transition-all" onClick={() => navigate('/case-master')}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3 sm:gap-4 md:gap-6 mb-8">
+        <div className="stat cursor-pointer hover:border-purple-300 transition-all" onClick={() => navigate('/case-master')}>
           <div className="stat-icon bg-purple-soft text-purple">
             <Folder size={18} />
           </div>
-          <div>
-            <div className="val text-purple-300">{stats?.totalCases || 0}</div>
+          <div className="flex-1">
+            <div className="flex items-baseline gap-2">
+              <div className="val text-purple-300">{stats?.totalCases || 0}</div>
+              <div className="text-[10px] font-bold text-purple/60">₹{Number(stats?.totalAmountPaid || 0).toLocaleString('en-IN')}</div>
+            </div>
             <div className="lbl">Total Cases</div>
           </div>
         </div>
 
-        <div className="stat cursor-pointer hover:border-green-300 transition-all" onClick={() => navigate('/case-master', { state: { statusFilter: 'Closed' } })}>
+        <div className="stat cursor-pointer hover:border-green-300 transition-all" onClick={() => navigate('/case-master', { state: { statusFilter: 'Settlement' } })}>
           <div className="stat-icon bg-green-soft text-green">
             <CheckCircle size={18} />
           </div>
           <div>
             <div className="val text-green-300">{stats?.settledCases || 0}</div>
-            <div className="lbl">Settled / Closed</div>
+            <div className="lbl">Settled</div>
+          </div>
+        </div>
+
+        <div className="stat cursor-pointer hover:border-emerald-300 transition-all" onClick={() => navigate('/case-master', { state: { statusFilter: 'Closure' } })}>
+          <div className="stat-icon bg-emerald-500/10 text-emerald-500">
+            <Hammer size={18} />
+          </div>
+          <div>
+            <div className="val text-emerald-300">{stats?.closedCases || 0}</div>
+            <div className="lbl">Closure</div>
           </div>
         </div>
 
@@ -1007,16 +1092,6 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        <div className="stat cursor-pointer hover:border-fuchsia-300 transition-all" onClick={() => navigate('/case-master', { state: { unassignedOnly: true } })}>
-          <div className="stat-icon bg-fuchsia-500/10 text-fuchsia-500">
-            <Plus size={18} />
-          </div>
-          <div>
-            <div className="val text-fuchsia-300">{stats?.unassignedCount || 0}</div>
-            <div className="lbl">Unassigned</div>
-          </div>
-        </div>
-
         <div className="stat">
           <div className="stat-icon bg-blue-soft text-blue">
             <IndianRupee size={18} />
@@ -1024,6 +1099,16 @@ const DashboardTab = () => {
           <div>
             <div className="val text-teal-300">₹{Number(stats?.totalRefundAmount || 0).toLocaleString('en-IN')}</div>
             <div className="lbl">Refund Amount</div>
+          </div>
+        </div>
+
+        <div className="stat cursor-pointer hover:border-red-300 transition-all" onClick={() => navigate('/case-master', { state: { hasDemand: true } })}>
+          <div className="stat-icon bg-red-500/10 text-red-400">
+            <IndianRupee size={18} />
+          </div>
+          <div>
+            <div className="val text-red-300 text-xs">₹{Number(stats?.totalDemandAmount || 0).toLocaleString('en-IN')}</div>
+            <div className="lbl">Total Demanded</div>
           </div>
         </div>
       </div>
@@ -1109,17 +1194,19 @@ const DashboardTab = () => {
                         <th className="px-4 py-3">Member</th>
                         <th className="px-2 py-3 text-center">Total</th>
                         <th className="px-2 py-3 text-center">Done</th>
+                        <th className="px-2 py-3 text-center">Tasks</th>
                         <th className="px-2 py-3 text-center">Pend</th>
                       </tr>
                     </thead>
                     <tbody className="text-[10px] text-text-secondary divide-y divide-border/30">
                       {stats?.teamPerformance?.slice(0, 8).map(member => (
-                        <tr key={member.id} className="hover:bg-bg-input/50 transition-all">
+                        <tr key={member.id} className="hover:bg-bg-input/50 transition-all cursor-pointer" onClick={() => navigate('/work-report', { state: { userEmail: member.email } })}>
                           <td className="px-4 py-2.5">
                             <div className="font-bold text-text-primary truncate max-w-[80px]">{member.name.split(' ')[0]}</div>
                           </td>
                           <td className="px-2 py-2.5 text-center font-black text-blue-600">{member.assigned}</td>
                           <td className="px-2 py-2.5 text-center font-black text-emerald-600">{member.settled}</td>
+                          <td className="px-2 py-2.5 text-center font-black text-purple-600">{member.pendingTasks || 0}</td>
                           <td className="px-2 py-2.5 text-center font-black text-orange-600">{member.pending}</td>
                         </tr>
                       ))}

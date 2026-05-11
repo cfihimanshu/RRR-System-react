@@ -2,11 +2,15 @@ import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { Mail, Lock, LogIn, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, LogIn, ShieldCheck, Key, X, Send } from 'lucide-react';
+import api from '../api/axios';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -19,6 +23,24 @@ const Login = () => {
       navigate('/');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Login failed', { id: loadingToast });
+    }
+  };
+ 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!forgotEmail) return toast.error("Please enter your email");
+    
+    setForgotLoading(true);
+    const loadingToast = toast.loading('Sending reset email...');
+    try {
+      await api.post('/auth/forgot-password', { email: forgotEmail });
+      toast.success('Temporary password sent to your email!', { id: loadingToast });
+      setShowForgotModal(false);
+      setForgotEmail('');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to send reset email', { id: loadingToast });
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -84,10 +106,68 @@ const Login = () => {
             >
               Sign In
             </button>
+
+            <div className="text-center pt-4">
+              <button 
+                type="button"
+                onClick={() => setShowForgotModal(true)}
+                className="text-[10px] font-black text-text-muted hover:text-accent uppercase tracking-widest transition-colors flex items-center justify-center gap-2 mx-auto"
+              >
+                <Key size={12} /> Forgot Password?
+              </button>
+            </div>
           </form>
         </div>
-
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl border border-slate-200 animate-zoom-in relative">
+            <div className="p-10">
+              <div className="w-20 h-20 bg-amber-50 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner border border-amber-100">
+                <Key size={32} className="text-amber-500" />
+              </div>
+              
+              <h3 className="text-xl font-black text-slate-900 text-center mb-2 uppercase tracking-tight">Forgot Password</h3>
+              <p className="text-xs text-slate-500 text-center font-medium mb-8 leading-relaxed">Enter your email and we'll send you a temporary password to log in.</p>
+              
+              <form onSubmit={handleForgotPassword} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
+                  <input 
+                    type="email" 
+                    required
+                    className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-amber-500/50 focus:bg-white outline-none transition-all text-sm font-bold"
+                    placeholder="your@email.com"
+                    value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)}
+                  />
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={forgotLoading}
+                  className="w-full py-4.5 rounded-2xl bg-amber-600 text-white font-black text-xs uppercase tracking-[0.2em] hover:bg-amber-700 shadow-xl shadow-amber-900/20 transition-all active:scale-95 flex items-center justify-center gap-3"
+                >
+                  {forgotLoading ? 'Sending...' : (
+                    <>
+                      <Send size={16} /> Send Reset Email
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+            
+            <button 
+              onClick={() => setShowForgotModal(false)}
+              className="absolute top-6 right-6 p-2 text-slate-300 hover:text-slate-500 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

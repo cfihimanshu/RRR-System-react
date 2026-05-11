@@ -1,13 +1,13 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { format } from 'date-fns';
-import { Menu, Bell, Check, Trash2, ExternalLink } from 'lucide-react';
+import { Menu, Bell, Check, Trash2, ExternalLink, Key } from 'lucide-react';
 import api from '../api/axios';
 import logo from '../assets/blacklogo.png';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
-const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
+const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed, onLogoutClick, onChangePasswordClick }) => {
   const { user, logout } = useContext(AuthContext);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -140,12 +140,20 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
           {format(new Date(), 'dd MMM yyyy, hh:mm a')}
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-input border border-border hidden md:flex">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-input border border-border hidden md:flex group relative">
           <div className="w-2 h-2 rounded-full bg-green animate-pulse"></div>
           <span className="text-text-secondary font-medium text-xs">
             {user?.fullName && <b className="text-text-primary mr-1.5">{user.fullName}</b>}
             <span className="text-[10px] text-text-muted uppercase tracking-wider">{user?.role}</span>
           </span>
+          
+          <button 
+            onClick={onChangePasswordClick}
+            className="ml-2 p-1.5 hover:bg-white rounded-md text-text-muted hover:text-accent transition-all"
+            title="Reset Password"
+          >
+            <Key size={14} />
+          </button>
         </div>
 
         {/* Notification Bell */}
@@ -205,7 +213,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
           )}
         </div>
 
-        <button onClick={logout} className="btn btn-primary !py-2 !px-4 !text-[11px] shadow-lg shadow-orange-900/20">
+        <button onClick={onLogoutClick} className="btn btn-primary !py-2 !px-4 !text-[11px] shadow-lg shadow-orange-900/20">
           Logout
         </button>
       </div>

@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const { verifyToken } = require('../middleware/auth');
+const { roleGuard } = require('../middleware/roleGuard');
 
 // Get all users (Filtered for Operations in frontend)
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', verifyToken, roleGuard(['Admin', 'Operations']), async (req, res) => {
   try {
     const users = await User.find({}, 'fullName email role department');
     res.json(users);

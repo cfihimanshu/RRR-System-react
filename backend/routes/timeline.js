@@ -5,12 +5,21 @@ const router = express.Router();
 
 router.get('/', verifyToken, async (req, res) => {
   try {
-    const { caseId, date, userEmail: queryEmail } = req.query;
+    const { caseId, date, type, sourceFilter, userEmail: queryEmail } = req.query;
     let pipeline = [];
 
     // Base filters
     let baseMatch = {};
     if (caseId) baseMatch.caseId = caseId;
+    if (sourceFilter) baseMatch.source = sourceFilter;
+    if (type) {
+      if (type === 'Communication') {
+        baseMatch.eventType = { $in: ['Call', 'Email', 'Whatsapp', 'Meeting', 'Communication'] };
+      } else {
+        baseMatch.eventType = type;
+      }
+    }
+
     if (Object.keys(baseMatch).length > 0) {
       pipeline.push({ $match: baseMatch });
     }
@@ -68,23 +77,31 @@ router.get('/', verifyToken, async (req, res) => {
           ]
         }
       });
-    } else if (queryEmail) {
+    } else if (queryEmail || req.query.userName) {
       // If Admin is filtering for a specific user, match broad
       const User = require('../models/User');
-      const targetUser = await User.findOne({ email: queryEmail });
-      const userIds = [...new Set([queryEmail, queryEmail.split('@')[0], targetUser?.fullName, targetUser?.email])].filter(Boolean);
+      const targetUser = queryEmail ? await User.findOne({ email: { $regex: new RegExp(`^${queryEmail}$`, 'i') } }) : null;
+      
+      const userIds = [...new Set([
+        queryEmail, 
+        req.query.userName,
+        targetUser?.fullName, 
+        targetUser?.email
+      ])].filter(Boolean);
+
+      let orConditions = [{ source: { $in: userIds } }];
+      if (queryEmail) {
+        orConditions.push({ source: { $regex: new RegExp(queryEmail.split('@')[0], 'i') } });
+      }
 
       pipeline.push({
         $match: {
-          $or: [
-            { source: { $in: userIds } },
-            { source: { $regex: new RegExp(queryEmail.split('@')[0], 'i') } }
-          ]
+          $or: orConditions
         }
       });
     }
 
-    pipeline.push({ $sort: { eventDate: -1, createdAt: -1 } });
+    pipeline.push({ $sort: { createdAt: -1 } });
 
     pipeline.push({ 
       $project: { 

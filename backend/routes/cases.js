@@ -185,6 +185,16 @@ router.get('/', verifyToken, async (req, res) => {
       };
     }
 
+    if (req.query.hasDemand === 'true') {
+      const commsWithDemand = await Communication.find({ 
+        $or: [
+          { demandAmount: { $gt: 0 } }, 
+          { refundDemanded: { $regex: /[1-9]/ } } // Any string containing a non-zero digit
+        ] 
+      }).distinct('caseId');
+      query.caseId = { $in: commsWithDemand };
+    }
+
     const cases = await Case.find(query).sort({ createdAt: -1 });
     res.json(cases);
   } catch (error) {
@@ -457,7 +467,11 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
     const isInitiating = req.body.initiatedBy && req.body.initiatedBy !== existingCase.initiatedBy;
 
     // Auto-update status to "Assigned" if it was just "New" or "Case Logged"
-    const hasAssignee = (req.body.assignedTo && req.body.assignedTo.trim() !== '') || (req.body.initiatedBy && req.body.initiatedBy.trim() !== '');
+    // Check both REQUEST data and EXISTING case data to see if case has/will have assignee
+    const assigneeToUse = (req.body.assignedTo && req.body.assignedTo.trim()) || (existingCase.assignedTo && existingCase.assignedTo.trim());
+    const initiatorToUse = (req.body.initiatedBy && req.body.initiatedBy.trim()) || (existingCase.initiatedBy && existingCase.initiatedBy.trim());
+    const hasAssignee = !!(assigneeToUse || initiatorToUse);
+    
     if (hasAssignee && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged')) {
       req.body.currentStatus = 'Assigned';
       req.body.progressPercentage = 25;
@@ -474,8 +488,23 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
     const updated = await Case.findOneAndUpdate(
       { caseId },
       { ...updateData, lastUpdateDate: new Date().toISOString() },
-      { new: true }
+      { returnDocument: 'after' }
     );
+
+    // Update Progress stage if status changed
+    if (req.body.currentStatus && req.body.currentStatus !== existingCase.currentStatus) {
+      const Progress = require('../models/Progress');
+      try {
+        const existingProgress = await Progress.findOne({ caseId });
+        if (existingProgress) {
+          existingProgress.stage = req.body.currentStatus;
+          existingProgress.percentage = req.body.progressPercentage || existingProgress.percentage;
+          await existingProgress.save();
+        }
+      } catch (err) {
+        console.error('Failed to update Progress stage:', err);
+      }
+    }
 
     const uploader = req.user.fullName || req.user.email || 'System';
     const updatedType = req.body.typeOfComplaint || existingCase.typeOfComplaint;
@@ -593,6 +622,68 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
       } catch (err) { console.error('Edit Notification Error:', err); }
     }
 
+    // Track all field changes
+    const changedFields = Object.keys(updateData).filter(key => {
+      // Skip complex objects/arrays for simple string comparison
+      if (typeof updateData[key] === 'object') return false;
+      
+      const oldVal = String(existingCase[key] ?? '').trim();
+      const newVal = String(updateData[key] ?? '').trim();
+      return oldVal !== newVal;
+    });
+    
+    changedFields.forEach(async (field) => {
+      let fieldLabel = field;
+      let oldVal = existingCase[field];
+      let newVal = updateData[field];
+
+      // Map field names to display labels
+      const fieldLabelMap = {
+        'currentStatus': 'Status',
+        'priority': 'Priority',
+        'assignedTo': 'Assignee',
+        'initiatedBy': 'Initiated By',
+        'typeOfComplaint': 'Complaint Type',
+        'clientName': 'Client Name',
+        'clientMobile': 'Client Mobile',
+        'clientEmail': 'Client Email',
+        'state': 'State',
+        'totalAmtPaid': 'Amount Paid',
+        'totalMouValue': 'MOU Value',
+        'amtInDispute': 'Dispute Amount',
+        'caseSummary': 'Case Summary',
+        'clientAllegation': 'Allegation',
+        'progressPercentage': 'Progress %',
+        'brandName': 'Brand Name',
+        'companyName': 'Company Name',
+        'engagementNote': 'Engagement Note',
+        'recommendedNextSteps': 'Next Steps',
+        'keyPendingIssue': 'Pending Issue',
+        'firNumber': 'FIR Number',
+        'firFileLink': 'FIR Document',
+        'grievanceNumber': 'Grievance No',
+        'proofCallRec': 'Call Recording Proof',
+        'proofWaChat': 'WhatsApp Proof',
+        'mouSigned': 'MOU Signed'
+      };
+
+      fieldLabel = fieldLabelMap[field] || field;
+
+      // Create timeline entry with before/after
+      await new Timeline({
+        id: Date.now().toString() + Math.random().toString(36).substring(7),
+        caseId: req.params.caseId,
+        eventDate: new Date().toISOString(),
+        source: req.user.fullName || req.user.email || 'System',
+        eventType: 'Case Updated',
+        summary: `${fieldLabel} changed: ${oldVal || 'N/A'} → ${newVal || 'N/A'}`,
+        fieldChanged: fieldLabel,
+        oldValue: oldVal,
+        newValue: newVal
+      }).save();
+    });
+
+    // Also create audit log
     if (req.body.currentStatus) {
       await AuditLog.create({
         id: Date.now().toString(),
@@ -600,21 +691,13 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
         user: req.user.email,
         role: req.user.role,
         category: 'Case Status Changed',
-        description: `Case ${req.params.caseId} status updated to ${req.body.currentStatus}`,
+        description: `Case ${req.params.caseId} status updated from ${existingCase.currentStatus} to ${req.body.currentStatus}`,
         caseId: req.params.caseId
       });
+    }
 
-      // Also add to Timeline for Live Activity
-      await new Timeline({
-        id: Date.now().toString() + Math.random().toString(36).substring(7),
-        caseId: req.params.caseId,
-        eventDate: new Date().toISOString(),
-        source: req.user.fullName || req.user.email || 'System',
-        eventType: 'Status Change',
-        summary: `Case status updated to ${req.body.currentStatus}`
-      }).save();
-    } else {
-      // General update timeline entry
+    // If no specific fields changed, log general update
+    if (changedFields.length === 0) {
       await new Timeline({
         id: Date.now().toString() + Math.random().toString(36).substring(7),
         caseId: req.params.caseId,

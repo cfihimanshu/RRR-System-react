@@ -24,7 +24,8 @@ const CommLogTab = () => {
     smMentioned: 'No',
     fileLink: '',
     fileUrlStr: '',
-    loggedBy: user?.name || user?.email || ''
+    loggedBy: user?.name || user?.email || '',
+    demandAmount: '0'
   });
 
   useEffect(() => {
@@ -64,7 +65,8 @@ const CommLogTab = () => {
       setFormData({
         dateTime: '', mode: 'Call', direction: 'Incoming', fromTo: '', summary: '',
         exactDemand: '', refundDemanded: '0', legalThreat: 'No', smMentioned: 'No',
-        fileLink: '', fileUrlStr: '', loggedBy: user?.name || user?.email || ''
+        fileLink: '', fileUrlStr: '', loggedBy: user?.name || user?.email || '',
+        demandAmount: '0'
       });
       setSelectedCase('');
     } catch (err) {
@@ -150,6 +152,11 @@ const CommLogTab = () => {
               <input type="text" className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-xs font-black text-text-primary focus:border-accent outline-none transition-all shadow-sm" placeholder="0" value={formData.refundDemanded} onChange={e => setFormData({ ...formData, refundDemanded: e.target.value })} />
             </div>
             <div className="space-y-3">
+              <label className={labelClass}>Demand Amount (₹)</label>
+              <input type="text" className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-xs font-black text-text-primary focus:border-accent outline-none transition-all shadow-sm" placeholder="0" value={formData.demandAmount} onChange={e => setFormData({ ...formData, demandAmount: e.target.value })} />
+            </div>
+
+            <div className="space-y-3">
               <label className={labelClass}>Legal Threat Vector</label>
               <select className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-xs font-black text-text-primary focus:border-accent outline-none transition-all uppercase tracking-widest shadow-sm" value={formData.legalThreat} onChange={e => setFormData({ ...formData, legalThreat: e.target.value })}>
                 <option value="No">No</option>
@@ -216,6 +223,7 @@ const CommLogTab = () => {
                 <th className="px-6 py-6 w-[120px]">TRAFFIC</th>
                 <th className="px-6 py-6 w-[150px]">ENDPOINT</th>
                 <th className="px-6 py-6 min-w-[300px]">SIGNAL CONTENT</th>
+                <th className="px-6 py-6 w-[120px] text-center">DEMAND / SAVED</th>
                 <th className="px-6 py-6 w-[100px] text-center">DATA</th>
                 <th className="px-6 py-6 w-[120px] text-center">THREAT</th>
               </tr>
@@ -262,6 +270,12 @@ const CommLogTab = () => {
                     <td className="px-6 py-6 align-top">
                       <div className="font-black text-text-primary text-[11px] leading-relaxed uppercase tracking-tight">{c.summary}</div>
                       {c.exactDemand && <div className="text-[10px] text-text-muted mt-3 italic border-l-4 border-accent-soft pl-4 py-1 bg-bg-input/30 rounded-r-xl">"{c.exactDemand}"</div>}
+                    </td>
+                    <td className="px-6 py-6 text-center align-top">
+                      <div className="flex flex-col gap-1">
+                        {c.demandAmount > 0 && <span className="text-red-400 font-black text-[10px]">D: ₹{c.demandAmount.toLocaleString()}</span>}
+                        {!(c.demandAmount > 0) && <span className="text-text-muted opacity-30">—</span>}
+                      </div>
                     </td>
                     <td className="px-6 py-6 text-center align-top">
                       {c.fileLink ? (

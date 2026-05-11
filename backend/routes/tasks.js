@@ -25,7 +25,14 @@ router.get('/', verifyToken, async (req, res) => {
       ];
     }
 
-    const tasks = await Task.find(query).sort({ createdAt: -1 });
+    if (req.query.date) {
+      const dateObj = new Date(req.query.date);
+      const start = new Date(dateObj.setHours(0, 0, 0, 0));
+      const end = new Date(dateObj.setHours(23, 59, 59, 999));
+      query.updatedAt = { $gte: start, $lte: end };
+    }
+
+    const tasks = await Task.find(query).sort({ updatedAt: -1 });
     res.json(tasks);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -75,7 +82,7 @@ router.put('/:id', verifyToken, async (req, res) => {
     let updated = await Task.findByIdAndUpdate(
       req.params.id, 
       { ...req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     // 2. If not found in Task, it might be a Case
@@ -93,7 +100,7 @@ router.put('/:id', verifyToken, async (req, res) => {
       updated = await Case.findByIdAndUpdate(
         req.params.id,
         updatePayload,
-        { new: true }
+        { returnDocument: 'after' }
       );
       
       if (updated) {

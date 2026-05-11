@@ -118,6 +118,11 @@ const CaseMasterTab = () => {
   const [viewCase, setViewCase] = useState(null);
   const [activeDetailTab, setActiveDetailTab] = useState('Case Details');
   const [timelineLogs, setTimelineLogs] = useState([]);
+  const [expandedRows, setExpandedRows] = useState({});
+
+  const toggleRow = (id) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
   const [caseComms, setCaseComms] = useState([]);
   const [caseDocs, setCaseDocs] = useState([]);
   const [commFormData, setCommFormData] = useState({
@@ -247,6 +252,21 @@ const CaseMasterTab = () => {
   const sectionTitleClass = "text-md font-black flex items-center gap-2 mb-6 text-accent uppercase tracking-wider";
   const cardClass = "bg-bg-card rounded-2xl border-2 border-border p-8 mb-8 shadow-sm transition-all duration-300";
 
+  // Helper to parse legacy summary strings into structured data
+  const parseLegacySummary = (summary) => {
+    if (!summary || typeof summary !== 'string') return null;
+    // Pattern: "Field changed: Old Value → New Value" or "Field changed: Old Value -> New Value"
+    const match = summary.match(/(.+) changed:\s*(.*)\s*[→\->]\s*(.*)/i);
+    if (match) {
+      return {
+        field: match[1].trim(),
+        old: match[2].trim() === 'N/A' || match[2].trim() === 'undefined' ? '' : match[2].trim(),
+        new: match[3].trim() === 'N/A' || match[3].trim() === 'undefined' ? '' : match[3].trim()
+      };
+    }
+    return null;
+  };
+
   // Consolidate all case-related events for a full audit trail
   const fullHistory = useMemo(() => {
     if (!viewCase) return [];
@@ -264,7 +284,10 @@ const CaseMasterTab = () => {
               (log.eventType === 'Manual Action' || log.eventType === 'Action Logged') ? 'ACTION' : 'SYSTEM',
         action: log.eventType || 'System Update',
         details: log.summary,
-        user: log.source || 'System'
+        user: log.source || 'System',
+        fieldChanged: log.fieldChanged || parseLegacySummary(log.summary)?.field,
+        oldValue: log.oldValue !== undefined ? log.oldValue : parseLegacySummary(log.summary)?.old,
+        newValue: log.newValue !== undefined ? log.newValue : parseLegacySummary(log.summary)?.new
       })),
 
       // 2. Document Indexing (Documents are tracked in a separate collection without timeline entries)
@@ -290,9 +313,45 @@ const CaseMasterTab = () => {
     return finalEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [viewCase, timelineLogs, caseDocs]);
 
-  const fetchCases = async () => {
+  const groupedHistory = useMemo(() => {
+    const raw = fullHistory;
+    const groups = [];
+    raw.forEach(item => {
+      const prev = groups[groups.length - 1];
+      // Group items that occurred within 2 seconds of each other by the same user with the same action type
+      const isSimilar = prev &&
+        Math.abs(new Date(prev.date) - new Date(item.date)) < 2000 &&
+        prev.user === item.user &&
+        prev.action === item.action &&
+        item.fieldChanged;
+
+      if (isSimilar) {
+        if (!prev.changes) {
+          prev.changes = [{
+            field: prev.fieldChanged,
+            old: prev.oldValue,
+            new: prev.newValue,
+            details: prev.details
+          }];
+        }
+        prev.changes.push({
+          field: item.fieldChanged,
+          old: item.oldValue,
+          new: item.newValue,
+          details: item.details
+        });
+        prev.details = `${prev.changes.length} fields updated`;
+      } else {
+        groups.push({ ...item });
+      }
+    });
+    return groups;
+  }, [fullHistory]);
+
+  const fetchCases = async (hasDemand = false) => {
     try {
-      const res = await api.get('/cases');
+      const url = hasDemand ? '/cases?hasDemand=true' : '/cases';
+      const res = await api.get(url);
       setCases(res.data);
     } catch (err) {
       toast.error('Failed to fetch cases');
@@ -333,39 +392,48 @@ const CaseMasterTab = () => {
   };
 
   useEffect(() => {
-    fetchCases();
+    // Check if we have a special demand filter from dashboard
+    const hasDemandFilter = location.state?.hasDemand;
+    
+    // Initial data fetch
+    fetchCases(!!hasDemandFilter);
     fetchOpsUsers();
     fetchAvailableDates();
-    // Check for auto-filter from Dashboard
+
+    // Check for other auto-filters from Dashboard
     if (location.state?.statusFilter) {
       const sf = location.state.statusFilter;
       const statusArray = Array.isArray(sf) ? sf : [sf];
       setAppliedFilters(prev => ({ ...prev, status: statusArray }));
       setTempFilters(prev => ({ ...prev, status: statusArray }));
-      // Clear state after applying so it doesn't persist on refresh
-      window.history.replaceState({}, document.title);
     }
     if (location.state?.priorityFilter) {
       const pf = location.state.priorityFilter;
       const pfArray = Array.isArray(pf) ? pf : [pf];
       setAppliedFilters(prev => ({ ...prev, priority: pfArray }));
       setTempFilters(prev => ({ ...prev, priority: pfArray }));
-      window.history.replaceState({}, document.title);
     }
     if (location.state?.searchId) {
       setSearchTerm(location.state.searchId);
-      window.history.replaceState({}, document.title);
     }
     if (location.state?.typeFilter) {
       const tf = location.state.typeFilter;
       const tfArray = Array.isArray(tf) ? tf : [tf];
       setAppliedFilters(prev => ({ ...prev, typeOfComplaint: tfArray }));
       setTempFilters(prev => ({ ...prev, typeOfComplaint: tfArray }));
-      window.history.replaceState({}, document.title);
     }
     if (location.state?.unassignedOnly) {
       setAppliedFilters(prev => ({ ...prev, status: ['Unassigned'] }));
       setTempFilters(prev => ({ ...prev, status: ['Unassigned'] }));
+    }
+    if (location.state?.dateFilter) {
+      const df = location.state.dateFilter;
+      setAppliedFilters(prev => ({ ...prev, date: df }));
+      setTempFilters(prev => ({ ...prev, date: df }));
+    }
+
+    // Clear state after applying so it doesn't persist on refresh
+    if (location.state) {
       window.history.replaceState({}, document.title);
     }
 
@@ -374,6 +442,8 @@ const CaseMasterTab = () => {
       setSearchTerm(searchParams.get('search'));
     }
   }, [location.state, location.search]);
+
+
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -546,107 +616,118 @@ const CaseMasterTab = () => {
 
 
   const handleViewCase = async (c) => {
-    setViewCase(c);
-    setActiveDetailTab('Case Study');
-    setTimelineLogs([]);
-    setCaseComms([]);
-    setCaseDocs([]);
-
-    // Initialize editable form data
-    setFormData({
-      companyName: c.companyName || '',
-      caseTitle: c.caseTitle || '',
-      priority: c.priority || 'Medium',
-      sourceOfComplaint: c.sourceOfComplaint || '',
-      typeOfComplaint: c.typeOfComplaint || '',
-      brandName: c.brandName || '',
-      clientName: c.clientName || '',
-      clientMobile: c.clientMobile || '',
-      clientEmail: c.clientEmail || '',
-      state: c.state || '',
-      engagementNote: c.engagementNote || '',
-      caseSummary: c.caseSummary || c.summary || '',
-      clientAllegation: c.clientAllegation || c.allegation || '',
-      totalAmtPaid: c.totalAmtPaid || c.amountPaid || '',
-      totalMouValue: c.totalMouValue || c.mouValue || '',
-      amtInDispute: c.amtInDispute || c.disputeAmount || '',
-      initiatedBy: c.initiatedBy || c.initiator || '',
-      accountable: c.accountable || '',
-      legalOfficer: c.legalOfficer || '',
-      accounts: c.accounts || '',
-      assignedTo: c.assignedTo || c.owner || '',
-      firNumber: c.firNumber || '',
-      firFileLink: c.firFileLink || '',
-      grievanceNumber: c.grievanceNumber || '',
-      proofCallRec: c.proofCallRec || 'No',
-      proofWaChat: c.proofWaChat || 'No',
-      proofVideoCall: c.proofVideoCall || 'No',
-      proofFundingEmail: c.proofFundingEmail || 'No',
-      mouSigned: c.mouSigned || 'No',
-      smRisk: c.smRisk || 'None',
-      consumerComplaintFiled: c.consumerComplaintFiled || 'No',
-      policeThreat: c.policeThreat || 'None',
-      lienMarkedOn: c.lienMarkedOn || '',
-      lienBank: c.lienBank || '',
-      refundStatus: c.refundStatus || '',
-      acc1No: c.bankAccountDetails?.acc1No || '',
-      acc1Ifsc: c.bankAccountDetails?.acc1Ifsc || '',
-      acc2No: c.bankAccountDetails?.acc2No || '',
-      acc2Ifsc: c.bankAccountDetails?.acc2Ifsc || '',
-      importDocumentLink: c.importDocumentLink || '',
-      keyPendingIssue: c.keyPendingIssue || '',
-      recommendedNextSteps: c.recommendedNextSteps || ''
-    });
-
-    const isAssigned = (c.assignedTo && c.assignedTo.trim() !== '') || (c.initiatedBy && c.initiatedBy.toLowerCase() !== 'system' && c.initiatedBy.trim() !== '');
-    const initialStageFallback = (c.currentStatus === 'Case Logged' || !c.currentStatus) && isAssigned ? 'Assigned' : (c.currentStatus || 'Case Logged');
-    const initialPctFallback = initialStageFallback === 'Assigned' ? 40 : (c.progressPercentage || 0);
-
-    setProgressFormData({
-      stage: initialStageFallback,
-      percentage: initialPctFallback,
-      summary: '',
-      nextAction: '',
-      blockers: '',
-      followUpDate: '',
-      escalateTo: ''
-    });
-
-    setCommFormData(prev => ({
-      ...prev,
-      fromTo: c.clientName || ''
-    }));
-
-    setServiceMode(c.serviceMode || 'Single Service');
-    if (c.servicesSold && Array.isArray(c.servicesSold) && c.servicesSold.length > 0) {
-      setServices(c.servicesSold);
-    } else {
-      setServices([{ ...initialService }]);
-    }
-
-    if (c.cyberAckNumbers) {
-      setCyberAcks(c.cyberAckNumbers.split(',').filter(Boolean));
-    } else {
-      setCyberAcks(['']);
-    }
-
-    setIsEditing(false);
-
-    // Auto-fill signatory name with client name
-    setMouFormData(prev => ({
-      ...prev,
-      signatoryName: c.clientName || ''
-    }));
-
     try {
-      const res = await api.get(`/timeline?caseId=${c.caseId}`);
-      setTimelineLogs(res.data);
-      fetchCaseComms(c.caseId);
-      fetchCaseDocs(c.caseId);
-      fetchProgressData(c.caseId);
-      fetchActionLogs(c.caseId);
+      // Fetch fresh case data from backend to ensure we have latest status/assignment
+      const freshRes = await api.get('/cases');
+      const freshCase = freshRes.data.find(fc => fc.caseId === c.caseId);
+      const caseToUse = freshCase || c;
+
+      setViewCase(caseToUse);
+      setActiveDetailTab('Case Study');
+      setTimelineLogs([]);
+      setCaseComms([]);
+      setCaseDocs([]);
+
+      // Initialize editable form data with fresh data
+      setFormData({
+        companyName: caseToUse.companyName || '',
+        caseTitle: caseToUse.caseTitle || '',
+        priority: caseToUse.priority || 'Medium',
+        sourceOfComplaint: caseToUse.sourceOfComplaint || '',
+        typeOfComplaint: caseToUse.typeOfComplaint || '',
+        brandName: caseToUse.brandName || '',
+        clientName: caseToUse.clientName || '',
+        clientMobile: caseToUse.clientMobile || '',
+        clientEmail: caseToUse.clientEmail || '',
+        state: caseToUse.state || '',
+        engagementNote: caseToUse.engagementNote || '',
+        caseSummary: caseToUse.caseSummary || caseToUse.summary || '',
+        clientAllegation: caseToUse.clientAllegation || caseToUse.allegation || '',
+        totalAmtPaid: caseToUse.totalAmtPaid || caseToUse.amountPaid || '',
+        totalMouValue: caseToUse.totalMouValue || caseToUse.mouValue || '',
+        amtInDispute: caseToUse.amtInDispute || caseToUse.disputeAmount || '',
+        initiatedBy: caseToUse.initiatedBy || caseToUse.initiator || '',
+        accountable: caseToUse.accountable || '',
+        legalOfficer: caseToUse.legalOfficer || '',
+        accounts: caseToUse.accounts || '',
+        assignedTo: caseToUse.assignedTo || caseToUse.owner || '',
+        firNumber: caseToUse.firNumber || '',
+        firFileLink: caseToUse.firFileLink || '',
+        grievanceNumber: caseToUse.grievanceNumber || '',
+        proofCallRec: caseToUse.proofCallRec || 'No',
+        proofWaChat: caseToUse.proofWaChat || 'No',
+        proofVideoCall: caseToUse.proofVideoCall || 'No',
+        proofFundingEmail: caseToUse.proofFundingEmail || 'No',
+        mouSigned: caseToUse.mouSigned || 'No',
+        smRisk: caseToUse.smRisk || 'None',
+        consumerComplaintFiled: caseToUse.consumerComplaintFiled || 'No',
+        policeThreat: caseToUse.policeThreat || 'None',
+        lienMarkedOn: caseToUse.lienMarkedOn || '',
+        lienBank: caseToUse.lienBank || '',
+        refundStatus: caseToUse.refundStatus || '',
+        acc1No: caseToUse.bankAccountDetails?.acc1No || '',
+        acc1Ifsc: caseToUse.bankAccountDetails?.acc1Ifsc || '',
+        acc2No: caseToUse.bankAccountDetails?.acc2No || '',
+        acc2Ifsc: caseToUse.bankAccountDetails?.acc2Ifsc || '',
+        importDocumentLink: caseToUse.importDocumentLink || '',
+        keyPendingIssue: caseToUse.keyPendingIssue || '',
+        recommendedNextSteps: caseToUse.recommendedNextSteps || ''
+      });
+
+      const isAssigned = (caseToUse.assignedTo && caseToUse.assignedTo.trim() !== '') || (caseToUse.initiatedBy && caseToUse.initiatedBy.toLowerCase() !== 'system' && caseToUse.initiatedBy.trim() !== '');
+      const initialStageFallback = (caseToUse.currentStatus === 'Case Logged' || !caseToUse.currentStatus) && isAssigned ? 'Assigned' : (caseToUse.currentStatus || 'Case Logged');
+      const initialPctFallback = initialStageFallback === 'Assigned' ? 40 : (caseToUse.progressPercentage || 0);
+
+      setProgressFormData({
+        stage: initialStageFallback,
+        percentage: initialPctFallback,
+        summary: '',
+        nextAction: '',
+        blockers: '',
+        followUpDate: '',
+        escalateTo: ''
+      });
+
+      setCommFormData(prev => ({
+        ...prev,
+        fromTo: caseToUse.clientName || ''
+      }));
+
+      setServiceMode(caseToUse.serviceMode || 'Single Service');
+      if (caseToUse.servicesSold && Array.isArray(caseToUse.servicesSold) && caseToUse.servicesSold.length > 0) {
+        setServices(caseToUse.servicesSold);
+      } else {
+        setServices([{ ...initialService }]);
+      }
+
+      if (caseToUse.cyberAckNumbers) {
+        setCyberAcks(caseToUse.cyberAckNumbers.split(',').filter(Boolean));
+      } else {
+        setCyberAcks(['']);
+      }
+
+      setIsEditing(false);
+
+      // Auto-fill signatory name with client name
+      setMouFormData(prev => ({
+        ...prev,
+        signatoryName: caseToUse.clientName || ''
+      }));
+
+      try {
+        const res = await api.get(`/timeline?caseId=${caseToUse.caseId}`);
+        setTimelineLogs(res.data);
+        fetchCaseComms(caseToUse.caseId);
+        fetchCaseDocs(caseToUse.caseId);
+        fetchProgressData(caseToUse.caseId);
+        fetchActionLogs(caseToUse.caseId);
+      } catch (err) {
+        console.error('Failed to fetch timeline for case', err);
+      }
     } catch (err) {
-      console.error('Failed to fetch timeline for case', err);
+      console.error('Failed to fetch fresh case data:', err);
+      // Fallback to using the passed case object
+      setViewCase(c);
     }
   };
 
@@ -2871,14 +2952,14 @@ const CaseMasterTab = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {fullHistory.length === 0 ? (
+                      {groupedHistory.length === 0 ? (
                         <tr>
                           <td colSpan="5" className="px-6 py-20 text-center text-text-muted text-[10px] font-black uppercase tracking-widest">
                             No history records found
                           </td>
                         </tr>
                       ) : (
-                        fullHistory.map((log) => {
+                        groupedHistory.map((log) => {
                           let typeColor = 'border-green text-green bg-green-soft/20';
 
                           switch (log.type) {
@@ -2917,7 +2998,42 @@ const CaseMasterTab = () => {
                                 {log.action}
                               </td>
                               <td className="px-6 py-4 text-[10px] text-text-secondary leading-relaxed max-w-md">
-                                {log.details}
+                                {log.changes ? (
+                                  <div className="space-y-2">
+                                    <div
+                                      className="flex items-center gap-2 cursor-pointer hover:text-accent transition-all font-black text-[11px] uppercase tracking-widest group/expand"
+                                      onClick={(e) => { e.stopPropagation(); toggleRow(log.id); }}
+                                    >
+                                      <span className="border-b border-dotted border-text-muted group-hover/expand:border-accent">{log.details}</span>
+                                      {expandedRows[log.id] ? <ChevronDown size={14} className="text-accent" /> : <ChevronRight size={14} />}
+                                    </div>
+                                    {expandedRows[log.id] && (
+                                      <div className="mt-3 space-y-4 border-l-2 border-accent/20 pl-4 py-2 bg-bg-secondary/30 rounded-r-xl animate-in slide-in-from-top-2 duration-300">
+                                        {log.changes.map((change, i) => (
+                                          <div key={i} className="space-y-1.5">
+                                            <div className="text-[10px] font-black text-accent uppercase tracking-widest">{change.field}</div>
+                                            <div className="flex items-center gap-2 text-[10px] font-semibold text-text-primary">
+                                              <span className="px-2 py-0.5 bg-red-soft/20 text-red rounded-md border border-red/10 truncate max-w-[150px]">{change.old || 'Empty'}</span>
+                                              <span className="text-text-muted opacity-50">→</span>
+                                              <span className="px-2 py-0.5 bg-green-soft/20 text-green rounded-md border border-green/10 truncate max-w-[150px]">{change.new || 'Empty'}</span>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : log.fieldChanged ? (
+                                  <div className="space-y-1.5">
+                                    <div className="text-[11px] font-black text-accent uppercase tracking-widest">{log.fieldChanged}</div>
+                                    <div className="flex items-center gap-2 text-[10px] font-semibold text-text-primary">
+                                      <span className="px-2 py-0.5 bg-red-soft/20 text-red rounded-md border border-red/10 truncate max-w-[150px]">{log.oldValue || 'Empty'}</span>
+                                      <span className="text-text-muted opacity-50">→</span>
+                                      <span className="px-2 py-0.5 bg-green-soft/20 text-green rounded-md border border-green/10 truncate max-w-[150px]">{log.newValue || 'Empty'}</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  log.details
+                                )}
                               </td>
                               <td className="px-6 py-4 text-[10px] font-bold text-text-primary">
                                 {log.user?.split('@')[0] || 'System'}

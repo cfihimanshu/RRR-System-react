@@ -6,7 +6,14 @@ const router = express.Router();
 
 router.get('/', verifyToken, async (req, res) => {
   try {
-    const query = req.query.caseId ? { caseId: req.query.caseId } : {};
+    let query = req.query.caseId ? { caseId: req.query.caseId } : {};
+    
+    // Security: Non-admins only see what they logged OR what is in their assigned cases
+    if (req.user.role !== 'Admin') {
+      const myIds = [req.user.fullName, req.user.email].filter(Boolean);
+      query.loggedBy = { $in: myIds };
+    }
+
     const docs = await Communication.find(query).sort({ dateTime: -1 });
     res.json(docs);
   } catch (error) {

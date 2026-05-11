@@ -1,25 +1,48 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { useLocation } from 'react-router-dom';
 import api from '../../api/axios';
 import SearchableCaseSelect from '../shared/SearchableCaseSelect';
-import { Loader2, Clock, Filter, History, Inbox, CircleDot } from 'lucide-react';
+import SearchableSelect from '../shared/SearchableSelect';
+import { AuthContext } from '../../context/AuthContext';
+import { Loader2, Clock, Filter, History, Inbox, CircleDot, User as UserIcon } from 'lucide-react';
 
 const TimelineTab = () => {
+  const { user } = useContext(AuthContext);
   const [cases, setCases] = useState([]);
+  const [users, setUsers] = useState([]);
   const [timeline, setTimeline] = useState([]);
+  const location = useLocation();
   const [selectedCase, setSelectedCase] = useState('');
+  const [selectedUser, setSelectedUser] = useState('');
   const [loading, setLoading] = useState(true);
   const [fetchingCases, setFetchingCases] = useState(true);
+  const [dateFilter, setDateFilter] = useState(location.state?.dateFilter || '');
+  const [typeFilter, setTypeFilter] = useState(location.state?.typeFilter || '');
 
   useEffect(() => {
     setFetchingCases(true);
     api.get('/cases').then(res => setCases(res.data)).catch(console.error).finally(() => setFetchingCases(false));
-  }, []);
+    
+    if (user?.role === 'Admin') {
+      api.get('/auth/users').then(res => setUsers(res.data)).catch(console.error);
+    }
+  }, [user]);
 
   useEffect(() => {
     setLoading(true);
-    const url = selectedCase ? `/timeline?caseId=${selectedCase}` : '/timeline';
+    let url = '/timeline';
+    const params = new URLSearchParams();
+    
+    if (selectedCase) params.append('caseId', selectedCase);
+    if (selectedUser) params.append('sourceFilter', selectedUser);
+    if (dateFilter) params.append('date', dateFilter);
+    if (typeFilter) params.append('type', typeFilter);
+
+    const queryString = params.toString();
+    if (queryString) url += `?${queryString}`;
+
     api.get(url).then(res => setTimeline(res.data)).catch(console.error).finally(() => setLoading(false));
-  }, [selectedCase]);
+  }, [selectedCase, selectedUser, dateFilter, typeFilter]);
 
   return (
     <div className="min-h-full bg-bg-primary p-4 md:p-8 w-full flex justify-center pb-32">
@@ -27,19 +50,34 @@ const TimelineTab = () => {
         
         {/* Header section */}
         <div className="mb-10 pt-4">
-          <h1 className="text-2xl font-black text-text-primary tracking-tight uppercase">Event Chronology</h1>
-          <p className="text-xs text-text-muted mt-1 font-medium tracking-wide">Real-time audited transmission and state change ledger</p>
+          <h1 className="text-2xl font-black text-text-primary tracking-tight uppercase">Activity Timeline</h1>
+          <p className="text-xs text-text-muted mt-1 font-medium tracking-wide">Track all updates and actions across cases</p>
         </div>
 
         {/* Filter Section */}
-        <div className="mb-12 bg-bg-secondary p-8 rounded-[2.5rem] border-2 border-border inline-block w-full max-w-md shadow-sm">
-          <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 ml-1 text-center">Case Identifier Filter</label>
-          <SearchableCaseSelect 
-            cases={cases} 
-            value={selectedCase} 
-            onChange={setSelectedCase} 
-            placeholder="-- Audit All Transmissions --"
-          />
+        <div className="mb-12 flex flex-col md:flex-row gap-6">
+          <div className="flex-1 bg-bg-secondary p-6 rounded-[2.5rem] border-2 border-border shadow-sm">
+            <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 ml-1">Filter by Case</label>
+            <SearchableCaseSelect 
+              cases={cases} 
+              value={selectedCase} 
+              onChange={setSelectedCase} 
+              placeholder="-- All Cases --"
+            />
+          </div>
+
+          {user?.role === 'Admin' && (
+            <div className="flex-1 bg-bg-secondary p-6 rounded-[2.5rem] border-2 border-border shadow-sm">
+              <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 ml-1 text-center">Filter by User</label>
+              <SearchableSelect
+                options={users.map(u => u.fullName).filter(Boolean)}
+                value={selectedUser}
+                onChange={(e) => setSelectedUser(e.target.value)}
+                placeholder="-- All Users --"
+                icon={<UserIcon size={14} className="text-accent" />}
+              />
+            </div>
+          )}
         </div>
 
         {/* Timeline List */}

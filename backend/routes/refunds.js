@@ -122,7 +122,7 @@ router.put('/:id', verifyToken, async (req, res) => {
       ...req.body,
       status: newStatus,
       lastStatusAtMs: Date.now()
-    }, { new: true });
+    }, { returnDocument: 'after' });
 
     // Workflow Notifications
     try {

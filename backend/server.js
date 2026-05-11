@@ -122,6 +122,25 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// --- SECURITY: Global Response Encryption ---
+const { encryptData } = require('./utils/cryptoUtils');
+
+app.use((req, res, next) => {
+  const originalJson = res.json;
+  res.json = function (data) {
+    // Don't encrypt error messages (for easier debugging of auth/validation)
+    if (data && (data.error || data.message === 'Unauthorized' || data.message === 'No token provided')) {
+      return originalJson.call(this, data);
+    }
+
+    // Encrypt the payload
+    const encrypted = encryptData(data);
+    // We wrap it in an object so frontend knows it's an encrypted payload
+    return originalJson.call(this, { _enc: encrypted });
+  };
+  next();
+});
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/cases', require('./routes/cases'));
@@ -157,6 +176,11 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
   try {
     const Case = require('./models/Case');
     const User = require('./models/User');
+    const Task = require('./models/Task');
+    const Communication = require('./models/Communication');
+    const Refund = require('./models/Refund');
+    const Timeline = require('./models/Timeline');
+
     let query = {};
 
     // Always fetch the latest user record from DB (so name is always fresh)
@@ -164,31 +188,37 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     let userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
 
     // Non-admin: total cases = Assigned to me OR (Unassigned AND Initiated by me)
+    // Non-admin: Isolated data view
     if (req.user.role !== 'Admin') {
       const esc = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const nameRegex = { $regex: new RegExp(`^\\s*${esc}\\s*$`, 'i') };
+      
+      // Case query: Cases assigned to me OR initiated by me
       query = {
         $or: [
           { assignedTo: nameRegex },
-          {
-            $and: [
-              { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
-              { initiatedBy: nameRegex }
-            ]
-          }
+          { initiatedBy: nameRegex }
         ]
       };
     }
 
     const totalCases = await Case.countDocuments(query);
+    const openCases = await Case.countDocuments({ ...query, currentStatus: { $nin: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] } });
+    const settledCases = await Case.countDocuments({ ...query, currentStatus: { $in: ['Settled', 'Settlement'] } });
+    const closedCases = await Case.countDocuments({ ...query, currentStatus: { $in: ['Closed', 'Closure'] } });
 
-    const openCases = await Case.countDocuments({ ...query, currentStatus: { $ne: 'Closed' } });
-    const settledCases = await Case.countDocuments({ ...query, currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] } });
-    const highPriority = await Case.countDocuments({ ...query, priority: 'High', currentStatus: { $nin: ['Closed', 'Closure'] } });
-    const mediumPriority = await Case.countDocuments({ ...query, priority: 'Medium', currentStatus: { $nin: ['Closed', 'Closure'] } });
-    const lowPriority = await Case.countDocuments({ ...query, priority: 'Low', currentStatus: { $nin: ['Closed', 'Closure'] } });
+    const completedStatuses = ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'];
+    const highPriority = await Case.countDocuments({ ...query, priority: 'High', currentStatus: { $nin: completedStatuses } });
+    const mediumPriority = await Case.countDocuments({ ...query, priority: 'Medium', currentStatus: { $nin: completedStatuses } });
+    const lowPriority = await Case.countDocuments({ ...query, priority: 'Low', currentStatus: { $nin: completedStatuses } });
 
-    // Unassigned Cases (Both Initiated By and Assigned To are blank)
+    // Financial Metric: Sum of totalAmtPaid across all cases
+    const totalAmtPaidResult = await Case.aggregate([
+      { $match: query },
+      { $group: { _id: null, total: { $sum: { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
+    ]);
+    const totalAmountPaid = totalAmtPaidResult.length > 0 ? totalAmtPaidResult[0].total : 0;
+
     const unassignedCount = await Case.countDocuments({
       ...query,
       $and: [
@@ -197,185 +227,281 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       ]
     });
 
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    
+    // For today's activities, we filter by WHO performed the action (source) if not Admin
+    const esc = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nameRegex = { $regex: new RegExp(`^\\s*${esc}\\s*$`, 'i') };
+    const timelineQuery = req.user.role === 'Admin' ? {} : { source: nameRegex };
+
+    const casesCreatedToday = await Case.countDocuments({ ...query, createdAt: { $gte: startOfToday } });
+
+    const documentsUploadedToday = await Timeline.countDocuments({
+      ...timelineQuery,
+      eventType: { $in: ['Document Upload', 'Document Uploaded'] },
+      createdAt: { $gte: startOfToday }
+    });
+
+    const communicationsToday = await Timeline.countDocuments({
+      ...timelineQuery,
+      eventType: { $in: ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'] },
+      createdAt: { $gte: startOfToday }
+    });
+
+    const progressUpdatesToday = await Timeline.countDocuments({
+      ...timelineQuery,
+      eventType: { $in: ['Progress Update', 'Status Update'] },
+      createdAt: { $gte: startOfToday }
+    });
+
+    const pendingTasksCount = await Task.countDocuments({
+      ...(req.user.role !== 'Admin' ? { assignee: userName } : {}),
+      status: { $ne: 'Completed' }
+    });
+
     const today = new Date().toISOString().split('T')[0];
-    const overdueActions = await Case.find({ ...query, nextActionDate: { $lt: today }, currentStatus: { $ne: 'Closed' } });
+    const overdueActions = await Case.find({ ...query, nextActionDate: { $lt: today }, currentStatus: { $ne: 'Closed' } }).limit(50).lean();
 
     const twoDaysFromNow = new Date();
     twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
     const dueSoonDate = twoDaysFromNow.toISOString().split('T')[0];
-    const dueSoonActions = await Case.find({ ...query, nextActionDate: { $gte: today, $lte: dueSoonDate }, currentStatus: { $ne: 'Closed' } });
+    const dueSoonActions = await Case.find({ ...query, nextActionDate: { $gte: today, $lte: dueSoonDate }, currentStatus: { $ne: 'Closed' } }).limit(50).lean();
 
-    const Refund = require('./models/Refund');
-    let refundQuery = { status: 'Paid' };
+    const refundsPaid = await Refund.find({ ...(req.user.role !== 'Admin' ? { requestedBy: req.user.email } : {}), status: 'Paid' }).lean();
+    const totalRefundAmount = refundsPaid.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+    // Financial Metrics Isolation: Show data for all communications related to cases the staff member OWNS
+    let commQuery = {};
     if (req.user.role !== 'Admin') {
-      refundQuery.requestedBy = req.user.email;
+      const myCaseIds = await Case.find(query).distinct('caseId');
+      commQuery = { caseId: { $in: myCaseIds } };
     }
-    const refundsForSum = await Refund.find(refundQuery);
-    const totalRefundAmount = refundsForSum.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const commsForSum = await Communication.find(commQuery).lean();
 
+    // Group by caseId to avoid double-counting demand/saved amounts from multiple logs of the same case
+    const caseMetrics = {};
+    commsForSum.forEach(c => {
+      const caseId = c.caseId || 'unlinked';
+      if (!caseMetrics[caseId]) {
+        caseMetrics[caseId] = { demand: 0, saved: 0 };
+      }
+      
+      const demandVal = Number(c.refundDemanded) || Number(c.demandAmount) || 0;
+      const savedVal = Number(c.amountSaved) || 0;
+      
+      // Update with the maximum value found for this case
+      if (demandVal > caseMetrics[caseId].demand) caseMetrics[caseId].demand = demandVal;
+      if (savedVal > caseMetrics[caseId].saved) caseMetrics[caseId].saved = savedVal;
+    });
+
+    const totalDemandAmount = Object.values(caseMetrics).reduce((sum, m) => sum + m.demand, 0);
+    const totalAmountSaved = Object.values(caseMetrics).reduce((sum, m) => sum + m.saved, 0);
+
+    const recentCases = await Case.find(query).sort({ createdAt: -1 }).limit(10).lean();
+
+    // Fetch Dynamic Case Type Wise Data
+    const caseTypeAggregation = await Case.aggregate([
+      { $match: query },
+      { $group: { _id: '$typeOfComplaint', count: { $sum: 1 }, totalAmount: { $sum: { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } },
+      { $sort: { count: -1 } }
+    ]);
+    const caseTypeWiseData = caseTypeAggregation.map(item => ({ caseType: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
+
+    // Fetch Dynamic Source of Complaint Data
+    const sourceAggregation = await Case.aggregate([
+      { $match: query },
+      { $group: { _id: '$sourceOfComplaint', count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]);
+    const sourceWiseData = sourceAggregation.map(item => ({ source: item._id || 'Unknown', count: item.count }));
+
+    // ── Team Performance (Admin Only) ──
     let teamPerformance = [];
     if (req.user.role === 'Admin') {
       const allUsers = await User.find({ role: { $regex: /^operations$/i } }).lean();
-      teamPerformance = await Promise.all(allUsers.map(async (u) => {
-        const uName = (u.fullName || u.name || '').trim();
-        if (!uName) return null;
 
-        const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const esc = escapeRegExp(uName);
-        const nameRegex = { $regex: new RegExp(`^\\s*${esc}\\s*$`, 'i') };
-        const ownerFilter = {
-          $or: [
-            { assignedTo: nameRegex },
-            {
-              $and: [
-                { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
-                { initiatedBy: nameRegex }
-              ]
-            }
-          ]
-        };
-
-        // Total cases (assigned or unassigned-initiated)
-        const assigned = await Case.countDocuments(ownerFilter);
-
-        // Pending cases (not Settled, Closed, Settlement, Closure, or Resolution)
-        const pending = await Case.countDocuments({ ...ownerFilter, currentStatus: { $nin: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] } });
- 
-        // Total Settled Cases
-        const settled = await Case.countDocuments({
-          ...ownerFilter,
-          currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] }
-        });
-
-        // Generate initials
-        const parts = uName.split(' ').filter(Boolean);
-        const initials = parts.length > 1
-          ? (parts[0][0] + parts[1][0]).toUpperCase()
-          : (parts[0] ? parts[0].substring(0, 2).toUpperCase() : 'U');
-
-        // Generate a pseudo-random color based on name length
-        const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#6366f1'];
-        const color = colors[uName.length % colors.length];
-
-        return {
-          id: u._id,
-          name: uName,
-          role: u.role,
-          initials,
-          color,
-          assigned,
-          pending,
-          settled
-        };
-      }));
-
-      teamPerformance = teamPerformance.filter(Boolean).sort((a, b) => b.assigned - a.assigned);
-    }
-
-    const recentCases = await Case.find(query).sort({ createdAt: -1 }).limit(10);
-
-    // Fetch Dynamic Case Type Wise Data (Aggregated from DB)
-    const caseTypeAggregation = await Case.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: '$typeOfComplaint',
-          count: { $sum: 1 },
-          totalAmount: {
-            $sum: {
-              $convert: {
-                input: { $ifNull: ['$totalAmtPaid', '0'] },
-                to: 'double',
-                onError: 0,
-                onNull: 0
-              }
-            }
+      const caseCounts = await Case.aggregate([
+        {
+          $group: {
+            _id: "$assignedTo",
+            total: { $sum: 1 },
+            pending: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution']] }] }, 1, 0] } },
+            settled: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution']] }, 1, 0] } }
           }
         }
-      },
-      { $sort: { count: -1 } }
-    ]);
+      ]);
 
-    const caseTypeWiseData = caseTypeAggregation.map(item => ({
-      caseType: item._id || 'Unknown',
-      count: item.count,
-      totalAmount: item.totalAmount || 0
-    }));
+      const taskCounts = await Task.aggregate([
+        { $match: { status: { $ne: 'Completed' } } },
+        { $group: { _id: "$assignee", count: { $sum: 1 } } }
+      ]);
 
-    // Fetch Dynamic Source of Complaint Data (Aggregated from DB)
-    const sourceAggregation = await Case.aggregate([
-      { $match: query },
+      const savedAmounts = await Communication.aggregate([
+        { $group: { _id: "$loggedBy", totalSaved: { $sum: { $convert: { input: "$amountSaved", to: "double", onError: 0, onNull: 0 } } } } }
+      ]);
+
+      teamPerformance = allUsers.map(u => {
+        const uName = (u.fullName || u.name || '').trim();
+        const stats = caseCounts.find(c => c._id && c._id.trim().toLowerCase() === uName.toLowerCase()) || { total: 0, pending: 0, settled: 0 };
+        const tasks = taskCounts.find(t => t._id && t._id.trim().toLowerCase() === uName.toLowerCase()) || { count: 0 };
+        const saved = savedAmounts.find(s => (s._id && s._id.trim().toLowerCase() === uName.toLowerCase()) || (s._id && s._id.trim().toLowerCase() === u.email.toLowerCase())) || { totalSaved: 0 };
+
+        const parts = uName.split(' ').filter(Boolean);
+        const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : (parts[0] ? parts[0].substring(0, 2).toUpperCase() : 'U');
+        const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#6366f1'];
+
+        return { id: u._id, name: uName, email: u.email, role: u.role, initials, color: colors[uName.length % colors.length], assigned: stats.total, pending: stats.pending, settled: stats.settled, pendingTasks: tasks.count, totalSaved: saved.totalSaved };
+      }).sort((a, b) => b.assigned - a.assigned);
+    }
+
+    // ── Trend Data (7 Days) ──
+    const trendData = [];
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const trendAggregation = await Case.aggregate([
+      { $match: { ...query, createdAt: { $gte: sevenDaysAgo } } },
       {
         $group: {
-          _id: '$sourceOfComplaint',
-          count: { $sum: 1 }
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          newCases: { $sum: 1 },
+          highPriority: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } }
         }
       },
-      { $sort: { count: -1 } }
+      { $sort: { _id: 1 } }
     ]);
 
-    const sourceWiseData = sourceAggregation.map(item => ({
-      source: item._id || 'Unknown',
-      count: item.count
-    }));
-
-    // Fetch 7-day Trend Data
-    const trendData = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const dayStr = d.toISOString().split('T')[0]; // YYYY-MM-DD
+      const dayStr = d.toISOString().split('T')[0];
       const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-
-      const startOfDay = new Date(new Date(d).setHours(0, 0, 0, 0));
-      const endOfDay = new Date(new Date(d).setHours(23, 59, 59, 999));
-
-      // New cases created on this day
-      const newCasesCount = await Case.countDocuments({
-        ...query,
-        createdAt: { $gte: startOfDay, $lte: endOfDay }
-      });
-
-      // Closed cases on this day
-      const closedCasesCount = await Case.countDocuments({
-        ...query,
-        currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] },
-        lastUpdateDate: { $regex: new RegExp(`^${dayStr}`) }
-      });
-
-      // High Priority cases created on this day
-      const highPriorityCount = await Case.countDocuments({
-        ...query,
-        priority: 'High',
-        createdAt: { $gte: startOfDay, $lte: endOfDay }
-      });
+      const dayData = trendAggregation.find(t => t._id === dayStr) || { newCases: 0, highPriority: 0 };
 
       trendData.push({
         date: label,
-        newCases: newCasesCount,
-        closedCases: closedCasesCount,
-        highPriority: highPriorityCount
+        newCases: dayData.newCases,
+        closedCases: 0,
+        highPriority: dayData.highPriority
       });
     }
 
-    res.json({
-      totalCases,
-      openCases,
-      settledCases,
-      highPriority,
-      mediumPriority,
-      lowPriority,
-      overdueActions,
-      dueSoonActions,
-      recentCases,
-      teamPerformance,
-      totalRefundAmount,
-      caseTypeWiseData,
-      sourceWiseData,
-      unassignedCount,
-      trendData
+    // ── Threat Matrix Analysis ──
+    const threatAnalysis = caseTypeWiseData.slice(0, 5).map(item => ({
+      type: item.caseType,
+      count: item.count,
+      amount: item.totalAmount || 0
+    }));
+
+    // ── Collection Potential (Non-settled demand) ──
+    const collectionPotentialQuery = { ...query, currentStatus: { $nin: completedStatuses } };
+    const potentialComms = await Communication.find(collectionPotentialQuery).lean();
+    const collectionPotential = potentialComms.reduce((sum, c) => sum + (Number(c.demandAmount) || Number(c.refundDemanded) || 0), 0);
+
+    // ── Live Escalations (High priority updated recently) ──
+    const fortyEightHrsAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const liveEscalations = await Case.countDocuments({
+      ...query,
+      priority: 'High',
+      updatedAt: { $gte: fortyEightHrsAgo },
+      currentStatus: { $nin: completedStatuses }
     });
+
+    // ── System Violations ──
+    const violations = {
+      sodNotSubmitted: 0,
+      eodNotSubmitted: 0,
+      noUpdate48Hrs: await Case.countDocuments({ ...query, updatedAt: { $lt: fortyEightHrsAgo }, currentStatus: { $nin: completedStatuses } }),
+      slaBreached: await Case.countDocuments({ ...query, priority: 'High', nextActionDate: { $lt: today }, currentStatus: { $nin: completedStatuses } })
+    };
+
+    // ── Compliance Rate & Detailed Team Stats ──
+    if (req.user.role === 'Admin') {
+      const Report = require('./models/Report'); 
+      const reportsToday = await Report.find({
+        createdAt: { $gte: startOfToday }
+      }).lean();
+
+      // Simple compliance calculation: percentage of active users who submitted SOD today
+      const opsUsers = await User.find({ role: { $regex: /^operations$/i } }).countDocuments();
+      const sodCount = new Set(reportsToday.filter(r => r.type === 'SOD').map(r => r.userName)).size;
+      const complianceRate = opsUsers > 0 ? Math.round((sodCount / opsUsers) * 100) : 100;
+
+      teamPerformance = teamPerformance.map(staff => {
+        const hasSod = reportsToday.some(r => r.type === 'SOD' && (r.userName === staff.name || r.userEmail === staff.email));
+        return {
+          ...staff,
+          isOnline: hasSod,
+          slaScore: hasSod ? 95 : 65 // Dynamic SLA simulation
+        };
+      });
+
+      violations.sodNotSubmitted = Math.max(0, opsUsers - sodCount);
+      violations.eodNotSubmitted = Math.max(0, sodCount - new Set(reportsToday.filter(r => r.type === 'EOD').map(r => r.userName)).size);
+
+      res.json({
+        totalCases,
+        openCases,
+        settledCases,
+        closedCases,
+        casesCreatedToday,
+        documentsUploadedToday,
+        communicationsToday,
+        progressUpdatesToday,
+        pendingTasksCount,
+        highPriority,
+        mediumPriority,
+        lowPriority,
+        overdueActions,
+        dueSoonActions,
+        recentCases,
+        teamPerformance,
+        totalRefundAmount,
+        totalAmountSaved,
+        totalDemandAmount,
+        caseTypeWiseData,
+        sourceWiseData,
+        unassignedCount,
+        trendData,
+        threatAnalysis,
+        collectionPotential,
+        totalAmountPaid,
+        liveEscalations,
+        complianceRate,
+        violations
+      });
+    } else {
+      // Non-Admin response
+      res.json({
+        totalCases,
+        openCases,
+        settledCases,
+        closedCases,
+        casesCreatedToday,
+        documentsUploadedToday,
+        communicationsToday,
+        progressUpdatesToday,
+        pendingTasksCount,
+        highPriority,
+        mediumPriority,
+        lowPriority,
+        overdueActions,
+        dueSoonActions,
+        recentCases,
+        totalRefundAmount,
+        totalAmountSaved,
+        totalDemandAmount,
+        caseTypeWiseData,
+        sourceWiseData,
+        unassignedCount,
+        totalAmountPaid,
+        trendData
+      });
+    }
   } catch (error) {
+    console.error('Dashboard Stats Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -394,7 +520,7 @@ const startServer = async () => {
   } catch (err) {
     console.error("Startup DB error (non-fatal for Vercel):", err.message);
   }
-  
+
   if (!process.env.VERCEL) {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

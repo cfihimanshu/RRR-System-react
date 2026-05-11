@@ -10,6 +10,11 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 router.get('/', verifyToken, async (req, res) => {
   try {
+    // Only Admin or users with explicit access can see these records
+    if (req.user.role !== 'Admin' && !req.user.canAccessRecords) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to view these records.' });
+    }
+
     const { search } = req.query;
     let query = {};
     if (search) {
@@ -33,8 +38,9 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 const xlsx = require('xlsx');
+const { roleGuard } = require('../middleware/roleGuard');
 
-router.post('/import', verifyToken, upload.single('file'), async (req, res) => {
+router.post('/import', verifyToken, roleGuard(['Admin']), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No Excel file provided' });

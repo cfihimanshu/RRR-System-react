@@ -83,6 +83,16 @@ const AdminPanelTab = () => {
     }
   };
 
+  const handleToggleRecordsAccess = async (userId, currentStatus) => {
+    try {
+      await api.put(`/auth/users/${userId}/records-access`, { canAccessRecords: !currentStatus });
+      toast.success(`Records access ${!currentStatus ? 'enabled' : 'disabled'}`);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update access');
+    }
+  };
+
   const handleApproveRefund = async (id) => {
     try {
       await api.put(`/refunds/${id}`, {
@@ -212,21 +222,34 @@ const AdminPanelTab = () => {
             <thead>
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                 <th className="px-4 py-4">User Name</th>
-                <th className="px-4 py-4">Current Role</th>
-                <th className="px-4 py-4">New Role</th>
+                <th className="px-4 py-4">Role</th>
+                <th className="px-4 py-4 text-center">Records Module</th>
+                <th className="px-4 py-4">Change Role</th>
                 <th className="px-4 py-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="px-4 py-10 text-center text-text-muted uppercase tracking-[0.2em]">No users available for role change.</td>
+                  <td colSpan="5" className="px-4 py-10 text-center text-text-muted uppercase tracking-[0.2em]">No users available for role change.</td>
                 </tr>
               ) : (
                 users.map(u => (
                   <tr key={u._id} className="hover:bg-bg-input/30 transition-all">
                     <td className="px-4 py-4 font-black text-text-primary uppercase tracking-tight">{u.fullName}</td>
-                    <td className="px-4 py-4 font-bold text-text-muted">{u.role}</td>
+                    <td className="px-4 py-4 font-bold text-text-muted italic">{u.role}</td>
+                    <td className="px-4 py-4 text-center">
+                      <button
+                        onClick={() => handleToggleRecordsAccess(u._id, u.canAccessRecords)}
+                        className={`px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm ${
+                          u.canAccessRecords 
+                            ? 'bg-green-soft text-green border border-green-soft hover:bg-green hover:text-white' 
+                            : 'bg-bg-input text-text-muted border border-border hover:border-accent hover:text-accent'
+                        }`}
+                      >
+                        {u.canAccessRecords ? 'ENABLED' : 'DISABLED'}
+                      </button>
+                    </td>
                     <td className="px-4 py-4">
                       <select
                         className={inputClass}
@@ -243,9 +266,9 @@ const AdminPanelTab = () => {
                     <td className="px-4 py-4 text-right">
                       <button
                         onClick={() => handleUpdateUserRole(u._id)}
-                        className="bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-2xl transition-all active:scale-95"
+                        className="bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-2xl transition-all active:scale-95 whitespace-nowrap"
                       >
-                        Update
+                        Update Role
                       </button>
                     </td>
                   </tr>

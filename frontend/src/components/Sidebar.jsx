@@ -25,25 +25,7 @@ import {
   IndianRupee
 } from 'lucide-react';
 
-const tabAccess = {
-  "dashboard": ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
-  "new-case": ["Admin", "Operations", "Staff"],
-  "case-master": ["Admin", "Operations"],
-  // "history": ["Admin", "Operations", "Staff"],
-  // "action-log": ["Admin", "Operations", "Staff"],
-  // "comm-log": ["Admin", "Operations", "Staff"],
-  // "timeline": ["Admin"],
-  // "doc-index": ["Admin", "Operations", "Staff"],
-  "admin-panel": ["Admin"],
-  "internal-search": ["Admin"],
-  "reviewer-panel": ["Admin", "Reviewer"],
-  "accountant-dashboard": ["Admin", "Accountant"],
-  "agreement-gen": ["Operations"],
-  "my-task": ["Admin", "Operations", "Staff", "Accountant"],
-  "sod-eod-reports": ["Admin", "Operations", "Staff", "Accountant"],
-  "work-report": ["Admin", "Operations"],
-  "refund-request": ["Operations", "Staff"]
-};
+import { TAB_ACCESS } from '../config/tabAccess';
 
 const tabsConfig = [
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -60,12 +42,12 @@ const tabsConfig = [
   { id: 'accountant-dashboard', label: 'Accountant', path: '/accountant-dashboard', icon: CircleDollarSign },
   { id: 'agreement-gen', label: 'Agreement Generation', path: '/agreement-gen', icon: FileText },
   { id: 'my-task', label: 'My Tasks', path: '/my-task', icon: CheckSquare },
-  { id: 'sod-eod-reports', label: 'Reports', path: '/sod-eod-reports', icon: ClipboardList },
+  // { id: 'sod-eod-reports', label: 'Reports', path: '/sod-eod-reports', icon: ClipboardList },
   { id: 'work-report', label: 'Work Report', path: '/work-report', icon: BarChart },
   { id: 'refund-request', label: 'Request', path: '/refund-request', icon: IndianRupee },
 ];
 
-const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed }) => {
+const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogoutClick }) => {
   const { user, logout } = useContext(AuthContext);
   const [caseCount, setCaseCount] = useState(0);
 
@@ -81,9 +63,12 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed }) => {
     if (user) fetchCount();
   }, [user]);
 
-  const visibleTabs = tabsConfig.filter(tab =>
-    user && tabAccess[tab.id]?.includes(user?.role)
-  );
+  const visibleTabs = tabsConfig.filter(tab => {
+    if (!user) return false;
+    // Show Records module if user has explicit permission OR role-based access
+    if (tab.id === 'internal-search' && user.canAccessRecords) return true;
+    return TAB_ACCESS[tab.id]?.includes(user?.role);
+  });
 
   return (
     <>
@@ -172,7 +157,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed }) => {
 
           {/* Logout */}
           <button
-            onClick={logout}
+            onClick={onLogoutClick}
             title="Sign Out"
             className={`
               flex items-center gap-2 rounded-xl border border-red-500/20
