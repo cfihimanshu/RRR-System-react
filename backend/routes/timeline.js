@@ -35,8 +35,11 @@ router.get('/', verifyToken, async (req, res) => {
 
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
+      startOfDay.setMinutes(startOfDay.getMinutes() - 330); // Shift for IST (UTC+5:30)
+      
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
+      endOfDay.setMinutes(endOfDay.getMinutes() - 330); // Shift for IST (UTC+5:30)
       
       pipeline.push({
         $match: {
@@ -67,11 +70,15 @@ router.get('/', verifyToken, async (req, res) => {
       });
     } else if (queryEmail) {
       // If Admin is filtering for a specific user, match broad
+      const User = require('../models/User');
+      const targetUser = await User.findOne({ email: queryEmail });
+      const userIds = [...new Set([queryEmail, queryEmail.split('@')[0], targetUser?.fullName, targetUser?.email])].filter(Boolean);
+
       pipeline.push({
         $match: {
           $or: [
-            { source: { $regex: new RegExp(queryEmail.split('@')[0], 'i') } },
-            { source: { $regex: new RegExp(queryEmail, 'i') } }
+            { source: { $in: userIds } },
+            { source: { $regex: new RegExp(queryEmail.split('@')[0], 'i') } }
           ]
         }
       });

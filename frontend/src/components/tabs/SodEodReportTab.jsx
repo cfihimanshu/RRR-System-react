@@ -247,7 +247,7 @@ const SodEodReportTab = () => {
                     <div className="text-[10px] font-bold text-accent mt-1">Duration: {selectedReport.workDuration}</div>
                   )}
                 </div>
-                <div className="bg-bg-input p-6 rounded-3xl border-2 border-border">
+                {/* <div className="bg-bg-input p-6 rounded-3xl border-2 border-border">
                   <div className="flex items-center gap-2 text-text-muted mb-2">
                     <Smile size={16} />
                     <span className="text-[10px] font-black uppercase tracking-widest">Energy / Score</span>
@@ -255,7 +255,7 @@ const SodEodReportTab = () => {
                   <div className="text-lg font-black text-text-primary">
                     {selectedReport.moodEnergy || `${selectedReport.progressScore}/100` || '---'}
                   </div>
-                </div>
+                </div> */}
               </div>
 
               {/* Content Section */}

@@ -55,12 +55,9 @@ const DocIndexTab = () => {
       toast.success('Document saved to index');
 
       setFormData({
-        docType: 'Legal Notice',
-        uploadedBy: user?.name || user?.email || '',
-        fileSummary: '',
+        ...formData,
         fileLink: '',
-        fileUrlStr: '',
-        remarks: ''
+        fileUrlStr: ''
       });
       fetchDocs();
     } catch (err) {

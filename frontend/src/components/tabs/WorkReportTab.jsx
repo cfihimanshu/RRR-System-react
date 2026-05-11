@@ -77,12 +77,8 @@ const WorkReportTab = () => {
     try {
       // Fetch activities for that specific day and user
       const res = await api.get(`/timeline?date=${report.date}&userEmail=${report.userEmail}`);
-      // Filter by source to ensure it's the specific user's activity
-      const myActivities = res.data.filter(act => 
-        (act.source || '').toLowerCase().includes((report.userName || '').toLowerCase()) || 
-        (act.source || '').toLowerCase().includes((report.userEmail || '').toLowerCase())
-      );
-      setDayActivities(myActivities);
+      // Trust the backend filter (it filters by userEmail for admins and by logged-in user for others)
+      setDayActivities(res.data);
     } catch (err) {
       console.error('Failed to fetch day activities:', err);
     } finally {
@@ -278,6 +274,19 @@ const WorkReportTab = () => {
                       <tr className="bg-bg-input/30">
                         <td colSpan="10" className="px-8 py-6">
                           <div className="animate-in slide-in-from-top-2 duration-300">
+                            {/* Report Details */}
+                            <div className="mb-6 p-4 bg-bg-card rounded-2xl border border-border">
+                              <div className="flex items-center gap-2 mb-3">
+                                <ClipboardList size={16} className="text-accent" />
+                                <h3 className="text-xs font-black text-text-primary uppercase tracking-wider">
+                                  {report.type === 'SOD' ? 'Planned Tasks (SOD)' : 'Work Summary (EOD)'}
+                                </h3>
+                              </div>
+                              <p className="text-[12px] font-bold text-text-secondary whitespace-pre-wrap leading-relaxed">
+                                {report.type === 'SOD' ? (report.plannedTasks || 'No tasks listed') : (report.workSummary || 'No summary listed')}
+                              </p>
+                            </div>
+
                             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                               {/* Communications */}
                               <div className="bg-bg-card border border-border rounded-2xl overflow-hidden flex flex-col min-h-[300px] max-h-[500px]">

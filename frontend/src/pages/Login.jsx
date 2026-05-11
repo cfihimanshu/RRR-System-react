@@ -23,7 +23,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0b0e14] p-6 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-bg-primary p-6 relative overflow-hidden">
       {/* Decorative background elements */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-accent/5 rounded-full blur-[120px]"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue/5 rounded-full blur-[120px]"></div>
@@ -38,7 +38,7 @@ const Login = () => {
         </div>
 
         {/* Login Card */}
-        <div className="bg-[#151b28] border-2 border-[#161d2b] rounded-3xl p-10 shadow-2xl animate-in fade-in zoom-in-95 duration-500">
+        <div className="bg-bg-card border-2 border-border rounded-3xl p-10 shadow-2xl animate-in fade-in zoom-in-95 duration-500">
           <div className="mb-8">
             <h2 className="text-xl font-black text-text-primary uppercase tracking-widest mb-1">Log In </h2>
           </div>
@@ -52,7 +52,7 @@ const Login = () => {
                 </div>
                 <input
                   type="email"
-                  className="w-full bg-[#0f1521] border-2 border-[#161d2b] rounded-2xl pl-12 pr-4 py-4 text-xs font-black text-text-primary outline-none focus:border-accent transition-all placeholder:text-text-muted/50"
+                  className="w-full bg-bg-input border-2 border-border rounded-2xl pl-12 pr-4 py-4 text-xs font-black text-text-primary outline-none focus:border-accent transition-all placeholder:text-text-muted/50"
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -69,7 +69,7 @@ const Login = () => {
                 </div>
                 <input
                   type="password"
-                  className="w-full bg-[#0f1521] border-2 border-[#161d2b] rounded-2xl pl-12 pr-4 py-4 text-xs font-black text-text-primary outline-none focus:border-accent transition-all placeholder:text-text-muted/50"
+                  className="w-full bg-bg-input border-2 border-border rounded-2xl pl-12 pr-4 py-4 text-xs font-black text-text-primary outline-none focus:border-accent transition-all placeholder:text-text-muted/50"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

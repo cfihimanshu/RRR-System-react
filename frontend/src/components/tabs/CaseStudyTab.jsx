@@ -371,12 +371,12 @@ const CaseStudyTab = ({ caseData = null }) => {
                   const dateObj = new Date(rawDate);
                   const displayDate = (!rawDate) ? '—' : (isNaN(dateObj.getTime()) ? rawDate : dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }));
                   return (
-                  <tr key={i}>
-                    <td className="bg-white p-2 border border-gray-200 text-gray-700">{displayDate}</td>
-                    <td className="bg-white p-2 border border-gray-200 font-medium text-gray-900">{c.mode} / {c.direction}</td>
-                    <td className="bg-white p-2 border border-gray-200 text-gray-700">{c.fromTo || '—'}</td>
-                    <td className="bg-white p-2 border border-gray-200 text-gray-700 italic">{c.summary}</td>
-                  </tr>
+                    <tr key={i}>
+                      <td className="bg-white p-2 border border-gray-200 text-gray-700">{displayDate}</td>
+                      <td className="bg-white p-2 border border-gray-200 font-medium text-gray-900">{c.mode} / {c.direction}</td>
+                      <td className="bg-white p-2 border border-gray-200 text-gray-700">{c.fromTo || '—'}</td>
+                      <td className="bg-white p-2 border border-gray-200 text-gray-700 italic">{c.summary}</td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -403,12 +403,12 @@ const CaseStudyTab = ({ caseData = null }) => {
                   const dateObj = new Date(rawDate);
                   const displayDate = (!rawDate) ? '—' : (isNaN(dateObj.getTime()) ? rawDate : dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }));
                   return (
-                  <tr key={i}>
-                    <td className="bg-white p-2 border border-gray-200 text-gray-700">{displayDate}</td>
-                    <td className="bg-white p-2 border border-gray-200 font-medium text-gray-900">{d.docType || d.sourceForm || '—'}</td>
-                    <td className="bg-white p-2 border border-gray-200 text-gray-900 font-bold">{d.fileSummary || '—'}</td>
-                    <td className="bg-white p-2 border border-gray-200 text-gray-700 italic">{d.remarks || '—'}</td>
-                  </tr>
+                    <tr key={i}>
+                      <td className="bg-white p-2 border border-gray-200 text-gray-700">{displayDate}</td>
+                      <td className="bg-white p-2 border border-gray-200 font-medium text-gray-900">{d.docType || d.sourceForm || '—'}</td>
+                      <td className="bg-white p-2 border border-gray-200 text-gray-900 font-bold">{d.fileSummary || '—'}</td>
+                      <td className="bg-white p-2 border border-gray-200 text-gray-700 italic">{d.remarks || '—'}</td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -512,7 +512,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                         <Inbox size={20} />
                       </div>
                       <div>
-                        <h3 className="text-xs font-black text-white uppercase tracking-widest">Case Documents</h3>
+                        <h3 className="text-xs font-black text-black uppercase tracking-widest">Case Documents</h3>
                         <p className="text-[9px] text-text-muted font-bold uppercase tracking-widest mt-0.5">{generatedCase?.caseId || caseData?.caseId}</p>
                       </div>
                     </div>
@@ -541,7 +541,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                                 <FileText size={20} />
                               </div>
                               <div>
-                                <p className="text-[10px] font-black text-white uppercase tracking-tight">{doc.fileSummary || doc.docType || doc.docId}</p>
+                                <p className="text-[10px] font-black text-black uppercase tracking-tight">{doc.fileSummary || doc.docType || doc.docId}</p>
                                 <p className="text-[8px] text-text-muted font-bold uppercase mt-0.5">{doc.docType || 'Uncategorized'}</p>
                               </div>
                             </div>
@@ -550,9 +550,6 @@ const CaseStudyTab = ({ caseData = null }) => {
                         ))}
                       </div>
                     )}
-                  </div>
-                  <div className="p-6 bg-bg-card border-t border-border text-center">
-                    <p className="text-[8px] text-text-muted font-black uppercase tracking-widest">Only authorized personnel can access these documents</p>
                   </div>
                 </div>
               </div>
@@ -568,7 +565,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                         <MessageSquare size={20} />
                       </div>
                       <div>
-                        <h3 className="text-xs font-black text-white uppercase tracking-widest">Communication Attachments</h3>
+                        <h3 className="text-xs font-black text-black uppercase tracking-widest">Communication Attachments</h3>
                         <p className="text-[9px] text-text-muted font-bold uppercase tracking-widest mt-0.5">{generatedCase?.caseId || caseData?.caseId}</p>
                       </div>
                     </div>
@@ -595,14 +592,14 @@ const CaseStudyTab = ({ caseData = null }) => {
                                   {comm.direction === 'Incoming' ? <Inbox size={18} /> : <MessageSquare size={18} />}
                                 </div>
                                 <div>
-                                  <p className="text-[10px] font-black text-white uppercase tracking-tight line-clamp-1">{comm.mode || 'Email'}</p>
+                                  <p className="text-[10px] font-black text-black uppercase tracking-tight line-clamp-1">{comm.mode || 'Email'}</p>
                                   <p className="text-[8px] text-text-muted font-bold uppercase mt-0.5">{new Date(comm.dateTime || comm.createdAt).toLocaleDateString()} • {comm.fromTo || 'Client'}</p>
                                 </div>
                               </div>
                               {comm.fileLink && (
-                                <a 
-                                  href={comm.fileLink} 
-                                  target="_blank" 
+                                <a
+                                  href={comm.fileLink}
+                                  target="_blank"
                                   rel="noopener noreferrer"
                                   className="bg-accent text-white px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-accent-hover transition-all"
                                 >
@@ -615,9 +612,6 @@ const CaseStudyTab = ({ caseData = null }) => {
                         ))}
                       </div>
                     )}
-                  </div>
-                  <div className="p-6 bg-bg-card border-t border-border text-center">
-                    <p className="text-[8px] text-text-muted font-black uppercase tracking-widest">Showing files attached via communication logs</p>
                   </div>
                 </div>
               </div>
@@ -783,7 +777,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                           <FileText size={20} />
                         </div>
                         <div>
-                          <p className="text-[10px] font-black text-white uppercase tracking-tight">{doc.fileSummary || doc.docType || doc.docId}</p>
+                          <p className="text-[10px] font-black text-black uppercase tracking-tight">{doc.fileSummary || doc.docType || doc.docId}</p>
                           <p className="text-[8px] text-text-muted font-bold uppercase mt-0.5">{doc.docType || 'Uncategorized'}</p>
                         </div>
                       </div>
@@ -839,7 +833,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                           <FileText size={20} />
                         </div>
                         <div>
-                          <p className="text-[10px] font-black text-white uppercase tracking-tight line-clamp-1">{comm.summary || 'Attached File'}</p>
+                          <p className="text-[10px] font-black text-black uppercase tracking-tight line-clamp-1">{comm.summary || 'Attached File'}</p>
                           <p className="text-[8px] text-text-muted font-bold uppercase mt-0.5">{comm.mode || 'Email'} • {new Date(comm.dateTime).toLocaleDateString()}</p>
                         </div>
                       </div>

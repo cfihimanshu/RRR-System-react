@@ -36,15 +36,15 @@ console.log('✓ Allowed Origins for CORS:', allowedOrigins);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    console.log(`[CORS] Incoming Origin: "${origin}"`);
+    // console.log(`[CORS] Incoming Origin: "${origin}"`);
 
     if (!origin) {
-      console.log('[CORS] No origin (likely same-origin request) - allowing');
+      // console.log('[CORS] No origin (likely same-origin request) - allowing');
       return callback(null, true);
     }
 
     if (allowedOrigins.includes(origin)) {
-      console.log(`[CORS] ✓ Origin "${origin}" is allowed`);
+      // console.log(`[CORS] ✓ Origin "${origin}" is allowed`);
       return callback(null, true);
     }
 
@@ -73,7 +73,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Max-Age', '86400');
 
   if (method === 'OPTIONS') {
-    console.log(`[CORS] ✓ Preflight OPTIONS request from "${origin}" - responding 200`);
+    // console.log(`[CORS] ✓ Preflight OPTIONS request from "${origin}" - responding 200`);
     return res.sendStatus(200);
   }
 
@@ -144,7 +144,9 @@ app.use('/api/case-study', require('./routes/caseStudy'));
 
 app.get('/api/test-db', async (req, res) => {
   try {
-    await connectToDatabase();
+    if (mongoose.connection.readyState !== 1) {
+      await connectToDatabase();
+    }
     res.json({ status: "success", message: "Database connected successfully", readyState: mongoose.connection.readyState });
   } catch (err) {
     res.status(500).json({ status: "error", message: "Database connection failed", error: err.message });
@@ -181,7 +183,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const totalCases = await Case.countDocuments(query);
 
     const openCases = await Case.countDocuments({ ...query, currentStatus: { $ne: 'Closed' } });
-    const settledCases = await Case.countDocuments({ ...query, currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure'] } });
+    const settledCases = await Case.countDocuments({ ...query, currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] } });
     const highPriority = await Case.countDocuments({ ...query, priority: 'High', currentStatus: { $nin: ['Closed', 'Closure'] } });
     const mediumPriority = await Case.countDocuments({ ...query, priority: 'Medium', currentStatus: { $nin: ['Closed', 'Closure'] } });
     const lowPriority = await Case.countDocuments({ ...query, priority: 'Low', currentStatus: { $nin: ['Closed', 'Closure'] } });
@@ -213,7 +215,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     let teamPerformance = [];
     if (req.user.role === 'Admin') {
-      const allUsers = await User.find({ role: 'Operations' }).lean();
+      const allUsers = await User.find({ role: { $regex: /^operations$/i } }).lean();
       teamPerformance = await Promise.all(allUsers.map(async (u) => {
         const uName = (u.fullName || u.name || '').trim();
         if (!uName) return null;
@@ -236,14 +238,13 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         // Total cases (assigned or unassigned-initiated)
         const assigned = await Case.countDocuments(ownerFilter);
 
-        // Pending cases (not Closed)
-        const pending = await Case.countDocuments({ ...ownerFilter, currentStatus: { $ne: 'Closed' } });
-
-        // Closed Today
-        const closedToday = await Case.countDocuments({
+        // Pending cases (not Settled, Closed, Settlement, Closure, or Resolution)
+        const pending = await Case.countDocuments({ ...ownerFilter, currentStatus: { $nin: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] } });
+ 
+        // Total Settled Cases
+        const settled = await Case.countDocuments({
           ...ownerFilter,
-          currentStatus: 'Closed',
-          lastUpdateDate: { $regex: new RegExp(`^${today}`) }
+          currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] }
         });
 
         // Generate initials
@@ -264,7 +265,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
           color,
           assigned,
           pending,
-          closedToday
+          settled
         };
       }));
 
@@ -338,7 +339,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       // Closed cases on this day
       const closedCasesCount = await Case.countDocuments({
         ...query,
-        currentStatus: { $in: ['Settled', 'Closed'] },
+        currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] },
         lastUpdateDate: { $regex: new RegExp(`^${dayStr}`) }
       });
 

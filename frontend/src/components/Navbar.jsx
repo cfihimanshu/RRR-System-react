@@ -3,7 +3,7 @@ import { AuthContext } from '../context/AuthContext';
 import { format } from 'date-fns';
 import { Menu, Bell, Check, Trash2, ExternalLink } from 'lucide-react';
 import api from '../api/axios';
-import logo from '../assets/logo.png';
+import logo from '../assets/blacklogo.png';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -19,7 +19,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
     try {
       const res = await api.get('/notifications');
       const newNotifications = res.data;
-      
+
       // Check for new unread notifications to show toast
       if (newNotifications.length > 0) {
         if (isInitial) {
@@ -28,35 +28,35 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
         } else {
           // Find unread notifications that we haven't toasted yet
           const unreadToToast = newNotifications.filter(n => !n.isRead && !notifiedIdsRef.current.has(n._id));
-          
+
           unreadToToast.forEach(notif => {
             toast.custom((t) => (
-              <div 
-                className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-slate-900 border border-slate-700 shadow-2xl rounded-2xl pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+              <div
+                className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-bg-card border border-border shadow-2xl rounded-2xl pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
               >
-                <div className="flex-1 w-0 p-4 cursor-pointer" onClick={() => { toast.dismiss(t.id); markAsRead(notif._id); if(notif.link) navigate(notif.link); }}>
+                <div className="flex-1 w-0 p-4 cursor-pointer" onClick={() => { toast.dismiss(t.id); markAsRead(notif._id); if (notif.link) navigate(notif.link); }}>
                   <div className="flex items-start">
                     <div className="flex-shrink-0 pt-0.5">
                       <Bell size={20} className="text-accent animate-swing" />
                     </div>
                     <div className="ml-3 flex-1">
                       <p className="text-[11px] font-black uppercase tracking-widest text-accent mb-1">New Notification</p>
-                      <p className="text-sm font-bold text-white mb-1">{notif.title}</p>
-                      <p className="text-xs text-gray-400 line-clamp-2">{notif.message}</p>
+                      <p className="text-sm font-bold text-text-primary mb-1">{notif.title}</p>
+                      <p className="text-xs text-text-muted line-clamp-2">{notif.message}</p>
                     </div>
                   </div>
                 </div>
-                <div className="flex border-l border-slate-700">
+                <div className="flex border-l border-border">
                   <button
                     onClick={() => toast.dismiss(t.id)}
-                    className="w-full border border-transparent rounded-none rounded-r-2xl p-4 flex items-center justify-center text-sm font-medium text-gray-400 hover:text-white focus:outline-none"
+                    className="w-full border border-transparent rounded-none rounded-r-2xl p-4 flex items-center justify-center text-sm font-medium text-text-muted hover:text-text-primary focus:outline-none"
                   >
                     Close
                   </button>
                 </div>
               </div>
             ), { duration: 5000, position: 'top-right' });
-            
+
             notifiedIdsRef.current.add(notif._id);
           });
         }
@@ -118,13 +118,13 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
   return (
     <div className="navbar print:hidden shadow-lg relative">
       {/* Mobile Toggle */}
-      <button className="md:hidden flex items-center justify-center min-w-[40px] px-2 py-1.5 border border-gray-800/70 rounded hover:bg-gray-700/20 transition-colors" onClick={toggleSidebar}>
+      <button className="md:hidden flex items-center justify-center min-w-[40px] px-2 py-1.5 border border-gray-800/70 rounded hover:bg-orange-300/20 transition-colors" onClick={toggleSidebar}>
         <Menu size={20} />
       </button>
 
       {/* Desktop Collapse Toggle */}
       <button
-        className="hidden md:flex items-center justify-center min-w-[40px] h-10 w-10 hover:bg-white/5 rounded-lg transition-colors"
+        className="hidden md:flex items-center justify-center min-w-[40px] h-10 w-10 hover:bg-gray-600 rounded-lg transition-colors"
         onClick={toggleCollapse}
         title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
       >
@@ -132,7 +132,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
       </button>
 
       <div className="flex items-center gap-2 cursor-pointer transition-transform hover:scale-105 active:scale-95" onClick={toggleCollapse}>
-        <img src={logo} alt="RRR Engine Logo" className="h-10 md:h-11 w-auto object-contain" />
+        <img src={logo} alt="RRR Engine Logo" className="h-5 md:h-7 w-auto object-contain" />
       </div>
 
       <div className="ml-auto flex items-center gap-4 text-sm">
@@ -140,19 +140,19 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
           {format(new Date(), 'dd MMM yyyy, hh:mm a')}
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/30 hidden md:flex">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-          <span className="text-gray-300 font-medium">
-            {user?.fullName && <b className="text-white mr-1.5">{user.fullName}</b>}
-            <span className="text-[10px] opacity-60 uppercase tracking-wider">{user?.role}</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-input border border-border hidden md:flex">
+          <div className="w-2 h-2 rounded-full bg-green animate-pulse"></div>
+          <span className="text-text-secondary font-medium text-xs">
+            {user?.fullName && <b className="text-text-primary mr-1.5">{user.fullName}</b>}
+            <span className="text-[10px] text-text-muted uppercase tracking-wider">{user?.role}</span>
           </span>
         </div>
 
         {/* Notification Bell */}
         <div className="relative" ref={dropdownRef}>
-          <button 
+          <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="p-2.5 bg-gray-900/40 hover:bg-gray-900/60 rounded-xl border border-white/5 transition-all relative group"
+            className="p-2.5 hover:scale-150 rounded-xl border border-white/5 transition-all relative group"
           >
             <Bell size={18} className={`transition-colors ${unreadCount > 0 ? 'text-accent animate-swing' : 'text-gray-400 group-hover:text-white'}`} />
             {unreadCount > 0 && (
@@ -175,8 +175,8 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed }) => {
                   <div className="p-8 text-center text-text-muted italic text-[11px]">No notifications yet</div>
                 ) : (
                   notifications.map(n => (
-                    <div 
-                      key={n._id} 
+                    <div
+                      key={n._id}
                       className={`p-4 border-b border-border/50 hover:bg-white/5 transition-colors cursor-pointer relative group ${!n.isRead ? 'bg-accent-soft/10' : ''}`}
                       onClick={() => {
                         if (!n.isRead) markAsRead(n._id);

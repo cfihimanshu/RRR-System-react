@@ -55,7 +55,7 @@ router.get('/', verifyToken, async (req, res) => {
 // Post a new progress update
 router.post('/', verifyToken, async (req, res) => {
   try {
-    const { caseId, stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, updatedBy, checklist } = req.body;
+    const { caseId, stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, updatedBy, checklist, refundedAmount, savedAmount } = req.body;
 
     const newLog = new Progress({
       caseId,
@@ -67,14 +67,24 @@ router.post('/', verifyToken, async (req, res) => {
       followUpDate,
       escalateTo,
       updatedBy,
-      checklist
+      checklist,
+      refundedAmount,
+      savedAmount
     });
 
     await newLog.save();
 
     // Update the Case status and percentage if provided
     const updateFields = {};
-    if (stage) updateFields.currentStatus = stage;
+    if (stage) {
+      if (stage === 'Closure') {
+        updateFields.currentStatus = 'Settled';
+        updateFields.refundedAmount = refundedAmount;
+        updateFields.savedAmount = savedAmount;
+      } else {
+        updateFields.currentStatus = stage;
+      }
+    }
     if (percentage !== undefined) updateFields.progressPercentage = percentage;
 
     if (Object.keys(updateFields).length > 0) {

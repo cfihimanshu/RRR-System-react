@@ -44,6 +44,8 @@ const caseSchema = new mongoose.Schema({
   caseStudyGeneratedAt: String,
   assignedTo: String,
   progressPercentage: { type: Number, default: 0 },
+  refundedAmount: String,
+  savedAmount: String,
   // Case Study Template Fields
   lienMarkedOn: String,
   lienBank: String,

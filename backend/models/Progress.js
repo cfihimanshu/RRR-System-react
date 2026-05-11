@@ -9,6 +9,8 @@ const progressSchema = new mongoose.Schema({
   blockers: String,
   followUpDate: String,
   escalateTo: String,
+  refundedAmount: Number,
+  savedAmount: Number,
   updatedBy: String,
   checklist: [
     {

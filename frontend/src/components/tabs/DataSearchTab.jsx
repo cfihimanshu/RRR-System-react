@@ -210,17 +210,17 @@ const DataSearchTab = () => {
                         </td>
                         <td className="px-6 py-4 text-text-secondary leading-tight font-black uppercase text-[10px] tracking-wide">{r.contactPerson || '—'}</td>
                         <td className="px-6 py-4">
-                          <span className="font-mono text-text-primary font-black whitespace-nowrap bg-bg-input px-3 py-1.5 rounded-lg border border-border shadow-inner text-[10px]">{r.contact || '—'}</span>
+                          <span className="font-mono text-text-primary font-black whitespace-nowrap bg-bg-input px-3 py-1.5 rounded-lg border border-border shadow-inner text-[12px]">{r.contact || '—'}</span>
                         </td>
-                        <td className="px-6 py-4 text-accent font-black break-all group-hover:underline cursor-pointer tracking-tight text-[10px] uppercase opacity-80">{r.emailId || '—'}</td>
-                        <td className="px-6 py-4 leading-tight italic text-text-muted font-medium text-[10px] uppercase">"{r.service || '—'}"</td>
+                        <td className="px-6 py-4 text-black font-black break-all group-hover:underline cursor-pointer tracking-tight text-[12px] opacity-80">{r.emailId || '—'}</td>
+                        <td className="px-6 py-4 leading-tight italic text-text-muted font-medium text-[11px] font-bold">"{r.service || '—'}"</td>
                         <td className="px-6 py-4">
-                          <span className="font-black text-text-primary leading-tight uppercase text-[10px] tracking-widest bg-bg-input px-3 py-1 rounded-lg border border-border">{r.bde || '—'}</span>
+                          <span className="font-black text-text-primary leading-tight uppercase text-[10px] tracking-widest bg-bg-input px-3 py-1 rounded-lg inline-block min-w-[140px] text-center truncate" title={r.bde}>{r.bde || '—'}</span>
                         </td>
                         <td className="px-6 py-4 text-center font-black text-text-primary text-[10px]">₹{r.totalAmountWithGst || '0'}</td>
                         <td className="px-6 py-4 text-center text-green font-black text-[10px]">₹{r.amtWithoutGst || '0'}</td>
                         <td className="px-6 py-4">
-                          <span className="bg-bg-secondary text-text-muted px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border-2 border-border shadow-sm">
+                          <span className="bg-bg-secondary text-text-muted px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest inline-block min-w-[120px] text-center">
                             {r.workStatus || '—'}
                           </span>
                         </td>

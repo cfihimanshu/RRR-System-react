@@ -101,6 +101,21 @@ async function createDocumentIfNotExists({ caseId, docType, fileLink, sourceForm
     caseId: caseId
   });
 
+  await Timeline.create({
+    id: Date.now().toString() + Math.random().toString(36).substring(7),
+    caseId: caseId,
+    eventDate: new Date().toISOString(),
+    source: uploadedBy || 'System',
+    eventType: 'Document Upload',
+    summary: `Document Uploaded: ${docType}`,
+    details: `File: ${fileLink?.split('/').pop() || 'Unnamed'}. Source: ${sourceForm || 'New Case'}`,
+    metadata: {
+      docType: docType,
+      fileLink: fileLink,
+      sourceForm: sourceForm
+    }
+  });
+
   return document;
 }
 

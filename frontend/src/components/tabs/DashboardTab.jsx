@@ -27,6 +27,7 @@ import {
   Timer,
   Target,
   Zap,
+  TrendingUp,
   BarChart,
   LogOut,
   Plus,
@@ -445,8 +446,8 @@ const DashboardTab = () => {
         date: today,
         userName: user?.fullName,
         userEmail: user?.email,
-        plannedTasks: reportType === 'SOD' 
-          ? (reportFormData.sodTasks?.map(t => `${t.type === 'Case ID' ? 'Case Follow-up' : 'Task'}: ${t.caseId || t.task} (${t.mode})`).join('\n') || reportFormData.plannedTasks) 
+        plannedTasks: reportType === 'SOD'
+          ? (reportFormData.sodTasks?.map(t => `${t.type === 'Case ID' ? 'Case Follow-up' : 'Task'}: ${t.caseId || t.task} (${t.mode})`).join('\n') || reportFormData.plannedTasks)
           : '',
         workSummary: reportType === 'EOD' ? reportFormData.workSummary : '',
         completionStatus: reportType === 'EOD' ? reportFormData.completionStatus : 'Incomplete',
@@ -775,6 +776,9 @@ const DashboardTab = () => {
                                   <option value="Case uploaded">Case uploaded</option>
                                   <option value="Document Uploaded">Document Uploaded</option>
                                 </>
+                              )}
+                              {t.type === 'Tasks' && (
+                                <option value="Add New case">Add New case</option>
                               )}
                             </select>
                           </div>
@@ -1114,9 +1118,9 @@ const DashboardTab = () => {
                           <td className="px-4 py-2.5">
                             <div className="font-bold text-text-primary truncate max-w-[80px]">{member.name.split(' ')[0]}</div>
                           </td>
-                          <td className="px-2 py-2.5 text-center font-black text-blue-300">{member.assigned}</td>
-                          <td className="px-2 py-2.5 text-center font-black text-emerald-300">{member.closedToday}</td>
-                          <td className="px-2 py-2.5 text-center font-black text-orange-300">{member.pending}</td>
+                          <td className="px-2 py-2.5 text-center font-black text-blue-600">{member.assigned}</td>
+                          <td className="px-2 py-2.5 text-center font-black text-emerald-600">{member.settled}</td>
+                          <td className="px-2 py-2.5 text-center font-black text-orange-600">{member.pending}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1167,26 +1171,26 @@ const DashboardTab = () => {
                         type="monotone"
                         dataKey="newCases"
                         name="Case Logged"
-                        stroke="#ef4444"
+                        stroke="#8b5cf6"
                         strokeWidth={3}
-                        dot={{ r: 3, fill: '#ef4444', strokeWidth: 2, stroke: '#151b28' }}
+                        dot={{ r: 3, fill: '#8b5cf6', strokeWidth: 2, stroke: '#151b28' }}
                       />
                       <Line
                         type="monotone"
                         dataKey="closedCases"
                         name="Settled"
-                        stroke="#22c55e"
+                        stroke="#10b981"
                         strokeWidth={3}
-                        dot={{ r: 3, fill: '#22c55e', strokeWidth: 2, stroke: '#151b28' }}
+                        dot={{ r: 3, fill: '#10b981', strokeWidth: 2, stroke: '#151b28' }}
                       />
                       <Line
                         type="monotone"
                         dataKey="highPriority"
                         name="High"
-                        stroke="#d946ef"
+                        stroke="#ef4444"
                         strokeWidth={3}
                         strokeDasharray="4 4"
-                        dot={{ r: 3, fill: '#d946ef', strokeWidth: 2, stroke: '#151b28' }}
+                        dot={{ r: 3, fill: '#ef4444', strokeWidth: 2, stroke: '#151b28' }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -1211,11 +1215,11 @@ const DashboardTab = () => {
                       onClick={() => navigate('/case-master', { state: { typeFilter: item.type } })}
                     >
                       <div className="space-y-0.5 sm:space-y-1">
-                        <div className="text-[7px] sm:text-[8px] font-black text-text-muted uppercase tracking-widest">{item.label}</div>
+                        <div className="text-[10px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">{item.label}</div>
                         <div className={`text-xl sm:text-2xl font-black text-${item.color}`}>{item.count}</div>
-                        <div className={`text-[7px] sm:text-[8px] font-bold text-${item.color} uppercase opacity-60`}>{item.status}</div>
+                        <div className={`text-[10px] sm:text-[10px] font-bold text-${item.color} uppercase opacity-60`}>{item.status}</div>
                       </div>
-                      <div className={`mt-2 sm:mt-0 p-2 sm:p-2.5 bg-${item.color}-soft rounded-xl text-${item.color} group-hover:scale-110 transition-transform`}>
+                      <div className={`mt-2 sm:mt-0 p-2 sm:p-2.5 bg-${item.color}-soft rounded-xl text-${item.color} group-hover:scale-150 transition-transform`}>
                         <item.icon size={20} />
                       </div>
                     </div>
@@ -1234,12 +1238,12 @@ const DashboardTab = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-bg-secondary text-text-primary text-[10px] font-semibold tracking-[0.2em] uppercase border-b border-border/30">
-                    <th className="px-6 py-4 text-indigo-200">Case ID</th>
-                    <th className="px-6 py-4 text-cyan-200">Company Name</th>
-                    <th className="px-6 py-4 text-emerald-200">Client Details</th>
-                    <th className="px-6 py-4 text-orange-200 text-center">Priority </th>
-                    <th className="px-6 py-4 text-fuchsia-200 text-center"> Status </th>
-                    <th className="px-6 py-4 text-sky-200 text-right">Last Update</th>
+                    <th className="px-6 py-4 text-indigo-500">Case ID</th>
+                    <th className="px-6 py-4 text-blue-500">Company Name</th>
+                    <th className="px-6 py-4 text-emerald-500">Client Details</th>
+                    <th className="px-6 py-4 text-orange-500 text-center">Priority </th>
+                    <th className="px-6 py-4 text-red-500 text-center"> Status </th>
+                    <th className="px-6 py-4 text-sky-500 text-right">Last Update</th>
                   </tr>
                 </thead>
                 <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
@@ -1252,11 +1256,11 @@ const DashboardTab = () => {
                       <td className="px-6 py-5 font-black text-accent uppercase tracking-tighter">
                         {c.caseId || c.caseid}
                       </td>
-                      <td className="px-6 py-5 font-black text-blue-300 uppercase tracking-tight">
+                      <td className="px-6 py-5 font-black text-blue-500 uppercase tracking-tight">
                         {c.companyName || '-'}
                       </td>
                       <td className="px-6 py-5">
-                        <div className="font-black text-green-300 leading-tight">{c.clientName}</div>
+                        <div className="font-black text-green-500 leading-tight">{c.clientName}</div>
                         <div className="text-[10px] text-text-muted font-bold mt-1 tracking-wider">{c.clientMobile || '-'}</div>
                       </td>
                       <td className="px-6 py-5 text-center">

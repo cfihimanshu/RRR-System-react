@@ -98,7 +98,7 @@ const normalizeStatus = (status, assignedTo, initiatedBy) => {
   // If normalized is still 'Case Logged' but has an assignee OR a real initiator, call it 'Assigned'
   const hasRealAssignee = (assignedTo && assignedTo.trim() !== '');
   const hasRealInitiator = (initiatedBy && initiatedBy.toLowerCase() !== 'system' && initiatedBy.trim() !== '');
-  
+
   if (normalized === 'Case Logged' && (hasRealAssignee || hasRealInitiator)) {
     return 'Assigned';
   }
@@ -168,7 +168,9 @@ const CaseMasterTab = () => {
     nextAction: '',
     blockers: '',
     followUpDate: '',
-    escalateTo: ''
+    escalateTo: '',
+    refundedAmount: '',
+    savedAmount: ''
   });
   const [mouFormData, setMouFormData] = useState({
     mouType: 'Legal Notice',
@@ -201,17 +203,17 @@ const CaseMasterTab = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilterType, setActiveFilterType] = useState('Status');
   const [tempFilters, setTempFilters] = useState({
-    status: 'All Status',
-    priority: 'All Priority',
-    assignee: 'All Assignees',
-    typeOfComplaint: 'All Types',
+    status: ['All Status'],
+    priority: ['All Priority'],
+    assignee: ['All Assignees'],
+    typeOfComplaint: ['All Types'],
     date: null
   });
   const [appliedFilters, setAppliedFilters] = useState({
-    status: 'All Status',
-    priority: 'All Priority',
-    assignee: 'All Assignees',
-    typeOfComplaint: 'All Types',
+    status: ['All Status'],
+    priority: ['All Priority'],
+    assignee: ['All Assignees'],
+    typeOfComplaint: ['All Types'],
     date: null
   });
   const { user } = useContext(AuthContext);
@@ -336,14 +338,18 @@ const CaseMasterTab = () => {
     fetchAvailableDates();
     // Check for auto-filter from Dashboard
     if (location.state?.statusFilter) {
-      setAppliedFilters(prev => ({ ...prev, status: location.state.statusFilter }));
-      setTempFilters(prev => ({ ...prev, status: location.state.statusFilter }));
+      const sf = location.state.statusFilter;
+      const statusArray = Array.isArray(sf) ? sf : [sf];
+      setAppliedFilters(prev => ({ ...prev, status: statusArray }));
+      setTempFilters(prev => ({ ...prev, status: statusArray }));
       // Clear state after applying so it doesn't persist on refresh
       window.history.replaceState({}, document.title);
     }
     if (location.state?.priorityFilter) {
-      setAppliedFilters(prev => ({ ...prev, priority: location.state.priorityFilter }));
-      setTempFilters(prev => ({ ...prev, priority: location.state.priorityFilter }));
+      const pf = location.state.priorityFilter;
+      const pfArray = Array.isArray(pf) ? pf : [pf];
+      setAppliedFilters(prev => ({ ...prev, priority: pfArray }));
+      setTempFilters(prev => ({ ...prev, priority: pfArray }));
       window.history.replaceState({}, document.title);
     }
     if (location.state?.searchId) {
@@ -351,13 +357,15 @@ const CaseMasterTab = () => {
       window.history.replaceState({}, document.title);
     }
     if (location.state?.typeFilter) {
-      setAppliedFilters(prev => ({ ...prev, typeOfComplaint: location.state.typeFilter }));
-      setTempFilters(prev => ({ ...prev, typeOfComplaint: location.state.typeFilter }));
+      const tf = location.state.typeFilter;
+      const tfArray = Array.isArray(tf) ? tf : [tf];
+      setAppliedFilters(prev => ({ ...prev, typeOfComplaint: tfArray }));
+      setTempFilters(prev => ({ ...prev, typeOfComplaint: tfArray }));
       window.history.replaceState({}, document.title);
     }
     if (location.state?.unassignedOnly) {
-      setAppliedFilters(prev => ({ ...prev, status: 'Unassigned' }));
-      setTempFilters(prev => ({ ...prev, status: 'Unassigned' }));
+      setAppliedFilters(prev => ({ ...prev, status: ['Unassigned'] }));
+      setTempFilters(prev => ({ ...prev, status: ['Unassigned'] }));
       window.history.replaceState({}, document.title);
     }
 
@@ -458,27 +466,31 @@ const CaseMasterTab = () => {
     let matchStatus = false;
     const normalizedCaseStatus = normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy);
 
-    if (appliedFilters.status === 'All Status') {
+    if (appliedFilters.status.includes('All Status') || appliedFilters.status.length === 0) {
       matchStatus = true;
-    } else if (appliedFilters.status === 'Active') {
-      matchStatus = normalizedCaseStatus !== 'Settlement' && normalizedCaseStatus !== 'Closure' && normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed';
-    } else if (appliedFilters.status === 'Closed') {
-      matchStatus = normalizedCaseStatus === 'Settlement' || normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Settled' || normalizedCaseStatus === 'Closed';
-    } else if (appliedFilters.status === 'Unassigned') {
-      const initiatedByValue = c.initiatedBy?.toString?.() || '';
-      const assignedToValue = c.assignedTo?.toString?.() || '';
-      const isInitiatedByBlank = initiatedByValue.trim() === '' || initiatedByValue.trim().toLowerCase() === 'null' || initiatedByValue.trim().toLowerCase() === 'undefined';
-      const isAssignedToBlank = assignedToValue.trim() === '' || assignedToValue.trim().toLowerCase() === 'null' || assignedToValue.trim().toLowerCase() === 'undefined';
-      matchStatus = isInitiatedByBlank && isAssignedToBlank;
     } else {
-      matchStatus = normalizedCaseStatus === appliedFilters.status;
+      matchStatus = appliedFilters.status.some(selectedStatus => {
+        if (selectedStatus === 'Active') {
+          return normalizedCaseStatus !== 'Settlement' && normalizedCaseStatus !== 'Closure' && normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed';
+        } else if (selectedStatus === 'Closed') {
+          return normalizedCaseStatus === 'Settlement' || normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Settled' || normalizedCaseStatus === 'Closed';
+        } else if (selectedStatus === 'Unassigned') {
+          const initiatedByValue = c.initiatedBy?.toString?.() || '';
+          const assignedToValue = c.assignedTo?.toString?.() || '';
+          const isInitiatedByBlank = initiatedByValue.trim() === '' || initiatedByValue.trim().toLowerCase() === 'null' || initiatedByValue.trim().toLowerCase() === 'undefined';
+          const isAssignedToBlank = assignedToValue.trim() === '' || assignedToValue.trim().toLowerCase() === 'null' || assignedToValue.trim().toLowerCase() === 'undefined';
+          return isInitiatedByBlank && isAssignedToBlank;
+        } else {
+          return normalizedCaseStatus === selectedStatus;
+        }
+      });
     }
 
-    const matchPriority = appliedFilters.priority === 'All Priority' || c.priority === appliedFilters.priority;
+    const matchPriority = appliedFilters.priority.includes('All Priority') || appliedFilters.priority.length === 0 || appliedFilters.priority.includes(c.priority);
 
     const assignedPerson = c.assignedTo || c.initiatedBy || '';
-    const matchAssignee = appliedFilters.assignee === 'All Assignees' ||
-      assignedPerson.toLowerCase() === appliedFilters.assignee.toLowerCase();
+    const matchAssignee = appliedFilters.assignee.includes('All Assignees') || appliedFilters.assignee.length === 0 ||
+      appliedFilters.assignee.some(a => a.toLowerCase() === assignedPerson.toLowerCase());
 
     let matchDate = true;
     if (appliedFilters.date) {
@@ -486,7 +498,7 @@ const CaseMasterTab = () => {
       matchDate = caseDate === appliedFilters.date;
     }
 
-    const matchType = appliedFilters.typeOfComplaint === 'All Types' || c.typeOfComplaint === appliedFilters.typeOfComplaint;
+    const matchType = appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.typeOfComplaint.length === 0 || appliedFilters.typeOfComplaint.includes(c.typeOfComplaint);
 
     return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchType;
   });
@@ -498,10 +510,10 @@ const CaseMasterTab = () => {
 
   const handleResetFilters = () => {
     const reset = {
-      status: 'All Status',
-      priority: 'All Priority',
-      assignee: 'All Assignees',
-      typeOfComplaint: 'All Types',
+      status: ['All Status'],
+      priority: ['All Priority'],
+      assignee: ['All Assignees'],
+      typeOfComplaint: ['All Types'],
       date: null
     };
     setTempFilters(reset);
@@ -665,8 +677,14 @@ const CaseMasterTab = () => {
 
     // Inline Validations
     if (name === 'clientEmail') {
-      if (value && !value.includes('@')) {
-        setFormErrors(prev => ({ ...prev, clientEmail: 'Pattern not valid! Must contain @' }));
+      if (value) {
+        const emails = value.split(',').map(e => e.trim());
+        const invalid = emails.some(e => e && !e.includes('@'));
+        if (invalid) {
+          setFormErrors(prev => ({ ...prev, clientEmail: 'Pattern not valid! Each email must contain @' }));
+        } else {
+          setFormErrors(prev => ({ ...prev, clientEmail: '' }));
+        }
       } else {
         setFormErrors(prev => ({ ...prev, clientEmail: '' }));
       }
@@ -747,7 +765,7 @@ const CaseMasterTab = () => {
     try {
       // 1. Update Case status
       await api.put(`/cases/${viewCase.caseId}`, {
-        currentStatus: 'Settled',
+        currentStatus: 'Resolution',
         progressPercentage: 100
       });
 
@@ -763,7 +781,7 @@ const CaseMasterTab = () => {
       toast.success('Case marked as resolved', { id: loadingToast });
       fetchCases();
       // Update local view
-      setViewCase(prev => ({ ...prev, currentStatus: 'Settled', progressPercentage: 100 }));
+      setViewCase(prev => ({ ...prev, currentStatus: 'Resolution', progressPercentage: 100 }));
     } catch (err) {
       toast.error('Failed to resolve case', { id: loadingToast });
     }
@@ -887,7 +905,7 @@ const CaseMasterTab = () => {
     if (viewCase) {
       if (activeDetailTab === 'Communications') fetchCaseComms(viewCase.caseId);
       if (activeDetailTab === 'Documents') fetchCaseDocs(viewCase.caseId);
-      if (activeDetailTab === 'Progress Update') fetchProgressData(viewCase.caseId);
+      fetchProgressData(viewCase.caseId);
       if (activeDetailTab === 'History') {
         fetchTimelineLogs(viewCase.caseId);
         fetchCaseDocs(viewCase.caseId);
@@ -898,6 +916,11 @@ const CaseMasterTab = () => {
   const handleProgressSubmit = async (e) => {
     e.preventDefault();
     if (!progressFormData.summary) return toast.error('Update summary is required');
+
+    if (progressFormData.stage === 'Closure') {
+      if (!progressFormData.refundedAmount) return toast.error('Refunded Amount is required');
+      if (!progressFormData.savedAmount) return toast.error('Saved Amount is required');
+    }
 
     const loadingToast = toast.loading('Saving progress update...');
     try {
@@ -922,7 +945,9 @@ const CaseMasterTab = () => {
         ...progressFormData,
         summary: '',
         nextAction: '',
-        blockers: ''
+        blockers: '',
+        refundedAmount: '',
+        savedAmount: ''
       });
       fetchProgressData(viewCase.caseId);
       fetchCases(); // Refresh global list
@@ -1010,11 +1035,7 @@ const CaseMasterTab = () => {
       });
       toast.success('MOU uploaded successfully', { id: loadingToast });
       setMouFormData({
-        mouType: 'Legal Notice',
-        otherType: '',
-        mouDate: '',
-        signatoryName: viewCase?.clientName || '',
-        remarks: '',
+        ...mouFormData,
         fileLink: ''
       });
       setMouUploadKey(prev => prev + 1);
@@ -1181,16 +1202,20 @@ const CaseMasterTab = () => {
               )}
 
               {user?.role === 'Admin' && (
-                <button onClick={handleExportExcel} className="flex-1 sm:flex-none bg-bg-card hover:bg-bg-input text-text-primary border-2 border-border font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95">
-                  <FileDown size={16} /> Export
-                </button>
+                <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
+                  <button onClick={handleExportExcel} className="w-full bg-bg-card hover:bg-bg-input text-text-primary border-2 border-border font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95">
+                    <FileDown size={16} /> Export
+                  </button>
+                </div>
               )}
-              <button
-                onClick={() => navigate('/new-case')}
-                className="flex-1 sm:flex-none bg-accent text-white font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest hover:bg-accent-hover active:scale-95"
-              >
-                <Plus size={16} /> New Case
-              </button>
+              <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
+                <button
+                  onClick={() => navigate('/new-case')}
+                  className="w-full bg-accent text-white font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest hover:bg-accent-hover active:scale-95"
+                >
+                  <Plus size={16} /> New Case
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1211,16 +1236,16 @@ const CaseMasterTab = () => {
             <div className="relative">
               <button
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.date
+                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || !appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || appliedFilters.date
                   ? 'bg-accent text-white border-accent shadow-sm'
                   : 'bg-bg-card text-text-secondary border-border hover:bg-bg-card-hover'
                   }`}
               >
                 <Filter size={16} />
                 Filters
-                {(appliedFilters.status !== 'All Status' || appliedFilters.priority !== 'All Priority' || appliedFilters.assignee !== 'All Assignees' || appliedFilters.typeOfComplaint !== 'All Types' || appliedFilters.date) && (
+                {(!appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date) && (
                   <span className="bg-white text-accent rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">
-                    {[appliedFilters.status !== 'All Status', appliedFilters.priority !== 'All Priority', appliedFilters.assignee !== 'All Assignees', appliedFilters.typeOfComplaint !== 'All Types', !!appliedFilters.date].filter(Boolean).length}
+                    {[!appliedFilters.status.includes('All Status'), !appliedFilters.priority.includes('All Priority'), !appliedFilters.assignee.includes('All Assignees'), !appliedFilters.typeOfComplaint.includes('All Types'), !!appliedFilters.date].filter(Boolean).length}
                   </span>
                 )}
               </button>
@@ -1251,35 +1276,73 @@ const CaseMasterTab = () => {
                       <div className="w-2/3 p-6 overflow-y-auto max-h-[400px] bg-bg-card">
                         {activeFilterType === 'Status' && (
                           <div className="space-y-3">
-                            {['All Status', 'Unassigned', 'Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure', 'Stucked'].map((s) => (
-                              <label key={s} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
-                                <input
-                                  type="radio"
-                                  name="status"
-                                  checked={tempFilters.status === s}
-                                  onChange={() => setTempFilters({ ...tempFilters, status: s })}
-                                  className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input"
-                                />
-                                <span className={`text-sm font-bold ${tempFilters.status === s ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{s}</span>
-                              </label>
-                            ))}
+                            {['All Status', 'Unassigned', 'Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure', 'Stucked'].map((s) => {
+                              const isChecked = tempFilters.status.includes(s);
+                              return (
+                                <label key={s} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                  <input
+                                    type="checkbox"
+                                    name="status"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setTempFilters(prev => {
+                                        let newStatus;
+                                        if (s === 'All Status') {
+                                          newStatus = ['All Status'];
+                                        } else {
+                                          const filtered = prev.status.filter(item => item !== 'All Status');
+                                          if (isChecked) {
+                                            newStatus = filtered.filter(item => item !== s);
+                                            if (newStatus.length === 0) newStatus = ['All Status'];
+                                          } else {
+                                            newStatus = [...filtered, s];
+                                          }
+                                        }
+                                        return { ...prev, status: newStatus };
+                                      });
+                                    }}
+                                    className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                                  />
+                                  <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{s}</span>
+                                </label>
+                              );
+                            })}
                           </div>
                         )}
 
                         {activeFilterType === 'Priority' && (
                           <div className="space-y-3">
-                            {['All Priority', 'High', 'Medium', 'Low'].map((p) => (
-                              <label key={p} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
-                                <input
-                                  type="radio"
-                                  name="priority"
-                                  checked={tempFilters.priority === p}
-                                  onChange={() => setTempFilters({ ...tempFilters, priority: p })}
-                                  className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input"
-                                />
-                                <span className={`text-sm font-bold ${tempFilters.priority === p ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{p}</span>
-                              </label>
-                            ))}
+                            {['All Priority', 'High', 'Medium', 'Low'].map((p) => {
+                              const isChecked = tempFilters.priority.includes(p);
+                              return (
+                                <label key={p} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                  <input
+                                    type="checkbox"
+                                    name="priority"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setTempFilters(prev => {
+                                        let newPriority;
+                                        if (p === 'All Priority') {
+                                          newPriority = ['All Priority'];
+                                        } else {
+                                          const filtered = prev.priority.filter(item => item !== 'All Priority');
+                                          if (isChecked) {
+                                            newPriority = filtered.filter(item => item !== p);
+                                            if (newPriority.length === 0) newPriority = ['All Priority'];
+                                          } else {
+                                            newPriority = [...filtered, p];
+                                          }
+                                        }
+                                        return { ...prev, priority: newPriority };
+                                      });
+                                    }}
+                                    className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                                  />
+                                  <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{p}</span>
+                                </label>
+                              );
+                            })}
                           </div>
                         )}
 
@@ -1287,48 +1350,98 @@ const CaseMasterTab = () => {
                           <div className="space-y-3">
                             <label className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
                               <input
-                                type="radio"
+                                type="checkbox"
                                 name="assignee"
-                                checked={tempFilters.assignee === 'All Assignees'}
-                                onChange={() => setTempFilters({ ...tempFilters, assignee: 'All Assignees' })}
-                                className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input"
+                                checked={tempFilters.assignee.includes('All Assignees')}
+                                onChange={() => {
+                                  setTempFilters(prev => ({ ...prev, assignee: ['All Assignees'] }));
+                                }}
+                                className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
                               />
-                              <span className={`text-sm font-bold ${tempFilters.assignee === 'All Assignees' ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>All Assignees</span>
+                              <span className={`text-sm font-bold ${tempFilters.assignee.includes('All Assignees') ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>All Assignees</span>
                             </label>
-                            {opsUsers.map((u) => (
-                              <label key={u._id} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
-                                <input
-                                  type="radio"
-                                  name="assignee"
-                                  checked={tempFilters.assignee === u.fullName}
-                                  onChange={() => setTempFilters({ ...tempFilters, assignee: u.fullName })}
-                                  className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input"
-                                />
-                                <span className={`text-sm font-bold ${tempFilters.assignee === u.fullName ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{u.fullName}</span>
-                              </label>
-                            ))}
+                            {opsUsers.map((u) => {
+                              const isChecked = tempFilters.assignee.includes(u.fullName);
+                              return (
+                                <label key={u._id} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                  <input
+                                    type="checkbox"
+                                    name="assignee"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setTempFilters(prev => {
+                                        let newAssignee;
+                                        const filtered = prev.assignee.filter(item => item !== 'All Assignees');
+                                        if (isChecked) {
+                                          newAssignee = filtered.filter(item => item !== u.fullName);
+                                          if (newAssignee.length === 0) newAssignee = ['All Assignees'];
+                                        } else {
+                                          newAssignee = [...filtered, u.fullName];
+                                        }
+                                        return { ...prev, assignee: newAssignee };
+                                      });
+                                    }}
+                                    className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                                  />
+                                  <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{u.fullName}</span>
+                                </label>
+                              );
+                            })}
                           </div>
                         )}
 
                         {activeFilterType === 'Type' && (
                           <div className="space-y-3">
-                            {['All Types', 'Legal Notice', 'Cyber Complaint', 'Consumer Complaint', 'FIR', 'Litigation', 'Escalation', 'General Query', 'Lien', 'TollFree'].map((t) => (
-                              <label key={t} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
-                                <input
-                                  type="radio"
-                                  name="typeOfComplaint"
-                                  checked={tempFilters.typeOfComplaint === t}
-                                  onChange={() => setTempFilters({ ...tempFilters, typeOfComplaint: t })}
-                                  className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input"
-                                />
-                                <span className={`text-sm font-bold ${tempFilters.typeOfComplaint === t ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{t}</span>
-                              </label>
-                            ))}
+                            {['All Types', 'Legal Notice', 'Cyber Complaint', 'Consumer Complaint', 'FIR', 'Litigation', 'Escalation', 'General Query', 'Lien', 'TollFree'].map((t) => {
+                              const isChecked = tempFilters.typeOfComplaint.includes(t);
+                              return (
+                                <label key={t} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                  <input
+                                    type="checkbox"
+                                    name="typeOfComplaint"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setTempFilters(prev => {
+                                        let newType;
+                                        if (t === 'All Types') {
+                                          newType = ['All Types'];
+                                        } else {
+                                          const filtered = prev.typeOfComplaint.filter(item => item !== 'All Types');
+                                          if (isChecked) {
+                                            newType = filtered.filter(item => item !== t);
+                                            if (newType.length === 0) newType = ['All Types'];
+                                          } else {
+                                            newType = [...filtered, t];
+                                          }
+                                        }
+                                        return { ...prev, typeOfComplaint: newType };
+                                      });
+                                    }}
+                                    className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                                  />
+                                  <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{t}</span>
+                                </label>
+                              );
+                            })}
                           </div>
                         )}
 
                         {activeFilterType === 'Date' && (
                           <div className="calendar-container dark-calendar">
+                            <style>{`
+                              .react-calendar__tile--active {
+                                 /* Tailwind orange-500 */
+                                color: #000000 !important;
+                                font-weight: 900 !important;
+                              }
+                              .react-calendar__tile--active:enabled:hover, .react-calendar__tile--active:enabled:focus {
+                                background: #ea580c !important; /* Tailwind orange-600 */
+                                color: #000000 !important;
+                              }
+                              .has-cases {
+                                font-weight: 800 !important;
+                              }
+                            `}</style>
                             <Calendar
                               onChange={(val) => setTempFilters({ ...tempFilters, date: format(val, 'yyyy-MM-dd') })}
                               value={tempFilters.date ? new Date(tempFilters.date) : null}
@@ -1455,7 +1568,7 @@ const CaseMasterTab = () => {
 
           <button
             onClick={() => setViewCase(null)}
-            className="flex items-center gap-2 text-white hover:text-text-primary mb-10 text-[10px] font-black uppercase tracking-widest transition-all group"
+            className="flex items-center gap-2 text-black hover:text-text-primary mb-10 text-[10px] font-bold uppercase tracking-widest transition-all group"
           >
             ← Back to Cases
           </button>
@@ -1475,7 +1588,7 @@ const CaseMasterTab = () => {
                   <h2 className="text-2xl font-black text-text-primary uppercase tracking-tight max-w-4xl">
                     {viewCase.typeOfComplaint || 'Payment Dispute'} — {viewCase.companyName}
                   </h2>
-                  {((activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Closure' || (activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Resolution' || viewCase.progressPercentage >= 100) && viewCase.currentStatus !== 'Settled' && viewCase.currentStatus !== 'Closure' && (
+                  {((activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Closure' || (activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Resolution' || viewCase.progressPercentage >= 100) && viewCase.currentStatus !== 'Settled' && (
                     <button
                       onClick={handleMarkResolved}
                       className="bg-green text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
@@ -1500,65 +1613,66 @@ const CaseMasterTab = () => {
 
             {/* Case Progress Bar */}
             <div className="mb-10">
-              <div className="text-[9px] font-black text-white uppercase tracking-[0.2em] mb-4 opacity-50">Case Progress</div>
-              <div className="flex w-full rounded-lg overflow-hidden h-10 ">
-                {['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'].map((step, idx) => {
-                  const steps = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
+              <div className="text-[9px] font-black text-text-primary uppercase tracking-[0.2em] mb-4 opacity-50">Case Progress</div>
+              <div className="w-full rounded-lg overflow-x-auto scrollbar-thin border border-border h-10">
+                <div className="flex min-w-[600px] h-full">
+                  {['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'].map((step, idx) => {
+                    const steps = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
 
-                  // If on Progress Update tab, show the current selection in the form
-                  const displayStatus = activeDetailTab === 'Progress Update' ? progressFormData.stage : normalizeStatus(viewCase.currentStatus, viewCase.assignedTo, viewCase.initiatedBy);
+                    // Use the stage from progressFormData for consistency across all tabs
+                    const displayStatus = progressFormData.stage;
 
-                  let currentIdx = steps.indexOf(displayStatus);
-                  if (currentIdx === -1) {
-                    if (displayStatus === 'Settlement' || displayStatus === 'Closure' || displayStatus === 'Settled' || viewCase.progressPercentage >= 100) {
-                      currentIdx = 5; // All steps completed
-                    } else {
-                      currentIdx = 0;
+                    let currentIdx = steps.indexOf(displayStatus);
+                    if (currentIdx === -1) {
+                      if (displayStatus === 'Settlement' || displayStatus === 'Closure' || displayStatus === 'Settled' || viewCase.progressPercentage >= 100) {
+                        currentIdx = 5; // All steps completed
+                      } else {
+                        currentIdx = 0;
+                      }
                     }
-                  }
-                  const isCompleted = idx < currentIdx;
-                  const isActive = idx === currentIdx;
+                    const isCompleted = idx < currentIdx;
+                    const isActive = idx === currentIdx;
 
-                  return (
-                    <div
-                      key={step}
-                      className={`flex-1 flex items-center justify-center text-[9px] font-black uppercase tracking-widest transition-all ${isCompleted ? 'bg-green-soft text-green' :
-                        isActive ? 'bg-accent-soft text-accent border-x border-accent/20' :
-                          'bg-bg-secondary text-white opacity-40'
-                        }`}
-                    >
-                      {isCompleted && <Check size={10} className="mr-2" strokeWidth={4} />}
-                      {isActive && <div className="w-1.5 h-1.5 bg-accent rounded-full mr-2 animate-pulse" />}
-                      {step}
-                    </div>
-                  );
-                })}
+                    return (
+                      <div
+                        key={step}
+                        className={`flex-1 flex items-center justify-center text-[9px] font-black uppercase tracking-widest transition-all duration-300 whitespace-nowrap ${isCompleted ? 'bg-green text-white' :
+                          isActive ? 'bg-accent text-white border-x border-white/10' :
+                            'bg-bg-input text-text-muted hover:bg-bg-secondary/50'
+                          }`}
+                      >
+                        {isCompleted && <Check size={10} className="mr-2" strokeWidth={4} />}
+                        {isActive && <div className="w-1.5 h-1.5 bg-white rounded-full mr-2 animate-pulse" />}
+                        {step}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
             {/* Quick Info Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div>
-                <div className="text-[9px] font-black text-white uppercase tracking-widest mb-1 opacity-50">Client</div>
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Client</div>
                 <div className="text-sm font-black text-text-primary truncate">{viewCase.clientName}</div>
               </div>
               <div>
-                <div className="text-[9px] font-black text-white uppercase tracking-widest mb-1 opacity-50">Contact</div>
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Contact</div>
                 <div className="text-sm font-black text-text-primary">{viewCase.clientMobile || '—'}</div>
               </div>
               <div>
-                <div className="text-[9px] font-black text-white uppercase tracking-widest mb-1 opacity-50">Channel</div>
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Email ID</div>
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-blue-soft rounded flex items-center justify-center text-blue text-[8px]"><FileText size={10} /></div>
-                  <div className="text-sm font-black text-text-primary uppercase">{viewCase.source || 'Email'}</div>
+                  <div className="text-xs font-black text-text-primary">{viewCase.clientEmail || 'Email'}</div>
                 </div>
               </div>
               <div>
-                <div className="text-[9px] font-black text-white uppercase tracking-widest mb-1 opacity-50">Assigned To</div>
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Assigned To</div>
                 <div className="text-sm font-black text-text-primary truncate">{viewCase.assignedTo || viewCase.initiatedBy || 'Unassigned'}</div>
               </div>
               <div>
-                <div className="text-[9px] font-black text-white uppercase tracking-widest mb-1 opacity-50">Created</div>
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Created</div>
                 <div className="text-sm font-black text-text-primary whitespace-nowrap">{viewCase.createdDate ? format(new Date(viewCase.createdDate), 'dd MMM yyyy') : '—'}</div>
               </div>
             </div>
@@ -1756,6 +1870,7 @@ const CaseMasterTab = () => {
                             <option value="In Progress">In Progress</option>
                             <option value="Completed">Completed</option>
                             <option value="On Hold">On Hold</option>
+                            <option value="Converted">Converted</option>
                           </select>
                         </div>
                         <div>
@@ -1797,7 +1912,7 @@ const CaseMasterTab = () => {
                     </div>
                     <div>
                       <label className={labelClass}>Email</label>
-                      <input type="email" className={`${inputClass} ${formErrors.clientEmail ? 'border-red bg-red-soft' : ''}`} name="clientEmail" value={formData.clientEmail || ''} onChange={handleFormChange} placeholder="example@gmail.com" disabled={!isEditing} />
+                      <input type="text" className={`${inputClass} ${formErrors.clientEmail ? 'border-red bg-red-soft' : ''}`} name="clientEmail" value={formData.clientEmail || ''} onChange={handleFormChange} placeholder="example@gmail.com" disabled={!isEditing} />
                       {formErrors.clientEmail && <p className="text-[9px] text-red font-black mt-2 uppercase tracking-widest">{formErrors.clientEmail}</p>}
                     </div>
                     <div>
@@ -1972,7 +2087,7 @@ const CaseMasterTab = () => {
                     <form onSubmit={handleCommSubmit} className="grid grid-cols-1 xl:grid-cols-2 gap-10">
                       {/* Form Part */}
                       <div className="space-y-8">
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                           <div className="space-y-2">
                             <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1">DATE & TIME</label>
                             <input
@@ -2044,7 +2159,7 @@ const CaseMasterTab = () => {
                           ></textarea>
                         </div> */}
 
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                           <div className="space-y-2">
                             <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1">Refund Demanded (₹)</label>
                             <input
@@ -2091,7 +2206,7 @@ const CaseMasterTab = () => {
                         <div className="bg-bg-input/50 border-2 border-dashed border-border rounded-2xl p-6 space-y-4">
                           <label className="text-[9px] font-black text-text-muted uppercase tracking-widest block mb-2">ATTACH PROOF FILE</label>
                           <div className="mb-4">
-                            <FileUpload onUploadSuccess={(url) => setCommFormData({ ...commFormData, fileLink: url })} label="Click to browse or drag & drop (Max 10MB)" />
+                            <FileUpload onUploadSuccess={(url) => setCommFormData(prev => ({ ...prev, fileLink: url }))} label="Click to browse or drag & drop (Max 10MB)" />
                           </div>
                           {/* <div className="relative group">
                             <input
@@ -2175,7 +2290,8 @@ const CaseMasterTab = () => {
                       <FileText size={16} />
                     </div>
                     <div className="flex flex-col">
-                      <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Case Documents</h3>
+                      <h3 className="text-xs font-black text-black uppercase tracking-widest">Communication Attachments
+                        RRR-SF-2026-0064</h3>
                       <div className="text-[9px] font-black text-accent uppercase tracking-widest mt-1 opacity-80">
                         Case ID: {viewCase.caseId}
                       </div>
@@ -2213,7 +2329,7 @@ const CaseMasterTab = () => {
                         <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">UPLOAD DOCUMENT</label>
                         <FileUpload
                           key={mouUploadKey}
-                          onUploadSuccess={(url) => setMouFormData({ ...mouFormData, fileLink: url })}
+                          onUploadSuccess={(url) => setMouFormData(prev => ({ ...prev, fileLink: url }))}
                           label="Click to upload or drag & drop. PDF, DOCX - Max 20MB"
                           icon={FileText}
                         />
@@ -2461,7 +2577,7 @@ const CaseMasterTab = () => {
 
                       <div className="space-y-3">
                         <FileUpload
-                          onUploadSuccess={(url) => setActionLogFormData({ ...actionLogFormData, attachment: url })}
+                          onUploadSuccess={(url) => setActionLogFormData(prev => ({ ...prev, attachment: url }))}
                           label="Attachment (Proof/File)"
                         />
                         {actionLogFormData.attachment && (
@@ -2556,7 +2672,7 @@ const CaseMasterTab = () => {
                     <Activity size={18} />
                   </div>
                   <div className="flex flex-col">
-                    <h3 className="text-xs font-black text-white uppercase tracking-widest">Update Case Progress</h3>
+                    <h3 className="text-xs font-black text-black uppercase tracking-widest">Update Case Progress</h3>
                     <div className="text-[9px] font-black text-accent uppercase tracking-widest mt-1 opacity-80">
                       Case ID: {viewCase.caseId}
                     </div>
@@ -2601,9 +2717,6 @@ const CaseMasterTab = () => {
                       <option value="Closure">Closure</option>
                     </select>
                   </div>
-
-
-
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">UPDATE SUMMARY</label>
                     <textarea
@@ -2634,6 +2747,33 @@ const CaseMasterTab = () => {
                       className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3 text-xs font-black text-text-primary focus:border-accent outline-none transition-all h-16 resize-none shadow-sm"
                     ></textarea>
                   </div>
+
+                  {progressFormData.stage === 'Closure' && (
+                    <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">REFUNDED AMOUNT (₹)</label>
+                        <input
+                          type="number"
+                          value={progressFormData.refundedAmount || ''}
+                          onChange={(e) => setProgressFormData({ ...progressFormData, refundedAmount: e.target.value })}
+                          placeholder="Amount refunded to client"
+                          className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent transition-all shadow-sm"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">SAVED AMOUNT (₹)</label>
+                        <input
+                          type="number"
+                          value={progressFormData.savedAmount || ''}
+                          onChange={(e) => setProgressFormData({ ...progressFormData, savedAmount: e.target.value })}
+                          placeholder="Amount saved for client"
+                          className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent transition-all shadow-sm"
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
@@ -2701,51 +2841,6 @@ const CaseMasterTab = () => {
                         );
                       })
                     )}
-                  </div>
-                </div>
-
-                {/* Resolution Checklist Section */}
-                <div className="bg-bg-card rounded-2xl border-2 border-border p-6 shadow-sm">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-5 h-5 bg-green rounded flex items-center justify-center text-white">
-                      <Check size={12} strokeWidth={4} />
-                    </div>
-                    <h3 className="text-xs font-black text-accent uppercase tracking-widest">Resolution Checklist</h3>
-                  </div>
-
-                  <div className="divide-y divide-[#ffffff05]">
-                    {(checklist.length > 0 ? checklist : [
-                      { id: 1, label: 'Initial contact made', completed: false },
-                      { id: 2, label: 'Documents received ', completed: false },
-                      { id: 3, label: 'MOU draft prepared', completed: false },
-                      { id: 4, label: 'Signed MOU received', completed: false },
-                      { id: 5, label: 'Final settlement agreed', completed: false },
-                      { id: 6, label: 'Case closed', completed: false }
-                    ]).map((item) => (
-                      <label
-                        key={item.id}
-                        className="flex items-center gap-4 py-3 group cursor-pointer first:pt-0 last:pb-0"
-                      >
-                        <div className="relative">
-                          <input
-                            type="checkbox"
-                            checked={item.completed}
-                            onChange={() => toggleChecklistItem(item.id)}
-                            className="peer hidden"
-                          />
-                          <div className={`w-5 h-5 rounded-md border-2 transition-all duration-300 flex items-center justify-center 
-                            ${item.completed ? 'bg-accent border-accent shadow-[0_0_10px_rgba(255,102,0,0.2)]' : 'bg-bg-input border-border group-hover:border-accent/50'}
-                          `}>
-                            {item.completed && <Check size={12} className="text-white" strokeWidth={4} />}
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-black uppercase tracking-widest transition-all duration-300 
-                          ${item.completed ? 'text-text-muted line-through opacity-40' : 'text-text-secondary group-hover:text-text-primary'}
-                        `}>
-                          {item.label}
-                        </span>
-                      </label>
-                    ))}
                   </div>
                 </div>
               </div>
@@ -3022,14 +3117,14 @@ const CaseRow = memo(({
           <div className="grid grid-cols-3 gap-2 w-full">
             <button
               onClick={() => handleViewCase(c)}
-              className="bg-[#121826] hover:bg-[#1a2236] text-[#4b5563] p-2.5 rounded-xl border border-[#1e293b] transition-all shadow-sm flex items-center justify-center w-full"
+              className="bg-blue-soft text-blue hover:bg-blue/20 p-2.5 rounded-xl border border-blue-soft transition-all shadow-sm flex items-center justify-center w-full"
               title="View Profile"
             >
               <Eye size={16} />
             </button>
             <button
               onClick={() => navigate('/new-case', { state: { editCase: c } })}
-              className="bg-[#2a1b12] hover:bg-[#3d261a] text-accent p-2.5 rounded-xl border border-[#452a1e] transition-all shadow-sm flex items-center justify-center w-full"
+              className="bg-yellow-soft text-yellow hover:bg-yellow/20 p-2.5 rounded-xl border border-yellow-soft transition-all shadow-sm flex items-center justify-center w-full"
               title="Edit Case"
             >
               <Edit3 size={16} />
@@ -3037,7 +3132,7 @@ const CaseRow = memo(({
             {user?.role === 'Admin' ? (
               <button
                 onClick={() => handleDeleteCase(c.caseId)}
-                className="bg-[#2a1212] hover:bg-[#3d1a1a] text-red p-2.5 rounded-xl border border-[#451e1e] transition-all shadow-sm active:scale-95 flex items-center justify-center w-full"
+                className="bg-red-soft text-red hover:bg-red/20 p-2.5 rounded-xl border border-red-soft transition-all shadow-sm active:scale-95 flex items-center justify-center w-full"
                 title="Delete Case"
               >
                 <Trash2 size={16} />
@@ -3051,18 +3146,18 @@ const CaseRow = memo(({
           {user?.role === 'Admin' && (
             <div className="flex gap-2 w-full">
               <select
-                className="flex-1 bg-[#0f172a] border-2 border-[#1e293b] rounded-xl text-[9px] px-2 py-2.5 outline-none focus:border-accent shadow-sm min-w-0 text-blue-400 font-black uppercase tracking-widest cursor-pointer"
+                className="flex-1 bg-bg-input border-2 border-border rounded-xl text-[9px] px-2 py-2.5 outline-none focus:border-accent shadow-sm min-w-0 text-text-primary font-black uppercase tracking-widest cursor-pointer"
                 value={assignmentInput !== undefined ? assignmentInput : (c.assignedTo || c.initiatedBy || '')}
                 onChange={(e) => handleAssignmentInputChange(c.caseId, e.target.value)}
               >
                 <option value="">Assign</option>
                 {opsUsers.map(u => (
-                  <option key={u._id} value={u.fullName} className="bg-[#0f172a] text-white">{u.fullName}</option>
+                  <option key={u._id} value={u.fullName}>{u.fullName}</option>
                 ))}
               </select>
               <button
                 onClick={() => handleAssign(c.caseId)}
-                className="bg-[#2a1b12] hover:bg-[#3d261a] text-accent font-black text-[9px] w-10 h-10 flex items-center justify-center rounded-xl border border-[#452a1e] transition-all uppercase active:scale-90 flex-shrink-0"
+                className="bg-accent-soft hover:bg-accent/20 text-accent font-black text-[9px] w-10 h-10 flex items-center justify-center rounded-xl border border-accent-soft transition-all uppercase active:scale-90 flex-shrink-0"
                 title="Confirm Assignment"
               >
                 <Check size={14} />

@@ -35,7 +35,7 @@ const tabAccess = {
   // "timeline": ["Admin"],
   // "doc-index": ["Admin", "Operations", "Staff"],
   "admin-panel": ["Admin"],
-  "internal-search": ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
+  "internal-search": ["Admin"],
   "reviewer-panel": ["Admin", "Reviewer"],
   "accountant-dashboard": ["Admin", "Accountant"],
   "agreement-gen": ["Operations"],
