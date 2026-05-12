@@ -47,6 +47,15 @@ const AdminPanelTab = () => {
     fetchPendingRefunds();
     fetchAllRefunds();
     fetchUsers();
+
+    if (window.location.hash === '#refund-actions') {
+      setTimeout(() => {
+        const element = document.getElementById('refund-actions');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 500);
+    }
   }, []);
 
   const handleCreateUser = async (e) => {
@@ -348,7 +357,7 @@ const AdminPanelTab = () => {
 
 
       {/* SECTION 3: Global Refund Audit Trail */}
-      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-5xl overflow-hidden mt-10">
+      <div id="refund-actions" className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-5xl overflow-hidden mt-10">
         <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
           <div className="w-10 h-10 bg-purple-soft rounded-2xl flex items-center justify-center text-purple">
             <span className="font-black text-lg">📋</span>

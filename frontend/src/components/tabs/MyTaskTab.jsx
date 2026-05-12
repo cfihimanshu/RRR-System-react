@@ -3,6 +3,7 @@ import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
 import Modal from '../shared/Modal';
 import SearchableCaseSelect from '../shared/SearchableCaseSelect';
+import { useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   Plus,
@@ -217,7 +218,15 @@ const MyTaskTab = () => {
     updateTaskStatus(id, status);
   };
 
+  const location = useLocation();
+  const [taskFilter, setTaskFilter] = useState(location.state?.taskFilter || '');
   const [dateFilter, setDateFilter] = useState('');
+
+  useEffect(() => {
+    if (location.state?.taskFilter) {
+      setTaskFilter(location.state.taskFilter);
+    }
+  }, [location.state]);
 
   const filteredTasks = tasks.filter(t => {
     const matchesSearch = t.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -228,7 +237,24 @@ const MyTaskTab = () => {
     const taskCreatedAtDate = t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : null;
     const matchesDate = dateFilter ? (t.dueDate === dateFilter || taskCreatedAtDate === dateFilter) : true;
 
-    return matchesSearch && matchesDate;
+    // Time Bound Filters
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    let matchesTimeFilter = true;
+    if (taskFilter === 'overdue') {
+      matchesTimeFilter = t.dueDate < todayStr && !['Completed', 'Done'].includes(t.status);
+    } else if (taskFilter === 'today') {
+      matchesTimeFilter = t.reminderDateTime && t.reminderDateTime < new Date().toISOString() && !['Completed', 'Done'].includes(t.status);
+    } else if (taskFilter === '24h') {
+      matchesTimeFilter = t.dueDate === todayStr && !['Completed', 'Done'].includes(t.status);
+    } else if (taskFilter === '48h') {
+      matchesTimeFilter = t.dueDate === yesterdayStr && !['Completed', 'Done'].includes(t.status);
+    }
+
+    return matchesSearch && matchesDate && matchesTimeFilter;
   });
 
   const handleExportTasks = () => {

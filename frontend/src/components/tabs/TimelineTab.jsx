@@ -110,6 +110,10 @@ const TimelineTab = () => {
                     <span className="bg-accent-soft text-accent px-3 py-1 rounded-full border border-accent-soft">
                       {t.eventType}
                     </span>
+                    <span className="text-accent opacity-50">•</span>
+                    <span className="bg-purple-soft text-purple px-3 py-1 rounded-full border border-purple-soft">
+                      {t.source || 'System'}
+                    </span>
                   </div>
                   
                   <div className="text-[16px] text-text-primary font-black tracking-tight leading-tight">

@@ -46,7 +46,13 @@ import {
   FolderPlus,
   FileUp,
   PhoneOutgoing,
-  Activity
+  Activity,
+  Mail,
+  PhoneIncoming,
+  Building2,
+  Phone,
+  MessageCircle,
+  HelpCircle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
@@ -71,6 +77,7 @@ const DashboardTab = () => {
   const [totalAmount, setTotalAmount] = useState('');
   const [installments, setInstallments] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [teamFilter, setTeamFilter] = useState('');
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
@@ -115,6 +122,13 @@ const DashboardTab = () => {
   });
 
   const [expandedTaskIds, setExpandedTaskIds] = useState([]);
+  const [isViolationsModalOpen, setIsViolationsModalOpen] = useState(false);
+  const [violationType, setViolationType] = useState('SOD');
+
+  const openViolationsModal = (type) => {
+    setViolationType(type);
+    setIsViolationsModalOpen(true);
+  };
 
   const toggleTaskExpansion = (taskId) => {
     setExpandedTaskIds(prev =>
@@ -397,9 +411,9 @@ const DashboardTab = () => {
     }
   };
 
-  const fetchStats = async () => {
+  const fetchStats = async (filter = '') => {
     try {
-      const res = await api.get('/dashboard/stats');
+      const res = await api.get(`/dashboard/stats?teamFilter=${filter}`);
       setStats(res.data);
     } catch (error) {
       console.error(error);
@@ -407,7 +421,7 @@ const DashboardTab = () => {
   };
 
   useEffect(() => {
-    fetchStats();
+    fetchStats(teamFilter);
     fetchMyRefunds();
     fetchMyReports();
     fetchUserCases();
@@ -415,11 +429,11 @@ const DashboardTab = () => {
 
     // Auto-refresh stats every 30 seconds so case add/delete reflects immediately
     const statsInterval = setInterval(() => {
-      fetchStats();
+      fetchStats(teamFilter);
     }, 30000);
 
     return () => clearInterval(statsInterval);
-  }, []);
+  }, [teamFilter]);
 
   const handleRefundSubmit = async (e) => {
     e.preventDefault();
@@ -973,62 +987,88 @@ const DashboardTab = () => {
       )}
 
       {/* Today's Overview Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-purple/30 transition-all cursor-pointer"
+          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-purple/30 transition-all cursor-pointer"
           onClick={() => navigate('/case-master', { state: { dateFilter: new Date().toISOString().split('T')[0] } })}
         >
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-purple-soft rounded-xl text-purple">
-              <FolderPlus size={16} />
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 bg-purple-soft rounded-xl text-purple">
+              <FolderPlus size={14} />
             </div>
-            <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">Case Logged Today</div>
+            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Case Logged Today</div>
           </div>
-          <div className="text-2xl font-black text-text-primary ml-1">{stats?.casesCreatedToday || 0}</div>
+          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.casesCreatedToday || 0}</div>
         </div>
 
         <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-blue/30 transition-all cursor-pointer"
+          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-blue/30 transition-all cursor-pointer"
           onClick={() => navigate('/timeline', { state: { dateFilter: new Date().toISOString().split('T')[0], typeFilter: 'Document Upload' } })}
         >
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-blue-soft rounded-xl text-blue">
-              <FileUp size={16} />
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 bg-blue-soft rounded-xl text-blue">
+              <FileUp size={14} />
             </div>
-            <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">Document Uploaded</div>
+            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Document Uploaded</div>
           </div>
-          <div className="text-2xl font-black text-text-primary ml-1">{stats?.documentsUploadedToday || 0}</div>
+          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.documentsUploadedToday || 0}</div>
         </div>
 
         <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-green/30 transition-all cursor-pointer"
+          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-green/30 transition-all cursor-pointer"
           onClick={() => navigate('/timeline', { state: { dateFilter: new Date().toISOString().split('T')[0], typeFilter: 'Communication' } })}
         >
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-green-soft rounded-xl text-green">
-              <PhoneOutgoing size={16} />
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 bg-green-soft rounded-xl text-green">
+              <PhoneOutgoing size={14} />
             </div>
-            <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">Communication</div>
+            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Communication</div>
           </div>
-          <div className="text-2xl font-black text-text-primary ml-1">{stats?.communicationsToday || 0}</div>
+          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.communicationsToday || 0}</div>
         </div>
 
         <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-orange/30 transition-all cursor-pointer"
+          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-orange/30 transition-all cursor-pointer"
           onClick={() => navigate('/timeline', { state: { dateFilter: new Date().toISOString().split('T')[0], typeFilter: 'Progress Update' } })}
         >
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-accent-soft rounded-xl text-accent">
-              <Activity size={16} />
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 bg-accent-soft rounded-xl text-accent">
+              <Activity size={14} />
             </div>
-            <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">Progress Updated</div>
+            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Progress Updated</div>
           </div>
-          <div className="text-2xl font-black text-text-primary ml-1">{stats?.progressUpdatesToday || 0}</div>
+          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.progressUpdatesToday || 0}</div>
+        </div>
+
+        <div
+          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-red/30 transition-all cursor-pointer"
+          onClick={() => navigate('/case-master')}
+        >
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 bg-red-soft rounded-xl text-red">
+              <IndianRupee size={14} />
+            </div>
+            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Amount At Risk</div>
+          </div>
+          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">₹{Number(stats?.totalAmountPaid || 0).toLocaleString('en-IN')}</div>
+        </div>
+
+        <div
+          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-blue/30 transition-all cursor-pointer"
+          onClick={() => navigate('/admin-panel#refund-actions')}
+        >
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 bg-blue-soft rounded-xl text-blue">
+              <ListChecks size={14} />
+            </div>
+            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Pending Approvals</div>
+          </div>
+          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.pendingApprovals || 0}</div>
         </div>
       </div>
 
       {/* Main Dashboard Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3 sm:gap-4 md:gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-9 gap-3 sm:gap-4 md:gap-6 mb-8">
         <div className="stat cursor-pointer hover:border-purple-300 transition-all" onClick={() => navigate('/case-master')}>
           <div className="stat-icon bg-purple-soft text-purple">
             <Folder size={18} />
@@ -1036,9 +1076,22 @@ const DashboardTab = () => {
           <div className="flex-1">
             <div className="flex items-baseline gap-2">
               <div className="val text-purple-300">{stats?.totalCases || 0}</div>
-              <div className="text-[10px] font-bold text-purple/60">₹{Number(stats?.totalAmountPaid || 0).toLocaleString('en-IN')}</div>
+              <div className="text-[8px] sm:text-[10px] font-bold text-purple/60">₹{Number(stats?.totalAmountPaid || 0).toLocaleString('en-IN')}</div>
             </div>
             <div className="lbl">Total Cases</div>
+          </div>
+        </div>
+
+        <div className="stat cursor-pointer hover:border-blue-300 transition-all" onClick={() => navigate('/case-master')}>
+          <div className="stat-icon bg-blue-soft text-blue">
+            <FolderOpen size={18} />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-baseline gap-2">
+              <div className="val text-blue-300">{(stats?.totalCases || 0) - (stats?.closedCases || 0)}</div>
+              <div className="text-[8px] sm:text-[10px] font-bold text-blue/60">₹{Number((stats?.totalAmountPaid || 0) - (stats?.closedAmount || 0)).toLocaleString('en-IN')}</div>
+            </div>
+            <div className="lbl">Active Cases</div>
           </div>
         </div>
 
@@ -1046,8 +1099,11 @@ const DashboardTab = () => {
           <div className="stat-icon bg-green-soft text-green">
             <CheckCircle size={18} />
           </div>
-          <div>
-            <div className="val text-green-300">{stats?.settledCases || 0}</div>
+          <div className="flex-1">
+            <div className="flex items-baseline gap-2">
+              <div className="val text-green-300">{stats?.settledCases || 0}</div>
+              <div className="text-[8px] sm:text-[10px] font-bold text-green/60">₹{Number(stats?.settledAmount || 0).toLocaleString('en-IN')}</div>
+            </div>
             <div className="lbl">Settled</div>
           </div>
         </div>
@@ -1056,8 +1112,11 @@ const DashboardTab = () => {
           <div className="stat-icon bg-emerald-500/10 text-emerald-500">
             <Hammer size={18} />
           </div>
-          <div>
-            <div className="val text-emerald-300">{stats?.closedCases || 0}</div>
+          <div className="flex-1">
+            <div className="flex items-baseline gap-2">
+              <div className="val text-emerald-300">{stats?.closedCases || 0}</div>
+              <div className="text-[8px] sm:text-[10px] font-bold text-black">₹{Number(stats?.closedAmount || 0).toLocaleString('en-IN')}</div>
+            </div>
             <div className="lbl">Closure</div>
           </div>
         </div>
@@ -1066,9 +1125,12 @@ const DashboardTab = () => {
           <div className="stat-icon bg-red-soft text-red">
             <AlertCircle size={18} />
           </div>
-          <div>
-            <div className="val text-red-300">{stats?.highPriority || 0}</div>
-            <div className="lbl">High Priority</div>
+          <div className="flex-1">
+            <div className="flex items-baseline gap-2">
+              <div className="val text-red-300">{stats?.highPriority || 0}</div>
+              <div className="text-[8px] sm:text-[10px] font-bold text-red/60">₹{Number(stats?.highPriorityAmount || 0).toLocaleString('en-IN')}</div>
+            </div>
+            <div className="lbl">High</div>
           </div>
         </div>
 
@@ -1076,9 +1138,12 @@ const DashboardTab = () => {
           <div className="stat-icon bg-accent-soft text-accent">
             <AlertTriangle size={18} />
           </div>
-          <div>
-            <div className="val text-orange-300">{stats?.mediumPriority || 0}</div>
-            <div className="lbl">Medium Priority</div>
+          <div className="flex-1">
+            <div className="flex items-baseline gap-2">
+              <div className="val text-orange-300">{stats?.mediumPriority || 0}</div>
+              <div className="text-[8px] sm:text-[10px] font-bold text-accent/60">₹{Number(stats?.mediumPriorityAmount || 0).toLocaleString('en-IN')}</div>
+            </div>
+            <div className="lbl">Medium</div>
           </div>
         </div>
 
@@ -1086,9 +1151,12 @@ const DashboardTab = () => {
           <div className="stat-icon bg-yellow-500/10 text-yellow-500">
             <AlertCircle size={18} />
           </div>
-          <div>
-            <div className="val text-yellow-300">{stats?.lowPriority || 0}</div>
-            <div className="lbl">Low Priority</div>
+          <div className="flex-1">
+            <div className="flex items-baseline gap-2">
+              <div className="val text-yellow-300">{stats?.lowPriority || 0}</div>
+              <div className="text-[8px] sm:text-[10px] font-bold text-black">₹{Number(stats?.lowPriorityAmount || 0).toLocaleString('en-IN')}</div>
+            </div>
+            <div className="lbl">Low</div>
           </div>
         </div>
 
@@ -1096,9 +1164,9 @@ const DashboardTab = () => {
           <div className="stat-icon bg-blue-soft text-blue">
             <IndianRupee size={18} />
           </div>
-          <div>
-            <div className="val text-teal-300">₹{Number(stats?.totalRefundAmount || 0).toLocaleString('en-IN')}</div>
-            <div className="lbl">Refund Amount</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-base sm:text-lg font-black text-black truncate tracking-tight" title={`₹${Number(stats?.totalRefundAmount || 0).toLocaleString('en-IN')}`}>₹{Number(stats?.totalRefundAmount || 0).toLocaleString('en-IN')}</div>
+            <div className="lbl mt-1">Refund Amount</div>
           </div>
         </div>
 
@@ -1106,9 +1174,9 @@ const DashboardTab = () => {
           <div className="stat-icon bg-red-500/10 text-red-400">
             <IndianRupee size={18} />
           </div>
-          <div>
-            <div className="val text-red-300 text-xs">₹{Number(stats?.totalDemandAmount || 0).toLocaleString('en-IN')}</div>
-            <div className="lbl">Total Demanded</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm sm:text-base font-black text-black truncate tracking-tight" title={`₹${Number(stats?.amountAtRisk || 0).toLocaleString('en-IN')}`}>₹{Number(stats?.amountAtRisk || 0).toLocaleString('en-IN')}</div>
+            <div className="lbl mt-1">Total Demanded</div>
           </div>
         </div>
       </div>
@@ -1183,9 +1251,31 @@ const DashboardTab = () => {
 
               {/* Team Performance Compact */}
               <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                <div className="px-6 py-4 border-b-2 border-border flex items-center gap-3">
-                  <Users size={18} className="text-accent" />
-                  <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Team Performance</h3>
+                <div className="px-6 py-4 border-b-2 border-border flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Users size={18} className="text-accent" />
+                    <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Team Performance</h3>
+                  </div>
+                  <div className="flex gap-2">
+                    {[
+                      { label: 'All', value: '' },
+                      { label: 'Last 7 Days', value: '7days' },
+                      { label: '1 Month', value: '1month' },
+                      { label: '3 Months', value: '3months' }
+                    ].map(btn => (
+                      <button
+                        key={btn.value}
+                        onClick={() => setTeamFilter(btn.value)}
+                        className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                          teamFilter === btn.value
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-bg-secondary text-text-muted hover:bg-bg-input'
+                        }`}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex-1 overflow-x-auto scrollbar-thin">
                   <table className="w-full text-left border-collapse">
@@ -1195,7 +1285,7 @@ const DashboardTab = () => {
                         <th className="px-2 py-3 text-center">Total</th>
                         <th className="px-2 py-3 text-center">Done</th>
                         <th className="px-2 py-3 text-center">Tasks</th>
-                        <th className="px-2 py-3 text-center">Pend</th>
+                        <th className="px-2 py-3 text-center">Overdue</th>
                       </tr>
                     </thead>
                     <tbody className="text-[10px] text-text-secondary divide-y divide-border/30">
@@ -1291,10 +1381,10 @@ const DashboardTab = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3 flex-1">
                   {[
-                    { label: 'FIR', type: 'FIR', count: stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0, color: 'red', icon: Gavel, status: 'High Risk' },
-                    { label: 'Consumer', type: 'Consumer Complaint', count: stats?.caseTypeWiseData?.find(c => c.caseType === 'Consumer Complaint')?.count || 0, color: 'yellow', icon: Users, status: 'In Progress' },
-                    { label: 'Cyber', type: 'Cyber Complaint', count: stats?.caseTypeWiseData?.find(c => c.caseType === 'Cyber Complaint')?.count || 0, color: 'purple', icon: ShieldAlert, status: 'Monitoring' },
-                    { label: 'Legal', type: 'Legal Notice', count: stats?.caseTypeWiseData?.find(c => c.caseType === 'Legal Notice')?.count || 0, color: 'blue', icon: Scale, status: 'Active' },
+                    { label: 'FIR', type: 'FIR', count: stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0, amount: stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.totalAmount || 0, color: 'red', icon: Gavel },
+                    { label: 'Consumer', type: 'Consumer Complaint', count: stats?.caseTypeWiseData?.find(c => c.caseType === 'Consumer Complaint')?.count || 0, amount: stats?.caseTypeWiseData?.find(c => c.caseType === 'Consumer Complaint')?.totalAmount || 0, color: 'yellow', icon: Users, },
+                    { label: 'Cyber', type: 'Cyber Complaint', count: stats?.caseTypeWiseData?.find(c => c.caseType === 'Cyber Complaint')?.count || 0, amount: stats?.caseTypeWiseData?.find(c => c.caseType === 'Cyber Complaint')?.totalAmount || 0, color: 'purple', icon: ShieldAlert, },
+                    { label: 'Legal', type: 'Legal Notice', count: stats?.caseTypeWiseData?.find(c => c.caseType === 'Legal Notice')?.count || 0, amount: stats?.caseTypeWiseData?.find(c => c.caseType === 'Legal Notice')?.totalAmount || 0, color: 'blue', icon: Scale, },
                   ].map((item, idx) => (
                     <div
                       key={idx}
@@ -1303,7 +1393,10 @@ const DashboardTab = () => {
                     >
                       <div className="space-y-0.5 sm:space-y-1">
                         <div className="text-[10px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">{item.label}</div>
-                        <div className={`text-xl sm:text-2xl font-black text-${item.color}`}>{item.count}</div>
+                        <div className="flex items-baseline gap-2">
+                          <div className={`text-xl sm:text-2xl font-black text-${item.color}`}>{item.count}</div>
+                          <div className={`text-[10px] font-bold text-${item.color} opacity-60`}>₹{Number(item.amount || 0).toLocaleString('en-IN')}</div>
+                        </div>
                         <div className={`text-[10px] sm:text-[10px] font-bold text-${item.color} uppercase opacity-60`}>{item.status}</div>
                       </div>
                       <div className={`mt-2 sm:mt-0 p-2 sm:p-2.5 bg-${item.color}-soft rounded-xl text-${item.color} group-hover:scale-150 transition-transform`}>
@@ -1312,6 +1405,121 @@ const DashboardTab = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            {/* High Priority Cases Table */}
+            <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch mt-8">
+              <div className="px-8 py-6 border-b-2 border-border flex items-center gap-3">
+                <AlertCircle size={20} className="text-red" />
+                <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">High Priority Cases</h3>
+              </div>
+              <div className="table-wrap overflow-x-auto scrollbar-thin">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-bg-secondary text-text-primary text-[10px] font-semibold tracking-[0.2em] uppercase border-b border-border/30">
+                      <th className="px-6 py-4 text-indigo-500">Case ID</th>
+                      <th className="px-6 py-4 text-blue-500">Company Name</th>
+                      <th className="px-6 py-4 text-emerald-500">Client Details</th>
+                      <th className="px-6 py-4 text-orange-500 text-center">Priority </th>
+                      <th className="px-6 py-4 text-red-500 text-center"> Status </th>
+                      <th className="px-6 py-4 text-sky-500 text-right">Last Update</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
+                    {stats?.highPriorityCases?.slice(0, 5).map(c => (
+                      <tr
+                        key={c._id}
+                        className="hover:bg-bg-input/50 transition-all cursor-pointer group"
+                        onClick={() => navigate('/case-master', { state: { searchId: c.caseId || c.caseid } })}
+                      >
+                        <td className="px-6 py-5 font-black text-accent uppercase tracking-tighter">
+                          {c.caseId || c.caseid}
+                        </td>
+                        <td className="px-6 py-5 font-black text-blue-500 uppercase tracking-tight">
+                          {c.companyName || '-'}
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="font-black text-green-500 leading-tight">{c.clientName}</div>
+                          <div className="text-[10px] text-text-muted font-bold mt-1 tracking-wider">{c.clientMobile || '-'}</div>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <Badge status={c.priority} />
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <Badge status={c.currentStatus} />
+                        </td>
+                        <td className="px-6 py-5 text-right text-text-muted font-bold italic opacity-60">
+                          {c.lastUpdateDate || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* View More Button */}
+              {stats?.highPriorityCases?.length > 5 && (
+                <div className="bg-bg-secondary/50 p-4 border-t border-border flex justify-center">
+                  <button
+                    onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}
+                    className="px-6 py-2 bg-accent hover:bg-accent-hover text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm shadow-orange-900/10 active:scale-95"
+                  >
+                    View More <ArrowRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Source of Complaint Table */}
+            <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch mt-8">
+              <div className="px-6 py-4 border-b-2 border-border flex items-center gap-2">
+                <Target size={20} className="text-accent" />
+                <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">Source of Complaint</h3>
+              </div>
+              <div className="table-wrap overflow-x-auto scrollbar-thin">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-bg-secondary text-text-primary text-[10px] font-semibold tracking-[0.2em] uppercase border-b border-border/30">
+                      <th className="px-4 py-2">Source</th>
+                      <th className="px-4 py-2 text-center">Count</th>
+                      <th className="px-4 py-2 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
+                    {stats?.sourceWiseData?.map((item, idx) => {
+                      let Icon = HelpCircle;
+                      let colorClass = 'text-blue-500';
+                      let bgClass = 'bg-blue-500/10';
+
+                      const sourceLower = item.source.toLowerCase();
+                      if (sourceLower.includes('email')) { Icon = Mail; colorClass = 'text-yellow-500'; bgClass = 'bg-yellow-500/10'; }
+                      else if (sourceLower.includes('call')) { Icon = PhoneIncoming; colorClass = 'text-orange-500'; bgClass = 'bg-orange-500/10'; }
+                      else if (sourceLower.includes('visit')) { Icon = Building2; colorClass = 'text-red-500'; bgClass = 'bg-red-500/10'; }
+                      else if (sourceLower.includes('toll')) { Icon = Phone; colorClass = 'text-pink-500'; bgClass = 'bg-pink-500/10'; }
+                      else if (sourceLower.includes('notice')) { Icon = FileText; colorClass = 'text-purple-500'; bgClass = 'bg-purple-500/10'; }
+                      else if (sourceLower.includes('social')) { Icon = MessageCircle; colorClass = 'text-green-500'; bgClass = 'bg-green-500/10'; }
+                      else if (sourceLower.includes('unknown')) { Icon = HelpCircle; colorClass = 'text-blue-500'; bgClass = 'bg-blue-500/10'; }
+
+                      return (
+                        <tr key={idx} className="hover:bg-bg-input/50 transition-all cursor-pointer" onClick={() => navigate('/case-master', { state: { sourceFilter: item.source } })}>
+                          <td className="px-4 py-2 flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${bgClass} ${colorClass}`}>
+                              <Icon size={16} />
+                            </div>
+                            <span className="font-black text-text-primary uppercase tracking-wider">{item.source}</span>
+                          </td>
+                          <td className="px-6 py-4 text-center font-black text-blue-600">
+                            {item.count}
+                          </td>
+                          <td className="px-6 py-4 text-right font-black text-emerald-600">
+                            ₹{Number(item.totalAmount || 0).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -1371,6 +1579,131 @@ const DashboardTab = () => {
 
         {/* Live Activity Feed & Source Breakdown */}
         <div className="lg:col-span-4 flex flex-col gap-8">
+          {user?.role === 'Admin' && (
+            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
+              <div className="flex items-center gap-3 mb-6">
+                <AlertTriangle size={18} className="text-[#1a2332]" />
+                <h3 className="text-xs font-black text-[#1a2332] uppercase tracking-widest">Violations</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div
+                  className="bg-white border-2 border-border rounded-2xl p-4 cursor-pointer hover:border-purple/50 transition-all shadow-sm"
+                  onClick={() => openViolationsModal('SOD')}
+                >
+                  <div className="text-[11px] font-black text-[#7c3aed] uppercase tracking-tight mb-2">SOD Not Submitted</div>
+                  <div className="text-3xl font-black text-[#7c3aed]">{stats?.violations?.sodNotSubmitted || 0}</div>
+                </div>
+                <div
+                  className="bg-white border-2 border-border rounded-2xl p-4 cursor-pointer hover:border-purple/50 transition-all shadow-sm"
+                  onClick={() => openViolationsModal('EOD')}
+                >
+                  <div className="text-[11px] font-black text-[#7c3aed] uppercase tracking-tight mb-2">EOD Not Submitted</div>
+                  <div className="text-3xl font-black text-[#7c3aed]">{stats?.violations?.eodNotSubmitted || 0}</div>
+                </div>
+              </div>
+              <div className="bg-white border-2 border-border rounded-2xl p-4 shadow-sm">
+                <div className="text-[11px] font-black text-[#1a2332] uppercase tracking-tight mb-2">Total Violations</div>
+                <div className="text-3xl font-black text-red-500">
+                  {(stats?.violations?.sodNotSubmitted || 0) + (stats?.violations?.eodNotSubmitted || 0)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {user?.role === 'Admin' && (
+            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
+              <div className="flex items-center gap-3 mb-6">
+                <Clock size={18} className="text-[#1a2332]" />
+                <h3 className="text-xs font-black text-[#1a2332] uppercase tracking-widest">Time Bound Actions</h3>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div
+                  className="bg-white border-2 border-border rounded-xl p-3 shadow-sm cursor-pointer hover:border-red-300 transition-all active:scale-95"
+                  onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}
+                >
+                  <div className="text-[10px] font-black text-red-500 uppercase tracking-tight mb-1">Due Today</div>
+                  <div className="text-2xl font-black text-red-500">{stats?.timeBoundActions?.dueToday || 0}</div>
+                </div>
+                <div
+                  className="bg-white border-2 border-border rounded-xl p-3 shadow-sm cursor-pointer hover:border-orange-300 transition-all active:scale-95"
+                  onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}
+                >
+                  <div className="text-[10px] font-black text-orange-500 uppercase tracking-tight mb-1">Due Within 24 Hrs</div>
+                  <div className="text-2xl font-black text-orange-500">{stats?.timeBoundActions?.dueWithin24h || 0}</div>
+                </div>
+                <div
+                  className="bg-white border-2 border-border rounded-xl p-3 shadow-sm cursor-pointer hover:border-orange-200 transition-all active:scale-95"
+                  onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}
+                >
+                  <div className="text-[10px] font-black text-orange-400 uppercase tracking-tight mb-1">Due Within 48 Hrs</div>
+                  <div className="text-2xl font-black text-orange-400">{stats?.timeBoundActions?.dueWithin48h || 0}</div>
+                </div>
+                <div
+                  className="bg-white border-2 border-border rounded-xl p-3 shadow-sm cursor-pointer hover:border-red-400 transition-all active:scale-95"
+                  onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}
+                >
+                  <div className="text-[10px] font-black text-red-600 uppercase tracking-tight mb-1">Overdue</div>
+                  <div className="text-2xl font-black text-red-600">{stats?.timeBoundActions?.overdue || 0}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* <div className="bg-white border-2 border-border rounded-xl p-4 shadow-sm">
+                  <div className="text-[11px] font-black text-[#1a2332] uppercase tracking-tight mb-1">Compliance Rate</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-2xl font-black text-green-500">{stats?.complianceRate || 100}%</div>
+                    <div className="flex-1 bg-gray-200 h-2 rounded-full overflow-hidden">
+                      <div className="bg-green-500 h-full" style={{ width: `${stats?.complianceRate || 100}%` }}></div>
+                    </div>
+                  </div>
+                </div> */}
+                <div className="bg-white border-2 border-border rounded-xl p-4 shadow-sm">
+                  <div className="text-[11px] font-black text-[#1a2332] uppercase tracking-tight mb-1">Action Taken (Today)</div>
+                  <div className="text-2xl font-black text-green-500">{stats?.timeBoundActions?.actionTakenToday || 0}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 text-right">
+                {/* <button
+                  onClick={() => navigate('/case-master')}
+                  className="text-blue-500 hover:text-blue-600 text-xs font-black uppercase tracking-widest flex items-center gap-1 justify-end w-full"
+                >
+                  View All Actions <ArrowRight size={14} />
+                </button> */}
+              </div>
+            </div>
+          )}
+
+          {user?.role === 'Admin' && (
+            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <h3 className="text-xs font-black text-[#1a2332] uppercase tracking-widest">Active Users</h3>
+              </div>
+              <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-thin">
+                {stats?.activeUsers?.map((u, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-white border-2 border-border rounded-xl shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${u.status === 'Active' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                      <div>
+                        <div className="text-xs font-black text-text-primary uppercase tracking-tight">{u.name}</div>
+                        <div className="text-[10px] text-text-muted font-bold">{u.role}</div>
+                        <div className="text-[9px] text-text-muted mt-1 flex flex-col gap-0.5">
+                          <div>{u.loginTime ? `Login: ${new Date(u.loginTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Login: -'}</div>
+                          {u.logoutTime && <div>Logout: {new Date(u.logoutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>}
+                          {u.lastActiveTime && <div>Active: {new Date(u.lastActiveTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className={`text-[10px] font-black uppercase tracking-widest ${u.status === 'Active' ? 'text-green-500' : 'text-text-muted opacity-60'}`}>
+                      {u.status}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
             <div className="flex items-center gap-3 mb-6 px-2">
               <Clock size={18} className="text-blue" />
@@ -1408,33 +1741,53 @@ const DashboardTab = () => {
             </div>
           </div>
 
-          <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-accent/10 rounded-lg">
-                <Target size={16} className="text-accent" />
+          {/* Quick Actions */}
+          {user?.role === 'Admin' && (
+            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col mt-4">
+              <div className="flex items-center gap-3 mb-4 px-2">
+                <Zap size={18} className="text-accent" />
+                <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Quick Actions</h3>
               </div>
-              <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Source of Complaint</h3>
-            </div>
-            <div className="space-y-3">
-              {stats?.sourceWiseData ? (
-                stats.sourceWiseData.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-bg-input/50 rounded-xl group hover:border-accent/30 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-1.5 h-1.5 rounded-full ${item.source === 'Email' ? 'bg-blue' :
-                        item.source === 'Call' ? 'bg-green' :
-                          item.source === 'Social media' ? 'bg-fuchsia-500' :
-                            item.source === 'office visit' ? 'bg-orange' : 'bg-purple'
-                        }`} />
-                      <span className="text-[11px] font-bold text-text-secondary uppercase tracking-tight">{item.source}</span>
-                    </div>
-                    <span className="text-sm font-black text-text-primary">{item.count}</span>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => navigate('/new-case')}
+                  className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex items-center gap-3"
+                >
+                  <div className="p-2 bg-purple-soft rounded-lg text-purple">
+                    <Plus size={16} />
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-4 opacity-40 text-[10px] font-bold uppercase tracking-tighter">Loading sources...</div>
-              )}
+                  <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">New Case</span>
+                </button>
+                <button
+                  onClick={() => navigate('/my-task')}
+                  className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex items-center gap-3"
+                >
+                  <div className="p-2 bg-blue-soft rounded-lg text-blue">
+                    <ClipboardList size={16} />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">New Task</span>
+                </button>
+                <button
+                  onClick={() => navigate('/work-report')}
+                  className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex items-center gap-3"
+                >
+                  <div className="p-2 bg-green-soft rounded-lg text-green">
+                    <FileText size={16} />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">Work Report</span>
+                </button>
+                <button
+                  onClick={() => navigate('/admin-panel')}
+                  className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex items-center gap-3"
+                >
+                  <div className="p-2 bg-orange-soft rounded-lg text-orange">
+                    <Users size={16} />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">Admin Panel</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -1470,6 +1823,59 @@ const DashboardTab = () => {
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Violations Popup Modal */}
+      {isViolationsModalOpen && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsViolationsModalOpen(false)}>
+          <div className="bg-bg-card border-2 border-border rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+            <div className="p-6 flex items-center justify-between text-white bg-purple">
+              <div>
+                <h2 className="text-xl font-black flex items-center gap-3 uppercase tracking-tight">
+                  <AlertTriangle size={24} />
+                  {violationType} Missing Users
+                </h2>
+                <p className="text-[10px] opacity-80 font-black uppercase tracking-[0.2em] mt-1">
+                  Users who have not submitted {violationType} today
+                </p>
+              </div>
+              <button onClick={() => setIsViolationsModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all"><X size={20} /></button>
+            </div>
+
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 bg-bg-card">
+              {(() => {
+                const users = violationType === 'SOD' ? stats?.violations?.missingSodUsers : stats?.violations?.missingEodUsers;
+
+                if (!users || users.length === 0) {
+                  return (
+                    <div className="text-center py-12 opacity-50">
+                      <CheckCircle size={48} className="mx-auto mb-4 text-green" />
+                      <div className="text-sm font-black uppercase tracking-widest text-text-primary">All {violationType}s Submitted</div>
+                      <div className="text-[10px] font-bold text-text-muted uppercase mt-1">Great job team!</div>
+                    </div>
+                  );
+                }
+
+                return users.map((u, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 bg-bg-input rounded-xl border border-border">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-purple/10 flex items-center justify-center text-purple font-black text-lg">
+                        {u.name ? u.name.charAt(0).toUpperCase() : '?'}
+                      </div>
+                      <div>
+                        <div className="text-sm font-black text-text-primary">{u.name}</div>
+                        <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">{u.email}</div>
+                      </div>
+                    </div>
+                    <div className="px-3 py-1.5 bg-red-soft text-red rounded-lg text-[9px] font-black uppercase tracking-widest">
+                      Missing {violationType}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
           </div>
         </div>
       )}

@@ -65,6 +65,24 @@ router.get('/me', verifyToken, async (req, res) => {
   }
 });
 
+// Logout route to track audit log
+router.post('/logout', verifyToken, async (req, res) => {
+  try {
+    await AuditLog.create({
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      user: req.user.email,
+      role: req.user.role,
+      category: 'Logout',
+      description: 'User logged out',
+      caseId: ''
+    });
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const { sendEmail } = require('../utils/mailer');
 
 router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) => {

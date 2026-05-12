@@ -55,7 +55,7 @@ router.get('/', verifyToken, async (req, res) => {
 // Post a new progress update
 router.post('/', verifyToken, async (req, res) => {
   try {
-    const { caseId, stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, updatedBy, checklist, refundedAmount, savedAmount } = req.body;
+    const { caseId, stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, updatedBy, checklist, refundedAmount, savedAmount, attachment } = req.body;
 
     const newLog = new Progress({
       caseId,
@@ -69,10 +69,27 @@ router.post('/', verifyToken, async (req, res) => {
       updatedBy,
       checklist,
       refundedAmount,
-      savedAmount
+      savedAmount,
+      attachment
     });
 
     await newLog.save();
+
+    // Create Document record if attachment is provided
+    if (attachment) {
+      const Document = require('../models/Document');
+      const existingCount = await Document.countDocuments({ caseId });
+      const docId = `DOC-${caseId}-${String(existingCount + 1).padStart(3, '0')}`;
+      await Document.create({
+        caseId,
+        docId,
+        uploadDate: new Date().toISOString(),
+        sourceForm: 'Progress Update',
+        docType: 'Progress Update Attachment',
+        fileLink: attachment,
+        uploadedBy: updatedBy || 'System'
+      });
+    }
 
     // Update the Case status and percentage if provided
     const updateFields = {};
@@ -105,7 +122,8 @@ router.post('/', verifyToken, async (req, res) => {
         nextAction,
         blockers,
         followUpDate,
-        escalateTo
+        escalateTo,
+        attachment
       }
     });
     await timelineEvent.save();

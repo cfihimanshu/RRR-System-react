@@ -175,7 +175,8 @@ const CaseMasterTab = () => {
     followUpDate: '',
     escalateTo: '',
     refundedAmount: '',
-    savedAmount: ''
+    savedAmount: '',
+    attachment: ''
   });
   const [mouFormData, setMouFormData] = useState({
     mouType: 'Legal Notice',
@@ -1028,7 +1029,8 @@ const CaseMasterTab = () => {
         nextAction: '',
         blockers: '',
         refundedAmount: '',
-        savedAmount: ''
+        savedAmount: '',
+        attachment: ''
       });
       fetchProgressData(viewCase.caseId);
       fetchCases(); // Refresh global list
@@ -2827,6 +2829,19 @@ const CaseMasterTab = () => {
                       placeholder="Any blockers slowing the resolution?"
                       className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3 text-xs font-black text-text-primary focus:border-accent outline-none transition-all h-16 resize-none shadow-sm"
                     ></textarea>
+                  </div>
+
+                  <div className="space-y-1">
+                    <FileUpload
+                      onUploadSuccess={(url) => setProgressFormData(prev => ({ ...prev, attachment: url }))}
+                      label="Upload Document (Optional)"
+                    />
+                    {progressFormData.attachment && (
+                      <div className="flex items-center gap-2 px-4 py-2 bg-blue-soft rounded-lg mt-1">
+                        <Paperclip size={14} className="text-blue" />
+                        <span className="text-[10px] font-black text-blue truncate">{progressFormData.attachment}</span>
+                      </div>
+                    )}
                   </div>
 
                   {progressFormData.stage === 'Closure' && (

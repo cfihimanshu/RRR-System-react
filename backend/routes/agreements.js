@@ -128,19 +128,6 @@ router.post('/generate', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error(`[AGREEMENT] Error: ${error.message}`);
-    
-    // Log error to a file for debugging
-    try {
-      const logDir = path.join(__dirname, '../scratch');
-      if (!fs.existsSync(logDir)) fs.mkdirSync(logDir);
-      fs.appendFileSync(
-        path.join(logDir, 'agreement_error.log'),
-        `[${new Date().toISOString()}] Error: ${error.message}\nStack: ${error.stack}\n\n`
-      );
-    } catch (e) {
-      console.error('Failed to write to log file:', e.message);
-    }
-
     res.status(500).json({ error: error.message });
   }
 });

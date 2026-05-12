@@ -1,0 +1,16 @@
+[2026-05-12T04:52:01.879Z] Error: The user's Drive storage quota has been exceeded.
+Stack: Error: The user's Drive storage quota has been exceeded.
+    at Gaxios._request (C:\Users\dell\RRR-System\backend\node_modules\gaxios\build\cjs\src\gaxios.js:155:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async JWT.requestAsync (C:\Users\dell\RRR-System\backend\node_modules\google-auth-library\build\src\auth\oauth2client.js:463:20)
+    at async createAPIRequestAsync (C:\Users\dell\RRR-System\backend\node_modules\googleapis-common\build\src\apirequest.js:308:25)
+    at async C:\Users\dell\RRR-System\backend\routes\agreements.js:68:26
+
+[2026-05-12T04:54:33.072Z] Error: The user's Drive storage quota has been exceeded.
+Stack: Error: The user's Drive storage quota has been exceeded.
+    at Gaxios._request (C:\Users\dell\RRR-System\backend\node_modules\gaxios\build\cjs\src\gaxios.js:155:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async JWT.requestAsync (C:\Users\dell\RRR-System\backend\node_modules\google-auth-library\build\src\auth\oauth2client.js:463:20)
+    at async createAPIRequestAsync (C:\Users\dell\RRR-System\backend\node_modules\googleapis-common\build\src\apirequest.js:308:25)
+    at async C:\Users\dell\RRR-System\backend\routes\agreements.js:68:26
+

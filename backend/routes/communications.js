@@ -8,8 +8,9 @@ router.get('/', verifyToken, async (req, res) => {
   try {
     let query = req.query.caseId ? { caseId: req.query.caseId } : {};
     
-    // Security: Non-admins only see what they logged OR what is in their assigned cases
-    if (req.user.role !== 'Admin') {
+    // Security: Non-admins only see what they logged when fetching all, 
+    // but if fetching for a specific case, show all communications.
+    if (req.user.role !== 'Admin' && !req.query.caseId) {
       const myIds = [req.user.fullName, req.user.email].filter(Boolean);
       query.loggedBy = { $in: myIds };
     }

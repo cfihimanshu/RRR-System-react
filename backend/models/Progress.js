@@ -11,6 +11,7 @@ const progressSchema = new mongoose.Schema({
   escalateTo: String,
   refundedAmount: Number,
   savedAmount: Number,
+  attachment: String,
   updatedBy: String,
   checklist: [
     {

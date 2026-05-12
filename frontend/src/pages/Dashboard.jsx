@@ -162,8 +162,13 @@ const Dashboard = () => {
                   Cancel
                 </button>
                 <button 
-                  onClick={() => {
+                  onClick={async () => {
                     setShowLogoutModal(false);
+                    try {
+                      await api.post('/auth/logout');
+                    } catch (err) {
+                      console.error('Logout API failed:', err);
+                    }
                     logout();
                   }}
                   className="py-4 px-6 rounded-2xl bg-red-600 text-white font-black text-[10px] uppercase tracking-[0.15em] hover:bg-red-700 shadow-xl shadow-red-900/20 transition-all active:scale-95 flex items-center justify-center gap-2"
