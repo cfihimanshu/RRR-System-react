@@ -283,510 +283,348 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         ]
       };
     }
-
-    const getMetrics = async (matchQuery) => {
-      const result = await Case.aggregate([
-        { $match: matchQuery },
-        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
-      ]);
-      return result.length > 0 ? result[0] : { count: 0, amount: 0 };
-    };
-
+    
     const completedStatuses = ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'];
-    const [
-      totalCases,
-      linkedByCount,
-      openCases,
-      settledMetrics,
-      closedMetrics,
-      highMetrics,
-      mediumMetrics,
-      lowMetrics
-    ] = await Promise.all([
-      Case.countDocuments(query),
-      Case.countDocuments({ ...query, linkedBy: { $exists: true, $ne: '' } }),
-      Case.countDocuments({ ...query, currentStatus: { $nin: completedStatuses } }),
-      getMetrics({ ...query, currentStatus: { $in: ['Settled', 'Settlement', 'Resolution'] } }),
-      getMetrics({ ...query, currentStatus: { $in: ['Closed', 'Closure'] } }),
-      getMetrics({ ...query, priority: 'High' }),
-      getMetrics({ ...query, priority: 'Medium' }),
-      getMetrics({ ...query, priority: 'Low' })
-    ]);
-
-    const settledCases = settledMetrics.count;
-    const settledAmount = settledMetrics.amount;
-    const closedCases = closedMetrics.count;
-    const closedAmount = closedMetrics.amount;
-    const highPriority = highMetrics.count;
-    const highPriorityAmount = highMetrics.amount;
-    const mediumPriority = mediumMetrics.count;
-    const mediumPriorityAmount = mediumMetrics.amount;
-    const lowPriority = lowMetrics.count;
-    const lowPriorityAmount = lowMetrics.amount;
-
-    // Financial Metric: Sum of totalAmtPaid across all cases
-    const totalAmtPaidResult = await Case.aggregate([
-      { $match: query },
-      { $group: { _id: null, total: { $sum: { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
-    ]);
-    const totalAmountPaid = totalAmtPaidResult.length > 0 ? totalAmtPaidResult[0].total : 0;
-
-    const unassignedCount = await Case.countDocuments({
-      ...query,
-      $and: [
-        { $or: [{ initiatedBy: { $regex: /^\s*$/ } }, { initiatedBy: { $exists: false } }, { initiatedBy: null }] },
-        { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] }
-      ]
-    });
-
     const nowForIST = new Date();
     const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
     const dateStrIST = istTime.toISOString().split('T')[0];
     const startOfToday = new Date(`${dateStrIST}T00:00:00+05:30`);
-
-    let timelineQuery = {};
-    const [myCaseIds, casesCreatedToday] = await Promise.all([
-      req.user.role !== 'Admin' ? Case.find(query).distinct('caseId') : Promise.resolve([]),
-      Case.countDocuments({ ...query, createdAt: { $gte: startOfToday } })
-    ]);
-
-    if (req.user.role !== 'Admin') {
-      timelineQuery = { caseId: { $in: myCaseIds } };
-    }
-
-    const [
-      documentsUploadedToday,
-      communicationsToday,
-      totalCommunications,
-      progressUpdatesToday
-    ] = await Promise.all([
-      Timeline.countDocuments({
-        ...timelineQuery,
-        eventType: { $in: ['Document Upload', 'Document Uploaded'] },
-        createdAt: { $gte: startOfToday }
-      }),
-      Timeline.countDocuments({
-        ...timelineQuery,
-        eventType: { $in: ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'] },
-        createdAt: { $gte: startOfToday }
-      }),
-      Timeline.countDocuments({
-        ...timelineQuery,
-        eventType: { $in: ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'] }
-      }),
-      Timeline.countDocuments({
-        ...timelineQuery,
-        eventType: { $in: ['Progress Update', 'Status Update'] },
-        createdAt: { $gte: startOfToday }
-      })
-    ]);
-
-    const pendingTasksCount = await Task.countDocuments({
-      ...(req.user.role !== 'Admin' ? { assignee: userName } : {}),
-      status: { $ne: 'Completed' }
-    });
-
+    const fortyEightHrsAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
     const today = new Date().toISOString().split('T')[0];
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
     const twoDaysFromNow = new Date();
     twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
     const dueSoonDate = twoDaysFromNow.toISOString().split('T')[0];
+    
+    const tomorrowObj = new Date();
+    tomorrowObj.setDate(nowForIST.getDate() + 1);
+    const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
+    const dayAfterTomorrowObj = new Date();
+    dayAfterTomorrowObj.setDate(nowForIST.getDate() + 2);
+    const dayAfterTomorrowStr = dayAfterTomorrowObj.toISOString().split('T')[0];
 
     const refundQuery = {
       ...(req.user.role !== 'Admin' ? { requestedBy: req.user.email } : {}),
       status: 'Approved'
     };
 
-    const [overdueActions, dueSoonActions, refundsPaid, allRefunds, overdueCasesCount] = await Promise.all([
-      Case.find({ ...query, nextActionDate: { $lt: today }, currentStatus: { $ne: 'Closed' } }).limit(50).lean(),
-      Case.find({ ...query, nextActionDate: { $gte: today, $lte: dueSoonDate }, currentStatus: { $ne: 'Closed' } }).limit(50).lean(),
-      Refund.find({ ...(req.user.role !== 'Admin' ? { requestedBy: req.user.email } : {}), status: 'Paid' }).lean(),
-      Refund.find(refundQuery).lean(),
-      Case.countDocuments({ ...query, nextActionDate: { $lt: today }, currentStatus: { $ne: 'Closed' } })
-    ]);
-
-    const totalRefundAmount = refundsPaid.reduce((sum, r) => sum + Number(r.amount || 0), 0);
-    
-    const provisions = {
-      today: { count: 0, amount: 0 },
-      thisWeek: { count: 0, amount: 0 },
-      thisMonth: { count: 0, amount: 0 },
-      next6Months: { count: 0, amount: 0 }
-    };
-
-    const now = new Date();
-    const startOfTodayForRefunds = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfTodayForRefunds = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    
-    const endOfThisWeekForRefunds = new Date(startOfTodayForRefunds);
-    endOfThisWeekForRefunds.setDate(endOfThisWeekForRefunds.getDate() + 7);
-    
-    const endOfThisMonthForRefunds = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    
-    const endOf6MonthsForRefunds = new Date(now.getFullYear(), now.getMonth() + 6, now.getDate(), 23, 59, 59, 999);
-
-    allRefunds.forEach(r => {
-      if (r.installments && r.installments.length > 0) {
-        r.installments.forEach(inst => {
-          if (inst.status === 'Pending' && inst.dueDate) {
-            const dueDate = new Date(inst.dueDate);
-            const amt = Number(inst.amount) || 0;
-            
-            if (dueDate >= startOfTodayForRefunds && dueDate <= endOfTodayForRefunds) {
-              provisions.today.count++;
-              provisions.today.amount += amt;
-            }
-            if (dueDate >= startOfTodayForRefunds && dueDate <= endOfThisWeekForRefunds) {
-              provisions.thisWeek.count++;
-              provisions.thisWeek.amount += amt;
-            }
-            if (dueDate >= startOfTodayForRefunds && dueDate <= endOfThisMonthForRefunds) {
-              provisions.thisMonth.count++;
-              provisions.thisMonth.amount += amt;
-            }
-            if (dueDate >= startOfTodayForRefunds && dueDate <= endOf6MonthsForRefunds) {
-              provisions.next6Months.count++;
-              provisions.next6Months.amount += amt;
-            }
-          }
-        });
-      } else {
-        const amt = Number(r.amount) || 0;
-        const date = r.paymentDate ? new Date(r.paymentDate) : (r.timestamp ? new Date(r.timestamp) : now);
-        
-        if (date >= startOfTodayForRefunds && date <= endOfTodayForRefunds) {
-          provisions.today.count++;
-          provisions.today.amount += amt;
-        }
-        if (date >= startOfTodayForRefunds && date <= endOfThisWeekForRefunds) {
-          provisions.thisWeek.count++;
-          provisions.thisWeek.amount += amt;
-        }
-        if (date >= startOfTodayForRefunds && date <= endOfThisMonthForRefunds) {
-          provisions.thisMonth.count++;
-          provisions.thisMonth.amount += amt;
-        }
-        if (date >= startOfTodayForRefunds && date <= endOf6MonthsForRefunds) {
-          provisions.next6Months.count++;
-          provisions.next6Months.amount += amt;
-        }
-      }
-    });
-
-    // Financial Metrics Isolation: Show data for all communications related to cases the staff member OWNS
-    let commQuery = {};
-    if (req.user.role !== 'Admin') {
-      commQuery = { caseId: { $in: myCaseIds } };
-    }
-
-    const [commsForSum, recentCases, highPriorityCases] = await Promise.all([
-      Communication.find(commQuery).lean(),
-      Case.find(query).sort({ createdAt: -1 }).limit(10).lean(),
-      Case.find({ ...query, priority: 'High', currentStatus: { $nin: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] } }).sort({ createdAt: -1 }).limit(10).lean()
-    ]);
-
-    // Group by caseId to avoid double-counting demand/saved amounts from multiple logs of the same case
-    const caseMetrics = {};
-    commsForSum.forEach(c => {
-      const caseId = c.caseId || 'unlinked';
-      if (!caseMetrics[caseId]) {
-        caseMetrics[caseId] = { demand: 0, saved: 0 };
-      }
-
-      const demandVal = Number(c.refundDemanded) || Number(c.demandAmount) || 0;
-      const savedVal = Number(c.amountSaved) || 0;
-
-      // Update with the maximum value found for this case
-      if (demandVal > caseMetrics[caseId].demand) caseMetrics[caseId].demand = demandVal;
-      if (savedVal > caseMetrics[caseId].saved) caseMetrics[caseId].saved = savedVal;
-    });
-
-    const totalDemandAmount = Object.values(caseMetrics).reduce((sum, m) => sum + m.demand, 0);
-    const totalAmountSaved = Object.values(caseMetrics).reduce((sum, m) => sum + m.saved, 0);
-
-    // Fetch Dynamic Case Type Wise Data
-    const caseTypeAggregation = await Case.aggregate([
-      { $match: query },
-      { $group: { _id: '$typeOfComplaint', count: { $sum: 1 }, totalAmount: { $sum: { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } },
-      { $sort: { count: -1 } }
-    ]);
-    const caseTypeWiseData = caseTypeAggregation.map(item => ({ caseType: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
-
-    // ── Threat Trends (Last 30 Days) ──
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    thirtyDaysAgo.setHours(0, 0, 0, 0);
-
-    const threatTrendAggregation = await Case.aggregate([
-      { $match: { ...query, createdAt: { $gte: thirtyDaysAgo } } },
-      {
-        $group: {
-          _id: {
-            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            type: "$typeOfComplaint"
-          },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { "_id.date": 1 } }
-    ]);
-
-    // Reshape data for Recharts
-    const threatTrendData = [];
-    const dateMap = {};
-
-    // Get all unique case types found in this period
-    const foundTypes = new Set();
-    threatTrendAggregation.forEach(item => {
-      if (item._id.type) foundTypes.add(item._id.type);
-    });
-
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dayStr = d.toISOString().split('T')[0];
-      const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-      
-      dateMap[dayStr] = { date: label };
-      // Initialize all found types with 0
-      foundTypes.forEach(type => {
-        dateMap[dayStr][type] = 0;
-      });
-    }
-
-    threatTrendAggregation.forEach(item => {
-      const date = item._id.date;
-      const type = item._id.type;
-      const count = item.count;
-      
-      if (dateMap[date] && type) {
-        dateMap[date][type] = count;
-      }
-    });
-
-    const threatTrendDataArray = Object.values(dateMap);
-
-    // Sort types by total count in this period
-    const typeTotals = {};
-    threatTrendAggregation.forEach(item => {
-      const type = item._id.type || 'Unknown';
-      typeTotals[type] = (typeTotals[type] || 0) + item.count;
-    });
-
-    const sortedTypes = Object.keys(typeTotals).sort((a, b) => typeTotals[b] - typeTotals[a]);
-
-    // Fetch Dynamic Source of Complaint Data
-    const sourceAggregation = await Case.aggregate([
-      { $match: query },
-      { $group: { _id: '$sourceOfComplaint', count: { $sum: 1 }, totalAmount: { $sum: { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } },
-      { $sort: { count: -1 } }
-    ]);
-    const sourceWiseData = sourceAggregation.map(item => ({ source: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
-
-    // ── Team Performance (Admin Only) ──
-    let teamPerformance = [];
-    if (req.user.role === 'Admin') {
-      const allUsers = await User.find({ role: { $regex: /^operations$/i } }).lean();
-
-      const casePipeline = [];
-      if (Object.keys(teamDateQuery).length > 0) {
-        casePipeline.push({ $match: teamDateQuery });
-      }
-      casePipeline.push({
-        $addFields: {
-          calculatedUser: {
-            $cond: {
-              if: { $eq: [{ $trim: { input: { $ifNull: ["$assignedTo", ""] } } }, ""] },
-              then: "$initiatedBy",
-              else: "$assignedTo"
-            }
-          }
-        }
-      });
-      casePipeline.push({
-        $group: {
-          _id: "$calculatedUser",
-          total: { $sum: 1 },
-          pending: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution']] }] }, 1, 0] } },
-          settled: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution']] }, 1, 0] } },
-          overdue: { 
-            $sum: { 
-              $cond: [
-                { 
-                  $and: [
-                    { $lt: ["$nextActionDate", today] }, 
-                    { $not: [{ $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution']] }] }
-                  ] 
-                }, 
-                1, 
-                0
-              ] 
-            } 
-          }
-        }
-      });
-      const caseCounts = await Case.aggregate(casePipeline);
-
-      const taskPipeline = [{ $match: { status: { $ne: 'Completed' } } }];
-      if (Object.keys(teamDateQuery).length > 0) {
-        taskPipeline.push({ $match: teamDateQuery });
-      }
-      taskPipeline.push({ $group: { _id: "$assignee", count: { $sum: 1 } } });
-      const taskCounts = await Task.aggregate(taskPipeline);
-
-      const commPipeline = [];
-      if (Object.keys(commDateQuery).length > 0) {
-        commPipeline.push({ $match: commDateQuery });
-      }
-      commPipeline.push({ $group: { _id: "$loggedBy", totalSaved: { $sum: { $convert: { input: "$amountSaved", to: "double", onError: 0, onNull: 0 } } } } });
-      const savedAmounts = await Communication.aggregate(commPipeline);
-
-      teamPerformance = allUsers.map(u => {
-        const uName = (u.fullName || u.name || '').trim();
-        const stats = caseCounts.find(c => c._id && c._id.trim().toLowerCase() === uName.toLowerCase()) || { total: 0, pending: 0, settled: 0, overdue: 0 };
-        const tasks = taskCounts.find(t => t._id && t._id.trim().toLowerCase() === uName.toLowerCase()) || { count: 0 };
-        const saved = savedAmounts.find(s => (s._id && s._id.trim().toLowerCase() === uName.toLowerCase()) || (s._id && s._id.trim().toLowerCase() === u.email.toLowerCase())) || { totalSaved: 0 };
-
-        const parts = uName.split(' ').filter(Boolean);
-        const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : (parts[0] ? parts[0].substring(0, 2).toUpperCase() : 'U');
-        const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#6366f1'];
-
-        return { id: u._id, name: uName, email: u.email, role: u.role, initials, color: colors[uName.length % colors.length], assigned: stats.total, pending: stats.overdue || 0, settled: stats.settled, pendingTasks: tasks.count, totalSaved: saved.totalSaved };
-      }).sort((a, b) => b.assigned - a.assigned);
-    }
-
-    // ── Trend Data (7 Days) ──
-    const trendData = [];
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-
-    const trendAggregation = await Case.aggregate([
-      { $match: { ...query, createdAt: { $gte: sevenDaysAgo } } },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          newCases: { $sum: 1 },
-          highPriority: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dayStr = d.toISOString().split('T')[0];
-      const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-      const dayData = trendAggregation.find(t => t._id === dayStr) || { newCases: 0, highPriority: 0 };
-
-      trendData.push({
-        date: label,
-        newCases: dayData.newCases,
-        closedCases: 0,
-        highPriority: dayData.highPriority
-      });
-    }
-
-    // ── Threat Matrix Analysis ──
-    const threatAnalysis = caseTypeWiseData.slice(0, 5).map(item => ({
-      type: item.caseType,
-      count: item.count,
-      amount: item.totalAmount || 0
-    }));
-
-    // ── Collection Potential (Non-settled demand) ──
-    const collectionPotentialQuery = { ...query, currentStatus: { $nin: completedStatuses } };
-    const potentialComms = await Communication.find(collectionPotentialQuery).lean();
-    const collectionPotential = potentialComms.reduce((sum, c) => sum + (Number(c.demandAmount) || Number(c.refundDemanded) || 0), 0);
-
-    // ── Live Escalations (High priority updated recently) ──
-    const fortyEightHrsAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-    const liveEscalations = await Case.countDocuments({
-      ...query,
-      priority: 'High',
-      updatedAt: { $gte: fortyEightHrsAgo },
-      currentStatus: { $nin: completedStatuses }
-    });
-
-    // ── System Violations ──
-    const violations = {
-      sodNotSubmitted: 0,
-      eodNotSubmitted: 0,
-      noUpdate48Hrs: await Case.countDocuments({ ...query, updatedAt: { $lt: fortyEightHrsAgo }, currentStatus: { $nin: completedStatuses } }),
-      slaBreached: await Case.countDocuments({ ...query, priority: 'High', nextActionDate: { $lt: today }, currentStatus: { $nin: completedStatuses } })
-    };
-
-    // ── Amount at Risk & Pending Approvals ──
-    const amountAtRisk = totalDemandAmount;
-    
-    const RefundModel = require('./models/Refund');
-    const pendingApprovalsResult = await RefundModel.aggregate([
-      { $match: { status: 'Pending Admin Approval' } },
-      { $group: { _id: null, total: { $sum: { $convert: { input: { $ifNull: ['$amount', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
-    ]);
-    const pendingApprovals = pendingApprovalsResult.length > 0 ? pendingApprovalsResult[0].total : 0;
-
-    // ── Time Bound Actions ──
-    const todayObj = new Date();
-    const todayStr = todayObj.toISOString().split('T')[0];
-    
-    const tomorrowObj = new Date();
-    tomorrowObj.setDate(todayObj.getDate() + 1);
-    const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
-    
-    const dayAfterTomorrowObj = new Date();
-    dayAfterTomorrowObj.setDate(todayObj.getDate() + 2);
-    const dayAfterTomorrowStr = dayAfterTomorrowObj.toISOString().split('T')[0];
-
-    // Using startOfToday defined earlier for timezone consistency
-
     const targetUserStr = String(userFilter || userName || '');
-    const esc = targetUserStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const nameRegex = new RegExp(`^\\s*${esc}\\s*$`, 'i');
+    const escUser = targetUserStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nameRegex = new RegExp(`^\\s*${escUser}\\s*$`, 'i');
     const taskUserQuery = (req.user.role !== 'Admin' || userFilter) ? {
       $or: [
         { assignee: nameRegex },
         { createdBy: req.user.email }
       ]
     } : {};
-    
-    // Removed hardcoded debug file writing
 
-    const timeBoundActions = {
-      dueToday: await Task.countDocuments({
-        ...taskUserQuery,
-        status: { $nin: ['Completed', 'Done'] },
-        $or: [
-          { dueDate: today },
-          { 
-            dueDate: { $in: [null, ""] },
-            createdAt: { $gte: startOfToday }
+    let myCaseIds = [];
+    if (req.user.role !== 'Admin') {
+      myCaseIds = await Case.find(query).distinct('caseId');
+    }
+    const timelineQuery = req.user.role !== 'Admin' ? { caseId: { $in: myCaseIds } } : {};
+
+
+    const [caseMetricsFacet, timelineMetrics, refundMetrics, taskMetrics] = await Promise.all([
+      Case.aggregate([
+        { $match: query },
+        {
+          $facet: {
+            basic: [
+              { $group: { 
+                _id: null, 
+                totalCases: { $sum: 1 },
+                totalAmountPaid: { $sum: { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } } },
+                openCases: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, 1, 0] } },
+                settledCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'Settlement', 'Resolution']] }, 1, 0] } },
+                settledAmount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'Settlement', 'Resolution']] }, { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } }, 0] } },
+                closedCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closed', 'Closure']] }, 1, 0] } },
+                closedAmount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closed', 'Closure']] }, { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } }, 0] } },
+                highPriority: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } },
+                highPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } }, 0] } },
+                mediumPriority: { $sum: { $cond: [{ $eq: ["$priority", "Medium"] }, 1, 0] } },
+                mediumPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "Medium"] }, { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } }, 0] } },
+                lowPriority: { $sum: { $cond: [{ $eq: ["$priority", "Low"] }, 1, 0] } },
+                lowPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "Low"] }, { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } }, 0] } },
+                linkedByCount: { $sum: { $cond: [{ $and: [{ $gt: ["$linkedBy", null] }, { $ne: ["$linkedBy", ""] }] }, 1, 0] } },
+                createdToday: { $sum: { $cond: [{ $gte: ["$createdAt", startOfToday] }, 1, 0] } },
+                liveEscalations: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $gte: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
+                noUpdate48Hrs: { $sum: { $cond: [{ $and: [{ $lt: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
+                slaBreached: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $lt: ["$nextActionDate", today] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } }
+              }}
+            ],
+            unassigned: [
+              { $match: {
+                $and: [
+                  { $or: [{ initiatedBy: { $regex: /^\s*$/ } }, { initiatedBy: { $exists: false } }, { initiatedBy: null }] },
+                  { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] }
+                ]
+              }},
+              { $count: "count" }
+            ],
+            caseTypeWise: [
+              { $group: { _id: '$typeOfComplaint', count: { $sum: 1 }, totalAmount: { $sum: { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } },
+              { $sort: { count: -1 } }
+            ],
+            sourceWise: [
+              { $group: { _id: '$sourceOfComplaint', count: { $sum: 1 }, totalAmount: { $sum: { $convert: { input: { $ifNull: ['$totalAmtPaid', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } },
+              { $sort: { count: -1 } }
+            ],
+            trendData: [
+              { $match: { createdAt: { $gte: sevenDaysAgo } } },
+              { $group: {
+                _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                newCases: { $sum: 1 },
+                highPriority: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } }
+              }},
+              { $sort: { _id: 1 } }
+            ],
+            overdueActions: [
+              { $match: { nextActionDate: { $lt: today }, currentStatus: { $ne: 'Closed' } } },
+              { $sort: { nextActionDate: 1 } },
+              { $limit: 10 }
+            ],
+            dueSoonActions: [
+              { $match: { nextActionDate: { $gte: today, $lte: dueSoonDate }, currentStatus: { $ne: 'Closed' } } },
+              { $sort: { nextActionDate: 1 } },
+              { $limit: 10 }
+            ],
+            recentCases: [
+              { $sort: { createdAt: -1 } },
+              { $limit: 10 }
+            ],
+            highPriorityCases: [
+              { $match: { priority: 'High', currentStatus: { $nin: completedStatuses } } },
+              { $sort: { createdAt: -1 } },
+              { $limit: 10 }
+            ],
+            threatTrends: [
+              { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+              { $group: {
+                _id: {
+                  date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                  type: "$typeOfComplaint"
+                },
+                count: { $sum: 1 }
+              }},
+              { $sort: { "_id.date": 1 } }
+            ]
           }
-        ]
-      }),
-      dueWithin24h: await Task.countDocuments({
-        ...taskUserQuery,
-        status: { $nin: ['Completed', 'Done'] },
-        dueDate: tomorrowStr
-      }),
-      dueWithin48h: await Task.countDocuments({
-        ...taskUserQuery,
-        status: { $nin: ['Completed', 'Done'] },
-        dueDate: dayAfterTomorrowStr
-      }),
-      overdue: await Task.countDocuments({
-        ...taskUserQuery,
-        status: { $nin: ['Completed', 'Done'] },
-        reminderDateTime: { $lt: new Date().toISOString(), $ne: '' }
-      }),
-      actionTakenToday: await Task.countDocuments({
-        ...taskUserQuery,
-        status: 'Completed',
-        updatedAt: { $gte: startOfToday }
-      })
+        }
+      ]),
+      Timeline.aggregate([
+        { $match: timelineQuery },
+        {
+          $facet: {
+            docsToday: [
+              { $match: { eventType: { $in: ['Document Upload', 'Document Uploaded'] }, createdAt: { $gte: startOfToday } } },
+              { $count: "count" }
+            ],
+            commsToday: [
+              { $match: { eventType: { $in: ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'] }, createdAt: { $gte: startOfToday } } },
+              { $count: "count" }
+            ],
+            totalComms: [
+              { $match: { eventType: { $in: ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'] } } },
+              { $count: "count" }
+            ],
+            progressToday: [
+              { $match: { eventType: { $in: ['Progress Update', 'Status Update'] }, createdAt: { $gte: startOfToday } } },
+              { $count: "count" }
+            ]
+          }
+        }
+      ]),
+      (async () => {
+        const [refundsPaid, allRefunds, pendingApprovalsResult] = await Promise.all([
+          Refund.find({ ...(req.user.role !== 'Admin' ? { requestedBy: req.user.email } : {}), status: 'Paid' }).lean(),
+          Refund.find(refundQuery).lean(),
+          Refund.aggregate([
+            { $match: { status: 'Pending Admin Approval' } },
+            { $group: { _id: null, total: { $sum: { $convert: { input: { $ifNull: ['$amount', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
+          ])
+        ]);
+        return { refundsPaid, allRefunds, pendingApprovalsResult };
+      })(),
+      (async () => {
+        const [pendingTasksCount, dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday] = await Promise.all([
+          Task.countDocuments({
+            ...(req.user.role !== 'Admin' ? { assignee: userName } : {}),
+            status: { $ne: 'Completed' }
+          }),
+          Task.countDocuments({
+            ...taskUserQuery,
+            status: { $nin: ['Completed', 'Done'] },
+            $or: [
+              { dueDate: today },
+              { 
+                dueDate: { $in: [null, ""] },
+                createdAt: { $gte: startOfToday }
+              }
+            ]
+          }),
+          Task.countDocuments({
+            ...taskUserQuery,
+            status: { $nin: ['Completed', 'Done'] },
+            dueDate: tomorrowStr
+          }),
+          Task.countDocuments({
+            ...taskUserQuery,
+            status: { $nin: ['Completed', 'Done'] },
+            dueDate: dayAfterTomorrowStr
+          }),
+          Task.countDocuments({
+            ...taskUserQuery,
+            status: { $nin: ['Completed', 'Done'] },
+            reminderDateTime: { $lt: new Date().toISOString(), $ne: '' }
+          }),
+          Task.countDocuments({
+            ...taskUserQuery,
+            status: 'Completed',
+            updatedAt: { $gte: startOfToday }
+          })
+        ]);
+        return { pendingTasksCount, dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday };
+      })()
+    ]);
+
+    const facet = caseMetricsFacet[0] || {};
+    const b = facet.basic?.[0] || {};
+    
+    const totalCases = b.totalCases || 0;
+    const totalAmountPaid = b.totalAmountPaid || 0;
+    const openCases = b.openCases || 0;
+    const settledCases = b.settledCount || 0;
+    const settledAmount = b.settledAmount || 0;
+    const closedCases = b.closedCount || 0;
+    const closedAmount = b.closedAmount || 0;
+    const highPriority = b.highPriority || 0;
+    const highPriorityAmount = b.highPriorityAmount || 0;
+    const mediumPriority = b.mediumPriority || 0;
+    const mediumPriorityAmount = b.mediumPriorityAmount || 0;
+    const lowPriority = b.lowPriority || 0;
+    const lowPriorityAmount = b.lowPriorityAmount || 0;
+    const linkedByCount = b.linkedByCount || 0;
+    const casesCreatedToday = b.createdToday || 0;
+    const liveEscalations = b.liveEscalations || 0;
+    const unassignedCount = facet.unassigned?.[0]?.count || 0;
+
+    const documentsUploadedToday = timelineMetrics[0]?.docsToday?.[0]?.count || 0;
+    const communicationsToday = timelineMetrics[0]?.commsToday?.[0]?.count || 0;
+    const totalCommunications = timelineMetrics[0]?.totalComms?.[0]?.count || 0;
+    const progressUpdatesToday = timelineMetrics[0]?.progressToday?.[0]?.count || 0;
+
+    const { refundsPaid, allRefunds, pendingApprovalsResult } = refundMetrics;
+    const totalRefundAmount = refundsPaid.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const pendingApprovals = pendingApprovalsResult.length > 0 ? pendingApprovalsResult[0].total : 0;
+
+    const { pendingTasksCount, dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday } = taskMetrics;
+    const timeBoundActions = { dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday };
+
+    const overdueActions = facet.overdueActions || [];
+    const dueSoonActions = facet.dueSoonActions || [];
+    const recentCases = facet.recentCases || [];
+    const highPriorityCases = facet.highPriorityCases || [];
+    const caseTypeWiseData = (facet.caseTypeWise || []).map(item => ({ caseType: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
+    const sourceWiseData = (facet.sourceWise || []).map(item => ({ source: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
+
+    // Reshape threatTrends
+    const threatTrendAggregation = facet.threatTrends || [];
+    const foundTypes = new Set();
+    threatTrendAggregation.forEach(item => { if (item._id.type) foundTypes.add(item._id.type); });
+
+    const dateMap = {};
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toISOString().split('T')[0];
+      const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      dateMap[dayStr] = { date: label };
+      foundTypes.forEach(type => { dateMap[dayStr][type] = 0; });
+    }
+    threatTrendAggregation.forEach(item => {
+      if (dateMap[item._id.date] && item._id.type) dateMap[item._id.date][item._id.type] = item.count;
+    });
+    const threatTrendDataArray = Object.values(dateMap);
+    const typeTotals = {};
+    threatTrendAggregation.forEach(item => {
+      const type = item._id.type || 'Unknown';
+      typeTotals[type] = (typeTotals[type] || 0) + item.count;
+    });
+    const sortedTypes = Object.keys(typeTotals).sort((a, b) => typeTotals[b] - typeTotals[a]);
+
+    // Reshape trendData
+    const trendAggregation = facet.trendData || [];
+    const trendData = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toISOString().split('T')[0];
+      const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      const dayData = trendAggregation.find(t => t._id === dayStr) || { newCases: 0, highPriority: 0 };
+      trendData.push({ date: label, newCases: dayData.newCases, closedCases: 0, highPriority: dayData.highPriority });
+    }
+
+    const threatAnalysis = caseTypeWiseData.slice(0, 5).map(item => ({ type: item.caseType, count: item.count, amount: item.totalAmount || 0 }));
+    const violations = {
+      sodNotSubmitted: 0,
+      eodNotSubmitted: 0,
+      noUpdate48Hrs: b.noUpdate48Hrs || 0,
+      slaBreached: b.slaBreached || 0
     };
 
-    // ── Compliance Rate & Detailed Team Stats ──
+    const provisions = { today: { count: 0, amount: 0 }, thisWeek: { count: 0, amount: 0 }, thisMonth: { count: 0, amount: 0 }, next6Months: { count: 0, amount: 0 } };
+    const nowForRefunds = new Date();
+    const startOfTodayForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth(), nowForRefunds.getDate());
+    const endOfTodayForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth(), nowForRefunds.getDate(), 23, 59, 59, 999);
+    const endOfThisWeekForRefunds = new Date(startOfTodayForRefunds);
+    endOfThisWeekForRefunds.setDate(endOfThisWeekForRefunds.getDate() + 7);
+    const endOfThisMonthForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth() + 1, 0, 23, 59, 59, 999);
+    const endOf6MonthsForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth() + 6, nowForRefunds.getDate(), 23, 59, 59, 999);
+
+    allRefunds.forEach(r => {
+      const installments = r.installments && r.installments.length > 0 ? r.installments : [{ status: 'Pending', dueDate: r.paymentDate || r.timestamp, amount: r.amount }];
+      installments.forEach(inst => {
+        if (inst.status === 'Pending' && inst.dueDate) {
+          const dueDate = new Date(inst.dueDate);
+          const amt = Number(inst.amount) || 0;
+          if (dueDate >= startOfTodayForRefunds && dueDate <= endOfTodayForRefunds) { provisions.today.count++; provisions.today.amount += amt; }
+          if (dueDate >= startOfTodayForRefunds && dueDate <= endOfThisWeekForRefunds) { provisions.thisWeek.count++; provisions.thisWeek.amount += amt; }
+          if (dueDate >= startOfTodayForRefunds && dueDate <= endOfThisMonthForRefunds) { provisions.thisMonth.count++; provisions.thisMonth.amount += amt; }
+          if (dueDate >= startOfTodayForRefunds && dueDate <= endOf6MonthsForRefunds) { provisions.next6Months.count++; provisions.next6Months.amount += amt; }
+        }
+      });
+    });
+
+    // Collection Potential and Total Demand/Saved
+    let commQuery = {};
+    if (req.user.role !== 'Admin') commQuery = { caseId: { $in: myCaseIds } };
+    const commsForSum = await Communication.find(commQuery).select('caseId refundDemanded demandAmount amountSaved').lean();
+    const caseMetrics = {};
+    let collectionPotential = 0;
+    commsForSum.forEach(c => {
+      const caseId = c.caseId || 'unlinked';
+      if (!caseMetrics[caseId]) caseMetrics[caseId] = { demand: 0, saved: 0 };
+      const demandVal = Number(c.refundDemanded) || Number(c.demandAmount) || 0;
+      const savedVal = Number(c.amountSaved) || 0;
+      if (demandVal > caseMetrics[caseId].demand) caseMetrics[caseId].demand = demandVal;
+      if (savedVal > caseMetrics[caseId].saved) caseMetrics[caseId].saved = savedVal;
+    });
+    const totalDemandAmount = Object.values(caseMetrics).reduce((sum, m) => sum + m.demand, 0);
+    const totalAmountSaved = Object.values(caseMetrics).reduce((sum, m) => sum + m.saved, 0);
+    const amountAtRisk = totalDemandAmount;
+
+    collectionPotential = commsForSum.reduce((sum, c) => {
+      return sum + (Number(c.demandAmount) || Number(c.refundDemanded) || 0);
+    }, 0);
+
+    let teamPerformance = [];
+
     if (req.user.role === 'Admin') {
       const Report = require('./models/Report');
       const reportsToday = await Report.find({
@@ -805,22 +643,93 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       const missingEodUsers = [];
       const missingNoUpdateUsers = [];
 
-      await Promise.all(allNonAdmins.map(async (user) => {
+      // ── Team Performance (Admin Only) ──
+      const casePipeline = [];
+      if (Object.keys(teamDateQuery).length > 0) casePipeline.push({ $match: teamDateQuery });
+      casePipeline.push({
+        $addFields: {
+          calculatedUser: {
+            $cond: {
+              if: { $eq: [{ $trim: { input: { $ifNull: ["$assignedTo", ""] } } }, ""] },
+              then: "$initiatedBy",
+              else: "$assignedTo"
+            }
+          }
+        }
+      });
+      casePipeline.push({
+        $group: {
+          _id: "$calculatedUser",
+          total: { $sum: 1 },
+          pending: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, 1, 0] } },
+          settled: { $sum: { $cond: [{ $in: ["$currentStatus", completedStatuses] }, 1, 0] } },
+          overdue: { 
+            $sum: { 
+              $cond: [
+                { 
+                  $and: [
+                    { $lt: ["$nextActionDate", today] }, 
+                    { $not: [{ $in: ["$currentStatus", completedStatuses] }] }
+                  ] 
+                }, 1, 0
+              ] 
+            } 
+          }
+        }
+      });
+
+      const taskPipeline = [{ $match: { status: { $ne: 'Completed' } } }];
+      if (Object.keys(teamDateQuery).length > 0) taskPipeline.push({ $match: teamDateQuery });
+      taskPipeline.push({ $group: { _id: "$assignee", count: { $sum: 1 } } });
+
+      const commPipeline = [];
+      if (Object.keys(commDateQuery).length > 0) commPipeline.push({ $match: commDateQuery });
+      commPipeline.push({ $group: { _id: "$loggedBy", totalSaved: { $sum: { $convert: { input: "$amountSaved", to: "double", onError: 0, onNull: 0 } } } } });
+
+      const [caseCounts, taskCounts, savedAmounts] = await Promise.all([
+        Case.aggregate(casePipeline),
+        Task.aggregate(taskPipeline),
+        Communication.aggregate(commPipeline)
+      ]);
+
+      const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#6366f1'];
+      teamPerformance = allNonAdmins.map(u => {
+        const uName = (u.fullName || u.name || '').trim();
+        const stats = caseCounts.find(c => c._id && c._id.trim().toLowerCase() === uName.toLowerCase()) || { total: 0, pending: 0, settled: 0, overdue: 0 };
+        const tasks = taskCounts.find(t => t._id && t._id.trim().toLowerCase() === uName.toLowerCase()) || { count: 0 };
+        const saved = savedAmounts.find(s => (s._id && s._id.trim().toLowerCase() === uName.toLowerCase()) || (s._id && s._id.trim().toLowerCase() === u.email.toLowerCase())) || { totalSaved: 0 };
+
+        const parts = uName.split(' ').filter(Boolean);
+        const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : (parts[0] ? parts[0].substring(0, 2).toUpperCase() : 'U');
+
+        return { id: u._id, name: uName, email: u.email, role: u.role, initials, color: colors[uName.length % colors.length], assigned: stats.total, pending: stats.overdue || 0, settled: stats.settled, pendingTasks: tasks.count, totalSaved: saved.totalSaved };
+      }).sort((a, b) => b.assigned - a.assigned);
+
+      // Batch fetch SOD and EOD reports for all users
+      const allEmails = allNonAdmins.map(u => u.email);
+      const [lastSods, lastEods] = await Promise.all([
+        Report.find({ userEmail: { $in: allEmails }, type: 'SOD', date: { $lt: dateStrIST } }).sort({ date: -1 }).lean(),
+        Report.find({ userEmail: { $in: allEmails }, type: 'EOD' }).lean()
+      ]);
+
+      const sodMap = {};
+      lastSods.forEach(s => { if (!sodMap[s.userEmail]) sodMap[s.userEmail] = s; });
+      const eodMap = {};
+      lastEods.forEach(e => { eodMap[`${e.userEmail}_${e.date}`] = e; });
+
+      allNonAdmins.forEach(user => {
         const hasSod = reportsToday.some(r => r.type === 'SOD' && (r.userEmail === user.email || r.userName === user.fullName));
         const hasReport48h = reportsLast48Hrs.some(r => r.userEmail === user.email || r.userName === user.fullName);
 
         if (!hasSod) missingSodUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
         if (!hasReport48h) missingNoUpdateUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
 
-        // Check for missed EOD on last active day
-        const lastSod = await Report.findOne({ userEmail: user.email, type: 'SOD', date: { $lt: dateStrIST } }).sort({ date: -1 }).lean();
+        const lastSod = sodMap[user.email];
         if (lastSod) {
-          const lastEod = await Report.findOne({ userEmail: user.email, type: 'EOD', date: lastSod.date }).lean();
-          if (!lastEod) {
-            missingEodUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
-          }
+          const lastEod = eodMap[`${user.email}_${lastSod.date}`];
+          if (!lastEod) missingEodUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
         }
-      }));
+      });
 
       const complianceRate = allNonAdmins.length > 0 ? Math.round(((allNonAdmins.length - missingSodUsers.length) / allNonAdmins.length) * 100) : 100;
 
@@ -1109,7 +1018,11 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         overdue: timeBoundActions.overdue,
         isEodMissed,
         bypassEodCheck,
-        timeBoundActions
+        timeBoundActions,
+        linkedByCount,
+        liveEscalations,
+        collectionPotential,
+        amountAtRisk
       });
     }
   } catch (error) {

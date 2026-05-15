@@ -27,4 +27,10 @@ const reportSchema = new mongoose.Schema({
   status: { type: String, default: 'Submitted' }
 }, { timestamps: true });
 
+reportSchema.index({ date: -1 });
+reportSchema.index({ userEmail: 1, date: -1 });
+reportSchema.index({ type: 1 });
+reportSchema.index({ userEmail: 1, type: 1, date: -1 });
+
+
 module.exports = mongoose.model('Report', reportSchema);

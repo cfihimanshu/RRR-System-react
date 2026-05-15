@@ -64,4 +64,14 @@ const caseSchema = new mongoose.Schema({
   recommendedNextSteps: String
 }, { timestamps: true });
 
+caseSchema.index({ createdAt: -1 });
+caseSchema.index({ assignedTo: 1 });
+caseSchema.index({ initiatedBy: 1 });
+caseSchema.index({ currentStatus: 1 });
+caseSchema.index({ priority: 1 });
+caseSchema.index({ nextActionDate: 1 });
+caseSchema.index({ companyName: 1 });
+caseSchema.index({ clientMobile: 1 });
+
+
 module.exports = mongoose.model('Case', caseSchema);
