@@ -171,7 +171,7 @@ const ReviewerDashTab = () => {
                 <p className="font-black text-green text-sm tracking-tight">₹{Number(selectedRefund.amount).toLocaleString('en-IN')}</p>
               </div>
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Initiated By</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Assign To</p>
                 <p className="text-text-primary font-black uppercase text-[10px] tracking-widest break-all">
                   {selectedRefund.requestedByName || selectedRefund.requestedBy}
                 </p>

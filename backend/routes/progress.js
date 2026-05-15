@@ -94,12 +94,10 @@ router.post('/', verifyToken, async (req, res) => {
     // Update the Case status and percentage if provided
     const updateFields = {};
     if (stage) {
+      updateFields.currentStatus = stage;
       if (stage === 'Closure') {
-        updateFields.currentStatus = 'Settled';
         updateFields.refundedAmount = refundedAmount;
         updateFields.savedAmount = savedAmount;
-      } else {
-        updateFields.currentStatus = stage;
       }
     }
     if (percentage !== undefined) updateFields.progressPercentage = percentage;

@@ -118,6 +118,13 @@ router.post('/', verifyToken, async (req, res) => {
     };
     const report = new Report(reportData);
     await report.save();
+
+    // Reset bypassEodCheck if this was a SOD submission
+    if (report.type === 'SOD') {
+      const User = require('../models/User');
+      await User.findByIdAndUpdate(req.user.id, { bypassEodCheck: false });
+    }
+
     res.status(201).json(report);
   } catch (error) {
     res.status(400).json({ error: error.message });

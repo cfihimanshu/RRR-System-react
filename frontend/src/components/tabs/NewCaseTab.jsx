@@ -49,13 +49,14 @@ const initialFormData = {
   companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
   typeOfComplaint: '', brandName: '',
   engagementNote: 'This is a multi-stage consultancy and execution support engagement. ₹0 was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.',
-  clientName: '', clientMobile: '', clientEmail: '', state: '',
-  totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '',
+  clientName: '', clientMobile: '', clientEmail: '', state: '', city: '', pincode: '',
+  totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '', dateOfLastPayment: '',
   smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
   proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
   initiatedBy: '', accountable: '', legalOfficer: '', accounts: '',
   firNumber: '', firFileLink: '', grievanceNumber: '',
-  assignedTo: ''
+  assignedTo: '',
+  linkedBy: ''
 };
 
 const NewCaseTab = () => {
@@ -72,7 +73,8 @@ const NewCaseTab = () => {
 
   const [errors, setErrors] = useState({
     clientEmail: '',
-    clientMobile: ''
+    clientMobile: '',
+    companyName: ''
   });
 
   const [userList, setUserList] = useState([]); // List of users for dropdown
@@ -115,12 +117,15 @@ const NewCaseTab = () => {
           clientMobile: editCase.clientMobile || '',
           clientEmail: editCase.clientEmail || '',
           state: editCase.state || '',
+          city: editCase.city || '',
+          pincode: editCase.pincode || '',
           engagementNote: editCase.engagementNote || data.engagementNote || '',
           caseSummary: editCase.caseSummary || editCase.summary || '',
           clientAllegation: editCase.clientAllegation || editCase.allegation || '',
           totalAmtPaid: editCase.totalAmtPaid || editCase.amountPaid || '',
           totalMouValue: editCase.totalMouValue || editCase.mouValue || '',
           amtInDispute: editCase.amtInDispute || editCase.disputeAmount || '',
+          dateOfLastPayment: editCase.dateOfLastPayment || '',
           initiatedBy: editCase.initiatedBy || editCase.initiator || '',
           accountable: editCase.accountable || '',
           legalOfficer: editCase.legalOfficer || '',
@@ -203,7 +208,41 @@ const NewCaseTab = () => {
     fetchUsers();
   }, []);
 
-  // Ensure initiatedBy is blank for Staff users on new cases
+  const checkCompanyNameDuplicate = async (name) => {
+    if (!name) return;
+    try {
+      const res = await api.get(`/cases/check-duplicate?companyName=${encodeURIComponent(name)}`);
+      if (res.data.exists) {
+        setErrors(prev => ({ ...prev, companyName: 'Company name already exist' }));
+      } else {
+        setErrors(prev => ({ ...prev, companyName: '' }));
+      }
+    } catch (err) {
+      console.error('Failed to check duplicate company name', err);
+    }
+  };
+
+  const [linkedCases, setLinkedCases] = useState([]);
+
+  useEffect(() => {
+    const fetchLinkedCases = async () => {
+      const name = formData.clientName;
+      const mobile = formData.clientMobile;
+      if (!name && !mobile) {
+        setLinkedCases([]);
+        return;
+      }
+      try {
+        const res = await api.get(`/cases/search-client?name=${encodeURIComponent(name)}&mobile=${encodeURIComponent(mobile)}`);
+        setLinkedCases(res.data);
+      } catch (err) {
+        console.error('Failed to fetch linked cases', err);
+      }
+    };
+    
+    const debounceTimer = setTimeout(fetchLinkedCases, 500);
+    return () => clearTimeout(debounceTimer);
+  }, [formData.clientName, formData.clientMobile]);
   useEffect(() => {
     if (!editCase && user?.role?.toLowerCase() === 'staff') {
       setFormData(prev => ({ ...prev, initiatedBy: '' }));
@@ -312,7 +351,7 @@ const NewCaseTab = () => {
       companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
       typeOfComplaint: '', brandName: '', engagementNote: '',
       clientName: '', clientMobile: '', clientEmail: '', state: '',
-      totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '',
+      totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '', dateOfLastPayment: '',
       smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
       proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
       initiatedBy: '', accountable: '', legalOfficer: '', accounts: '',
@@ -364,7 +403,7 @@ const NewCaseTab = () => {
           companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
           typeOfComplaint: '', brandName: '', engagementNote: '',
           clientName: '', clientMobile: '', clientEmail: '', state: '',
-          totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '',
+          totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '', dateOfLastPayment: '',
           smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
           proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
           initiatedBy: '', accountable: '', legalOfficer: '', accounts: '',
@@ -443,7 +482,17 @@ const NewCaseTab = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-4 gap-6">
             <div>
               <label className={`${labelClass} after:content-['*'] after:text-red`}>Company Name</label>
-              <input type="text" className={inputClass} name="companyName" value={formData.companyName || ''} onChange={handleChange} placeholder="e.g. ABC Solutions Pvt Ltd" required />
+              <input 
+                type="text" 
+                className={`${inputClass} ${errors.companyName ? 'border-red bg-red-soft' : ''}`} 
+                name="companyName" 
+                value={formData.companyName || ''} 
+                onChange={handleChange} 
+                onBlur={(e) => checkCompanyNameDuplicate(e.target.value)}
+                placeholder="e.g. ABC Solutions Pvt Ltd" 
+                required 
+              />
+              {errors.companyName && <p className="text-[9px] text-red font-black mt-2 uppercase tracking-widest">{errors.companyName}</p>}
             </div>
             <div>
               <label className={`${labelClass} after:content-['*'] after:text-red`}>Case Title</label>
@@ -455,6 +504,7 @@ const NewCaseTab = () => {
                 <option value="High">High</option>
                 <option value="Medium">Medium</option>
                 <option value="Low">Low</option>
+                <option value="Critical">Critical</option>
               </select>
             </div>
             <div>
@@ -474,14 +524,14 @@ const NewCaseTab = () => {
               <select className={inputClass} name="typeOfComplaint" value={formData.typeOfComplaint || ''} onChange={handleChange} required>
                 <option value="">-- Select --</option>
                 <option value="Legal Notice">Legal Notice</option>
-                <option value="Cyber Complaint">Cyber Complaint</option>
+                <option value="1930 Cyber Complaint">1930 Cyber Complaint</option>
                 <option value="Consumer Complaint">Consumer Complaint</option>
-                <option value="FIR">FIR</option>
-                <option value="Litigation">Litigation</option>
-                <option value="Escalation">Escalation</option>
+                <option value="Criminal Complaint/FIR">Criminal Complaint/FIR</option>
+                <option value="Civil Case">Civil Case</option>
+                <option value="Social Media">Social Media</option>
                 <option value="General Query">General Query</option>
-                <option value="Lien">Lien</option>
-
+                <option value="NA Non Agreement">NA Non Agreement</option>
+                <option value="Demand Pressure">Demand Pressure</option>
               </select>
             </div>
             <div>
@@ -570,16 +620,18 @@ const NewCaseTab = () => {
                   <option value="Multiple Services">Multiple Services</option>
                 </select>
               </div>
-              <div className="w-full lg:w-3/4">
-                <label className={labelClass}>Engagement Note</label>
-                <textarea
-                  className={`${inputClass} h-12 border-dashed !bg-bg-secondary italic`}
-                  name="engagementNote"
-                  value={formData.engagementNote}
-                  onChange={handleChange}
-                  placeholder="Brief summary of what was promised/sold..."
-                ></textarea>
-              </div>
+              {serviceMode === 'Multiple Services' && (
+                <div className="w-full lg:w-3/4">
+                  <label className={labelClass}>Engagement Note</label>
+                  <textarea
+                    className={`${inputClass} h-12 border-dashed !bg-bg-secondary italic`}
+                    name="engagementNote"
+                    value={formData.engagementNote}
+                    onChange={handleChange}
+                    placeholder="Brief summary of what was promised/sold..."
+                  ></textarea>
+                </div>
+              )}
             </div>
 
             {services.map((svc, idx) => (
@@ -671,6 +723,22 @@ const NewCaseTab = () => {
                 {errors.clientEmail && <p className="text-[9px] text-red font-black mt-2 uppercase tracking-widest">{errors.clientEmail}</p>}
               </div>
               <div>
+                <label className={labelClass}>Linked By</label>
+                <select 
+                  className={inputClass} 
+                  name="linkedBy" 
+                  value={formData.linkedBy || ''} 
+                  onChange={handleChange}
+                >
+                  <option value="">-- Select Linked Case --</option>
+                  {linkedCases.map(c => (
+                    <option key={c.caseId} value={c.caseId}>
+                      {c.companyName} ({c.caseId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className={labelClass}>State</label>
                 <SearchableSelect
                   name="state"
@@ -681,6 +749,18 @@ const NewCaseTab = () => {
                   className="!bg-bg-input !border-border h-12"
                 />
               </div>
+              {formData.state && (
+                <>
+                  <div>
+                    <label className={labelClass}>City</label>
+                    <input type="text" className={`${inputClass} h-12`} name="city" value={formData.city || ''} onChange={handleChange} placeholder="Enter city" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Pincode</label>
+                    <input type="text" className={`${inputClass} h-12`} name="pincode" value={formData.pincode || ''} onChange={handleChange} placeholder="Enter pincode" />
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -702,13 +782,13 @@ const NewCaseTab = () => {
                 <label className={labelClass}>Total Amount Paid (₹)</label>
                 <input type="text" className={`${inputClass} h-12 !bg-bg-secondary !border-dashed font-black`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" />
               </div>
-              <div>
+              {/* <div>
                 <label className={labelClass}>MOU Signed?</label>
                 <select className={`${inputClass} h-12`} name="mouSigned" value={formData.mouSigned || 'No'} onChange={handleChange}>
                   <option value="Yes">Yes</option>
                   <option value="No">No</option>
                 </select>
-              </div>
+              </div> */}
               <div>
                 <label className={labelClass}>Total MOU Value (₹)</label>
                 <input type="text" className={`${inputClass} h-12 !bg-bg-secondary !border-dashed font-black`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" />
@@ -716,6 +796,10 @@ const NewCaseTab = () => {
               <div>
                 <label className={labelClass}>Amount In Dispute (₹)</label>
                 <input type="text" className={`${inputClass} h-12 bg-blue-soft font-black text-blue border-blue-soft`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" />
+              </div>
+              <div>
+                <label className={labelClass}>Date of Last Payment</label>
+                <input type="date" className={`${inputClass} h-12`} name="dateOfLastPayment" value={formData.dateOfLastPayment || ''} onChange={handleChange} />
               </div>
             </div>
           </div>
@@ -740,6 +824,7 @@ const NewCaseTab = () => {
                   <option value="None">None</option>
                   <option value="Low">Low</option>
                   <option value="High">High</option>
+                  <option value="Critical">Critical</option>
                 </select>
               </div>
               <div>
@@ -847,11 +932,11 @@ const NewCaseTab = () => {
               <h3 className={sectionTitleClass}><Users size={18} className="text-purple" /> Team Assignment</h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
-                  <label className={labelClass}>Initiated By</label>
+                  <label className={labelClass}>Assign To</label>
                   <select
                     className={`${inputClass} ${user?.role?.toLowerCase() === 'staff' ? 'bg-bg-secondary cursor-not-allowed opacity-50' : ''}`}
-                    name="initiatedBy"
-                    value={formData.initiatedBy || ''}
+                    name="assignedTo"
+                    value={formData.assignedTo || ''}
                     onChange={handleChange}
                     disabled={user?.role?.toLowerCase() === 'staff'}
                   >
@@ -937,8 +1022,8 @@ const NewCaseTab = () => {
                 <p className="text-sm font-black text-text-primary uppercase">{duplicateCase.clientName}</p>
               </div>
               <div className="bg-bg-input p-4 rounded-2xl border border-border">
-                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Initiated By</p>
-                <p className="text-sm font-black text-text-primary uppercase">{duplicateCase.initiatedBy || 'N/A'}</p>
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Assign To</p>
+                <p className="text-sm font-black text-text-primary uppercase">{duplicateCase.assignedTo || 'N/A'}</p>
               </div>
             </div>
           )}

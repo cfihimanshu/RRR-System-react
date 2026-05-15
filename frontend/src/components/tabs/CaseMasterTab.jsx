@@ -220,7 +220,8 @@ const CaseMasterTab = () => {
     priority: ['All Priority'],
     assignee: ['All Assignees'],
     typeOfComplaint: ['All Types'],
-    date: null
+    date: null,
+    linkedOnly: false
   });
   const { user } = useContext(AuthContext);
 
@@ -229,7 +230,7 @@ const CaseMasterTab = () => {
     companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
     typeOfComplaint: '', brandName: '',
     engagementNote: '',
-    clientName: '', clientMobile: '', clientEmail: '', state: '',
+    clientName: '', clientMobile: '', clientEmail: '', state: '', city: '', pincode: '',
     totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '',
     smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
     importDocumentLink: '',
@@ -248,10 +249,40 @@ const CaseMasterTab = () => {
   const [cyberAcks, setCyberAcks] = useState(['']);
   const [formErrors, setFormErrors] = useState({});
 
+  const [linkedCases, setLinkedCases] = useState([]);
+
+  useEffect(() => {
+    const fetchLinkedCases = async () => {
+      const name = viewCase?.clientName || formData.clientName;
+      const mobile = viewCase?.clientMobile || formData.clientMobile;
+      if (!name && !mobile) {
+        setLinkedCases([]);
+        return;
+      }
+      try {
+        const res = await api.get(`/cases/search-client?name=${encodeURIComponent(name)}&mobile=${encodeURIComponent(mobile)}`);
+        const uniqueCases = [];
+        const seenIds = new Set();
+        res.data.forEach(c => {
+          if (!seenIds.has(c.caseId)) {
+            seenIds.add(c.caseId);
+            uniqueCases.push(c);
+          }
+        });
+        setLinkedCases(uniqueCases.filter(c => c.caseId !== viewCase?.caseId));
+      } catch (err) {
+        console.error('Failed to fetch linked cases', err);
+      }
+    };
+    
+    const debounceTimer = setTimeout(fetchLinkedCases, 500);
+    return () => clearTimeout(debounceTimer);
+  }, [formData.clientName, formData.clientMobile]);
+
   const inputClass = "w-full border border-border rounded-xl px-4 py-3 text-sm focus:border-accent focus:ring-1 focus:ring-accent-soft outline-none transition-all bg-bg-input text-text-primary font-medium placeholder:text-text-muted shadow-inner";
   const labelClass = "block text-[11px] font-black text-text-muted uppercase tracking-[0.1em] mb-2";
   const sectionTitleClass = "text-md font-black flex items-center gap-2 mb-6 text-accent uppercase tracking-wider";
-  const cardClass = "bg-bg-card rounded-2xl border-2 border-border p-8 mb-8 shadow-sm transition-all duration-300";
+  const cardClass = "bg-bg-card rounded-2xl border-2 border-border p-4 md:p-8 mb-8 shadow-sm transition-all duration-300";
 
   // Helper to parse legacy summary strings into structured data
   const parseLegacySummary = (summary) => {
@@ -395,7 +426,11 @@ const CaseMasterTab = () => {
   useEffect(() => {
     // Check if we have a special demand filter from dashboard
     const hasDemandFilter = location.state?.hasDemand;
-    
+
+    if (location.state?.linkedOnly) {
+      setAppliedFilters(prev => ({ ...prev, linkedOnly: true }));
+    }
+
     // Initial data fetch
     fetchCases(!!hasDemandFilter);
     fetchOpsUsers();
@@ -532,7 +567,8 @@ const CaseMasterTab = () => {
   const filteredCases = cases.filter(c => {
     const matchSearch = (c.caseId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (c.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      (c.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+      (c.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (c.assignedTo?.toLowerCase() || '').includes(searchTerm.toLowerCase());
 
     let matchStatus = false;
     const normalizedCaseStatus = normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy);
@@ -571,7 +607,9 @@ const CaseMasterTab = () => {
 
     const matchType = appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.typeOfComplaint.length === 0 || appliedFilters.typeOfComplaint.includes(c.typeOfComplaint);
 
-    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchType;
+    const matchLinkedOnly = !appliedFilters.linkedOnly || (c.linkedBy && c.linkedBy.trim() !== '');
+
+    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchType && matchLinkedOnly;
   });
 
   const handleApplyFilters = () => {
@@ -847,14 +885,14 @@ const CaseMasterTab = () => {
     try {
       // 1. Update Case status
       await api.put(`/cases/${viewCase.caseId}`, {
-        currentStatus: 'Resolution',
+        currentStatus: 'Closure',
         progressPercentage: 100
       });
 
       // 2. Log in progress history
       await api.post('/progress', {
         caseId: viewCase.caseId,
-        stage: 'Resolution',
+        stage: 'Closure',
         percentage: 100,
         summary: 'Case marked as resolved manually by user.',
         updatedBy: user?.fullName || user?.email
@@ -863,7 +901,7 @@ const CaseMasterTab = () => {
       toast.success('Case marked as resolved', { id: loadingToast });
       fetchCases();
       // Update local view
-      setViewCase(prev => ({ ...prev, currentStatus: 'Resolution', progressPercentage: 100 }));
+      setViewCase(prev => ({ ...prev, currentStatus: 'Closure', progressPercentage: 100 }));
     } catch (err) {
       toast.error('Failed to resolve case', { id: loadingToast });
     }
@@ -998,6 +1036,7 @@ const CaseMasterTab = () => {
   const handleProgressSubmit = async (e) => {
     e.preventDefault();
     if (!progressFormData.summary) return toast.error('Update summary is required');
+    if (!progressFormData.attachment) return toast.error('Document upload is required');
 
     if (progressFormData.stage === 'Closure') {
       if (!progressFormData.refundedAmount) return toast.error('Refunded Amount is required');
@@ -1013,6 +1052,12 @@ const CaseMasterTab = () => {
         updatedBy: user?.fullName || user?.email,
         checklist // Include current checklist state
       });
+      // Update case status in DB
+      await api.put(`/cases/${viewCase.caseId}`, {
+        currentStatus: progressFormData.stage,
+        progressPercentage: progressFormData.percentage
+      });
+
       toast.success('Progress updated', { id: loadingToast });
 
       // Update local viewCase to reflect new status/percentage
@@ -1657,7 +1702,7 @@ const CaseMasterTab = () => {
           </button>
 
           {/* Case Header Card */}
-          <div className="bg-bg-card rounded-2xl border-2 border-border p-8 mb-8 shadow-sm">
+          <div className="bg-bg-card rounded-2xl border-2 border-border p-4 md:p-8 mb-8 shadow-sm">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
               <div>
                 <div className="flex items-center gap-3 mb-4">
@@ -1671,7 +1716,7 @@ const CaseMasterTab = () => {
                   <h2 className="text-2xl font-black text-text-primary uppercase tracking-tight max-w-4xl">
                     {viewCase.typeOfComplaint || 'Payment Dispute'} — {viewCase.companyName}
                   </h2>
-                  {((activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Closure' || (activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Resolution' || viewCase.progressPercentage >= 100) && viewCase.currentStatus !== 'Settled' && (
+                  {((activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Closure' || (activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Resolution' || (activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Settled' || viewCase.progressPercentage >= 100) && (
                     <button
                       onClick={handleMarkResolved}
                       className="bg-green text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
@@ -1735,7 +1780,7 @@ const CaseMasterTab = () => {
             </div>
 
             {/* Quick Info Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div>
                 <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Client</div>
                 <div className="text-sm font-black text-text-primary truncate">{viewCase.clientName}</div>
@@ -1746,8 +1791,10 @@ const CaseMasterTab = () => {
               </div>
               <div>
                 <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Email ID</div>
-                <div className="flex items-center gap-2">
-                  <div className="text-xs font-black text-text-primary">{viewCase.clientEmail || 'Email'}</div>
+                <div className="text-xs font-black text-text-primary" title={viewCase.clientEmail || 'Email'}>
+                  {viewCase.clientEmail ? viewCase.clientEmail.split(/[/,]/).map((email, index) => (
+                    <div key={index} className="truncate">{email.trim()}</div>
+                  )) : 'Email'}
                 </div>
               </div>
               <div>
@@ -1758,11 +1805,39 @@ const CaseMasterTab = () => {
                 <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Created</div>
                 <div className="text-sm font-black text-text-primary whitespace-nowrap">{viewCase.createdDate ? format(new Date(viewCase.createdDate), 'dd MMM yyyy') : '—'}</div>
               </div>
+              <div>
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Linked By</div>
+                <div className="text-sm font-black text-text-primary whitespace-nowrap">
+                  <select 
+                    className="bg-transparent border-none text-blue hover:underline cursor-pointer outline-none text-sm font-black max-w-[150px] truncate"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        setSearchTerm(val);
+                        setAppliedFilters(prev => ({ ...prev, search: val }));
+                        setViewCase(null);
+                      }
+                    }}
+                    value=""
+                  >
+                    <option value="">
+                      {linkedCases.find(c => c.caseId === viewCase.linkedBy) 
+                        ? `${linkedCases.find(c => c.caseId === viewCase.linkedBy).companyName} (${viewCase.linkedBy})` 
+                        : (viewCase.linkedBy || '-- Select --')}
+                    </option>
+                    {linkedCases.filter(c => c.caseId !== viewCase.linkedBy).map(c => (
+                      <option key={c.caseId} value={c.caseId}>
+                        {c.companyName} ({c.caseId})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Content Tabs */}
-          <div className="flex gap-10 border-b border-border mb-10 overflow-x-auto scrollbar-none">
+          <div className="flex gap-4 md:gap-10 border-b border-border mb-10 overflow-x-auto scrollbar-none">
             {['Case Details', 'Communications', 'Documents', 'Progress Update', 'History', 'Case Study'].map((tab) => (
               <button
                 key={tab}
@@ -1798,6 +1873,7 @@ const CaseMasterTab = () => {
                         <option value="High">High</option>
                         <option value="Medium">Medium</option>
                         <option value="Low">Low</option>
+                        <option value="Critical">Critical</option>
                       </select>
                     </div>
                     <div>
@@ -1817,14 +1893,14 @@ const CaseMasterTab = () => {
                       <select className={inputClass} name="typeOfComplaint" value={formData.typeOfComplaint || ''} onChange={handleFormChange} required disabled={!isEditing}>
                         <option value="">-- Select --</option>
                         <option value="Legal Notice">Legal Notice</option>
-                        <option value="Cyber Complaint">Cyber Complaint</option>
+                        <option value="1930 Cyber Complaint">1930 Cyber Complaint</option>
                         <option value="Consumer Complaint">Consumer Complaint</option>
-                        <option value="FIR">FIR</option>
-                        <option value="Litigation">Litigation</option>
-                        <option value="Escalation">Escalation</option>
+                        <option value="Criminal Complaint/FIR">Criminal Complaint/FIR</option>
+                        <option value="Civil Case">Civil Case</option>
+                        <option value="Social Media">Social Media</option>
                         <option value="General Query">General Query</option>
-                        <option value="Lien">Lien</option>
-
+                        <option value="NA Non Agreement">NA Non Agreement</option>
+                        <option value="Demand Pressure">Demand Pressure</option>
                       </select>
                     </div>
                     <div>
@@ -1920,7 +1996,7 @@ const CaseMasterTab = () => {
                   </div>
 
                   {services.map((svc, idx) => (
-                    <div key={idx} className="relative bg-bg-input p-6 rounded-2xl border border-border mb-6">
+                    <div key={idx} className="relative bg-bg-input p-4 md:p-6 rounded-2xl border border-border mb-6">
                       {services.length > 1 && isEditing && (
                         <button type="button" onClick={() => removeService(idx)} className="absolute top-4 right-4 text-red hover:bg-red-soft p-2 rounded-xl transition-all" title="Remove Service">
                           <X size={18} />
@@ -1999,6 +2075,26 @@ const CaseMasterTab = () => {
                       {formErrors.clientEmail && <p className="text-[9px] text-red font-black mt-2 uppercase tracking-widest">{formErrors.clientEmail}</p>}
                     </div>
                     <div>
+                      <label className={labelClass}>Linked By</label>
+                      <select 
+                        className={inputClass} 
+                        name="linkedBy" 
+                        value={formData.linkedBy || ''} 
+                        onChange={handleFormChange}
+                        disabled={!isEditing}
+                      >
+                        <option value="">-- Select Linked Case --</option>
+                        {linkedCases.map(c => (
+                          <option key={c.caseId} value={c.caseId}>
+                            {c.companyName} ({c.caseId})
+                          </option>
+                        ))}
+                        {formData.linkedBy && !linkedCases.find(c => c.caseId === formData.linkedBy) && (
+                          <option value={formData.linkedBy}>{formData.linkedBy}</option>
+                        )}
+                      </select>
+                    </div>
+                    <div>
                       <label className={labelClass}>State</label>
                       <SearchableSelect
                         name="state"
@@ -2010,6 +2106,18 @@ const CaseMasterTab = () => {
                         disabled={!isEditing}
                       />
                     </div>
+                    {formData.state && (
+                      <>
+                        <div>
+                          <label className={labelClass}>City</label>
+                          <input type="text" className={inputClass} name="city" value={formData.city || ''} onChange={handleFormChange} placeholder="Enter city" disabled={!isEditing} />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Pincode</label>
+                          <input type="text" className={inputClass} name="pincode" value={formData.pincode || ''} onChange={handleFormChange} placeholder="Enter pincode" disabled={!isEditing} />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -2021,13 +2129,13 @@ const CaseMasterTab = () => {
                       <label className={labelClass}>Total Amount Paid (₹)</label>
                       <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
                     </div>
-                    <div>
+                    {/* <div>
                       <label className={labelClass}>MOU Signed?</label>
                       <select className={inputClass} name="mouSigned" value={formData.mouSigned || 'No'} onChange={handleFormChange} disabled={!isEditing}>
                         <option value="Yes">Yes</option>
                         <option value="No">No</option>
                       </select>
-                    </div>
+                    </div> */}
                     <div>
                       <label className={labelClass}>Total MOU Value (₹)</label>
                       <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
@@ -2035,6 +2143,10 @@ const CaseMasterTab = () => {
                     <div>
                       <label className={labelClass}>Amount In Dispute (₹)</label>
                       <input type="text" className={`${inputClass} bg-blue-soft font-black text-blue border-blue-soft`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Date of Last Payment</label>
+                      <input type="date" className={`${inputClass} h-12`} name="dateOfLastPayment" value={formData.dateOfLastPayment || ''} onChange={handleFormChange} disabled={!isEditing} />
                     </div>
                   </div>
                 </div>
@@ -2049,6 +2161,7 @@ const CaseMasterTab = () => {
                         <option value="None">None</option>
                         <option value="Low">Low</option>
                         <option value="High">High</option>
+                        <option value="Critical">Critical</option>
                       </select>
                     </div>
                     <div>
@@ -2834,7 +2947,7 @@ const CaseMasterTab = () => {
                   <div className="space-y-1">
                     <FileUpload
                       onUploadSuccess={(url) => setProgressFormData(prev => ({ ...prev, attachment: url }))}
-                      label="Upload Document (Optional)"
+                      label="Upload Document *"
                     />
                     {progressFormData.attachment && (
                       <div className="flex items-center gap-2 px-4 py-2 bg-blue-soft rounded-lg mt-1">
@@ -2932,7 +3045,24 @@ const CaseMasterTab = () => {
                               {log.uploadDate || log.createdAt ? format(new Date(log.uploadDate || log.createdAt), 'dd MMM yy') : '--'}
                             </div>
                             <p className="text-[11px] font-bold text-text-secondary leading-relaxed mb-1">{log.summary}</p>
+                            {log.nextAction && (
+                              <div className="text-[10px] font-black text-purple uppercase tracking-widest mt-1">
+                                Next Action: {log.nextAction}
+                              </div>
+                            )}
                             <div className="text-[9px] font-black text-accent uppercase tracking-widest opacity-80">Updated by: {log.updatedBy === user?.email ? 'You' : log.updatedBy?.split('@')[0] || 'System'}</div>
+                            {log.attachment && (
+                              <div className="mt-1">
+                                <a 
+                                  href={log.attachment} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-[9px] font-black text-blue hover:underline uppercase tracking-widest flex items-center gap-1"
+                                >
+                                  <Paperclip size={12} className="text-blue" /> View Document
+                                </a>
+                              </div>
+                            )}
                           </div>
                         );
                       })

@@ -39,9 +39,11 @@ import {
   FolderOpen,
   ListChecks,
   Eye,
+  Filter,
   Scale,
   Gavel,
   ShieldAlert,
+  ShieldCheck,
   Hammer,
   FolderPlus,
   FileUp,
@@ -78,6 +80,11 @@ const DashboardTab = () => {
   const [installments, setInstallments] = useState([]);
   const [activities, setActivities] = useState([]);
   const [teamFilter, setTeamFilter] = useState('');
+  const [userFilter, setUserFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [activePeriod, setActivePeriod] = useState('7 Days');
+  const [allUsers, setAllUsers] = useState([]);
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
@@ -413,12 +420,66 @@ const DashboardTab = () => {
 
   const fetchStats = async (filter = '') => {
     try {
-      const res = await api.get(`/dashboard/stats?teamFilter=${filter}`);
-      setStats(res.data);
+      let url = `/dashboard/stats?teamFilter=${filter}`;
+      if (userFilter) url += `&userFilter=${encodeURIComponent(userFilter)}`;
+      if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
+
+      const res = await api.get(url);
+      const data = res.data;
+
+      if (data.caseTypeWiseData) {
+        // No remapping — use DB values as-is
+        const dbData = data.caseTypeWiseData;
+
+        // Fixed 6 types to always show — 0 if not in DB
+        const fixedTypes = [
+          'Legal Notice',
+          '1930 Cyber Complaint',
+          'Consumer Complaint',
+          'Criminal Complaint/FIR',
+          'Social Media',
+          'Civil Case'
+        ];
+
+        const finalData = fixedTypes.map(type => {
+          // Match DB entries that correspond to this display type
+          const matchingItems = dbData.filter(i => {
+            const key = (i.caseType || '').toLowerCase().trim();
+            return key === type.toLowerCase().trim();
+          });
+
+          const totalCount = matchingItems.reduce((sum, i) => sum + i.count, 0);
+          const totalAmt = matchingItems.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+
+          return {
+            caseType: type,
+            count: totalCount,
+            totalAmount: totalAmt
+          };
+        });
+
+        data.caseTypeWiseData = finalData;
+      }
+
+      setStats(data);
     } catch (error) {
       console.error(error);
     }
   };
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res = await api.get('/users');
+        setAllUsers(res.data.filter(u => u.role !== 'Admin'));
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    if (user?.role === 'Admin') {
+      fetchUsers();
+    }
+  }, [user]);
 
   useEffect(() => {
     fetchStats(teamFilter);
@@ -433,7 +494,7 @@ const DashboardTab = () => {
     }, 30000);
 
     return () => clearInterval(statsInterval);
-  }, [teamFilter]);
+  }, [teamFilter, userFilter, startDate, endDate]);
 
   const handleRefundSubmit = async (e) => {
     e.preventDefault();
@@ -564,9 +625,6 @@ const DashboardTab = () => {
     <div className="section active w-full pb-10 px-4 bg-[#f8fafc]">
       <div className="section-header flex flex-col lg:flex-row justify-between items-start lg:items-center mb-10 w-full gap-6 pt-4">
         <div className="flex-1 text-left">
-          <div className="section-title text-xl md:text-2xl lg:text-3xl font-semibold text-text-primary tracking-tight leading-tight">
-            {user?.fullName ? `${getGreeting()}, ${user.fullName}!` : `${getGreeting()}!`}
-          </div>
         </div>
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full lg:w-auto">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
@@ -698,9 +756,11 @@ const DashboardTab = () => {
                 </h2>
                 <p className="text-[10px] opacity-80 font-black uppercase tracking-[0.2em] mt-2">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
               </div>
-              <button onClick={() => setIsReportModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2.5 rounded-xl transition-all text-white">
-                <X size={24} />
-              </button>
+              {!(reportType === 'SOD' && !hasSodToday && user?.role !== 'Admin') && (
+                <button onClick={() => setIsReportModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2.5 rounded-xl transition-all text-white">
+                  <X size={24} />
+                </button>
+              )}
             </div>
 
             <form onSubmit={handleReportSubmit} className="p-4 sm:p-8 space-y-8 text-left max-h-[75vh] overflow-y-auto hide-scrollbar bg-bg-card">
@@ -730,107 +790,137 @@ const DashboardTab = () => {
               </div>
 
               {reportType === 'SOD' ? (
-                <>
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
-                        <Target size={14} className="text-accent" /> Today's Objectives
-                      </label>
-                      <button
-                        type="button"
-                        onClick={addSodTaskRow}
-                        className="bg-accent/10 hover:bg-accent text-accent hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-accent/20 flex items-center gap-1.5"
-                      >
-                        <Plus size={12} /> Add Task
-                      </button>
+                stats?.isEodMissed && !stats?.bypassEodCheck ? (
+                  <div className="p-8 text-center space-y-4">
+                    <div className="text-red-500 bg-red-500/10 p-4 rounded-full w-16 h-16 mx-auto flex items-center justify-center">
+                      <AlertTriangle size={32} />
                     </div>
+                    <h3 className="text-lg font-black text-text-primary uppercase">Access Blocked</h3>
+                    <p className="text-[11px] font-bold text-text-muted">You missed filling your EOD report on a previous day. Please contact Admin to grant you access to fill SOD.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                          <Target size={14} className="text-accent" /> Today's Objectives
+                        </label>
+                        <button
+                          type="button"
+                          onClick={addSodTaskRow}
+                          className="bg-accent/10 hover:bg-accent text-accent hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-accent/20 flex items-center gap-1.5"
+                        >
+                          <Plus size={12} /> Add Task
+                        </button>
+                      </div>
 
-                    <div className="space-y-3">
-                      {reportFormData.sodTasks.map((t, index) => (
-                        <div key={index} className="flex flex-col lg:flex-row items-end gap-4 p-5 bg-bg-secondary/40 rounded-2xl border-2 border-border relative group shadow-sm transition-all hover:bg-bg-secondary/60">
-                          {/* Task Type Selector */}
-                          <div className="flex-1 space-y-2">
-                            <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Selection</label>
-                            <select
-                              className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-3 text-[11px] font-black text-text-primary outline-none focus:border-accent transition-all uppercase cursor-pointer h-[48px]"
-                              value={t.type}
-                              onChange={(e) => updateSodTaskRow(index, 'type', e.target.value)}
-                            >
-                              <option value="Case ID">Case ID</option>
-                              <option value="Tasks">Tasks</option>
-                            </select>
-                          </div>
+                      <div className="space-y-3">
+                        {reportFormData.sodTasks.map((t, index) => (
+                          <div key={index} className="flex flex-col lg:flex-row items-end gap-4 p-5 bg-bg-secondary/40 rounded-2xl border-2 border-border relative group shadow-sm transition-all hover:bg-bg-secondary/60">
+                            {/* Task Type Selector */}
+                            <div className="flex-1 space-y-2">
+                              <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Selection</label>
+                              <select
+                                className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-3 text-[11px] font-black text-text-primary outline-none focus:border-accent transition-all uppercase cursor-pointer h-[48px]"
+                                value={t.type}
+                                onChange={(e) => updateSodTaskRow(index, 'type', e.target.value)}
+                              >
+                                <option value="Case ID">Case ID</option>
+                                <option value="Tasks">Tasks</option>
+                              </select>
+                            </div>
 
-                          {/* Dynamic Input (Case Search or Task Text) */}
-                          <div className="flex-1 space-y-2 min-w-0">
-                            <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">
-                              {t.type === 'Case ID' ? 'Select Case File' : 'Enter Task Details'}
-                            </label>
-                            <div className="h-[48px] w-full">
-                              {t.type === 'Case ID' ? (
-                                <SearchableCaseSelect
-                                  value={t.caseId}
-                                  onChange={(val) => updateSodTaskRow(index, 'caseId', val)}
-                                  cases={userCases}
-                                  className="h-full"
-                                  required={true}
-                                />
-                              ) : (
-                                <input
-                                  type="text"
-                                  required
-                                  placeholder="Your task..."
-                                  className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3 text-[11px] font-bold text-text-primary outline-none focus:border-accent transition-all h-full placeholder:text-text-muted/50"
-                                  value={t.task}
-                                  onChange={(e) => updateSodTaskRow(index, 'task', e.target.value)}
-                                />
-                              )}
+                            {/* Dynamic Input (Case Search or Task Text) */}
+                            <div className="flex-1 space-y-2 min-w-0">
+                              <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">
+                                {t.type === 'Case ID' ? 'Select Case File' : 'Enter Task Details'}
+                              </label>
+                              <div className="h-[48px] w-full">
+                                {t.type === 'Case ID' ? (
+                                  <SearchableCaseSelect
+                                    value={t.caseId}
+                                    onChange={(val) => updateSodTaskRow(index, 'caseId', val)}
+                                    cases={userCases}
+                                    className="h-full"
+                                    required={true}
+                                  />
+                                ) : (
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Your task..."
+                                    className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3 text-[11px] font-bold text-text-primary outline-none focus:border-accent transition-all h-full placeholder:text-text-muted/50"
+                                    value={t.task}
+                                    onChange={(e) => updateSodTaskRow(index, 'task', e.target.value)}
+                                  />
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Mode Selector */}
+                            <div className="flex-1 space-y-2">
+                              <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Mode</label>
+                              <select
+                                required
+                                className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-3 text-[11px] font-black text-text-primary outline-none focus:border-accent transition-all uppercase tracking-widest cursor-pointer h-[48px]"
+                                value={t.mode}
+                                onChange={(e) => updateSodTaskRow(index, 'mode', e.target.value)}
+                              >
+                                <option value="" disabled>Select Mode</option>
+                                <option value="Call">Call</option>
+                                <option value="Email">Email</option>
+                                <option value="Whatsapp">Whatsapp</option>
+                                <option value="Meeting">Meeting</option>
+                                {t.type === 'Case ID' && (
+                                  <>
+                                    <option value="Case uploaded">Case uploaded</option>
+                                    <option value="Document Uploaded">Document Uploaded</option>
+                                  </>
+                                )}
+                                {t.type === 'Tasks' && (
+                                  <option value="Add New case">Add New case</option>
+                                )}
+                              </select>
+                            </div>
+
+                            {/* Action Button */}
+                            <div className="flex items-center justify-center pb-0.5 lg:w-10">
+                              <button
+                                type="button"
+                                onClick={() => removeSodTaskRow(index)}
+                                disabled={reportFormData.sodTasks.length === 1}
+                                className="p-2 text-text-muted hover:text-red hover:bg-red-soft rounded-lg transition-all disabled:opacity-0"
+                                title="Remove row"
+                              >
+                                <Trash2 size={16} />
+                              </button>
                             </div>
                           </div>
-
-                          {/* Mode Selector */}
-                          <div className="flex-1 space-y-2">
-                            <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Mode</label>
-                            <select
-                              required
-                              className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-3 text-[11px] font-black text-text-primary outline-none focus:border-accent transition-all uppercase tracking-widest cursor-pointer h-[48px]"
-                              value={t.mode}
-                              onChange={(e) => updateSodTaskRow(index, 'mode', e.target.value)}
-                            >
-                              <option value="" disabled>Select Mode</option>
-                              <option value="Call">Call</option>
-                              <option value="Email">Email</option>
-                              <option value="Whatsapp">Whatsapp</option>
-                              <option value="Meeting">Meeting</option>
-                              {t.type === 'Case ID' && (
-                                <>
-                                  <option value="Case uploaded">Case uploaded</option>
-                                  <option value="Document Uploaded">Document Uploaded</option>
-                                </>
-                              )}
-                              {t.type === 'Tasks' && (
-                                <option value="Add New case">Add New case</option>
-                              )}
-                            </select>
-                          </div>
-
-                          {/* Action Button */}
-                          <div className="flex items-center justify-center pb-0.5 lg:w-10">
-                            <button
-                              type="button"
-                              onClick={() => removeSodTaskRow(index)}
-                              disabled={reportFormData.sodTasks.length === 1}
-                              className="p-2 text-text-muted hover:text-red hover:bg-red-soft rounded-lg transition-all disabled:opacity-0"
-                              title="Remove row"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </>
+
+                    {/* Pending Tasks Section */}
+                    <div className="mt-6 space-y-4">
+                      <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                        <Target size={14} className="text-accent" /> Pending Tasks
+                      </label>
+                      <div className="bg-bg-secondary/40 rounded-2xl border-2 border-border p-4 space-y-2 max-h-[200px] overflow-y-auto hide-scrollbar">
+                        {myTodayTasks.length > 0 ? (
+                          myTodayTasks.map(task => (
+                            <div key={task._id} className="flex items-center gap-3 p-3 bg-bg-card rounded-xl border border-border/50 hover:border-accent/30 transition-all">
+                              <div className="w-2 h-2 rounded-full bg-accent/60"></div>
+                              <span className="text-[11px] font-bold text-text-primary flex-1">{task.title || task.task}</span>
+                              <span className="text-[9px] font-black text-text-muted uppercase bg-bg-secondary px-2 py-0.5 rounded-md">{task.priority || 'Normal'}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-[10px] font-black text-text-muted text-center py-4 uppercase tracking-widest">No pending tasks</div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )
               ) : (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
@@ -967,13 +1057,15 @@ const DashboardTab = () => {
               )}
 
               <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 pt-10 border-t-2 border-border">
-                <button
-                  type="button"
-                  onClick={() => setIsReportModalOpen(false)}
-                  className="w-full sm:w-auto px-6 sm:px-10 py-4 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-text-muted hover:bg-bg-input transition-all border-2 border-transparent hover:border-border"
-                >
-                  {reportType === 'SOD' ? 'Skip For Now' : 'Cancel'}
-                </button>
+                {!(reportType === 'SOD' && !hasSodToday && user?.role !== 'Admin') && (
+                  <button
+                    type="button"
+                    onClick={() => setIsReportModalOpen(false)}
+                    className="w-full sm:w-auto px-6 sm:px-10 py-4 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-text-muted hover:bg-bg-input transition-all border-2 border-transparent hover:border-border"
+                  >
+                    {reportType === 'SOD' ? 'Skip For Now' : 'Cancel'}
+                  </button>
+                )}
                 <button
                   type="submit"
                   className={`w-full sm:w-auto px-6 sm:px-12 py-4 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-white shadow-sm transition-all flex items-center justify-center gap-3 active:scale-95 ${reportType === 'SOD' ? 'bg-accent hover:bg-accent-hover' : 'bg-purple hover:bg-purple-600'}`}
@@ -986,336 +1078,989 @@ const DashboardTab = () => {
         </div>
       )}
 
-      {/* Today's Overview Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-purple/30 transition-all cursor-pointer"
-          onClick={() => navigate('/case-master', { state: { dateFilter: new Date().toISOString().split('T')[0] } })}
-        >
-          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-            <div className="p-1.5 sm:p-2 bg-purple-soft rounded-xl text-purple">
-              <FolderPlus size={14} />
-            </div>
-            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Case Logged Today</div>
+      {/* War Room Overview */}
+      <div className="mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <div>
+            <h2 className="text-xl font-black text-text-primary uppercase tracking-tight">Overview</h2>
           </div>
-          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.casesCreatedToday || 0}</div>
+          <div className="flex flex-wrap gap-3">
+            {user?.role === 'Admin' && (
+              <select
+                value={userFilter}
+                onChange={(e) => setUserFilter(e.target.value)}
+                className="bg-bg-card border-2 border-border px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none"
+              >
+                <option value="">All Users</option>
+                {allUsers.map(u => (
+                  <option key={u._id} value={u.fullName || u.name}>{u.fullName || u.name}</option>
+                ))}
+              </select>
+            )}
+            {user?.role === 'Admin' && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-bg-card border-2 border-border px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none"
+                />
+                <span className="text-text-muted font-black text-xs">TO</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-bg-card border-2 border-border px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
-        <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-blue/30 transition-all cursor-pointer"
-          onClick={() => navigate('/timeline', { state: { dateFilter: new Date().toISOString().split('T')[0], typeFilter: 'Document Upload' } })}
-        >
-          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-            <div className="p-1.5 sm:p-2 bg-blue-soft rounded-xl text-blue">
-              <FileUp size={14} />
-            </div>
-            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Document Uploaded</div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.documentsUploadedToday || 0}</div>
-        </div>
+        {user?.role === 'Operations' ? (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+              {/* TYPE OF THREAT - SUMMARY (Left, Wide) */}
+              <div className="lg:col-span-9 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">TYPE OF THREAT – SUMMARY</div>
+                <div className="flex justify-between items-start gap-4">
+                  {[
+                    { label: '1930 / Criminal FIR', type: 'Cyber Complaint', color: 'text-blue', bg: 'bg-blue-soft', icon: ShieldAlert },
+                    { label: 'Consumer Complaint', type: 'Consumer Complaint', color: 'text-green', bg: 'bg-green-soft', icon: Users },
+                    { label: 'Legal Notice', type: 'Legal Notice', color: 'text-purple', bg: 'bg-purple-soft', icon: Scale },
+                    { label: 'Demand Pressure', type: 'Demand Pressure', color: 'text-orange', bg: 'bg-orange-soft', icon: AlertTriangle },
+                    { label: 'Social Media', type: 'Social Media', color: 'text-cyan', bg: 'bg-cyan-soft', icon: MessageCircle },
+                    { label: 'NA (Non-Agreement) Cases', type: 'FIR', color: 'text-yellow', bg: 'bg-yellow-soft', icon: HelpCircle },
+                  ].map((item, index) => {
+                    const dbItem = stats?.caseTypeWiseData?.find(c => c.caseType === item.type) || { count: 0, totalAmount: 0 };
+                    const percentage = ((dbItem.count / (stats?.totalCases || 1)) * 100).toFixed(2);
+                    const IconComponent = item.icon;
+                    return (
+                      <div
+                        key={index}
+                        className="flex flex-col flex-1 min-w-[100px] border-r border-border last:border-r-0 pr-2 last:pr-0 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg"
+                        onClick={() => navigate('/case-master', { state: { typeFilter: item.type } })}
+                      >
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <div className={`p-1 ${item.bg} rounded ${item.color}`}>
+                            <IconComponent size={12} />
+                          </div>
+                          <div className={`text-[9px] font-black uppercase tracking-tight ${item.color}`} title={item.label}>{item.label}</div>
+                        </div>
+                        <div className="text-xl font-black text-text-primary tracking-tight">{dbItem.count}</div>
+                        <div className="text-[9px] font-bold text-text-muted mt-0.5">₹{Number(dbItem.totalAmount || 0).toLocaleString('en-IN')}</div>
+                        {/* <div className="text-[9px] font-black text-text-muted/60 mt-0.5">{percentage}%</div> */}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-        <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-green/30 transition-all cursor-pointer"
-          onClick={() => navigate('/timeline', { state: { dateFilter: new Date().toISOString().split('T')[0], typeFilter: 'Communication' } })}
-        >
-          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-            <div className="p-1.5 sm:p-2 bg-green-soft rounded-xl text-green">
-              <PhoneOutgoing size={14} />
+              {/* MY KEY NUMBERS (TODAY) (Right, Narrow) */}
+              <div className="lg:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY KEY NUMBERS (TODAY)</div>
+                <div className="grid grid-cols-4 gap-2 h-full items-center">
+                  <div className="text-center cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/case-master')}>
+                    <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Active Cases</div>
+                    <div className="text-xl font-black text-text-primary mt-2">{(stats?.totalCases || 0) - (stats?.closedCases || 0)}</div>
+                  </div>
+                  <div className="text-center border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
+                    <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Follow Ups</div>
+                    <div className="text-xl font-black text-text-primary mt-2">{stats?.timeBoundActions?.dueToday || 0}</div>
+                  </div>
+                  <div className="text-center border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task')}>
+                    <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Pending Actions</div>
+                    <div className="text-xl font-black text-text-primary mt-2">{stats?.pendingTasksCount || 0}</div>
+                  </div>
+                  <div className="text-center border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
+                    <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Overdue</div>
+                    <div className="text-xl font-black text-red mt-2">{stats?.overdue || 0}</div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Communication</div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.communicationsToday || 0}</div>
-        </div>
 
-        <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-orange/30 transition-all cursor-pointer"
-          onClick={() => navigate('/timeline', { state: { dateFilter: new Date().toISOString().split('T')[0], typeFilter: 'Progress Update' } })}
-        >
-          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-            <div className="p-1.5 sm:p-2 bg-accent-soft rounded-xl text-accent">
-              <Activity size={14} />
-            </div>
-            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Progress Updated</div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.progressUpdatesToday || 0}</div>
-        </div>
+            {/* NEW GRID FOR TASKS & PERFORMANCE */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-6">
+              {/* MY TASKS – SOD TO EOD */}
+              <div className="lg:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY TASKS – SOD TO EOD</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* SOD SUBMISSION */}
+                  <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
+                          <Zap size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">SOD Submission</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <span>Daily Checklist</span>
+                          <span className="font-black">6 / 6</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <span>Priority Cases Plan</span>
+                          <span className="font-black">5 / 5</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <span>Yesterday's EOD Review</span>
+                          <span className="font-black">1 / 1</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-text-muted">SOD Submitted At</span>
+                      <span className="text-green">09:15 AM</span>
+                    </div>
+                  </div>
 
-        <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-red/30 transition-all cursor-pointer"
-          onClick={() => navigate('/case-master')}
-        >
-          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-            <div className="p-1.5 sm:p-2 bg-red-soft rounded-xl text-red">
-              <IndianRupee size={14} />
-            </div>
-            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Amount At Risk</div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">₹{Number(stats?.totalAmountPaid || 0).toLocaleString('en-IN')}</div>
-        </div>
+                  {/* WORK TASK SUBMISSION */}
+                  <div className="bg-bg-card rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
+                          <ClipboardList size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Work Task Submission</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <span>Case Updates</span>
+                          <span className="font-black">{stats?.progressUpdatesToday || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <span>Client Communications</span>
+                          <span className="font-black">{stats?.communicationsToday || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <span>Legal Document Uploads</span>
+                          <span className="font-black">{stats?.documentsUploadedToday || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-text-muted">Last Submission</span>
+                      <span className="text-blue">12:30 PM</span>
+                    </div>
+                  </div>
 
-        <div
-          className="bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 shadow-sm hover:border-blue/30 transition-all cursor-pointer"
-          onClick={() => navigate('/admin-panel#refund-actions')}
-        >
-          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-            <div className="p-1.5 sm:p-2 bg-blue-soft rounded-xl text-blue">
-              <ListChecks size={14} />
+                  {/* EOD SUBMISSION */}
+                  <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="p-1.5 bg-purple-soft rounded-lg text-purple">
+                          <Clock size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">EOD Submission</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <span>Daily Case Summary</span>
+                          <span className="font-black">0 / 1</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <span>Calls & Meetings Log</span>
+                          <span className="font-black">0 / 1</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <span>Next Day Plan</span>
+                          <span className="font-black">0 / 1</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-text-muted">EOD Due By</span>
+                      <span className="text-purple">08:00 PM</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* MY PERFORMANCE */}
+              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Performance (Evaluation)</div>
+                    <div className="flex gap-1">
+                      {['7 Days', '1 Month', '3 Months'].map((label, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setActivePeriod(label);
+                            const end = new Date();
+                            const start = new Date();
+                            if (label === '7 Days') start.setDate(end.getDate() - 7);
+                            else if (label === '1 Month') start.setMonth(end.getMonth() - 1);
+                            else if (label === '3 Months') start.setMonth(end.getMonth() - 3);
+                            setStartDate(start.toISOString().split('T')[0]);
+                            setEndDate(end.toISOString().split('T')[0]);
+                          }}
+                          className={`px-2 py-1 text-[8px] font-black uppercase rounded ${activePeriod === label ? 'bg-blue-600 text-white' : 'bg-bg-secondary text-text-muted'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Client Communication</div>
+                      <div className="text-xl font-black text-green">{stats?.totalCommunications || 0}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Cases Resolved</div>
+                      <div className="text-xl font-black text-green">54</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">NA Cases</div>
+                      <div className="text-xl font-black text-red">{stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Overdue Cases</div>
+                      <div className="text-xl font-black text-red">{stats?.overdueActions?.length || 0}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Callbacks Done</div>
+                      <div className="text-xl font-black text-green">96</div>
+                    </div>
+
+                  </div>
+                </div>
+                {/* <div className="mt-4 text-right">
+                  <a href="#" className="text-[9px] font-black text-blue uppercase tracking-widest hover:underline flex items-center justify-end gap-1">
+                    View Full Performance Report <ArrowRight size={10} />
+                  </a>
+                </div> */}
+              </div>
             </div>
-            <div className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">Pending Approvals</div>
+
+            {/* Top Urgent Cases Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+              {/* MY CASES OVERVIEW */}
+              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">My Cases Overview</div>
+                <div className="flex flex-col items-center justify-center h-full">
+                  <div className="w-full h-32 mb-4 relative">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Active', value: stats?.openCases || 0 },
+                            { name: 'Resolved', value: stats?.settledCases || 0 },
+                            { name: 'NA Cases', value: stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0 },
+                            { name: 'Consumer Complaint', value: stats?.caseTypeWiseData?.find(c => c.caseType === 'Consumer Complaint')?.count || 0 }
+                          ].filter(d => d.value > 0)}
+                          innerRadius={35}
+                          outerRadius={50}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                          <Cell fill="#3B82F6" /> {/* Blue */}
+                          <Cell fill="#10B981" /> {/* Green */}
+                          <Cell fill="#F59E0B" /> {/* Yellow */}
+                          <Cell fill="#8B5CF6" /> {/* Purple */}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <div className="text-lg font-black text-text-primary">{stats?.totalCases || 0}</div>
+                      <div className="text-[8px] font-black text-text-muted uppercase">Total</div>
+                    </div>
+                  </div>
+                  <div className="space-y-2 w-full">
+                    <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <span>Active</span>
+                      </div>
+                      <span>{stats?.openCases || 0}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        <span>Resolved</span>
+                      </div>
+                      <span>{stats?.settledCases || 0}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                        <span>NA Cases</span>
+                      </div>
+                      <span>{stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                        <span>Consumer Complaint</span>
+                      </div>
+                      <span>{stats?.caseTypeWiseData?.find(c => c.caseType === 'Consumer Complaint')?.count || 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* TOP URGENT CASES */}
+              <div className="lg:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Top Urgent Cases (My Cases)</div>
+                <div className="table-wrap overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-bg-secondary text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
+                        <th className="px-3 py-3">Case ID</th>
+                        <th className="px-3 py-3">Type of Threat</th>
+                        <th className="px-3 py-3">Amount Paid</th>
+                        <th className="px-3 py-3">Last Updated</th>
+                        <th className="px-3 py-3">Status</th>
+                        <th className="px-3 py-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userCases.filter(c => c.priority === 'High' && c.currentStatus !== 'Closed').slice(0, 5).map((c, idx) => {
+                        return (
+                          <tr key={idx} className="border-b border-border/50 hover:bg-bg-secondary/30 transition-all text-[11px] font-bold text-text-primary">
+                            <td className="px-3 py-4 text-blue">{c.caseId}</td>
+                            <td className="px-3 py-4">{c.typeOfComplaint}</td>
+                            <td className="px-3 py-4">₹{Number(c.totalAmtPaid || c.amountPaid || 0).toLocaleString('en-IN')}</td>
+                            <td className="px-3 py-4 text-text-muted">
+                              {c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '--'}
+                            </td>
+                            <td className="px-3 py-4">
+                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${c.currentStatus === 'Escalated' ? 'bg-red-soft text-red' : 'bg-orange-soft text-orange'}`}>
+                                {c.currentStatus}
+                              </span>
+                            </td>
+                            <td className="px-3 py-4">
+                              <button
+                                onClick={() => navigate('/case-master', { state: { searchId: c.caseId } })}
+                                className="text-[9px] font-black text-blue uppercase tracking-widest hover:underline"
+                              >
+                                View Case
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            {/* Time Bound Actions & Schedule Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+              {/* TIME BOUND ACTIONS */}
+              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Time Bound Actions</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-bg-secondary p-4 rounded-xl text-center">
+                    <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Today</div>
+                    <div className="text-2xl font-black text-red">{stats?.timeBoundActions?.dueToday || 0}</div>
+                  </div>
+                  <div className="bg-bg-secondary p-4 rounded-xl text-center">
+                    <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Within 24 Hrs</div>
+                    <div className="text-2xl font-black text-orange">{stats?.timeBoundActions?.dueWithin24h || 0}</div>
+                  </div>
+                  <div className="bg-bg-secondary p-4 rounded-xl text-center">
+                    <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Within 48 Hrs</div>
+                    <div className="text-2xl font-black text-yellow">{stats?.timeBoundActions?.dueWithin48h || 0}</div>
+                  </div>
+                  <div className="bg-bg-secondary p-4 rounded-xl text-center">
+                    <div className="text-[10px] font-black text-text-muted uppercase mb-1">Overdue</div>
+                    <div className="text-2xl font-black text-red">{stats?.timeBoundActions?.overdue || 0}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* TODAY'S SCHEDULE */}
+              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Today's Schedule</div>
+                <div className="space-y-4">
+                  {myTodayTasks.slice(0, 5).map((t, idx) => (
+                    <div key={idx} className="flex items-center gap-3 text-[11px] font-bold text-text-primary">
+                      <div className="text-text-muted w-16">{t.startTime || '10:00 AM'}</div>
+                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                      <div className="flex-1">
+                        <div>{t.title || t.taskName}</div>
+                        <div className="text-[9px] text-text-muted">{t.clientName || 'N/A'}</div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${t.status === 'Completed' ? 'bg-green-soft text-green' : 'bg-blue-soft text-blue'}`}>
+                        {t.status}
+                      </span>
+                    </div>
+                  ))}
+                  {myTodayTasks.length === 0 && (
+                    <div className="text-[10px] font-black text-text-muted text-center py-4 uppercase tracking-widest">No tasks for today</div>
+                  )}
+                </div>
+              </div>
+
+              {/* QUICK ACTIONS */}
+              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Quick Actions</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => { navigate('/work-report') }}
+                    className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
+                  >
+                    <Activity size={16} className="text-orange mb-1" />
+                    <span className="text-[9px] font-black uppercase text-text-primary">SOD Submission</span>
+                  </button>
+                  <button
+                    onClick={() => navigate('/my-task')}
+                    className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
+                  >
+                    <FolderPlus size={16} className="text-purple mb-1" />
+                    <span className="text-[9px] font-black uppercase text-text-primary">Work Task</span>
+                  </button>
+                  {/* <button
+                    onClick={() => { setReportType('EOD'); setIsReportModalOpen(true); }}
+                    className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
+                  >
+                    <FileUp size={16} className="text-indigo mb-1" />
+                    <span className="text-[9px] font-black uppercase text-text-primary">EOD Submission</span>
+                  </button> */}
+                  <button
+                    onClick={() => navigate('/case-master')}
+                    className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
+                  >
+                    <Activity size={16} className="text-green mb-1" />
+                    <span className="text-[9px] font-black uppercase text-text-primary">Case Update</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+            {/* Main Cards (Left) */}
+            <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Card 1: Total Cases */}
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master')}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
+                      <FolderOpen size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Total Cases</div>
+                  </div>
+                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.totalCases || 0}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.totalAmountPaid || 0).toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+
+              {/* Card 2: Active Cases */}
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master')}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-green-soft rounded-lg text-green">
+                      <Activity size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Cases</div>
+                  </div>
+                  <div className="text-3xl font-black text-text-primary tracking-tight">{(stats?.totalCases || 0) - (stats?.closedCases || 0)}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number((stats?.totalAmountPaid || 0) - (stats?.closedAmount || 0)).toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+
+              {/* Card 3: High Risk Cases */}
+              <div className="bg-red-soft/20 rounded-2xl p-5 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:bg-red-soft/30" onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-red-soft rounded-lg text-red">
+                      <AlertTriangle size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">High Risk</div>
+                  </div>
+                  <div className="text-3xl font-black text-red tracking-tight">{stats?.highPriority || 0}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.highPriorityAmount || 0).toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Type of Threat (Right) */}
+            <div className="lg:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm">
+              <div className="flex justify-between items-center mb-5">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Type of Complaint</div>
+              </div>
+              <div className="flex justify-between items-start gap-4">
+                {stats?.caseTypeWiseData?.slice(0, 6).map((item, index) => {
+                  const percentage = ((item.count / (stats?.totalCases || 1)) * 100).toFixed(2);
+                  const colors = [
+                    { bg: 'bg-blue-soft', text: 'text-blue' },
+                    { bg: 'bg-green-soft', text: 'text-green' },
+                    { bg: 'bg-purple-soft', text: 'text-purple' },
+                    { bg: 'bg-orange-soft', text: 'text-orange' },
+                    { bg: 'bg-cyan-soft', text: 'text-cyan' },
+                    { bg: 'bg-yellow-soft', text: 'text-yellow' },
+                  ];
+                  const icons = [ShieldAlert, FileText, Gavel, AlertTriangle, MessageCircle, HelpCircle];
+                  const color = colors[index % colors.length];
+                  const IconComponent = icons[index % icons.length];
+
+                  return (
+                    <div
+                      key={index}
+                      className="flex flex-col flex-1 min-w-[120px] border-r border-border last:border-r-0 pr-4 last:pr-0 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg"
+                      onClick={() => navigate('/case-master', { state: { typeFilter: item.caseType } })}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`p-1 ${color.bg} rounded ${color.text}`}>
+                          <IconComponent size={12} />
+                        </div>
+                        <div className="text-[10px] font-black text-text-primary uppercase tracking-tight" title={item.caseType}>{item.caseType}</div>
+                      </div>
+                      <div className="text-xl font-black text-text-primary tracking-tight">{item.count}</div>
+                      <div className="text-[10px] font-bold text-text-muted mt-0.5">₹{Number(item.totalAmount || 0).toLocaleString('en-IN')}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-          <div className="text-xl sm:text-2xl font-black text-text-primary ml-1">{stats?.pendingApprovals || 0}</div>
-        </div>
+        )}
       </div>
 
-      {/* Main Dashboard Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-9 gap-3 sm:gap-4 md:gap-6 mb-8">
-        <div className="stat cursor-pointer hover:border-purple-300 transition-all" onClick={() => navigate('/case-master')}>
-          <div className="stat-icon bg-purple-soft text-purple">
-            <Folder size={18} />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="val text-purple-300">{stats?.totalCases || 0}</div>
-              <div className="text-[8px] sm:text-[10px] font-bold text-purple/60">₹{Number(stats?.totalAmountPaid || 0).toLocaleString('en-IN')}</div>
+      {/* Refund Provisions & Stats Section */}
+      {user?.role === 'Admin' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+          {/* Refund Provisions (Left) */}
+          <div className="lg:col-span-5 bg-bg-card rounded-2xl p-5 shadow-sm">
+            <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Refund Provisions (Approved)</div>
+            <div className="grid grid-cols-4 gap-4">
+              <div className="border-r border-border last:border-r-0 pr-4 last:pr-0">
+                <div className="text-[10px] font-black text-text-primary uppercase mb-2">Today</div>
+                <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
+                  <span>No.</span>
+                  <span>Amt.</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-lg font-black text-text-primary">{stats?.provisions?.today?.count || 0}</span>
+                  <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.today?.amount || 0).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+              <div className="border-r border-border last:border-r-0 pr-4 last:pr-0">
+                <div className="text-[10px] font-black text-text-primary uppercase mb-2">This Week</div>
+                <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
+                  <span>No.</span>
+                  <span>Amt.</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-lg font-black text-text-primary">{stats?.provisions?.thisWeek?.count || 0}</span>
+                  <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.thisWeek?.amount || 0).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+              <div className="border-r border-border last:border-r-0 pr-4 last:pr-0">
+                <div className="text-[10px] font-black text-text-primary uppercase mb-2">This Month</div>
+                <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
+                  <span>No.</span>
+                  <span>Amt.</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-lg font-black text-text-primary">{stats?.provisions?.thisMonth?.count || 0}</span>
+                  <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.thisMonth?.amount || 0).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              <div className="border-r border-border last:border-r-0 pr-4 last:pr-0">
+                <div className="text-[10px] font-black text-text-primary uppercase mb-2">Next 6 Months</div>
+                <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
+                  <span>No.</span>
+                  <span>Amt.</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-lg font-black text-text-primary">{stats?.provisions?.next6Months?.count || 0}</span>
+                  <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.next6Months?.amount || 0).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
             </div>
-            <div className="lbl">Total Cases</div>
           </div>
-        </div>
 
-        <div className="stat cursor-pointer hover:border-blue-300 transition-all" onClick={() => navigate('/case-master')}>
-          <div className="stat-icon bg-blue-soft text-blue">
-            <FolderOpen size={18} />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="val text-blue-300">{(stats?.totalCases || 0) - (stats?.closedCases || 0)}</div>
-              <div className="text-[8px] sm:text-[10px] font-bold text-blue/60">₹{Number((stats?.totalAmountPaid || 0) - (stats?.closedAmount || 0)).toLocaleString('en-IN')}</div>
+          {/* 4 Small Cards (Right) */}
+          <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {/* Amount At Risk */}
+            <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+              <div className="flex justify-between items-start">
+                <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
+                  <IndianRupee size={16} />
+                </div>
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Amount At Risk</div>
+              </div>
+              <div className="mt-2">
+                <div className="text-lg font-black text-text-primary">₹ {Number(stats?.amountAtRisk || 0).toLocaleString('en-IN')}</div>
+                <div className="text-[10px] font-bold text-text-muted mt-0.5">Approved Pending</div>
+              </div>
+              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master')}>
+                View Details <ArrowRight size={12} />
+              </div>
             </div>
-            <div className="lbl">Active Cases</div>
-          </div>
-        </div>
 
-        <div className="stat cursor-pointer hover:border-green-300 transition-all" onClick={() => navigate('/case-master', { state: { statusFilter: 'Settlement' } })}>
-          <div className="stat-icon bg-green-soft text-green">
-            <CheckCircle size={18} />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="val text-green-300">{stats?.settledCases || 0}</div>
-              <div className="text-[8px] sm:text-[10px] font-bold text-green/60">₹{Number(stats?.settledAmount || 0).toLocaleString('en-IN')}</div>
+            {/* Overdue Callbacks */}
+            <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+              <div className="flex justify-between items-start">
+                <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
+                  <Clock size={16} />
+                </div>
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Overdue</div>
+              </div>
+              <div className="mt-2">
+                <div className="text-lg font-black text-text-primary">{stats?.overdue || 0}</div>
+                <div className="text-[10px] font-bold text-text-muted mt-0.5">Due for Follow-up</div>
+              </div>
+              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
+                View Details <ArrowRight size={12} />
+              </div>
             </div>
-            <div className="lbl">Settled</div>
-          </div>
-        </div>
 
-        <div className="stat cursor-pointer hover:border-emerald-300 transition-all" onClick={() => navigate('/case-master', { state: { statusFilter: 'Closure' } })}>
-          <div className="stat-icon bg-emerald-500/10 text-emerald-500">
-            <Hammer size={18} />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="val text-emerald-300">{stats?.closedCases || 0}</div>
-              <div className="text-[8px] sm:text-[10px] font-bold text-black">₹{Number(stats?.closedAmount || 0).toLocaleString('en-IN')}</div>
+            {/* Pending Approvals */}
+            <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+              <div className="flex justify-between items-start">
+                <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
+                  <ShieldCheck size={16} />
+                </div>
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Pending Approvals</div>
+              </div>
+              <div className="mt-2">
+                <div className="text-lg font-black text-text-primary">₹ {Number(stats?.pendingApprovals || 0).toLocaleString('en-IN')}</div>
+                <div className="text-[10px] font-bold text-text-muted mt-0.5">Awaiting Action</div>
+              </div>
+              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/admin-panel#refund-actions')}>
+                View Details <ArrowRight size={12} />
+              </div>
             </div>
-            <div className="lbl">Closure</div>
-          </div>
-        </div>
 
-        <div className="stat cursor-pointer hover:border-red-300 transition-all" onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}>
-          <div className="stat-icon bg-red-soft text-red">
-            <AlertCircle size={18} />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="val text-red-300">{stats?.highPriority || 0}</div>
-              <div className="text-[8px] sm:text-[10px] font-bold text-red/60">₹{Number(stats?.highPriorityAmount || 0).toLocaleString('en-IN')}</div>
+            {/* Linked By Cases */}
+            <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+              <div className="flex justify-between items-start">
+                <div className="p-1.5 bg-accent/10 rounded-lg text-accent">
+                  <FileText size={16} />
+                </div>
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Linked By</div>
+              </div>
+              <div className="mt-2">
+                <div className="text-lg font-black text-text-primary">{stats?.linkedByCount || 0}</div>
+                <div className="text-[10px] font-bold text-text-muted mt-0.5">Linked Cases</div>
+              </div>
+              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master', { state: { linkedOnly: true } })}>
+                View Details <ArrowRight size={12} />
+              </div>
             </div>
-            <div className="lbl">High</div>
+
+            {/* Live Escalations */}
+
           </div>
         </div>
+      )}
 
-        <div className="stat cursor-pointer hover:border-orange-300 transition-all" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Medium' } })}>
-          <div className="stat-icon bg-accent-soft text-accent">
-            <AlertTriangle size={18} />
+      {/* Threat Trends Section */}
+      {user?.role === 'Admin' && (
+        <div className="bg-bg-card rounded-2xl p-5 shadow-sm mb-8">
+          <div className="flex justify-between items-center mb-5">
+            <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Threat Trends (Last 30 Days)</div>
+            {/* <div className="text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest">
+            View Analytics <ArrowRight size={12} />
+          </div> */}
           </div>
-          <div className="flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="val text-orange-300">{stats?.mediumPriority || 0}</div>
-              <div className="text-[8px] sm:text-[10px] font-bold text-accent/60">₹{Number(stats?.mediumPriorityAmount || 0).toLocaleString('en-IN')}</div>
+          <div className="h-[200px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={stats?.threatTrendData || []} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                <XAxis dataKey="date" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{ background: '#1F2937', border: 'none', borderRadius: '8px', color: '#F3F4F6', fontSize: '12px' }}
+                  itemStyle={{ color: '#F3F4F6' }}
+                  labelStyle={{ color: '#9CA3AF', fontWeight: 'bold' }}
+                />
+                <Legend
+                  verticalAlign="top"
+                  align="center"
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '20px' }}
+                />
+                {(stats?.threatTrendTypes || []).map((type, index) => {
+                  const colors = ['#0066FF', '#094e2bff', '#7C3AED', '#d1593bff', '#0a8585ff', '#915c0eff'];
+                  const color = colors[index % colors.length];
+                  return (
+                    <Line
+                      key={type}
+                      type="monotone"
+                      dataKey={type}
+                      stroke={color}
+                      strokeWidth={1.5}
+                      dot={{ r: 3, fill: color, strokeWidth: 0 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  );
+                })}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {user?.role === 'Admin' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
+          {/* Box 1: Staff Performance Analysis */}
+          <div className="lg:col-span-5 bg-bg-card rounded-2xl p-5 shadow-sm">
+            <div className="flex justify-between items-center mb-4">
+              <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">Staff Performance Analysis</div>
+              <div className="flex gap-2">
+                {[
+                  { label: 'Last 7 Days', value: '7days' },
+                  { label: 'Last 1 Month', value: '1month' },
+                  { label: 'Last 3 Months', value: '3months' }
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${teamFilter === item.value || (teamFilter === '' && item.value === '7days') ? 'bg-blue-600 text-white shadow-sm' : 'bg-bg-secondary text-text-muted hover:bg-bg-input'}`}
+                    onClick={() => setTeamFilter(item.value)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="lbl">Medium</div>
-          </div>
-        </div>
-
-        <div className="stat cursor-pointer hover:border-yellow-300 transition-all" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Low' } })}>
-          <div className="stat-icon bg-yellow-500/10 text-yellow-500">
-            <AlertCircle size={18} />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="val text-yellow-300">{stats?.lowPriority || 0}</div>
-              <div className="text-[8px] sm:text-[10px] font-bold text-black">₹{Number(stats?.lowPriorityAmount || 0).toLocaleString('en-IN')}</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
+                    <th className="py-2">Staff Name</th>
+                    <th className="py-2 text-center">Cases Assigned</th>
+                    <th className="py-2 text-center">Cases Closed</th>
+                    {/* <th className="py-2 text-center">Avg. Response Time</th> */}
+                    <th className="py-2 text-center">Overdue Cases</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[10px] font-bold text-text-primary">
+                  {(stats?.teamPerformance || []).slice(0, 5).map((member, index) => (
+                    <tr key={index} className="border-b border-border/50 last:border-b-0 hover:bg-bg-secondary/50">
+                      <td className="py-3 cursor-pointer hover:text-blue-600 hover:underline" onClick={() => navigate('/case-master', { state: { searchId: member.name } })}>{member.name}</td>
+                      <td className="py-3 text-center">{member.assigned}</td>
+                      <td className="py-3 text-center">{member.settled}</td>
+                      {/* <td className="py-3 text-center text-text-muted">{member.responseTime || 'N/A'}</td> */}
+                      <td className="py-3 text-center text-red-500">{member.pending}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div className="lbl">Low</div>
+            <div className="mt-4 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master')}>
+              View Full Staff Report <ArrowRight size={12} />
+            </div>
           </div>
-        </div>
 
-        <div className="stat">
-          <div className="stat-icon bg-blue-soft text-blue">
-            <IndianRupee size={18} />
+          {/* Box 2: Time Bound Actions */}
+          <div className="lg:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Time Bound Actions</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
+                  <span className="text-[8px] font-black text-red-500 uppercase">Due Today</span>
+                  <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.dueToday || 0}</span>
+                </div>
+                <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}>
+                  <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 24 Hrs</span>
+                  <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin24h || 0}</span>
+                </div>
+                <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}>
+                  <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 48 Hrs</span>
+                  <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin48h || 0}</span>
+                </div>
+                <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
+                  <span className="text-[8px] font-black text-red-500 uppercase">Overdue</span>
+                  <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.overdue || 0}</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+              {/* <div className="flex-1">
+                <span className="text-text-muted">Compliance Rate</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="text-lg font-black text-green-500">{stats?.complianceRate || 0}%</div>
+                  <div className="w-20 bg-bg-secondary h-2 rounded-full overflow-hidden">
+                    <div className="bg-green-500 h-full" style={{ width: `${stats?.complianceRate || 0}%` }}></div>
+                  </div>
+                </div>
+              </div> */}
+              <div className="cursor-pointer hover:opacity-80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'completed_today' } })}>
+                <span className="text-text-muted">Action Taken (Today)</span>
+                <div className="text-lg font-black text-green-500 mt-1">{stats?.timeBoundActions?.actionTakenToday || 0}</div>
+              </div>
+            </div>
+            <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/my-task')}>
+              View All Actions <ArrowRight size={12} />
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-base sm:text-lg font-black text-black truncate tracking-tight" title={`₹${Number(stats?.totalRefundAmount || 0).toLocaleString('en-IN')}`}>₹{Number(stats?.totalRefundAmount || 0).toLocaleString('en-IN')}</div>
-            <div className="lbl mt-1">Refund Amount</div>
-          </div>
-        </div>
 
-        <div className="stat cursor-pointer hover:border-red-300 transition-all" onClick={() => navigate('/case-master', { state: { hasDemand: true } })}>
-          <div className="stat-icon bg-red-500/10 text-red-400">
-            <IndianRupee size={18} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm sm:text-base font-black text-black truncate tracking-tight" title={`₹${Number(stats?.amountAtRisk || 0).toLocaleString('en-IN')}`}>₹{Number(stats?.amountAtRisk || 0).toLocaleString('en-IN')}</div>
-            <div className="lbl mt-1">Total Demanded</div>
+          {/* Box 3: Violations */}
+          <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Violations</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('SOD')}>
+                  <span className="text-[8px] font-black text-purple-500 uppercase">SOD Not Submitted</span>
+                  <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.sodNotSubmitted || 0}</span>
+                </div>
+                <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('EOD')}>
+                  <span className="text-[8px] font-black text-purple-500 uppercase">EOD Not Submitted</span>
+                  <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.eodNotSubmitted || 0}</span>
+                </div>
+                <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => openViolationsModal('48H')}>
+                  <span className="text-[8px] font-black text-orange-500 uppercase">No Update &gt; 48 Hrs</span>
+                  <span className="text-2xl font-black text-orange-500 mt-1">{stats?.violations?.noUpdate48Hrs || 0}</span>
+                </div>
+                <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all">
+                  <span className="text-[8px] font-black text-red-500 uppercase">SLA Breached</span>
+                  <span className="text-2xl font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+              <div>
+                <span className="text-text-muted">Total Violations</span>
+                <div className="text-lg font-black text-red-500 mt-1">{(stats?.violations?.sodNotSubmitted || 0) + (stats?.violations?.eodNotSubmitted || 0) + (stats?.violations?.noUpdate48Hrs || 0) + (stats?.violations?.slaBreached || 0)}</div>
+              </div>
+              <div>
+                <span className="text-text-muted">Critical Violations</span>
+                <div className="text-lg font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</div>
+              </div>
+            </div>
+            <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/work-report')}>
+              View All Violations <ArrowRight size={12} />
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {user?.role === 'Admin' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
+          {/* Top Urgent Cases Table */}
+          <div className="lg:col-span-7 bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
+            <div className="flex justify-between items-center mb-6 px-2">
+              <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Top Urgent Cases</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
+                    <th className="py-2">Case ID</th>
+                    <th className="py-2">Client / Party</th>
+                    <th className="py-2">Type of Threat</th>
+                    <th className="py-2 text-right">Amount Paid</th>
+                    <th className="py-2 text-center">Last Activity</th>
+                    <th className="py-2 text-center">Status</th>
+                    <th className="py-2 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[10px] font-bold text-text-primary">
+                  {(stats?.highPriorityCases || []).slice(0, 5).map((item, index) => (
+                    <tr key={index} className="border-b border-border/50 last:border-b-0 hover:bg-bg-secondary/50">
+                      <td className="py-3 text-accent uppercase tracking-tighter">{item.caseId || item.caseid}</td>
+                      <td className="py-3">{item.clientName || item.companyName || '-'}</td>
+                      <td className="py-3">{item.typeOfComplaint || item.complaintType || 'N/A'}</td>
+                      <td className="py-3 text-right font-black text-emerald-600">₹{Number(item.totalAmtPaid || 0).toLocaleString('en-IN')}</td>
+                      <td className="py-3 text-center text-text-muted">{item.lastUpdateDate || '2 Hrs Ago'}</td>
+                      <td className="py-3 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase font-black ${item.currentStatus === 'Escalated' ? 'bg-red-500/10 text-red-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                          {item.currentStatus || 'High Risk'}
+                        </span>
+                      </td>
+                      <td className="py-3 text-center">
+                        <button
+                          onClick={() => navigate('/case-master', { state: { searchId: item.caseId || item.caseid } })}
+                          className="text-blue hover:underline font-black text-[9px] uppercase tracking-widest"
+                        >
+                          View Case
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}>
+              View All Urgent Cases <ArrowRight size={12} />
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="lg:col-span-5 flex flex-col gap-8">
+            {/* Quick Actions Card */}
+            <div className="bg-bg-card border-2 rounded-2xl p-6 shadow-sm flex flex-col">
+              <div className="flex justify-between items-center mb-6 px-2">
+                <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Quick Actions</h3>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { icon: Plus, label: 'Add Case', path: '/new-case', color: 'text-blue bg-blue-500/10' },
+                  { icon: ListChecks, label: 'Create Task', path: '/my-task', color: 'text-purple bg-purple-500/10' },
+                  { icon: Activity, label: 'SOD Check', path: '/work-report', color: 'text-cyan bg-cyan-500/10' },
+                  { icon: BarChart, label: 'Reports & MIS', path: '/work-report', color: 'text-indigo bg-indigo-500/10' },
+                ].map((btn, index) => (
+                  <div
+                    key={index}
+                    className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex flex-col items-center gap-2 cursor-pointer"
+                    onClick={() => btn.path !== '#' && navigate(btn.path)}
+                  >
+                    <div className={`p-2 rounded-lg ${btn.color.split(' ')[1]} ${btn.color.split(' ')[0]}`}>
+                      <btn.icon size={16} />
+                    </div>
+                    <span className="text-[8px] font-black uppercase tracking-wider text-text-primary text-center leading-tight">{btn.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recent Activity Card */}
+            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
+              <div className="flex items-center gap-3 mb-6 px-2">
+                <Clock size={18} className="text-blue" />
+                <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Recent Activity</h3>
+              </div>
+              <div className="space-y-6 flex-1 overflow-y-auto scrollbar-thin max-h-[420px] pr-2">
+                {activities.length === 0 ? (
+                  <div className="text-center py-20 opacity-20">
+                    <Timer size={40} className="mx-auto mb-4" />
+                    <div className="text-[10px] font-black uppercase tracking-widest">Awaiting Pulse...</div>
+                  </div>
+                ) : (
+                  activities.map((activity, idx) => (
+                    <div key={activity.id || idx} className="relative pl-6 before:absolute before:left-0 before:top-2 before:bottom-[-24px] before:w-[2px] last:before:hidden before:bg-border/50">
+                      <div className={`absolute left-[-5px] top-1.5 w-3 h-3 rounded-full z-10 border-2 border-bg-card shadow-[0_0_10px_rgba(0,0,0,0.5)] ${activity.color === 'green' ? 'bg-green shadow-[0_0_8px_rgba(34,197,94,0.4)]' :
+                        activity.color === 'red' ? 'bg-red shadow-[0_0_8px_rgba(239,68,68,0.4)]' :
+                          activity.color === 'purple' ? 'bg-purple shadow-[0_0_8px_rgba(168,85,247,0.4)]' :
+                            activity.color === 'orange' ? 'bg-accent shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-blue shadow-[0_0_8px_rgba(59,130,246,0.4)]'
+                        }`} />
+
+                      <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1 flex items-center justify-between">
+                        <span>{new Date(activity.date).toLocaleDateString() === new Date().toLocaleDateString() ? 'Today' : 'Earlier'} &nbsp;{new Date(activity.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="text-accent font-black tracking-widest">{activity.user}</span>
+                      </div>
+
+                      <p className="text-[11px] font-bold text-text-secondary leading-snug mb-1">
+                        {activity.title.length > 80 ? activity.title.substring(0, 80) + '...' : activity.title}
+                      </p>
+                      <div className="text-[9px] font-black text-text-muted uppercase tracking-tight opacity-60 truncate">
+                        {activity.subtitle}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8 items-start">
         {user?.role === 'Admin' ? (
           <div className="lg:col-span-8 flex flex-col gap-8 self-stretch">
-            {/* Top Row: Pie Chart and Team Performance side-by-side */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-              {/* Case Type Wise Chart */}
-              <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                <div className="px-6 py-4 border-b-2 border-border flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Target size={18} className="text-accent" />
-                    <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Case Type Report</h3>
-                  </div>
-                </div>
-
-                <div className="p-6 flex-1 flex flex-col items-center justify-center">
-                  <div className="relative w-48 h-48 mb-6">
-                    <ResponsiveContainer width="100%" height={190} minWidth={180}>
-                      <PieChart>
-                        <Pie
-                          data={stats?.caseTypeWiseData || []}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={55}
-                          outerRadius={80}
-                          paddingAngle={5}
-                          dataKey="count"
-                        >
-                          {(stats?.caseTypeWiseData || []).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} stroke="none" />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                              const data = payload[0].payload;
-                              return (
-                                <div className="bg-bg-card border-2 border-border p-3 rounded-xl shadow-2xl">
-                                  <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">{data.caseType}</div>
-                                  <div className="text-sm font-black text-text-primary">{data.count} Cases</div>
-                                </div>
-                              );
-                            }
-                            return null;
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <div className="text-xl font-black text-text-primary leading-none">
-                        {stats?.caseTypeWiseData?.reduce((sum, item) => sum + item.count, 0) || 0}
-                      </div>
-                      <div className="text-[8px] font-black text-text-muted uppercase tracking-widest mt-1">Total</div>
-                    </div>
-                  </div>
-
-                  {/* Legend Compact */}
-                  <div className="w-full grid grid-cols-2 gap-x-4 gap-y-2 mt-2">
-                    {stats?.caseTypeWiseData?.slice(0, 6).map((item, index) => (
-                      <div key={index} className="flex items-center gap-2 overflow-hidden">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></div>
-                        <div className="text-[9px] font-bold text-text-muted uppercase tracking-tight truncate">{item.caseType}</div>
-                        <div className="text-[10px] font-black text-text-primary ml-auto">{item.count}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Team Performance Compact */}
-              <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                <div className="px-6 py-4 border-b-2 border-border flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Users size={18} className="text-accent" />
-                    <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Team Performance</h3>
-                  </div>
-                  <div className="flex gap-2">
-                    {[
-                      { label: 'All', value: '' },
-                      { label: 'Last 7 Days', value: '7days' },
-                      { label: '1 Month', value: '1month' },
-                      { label: '3 Months', value: '3months' }
-                    ].map(btn => (
-                      <button
-                        key={btn.value}
-                        onClick={() => setTeamFilter(btn.value)}
-                        className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
-                          teamFilter === btn.value
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'bg-bg-secondary text-text-muted hover:bg-bg-input'
-                        }`}
-                      >
-                        {btn.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex-1 overflow-x-auto scrollbar-thin">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-bg-secondary text-text-primary text-[9px] font-semibold tracking-widest uppercase border-b border-border/30">
-                        <th className="px-4 py-3">Member</th>
-                        <th className="px-2 py-3 text-center">Total</th>
-                        <th className="px-2 py-3 text-center">Done</th>
-                        <th className="px-2 py-3 text-center">Tasks</th>
-                        <th className="px-2 py-3 text-center">Overdue</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-[10px] text-text-secondary divide-y divide-border/30">
-                      {stats?.teamPerformance?.slice(0, 8).map(member => (
-                        <tr key={member.id} className="hover:bg-bg-input/50 transition-all cursor-pointer" onClick={() => navigate('/work-report', { state: { userEmail: member.email } })}>
-                          <td className="px-4 py-2.5">
-                            <div className="font-bold text-text-primary truncate max-w-[80px]">{member.name.split(' ')[0]}</div>
-                          </td>
-                          <td className="px-2 py-2.5 text-center font-black text-blue-600">{member.assigned}</td>
-                          <td className="px-2 py-2.5 text-center font-black text-emerald-600">{member.settled}</td>
-                          <td className="px-2 py-2.5 text-center font-black text-purple-600">{member.pendingTasks || 0}</td>
-                          <td className="px-2 py-2.5 text-center font-black text-orange-600">{member.pending}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {/* Compact Footer */}
-                <div className="bg-bg-secondary/50 p-3 border-t border-border flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-                  <span className="text-text-muted">Total Active</span>
-                  <span className="text-accent">{stats?.teamPerformance?.reduce((sum, m) => sum + m.assigned, 0) || 0}</span>
-                </div>
-              </div>
-            </div>
-
-
-            {/* Middle Row: Trend and Legal Heat side-by-side */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-              {/* Summary Trend Section */}
-              <div className="xl:col-span-7 bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm">
+              {/* <div className="xl:col-span-7 bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm">
                 <div className="px-6 py-4 border-b-2 border-border flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <BarChart size={18} className="text-blue" />
@@ -1372,10 +2117,10 @@ const DashboardTab = () => {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-              </div>
+              </div> */}
 
               {/* Legal Heat (Moved here and rearranged) */}
-              <div className="xl:col-span-5 flex flex-col">
+              {/* <div className="xl:col-span-5 flex flex-col">
                 <div className="flex items-center gap-3 mb-6 px-2">
                   <h3 className="text-[10px] font-black text-text-primary uppercase tracking-[0.2em]">LEGAL CASES</h3>
                 </div>
@@ -1405,74 +2150,76 @@ const DashboardTab = () => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </div> */}
             </div>
 
             {/* High Priority Cases Table */}
-            <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch mt-8">
-              <div className="px-8 py-6 border-b-2 border-border flex items-center gap-3">
-                <AlertCircle size={20} className="text-red" />
-                <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">High Priority Cases</h3>
-              </div>
-              <div className="table-wrap overflow-x-auto scrollbar-thin">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-bg-secondary text-text-primary text-[10px] font-semibold tracking-[0.2em] uppercase border-b border-border/30">
-                      <th className="px-6 py-4 text-indigo-500">Case ID</th>
-                      <th className="px-6 py-4 text-blue-500">Company Name</th>
-                      <th className="px-6 py-4 text-emerald-500">Client Details</th>
-                      <th className="px-6 py-4 text-orange-500 text-center">Priority </th>
-                      <th className="px-6 py-4 text-red-500 text-center"> Status </th>
-                      <th className="px-6 py-4 text-sky-500 text-right">Last Update</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
-                    {stats?.highPriorityCases?.slice(0, 5).map(c => (
-                      <tr
-                        key={c._id}
-                        className="hover:bg-bg-input/50 transition-all cursor-pointer group"
-                        onClick={() => navigate('/case-master', { state: { searchId: c.caseId || c.caseid } })}
-                      >
-                        <td className="px-6 py-5 font-black text-accent uppercase tracking-tighter">
-                          {c.caseId || c.caseid}
-                        </td>
-                        <td className="px-6 py-5 font-black text-blue-500 uppercase tracking-tight">
-                          {c.companyName || '-'}
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="font-black text-green-500 leading-tight">{c.clientName}</div>
-                          <div className="text-[10px] text-text-muted font-bold mt-1 tracking-wider">{c.clientMobile || '-'}</div>
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          <Badge status={c.priority} />
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          <Badge status={c.currentStatus} />
-                        </td>
-                        <td className="px-6 py-5 text-right text-text-muted font-bold italic opacity-60">
-                          {c.lastUpdateDate || '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* View More Button */}
-              {stats?.highPriorityCases?.length > 5 && (
-                <div className="bg-bg-secondary/50 p-4 border-t border-border flex justify-center">
-                  <button
-                    onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}
-                    className="px-6 py-2 bg-accent hover:bg-accent-hover text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm shadow-orange-900/10 active:scale-95"
-                  >
-                    View More <ArrowRight size={14} />
-                  </button>
+            {user?.role !== 'Admin' && (
+              <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch mt-8">
+                <div className="px-8 py-6 border-b-2 border-border flex items-center gap-3">
+                  <AlertCircle size={20} className="text-red" />
+                  <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">High Priority Cases</h3>
                 </div>
-              )}
-            </div>
+                <div className="table-wrap overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-bg-secondary text-text-primary text-[10px] font-semibold tracking-[0.2em] uppercase border-b border-border/30">
+                        <th className="px-6 py-4 text-indigo-500">Case ID</th>
+                        <th className="px-6 py-4 text-blue-500">Company Name</th>
+                        <th className="px-6 py-4 text-emerald-500">Client Details</th>
+                        <th className="px-6 py-4 text-orange-500 text-center">Priority </th>
+                        <th className="px-6 py-4 text-red-500 text-center"> Status </th>
+                        <th className="px-6 py-4 text-sky-500 text-right">Last Update</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
+                      {stats?.highPriorityCases?.slice(0, 5).map(c => (
+                        <tr
+                          key={c._id}
+                          className="hover:bg-bg-input/50 transition-all cursor-pointer group"
+                          onClick={() => navigate('/case-master', { state: { searchId: c.caseId || c.caseid } })}
+                        >
+                          <td className="px-6 py-5 font-black text-accent uppercase tracking-tighter">
+                            {c.caseId || c.caseid}
+                          </td>
+                          <td className="px-6 py-5 font-black text-blue-500 uppercase tracking-tight">
+                            {c.companyName || '-'}
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="font-black text-green-500 leading-tight">{c.clientName}</div>
+                            <div className="text-[10px] text-text-muted font-bold mt-1 tracking-wider">{c.clientMobile || '-'}</div>
+                          </td>
+                          <td className="px-6 py-5 text-center">
+                            <Badge status={c.priority} />
+                          </td>
+                          <td className="px-6 py-5 text-center">
+                            <Badge status={c.currentStatus} />
+                          </td>
+                          <td className="px-6 py-5 text-right text-text-muted font-bold italic opacity-60">
+                            {c.lastUpdateDate || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+
+                {stats?.highPriorityCases?.length > 5 && (
+                  <div className="bg-bg-secondary/50 p-4 border-t border-border flex justify-center">
+                    <button
+                      onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}
+                      className="px-6 py-2 bg-accent hover:bg-accent-hover text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm shadow-orange-900/10 active:scale-95"
+                    >
+                      View More <ArrowRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Source of Complaint Table */}
-            <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch mt-8">
+            <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch mt-1">
               <div className="px-6 py-4 border-b-2 border-border flex items-center gap-2">
                 <Target size={20} className="text-accent" />
                 <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">Source of Complaint</h3>
@@ -1523,7 +2270,7 @@ const DashboardTab = () => {
               </div>
             </div>
           </div>
-        ) : (
+        ) : user?.role === 'Admin' ? (
           <div className="lg:col-span-8 bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch">
             <div className="px-8 py-6 border-b-2 border-border flex items-center gap-3">
               <History size={20} className="text-accent" />
@@ -1573,259 +2320,21 @@ const DashboardTab = () => {
               </table>
             </div>
           </div>
-        )}
+        ) : null}
 
 
 
         {/* Live Activity Feed & Source Breakdown */}
         <div className="lg:col-span-4 flex flex-col gap-8">
-          {user?.role === 'Admin' && (
-            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
-              <div className="flex items-center gap-3 mb-6">
-                <AlertTriangle size={18} className="text-[#1a2332]" />
-                <h3 className="text-xs font-black text-[#1a2332] uppercase tracking-widest">Violations</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div
-                  className="bg-white border-2 border-border rounded-2xl p-4 cursor-pointer hover:border-purple/50 transition-all shadow-sm"
-                  onClick={() => openViolationsModal('SOD')}
-                >
-                  <div className="text-[11px] font-black text-[#7c3aed] uppercase tracking-tight mb-2">SOD Not Submitted</div>
-                  <div className="text-3xl font-black text-[#7c3aed]">{stats?.violations?.sodNotSubmitted || 0}</div>
-                </div>
-                <div
-                  className="bg-white border-2 border-border rounded-2xl p-4 cursor-pointer hover:border-purple/50 transition-all shadow-sm"
-                  onClick={() => openViolationsModal('EOD')}
-                >
-                  <div className="text-[11px] font-black text-[#7c3aed] uppercase tracking-tight mb-2">EOD Not Submitted</div>
-                  <div className="text-3xl font-black text-[#7c3aed]">{stats?.violations?.eodNotSubmitted || 0}</div>
-                </div>
-              </div>
-              <div className="bg-white border-2 border-border rounded-2xl p-4 shadow-sm">
-                <div className="text-[11px] font-black text-[#1a2332] uppercase tracking-tight mb-2">Total Violations</div>
-                <div className="text-3xl font-black text-red-500">
-                  {(stats?.violations?.sodNotSubmitted || 0) + (stats?.violations?.eodNotSubmitted || 0)}
-                </div>
-              </div>
-            </div>
-          )}
 
-          {user?.role === 'Admin' && (
-            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
-              <div className="flex items-center gap-3 mb-6">
-                <Clock size={18} className="text-[#1a2332]" />
-                <h3 className="text-xs font-black text-[#1a2332] uppercase tracking-widest">Time Bound Actions</h3>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                <div
-                  className="bg-white border-2 border-border rounded-xl p-3 shadow-sm cursor-pointer hover:border-red-300 transition-all active:scale-95"
-                  onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}
-                >
-                  <div className="text-[10px] font-black text-red-500 uppercase tracking-tight mb-1">Due Today</div>
-                  <div className="text-2xl font-black text-red-500">{stats?.timeBoundActions?.dueToday || 0}</div>
-                </div>
-                <div
-                  className="bg-white border-2 border-border rounded-xl p-3 shadow-sm cursor-pointer hover:border-orange-300 transition-all active:scale-95"
-                  onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}
-                >
-                  <div className="text-[10px] font-black text-orange-500 uppercase tracking-tight mb-1">Due Within 24 Hrs</div>
-                  <div className="text-2xl font-black text-orange-500">{stats?.timeBoundActions?.dueWithin24h || 0}</div>
-                </div>
-                <div
-                  className="bg-white border-2 border-border rounded-xl p-3 shadow-sm cursor-pointer hover:border-orange-200 transition-all active:scale-95"
-                  onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}
-                >
-                  <div className="text-[10px] font-black text-orange-400 uppercase tracking-tight mb-1">Due Within 48 Hrs</div>
-                  <div className="text-2xl font-black text-orange-400">{stats?.timeBoundActions?.dueWithin48h || 0}</div>
-                </div>
-                <div
-                  className="bg-white border-2 border-border rounded-xl p-3 shadow-sm cursor-pointer hover:border-red-400 transition-all active:scale-95"
-                  onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}
-                >
-                  <div className="text-[10px] font-black text-red-600 uppercase tracking-tight mb-1">Overdue</div>
-                  <div className="text-2xl font-black text-red-600">{stats?.timeBoundActions?.overdue || 0}</div>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* <div className="bg-white border-2 border-border rounded-xl p-4 shadow-sm">
-                  <div className="text-[11px] font-black text-[#1a2332] uppercase tracking-tight mb-1">Compliance Rate</div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-2xl font-black text-green-500">{stats?.complianceRate || 100}%</div>
-                    <div className="flex-1 bg-gray-200 h-2 rounded-full overflow-hidden">
-                      <div className="bg-green-500 h-full" style={{ width: `${stats?.complianceRate || 100}%` }}></div>
-                    </div>
-                  </div>
-                </div> */}
-                <div className="bg-white border-2 border-border rounded-xl p-4 shadow-sm">
-                  <div className="text-[11px] font-black text-[#1a2332] uppercase tracking-tight mb-1">Action Taken (Today)</div>
-                  <div className="text-2xl font-black text-green-500">{stats?.timeBoundActions?.actionTakenToday || 0}</div>
-                </div>
-              </div>
 
-              <div className="mt-4 text-right">
-                {/* <button
-                  onClick={() => navigate('/case-master')}
-                  className="text-blue-500 hover:text-blue-600 text-xs font-black uppercase tracking-widest flex items-center gap-1 justify-end w-full"
-                >
-                  View All Actions <ArrowRight size={14} />
-                </button> */}
-              </div>
-            </div>
-          )}
 
-          {user?.role === 'Admin' && (
-            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <h3 className="text-xs font-black text-[#1a2332] uppercase tracking-widest">Active Users</h3>
-              </div>
-              <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-thin">
-                {stats?.activeUsers?.map((u, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-white border-2 border-border rounded-xl shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${u.status === 'Active' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                      <div>
-                        <div className="text-xs font-black text-text-primary uppercase tracking-tight">{u.name}</div>
-                        <div className="text-[10px] text-text-muted font-bold">{u.role}</div>
-                        <div className="text-[9px] text-text-muted mt-1 flex flex-col gap-0.5">
-                          <div>{u.loginTime ? `Login: ${new Date(u.loginTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Login: -'}</div>
-                          {u.logoutTime && <div>Logout: {new Date(u.logoutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>}
-                          {u.lastActiveTime && <div>Active: {new Date(u.lastActiveTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>}
-                        </div>
-                      </div>
-                    </div>
-                    <div className={`text-[10px] font-black uppercase tracking-widest ${u.status === 'Active' ? 'text-green-500' : 'text-text-muted opacity-60'}`}>
-                      {u.status}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Recent Activity moved to Quick Actions column */}
 
-          <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
-            <div className="flex items-center gap-3 mb-6 px-2">
-              <Clock size={18} className="text-blue" />
-              <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Recent Activity</h3>
-            </div>
-            <div className="space-y-6 flex-1 overflow-y-auto scrollbar-thin max-h-[420px] pr-2">
-              {activities.length === 0 ? (
-                <div className="text-center py-20 opacity-20">
-                  <Timer size={40} className="mx-auto mb-4" />
-                  <div className="text-[10px] font-black uppercase tracking-widest">Awaiting Pulse...</div>
-                </div>
-              ) : (
-                activities.map((activity, idx) => (
-                  <div key={activity.id || idx} className="relative pl-6 before:absolute before:left-0 before:top-2 before:bottom-[-24px] before:w-[2px] last:before:hidden before:bg-border/50">
-                    <div className={`absolute left-[-5px] top-1.5 w-3 h-3 rounded-full z-10 border-2 border-bg-card shadow-[0_0_10px_rgba(0,0,0,0.5)] ${activity.color === 'green' ? 'bg-green shadow-[0_0_8px_rgba(34,197,94,0.4)]' :
-                      activity.color === 'red' ? 'bg-red shadow-[0_0_8px_rgba(239,68,68,0.4)]' :
-                        activity.color === 'purple' ? 'bg-purple shadow-[0_0_8px_rgba(168,85,247,0.4)]' :
-                          activity.color === 'orange' ? 'bg-accent shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-blue shadow-[0_0_8px_rgba(59,130,246,0.4)]'
-                      }`} />
-
-                    <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1 flex items-center justify-between">
-                      <span>{new Date(activity.date).toLocaleDateString() === new Date().toLocaleDateString() ? 'Today' : 'Earlier'} &nbsp;{new Date(activity.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span className="text-accent font-black tracking-widest">{activity.user}</span>
-                    </div>
-
-                    <p className="text-[11px] font-bold text-text-secondary leading-snug mb-1">
-                      {activity.title.length > 80 ? activity.title.substring(0, 80) + '...' : activity.title}
-                    </p>
-                    <div className="text-[9px] font-black text-text-muted uppercase tracking-tight opacity-60 truncate">
-                      {activity.subtitle}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          {user?.role === 'Admin' && (
-            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col mt-4">
-              <div className="flex items-center gap-3 mb-4 px-2">
-                <Zap size={18} className="text-accent" />
-                <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Quick Actions</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => navigate('/new-case')}
-                  className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex items-center gap-3"
-                >
-                  <div className="p-2 bg-purple-soft rounded-lg text-purple">
-                    <Plus size={16} />
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">New Case</span>
-                </button>
-                <button
-                  onClick={() => navigate('/my-task')}
-                  className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex items-center gap-3"
-                >
-                  <div className="p-2 bg-blue-soft rounded-lg text-blue">
-                    <ClipboardList size={16} />
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">New Task</span>
-                </button>
-                <button
-                  onClick={() => navigate('/work-report')}
-                  className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex items-center gap-3"
-                >
-                  <div className="p-2 bg-green-soft rounded-lg text-green">
-                    <FileText size={16} />
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">Work Report</span>
-                </button>
-                <button
-                  onClick={() => navigate('/admin-panel')}
-                  className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex items-center gap-3"
-                >
-                  <div className="p-2 bg-orange-soft rounded-lg text-orange">
-                    <Users size={16} />
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">Admin Panel</span>
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-
-      {/* Today's Reports */}
-      {user?.role !== 'Admin' && myReports.length > 0 && (
-        <div className="bg-bg-card border-2 border-border rounded-2xl p-8 shadow-sm mt-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2.5 bg-blue-soft rounded-xl text-blue-400 border border-blue-soft/30">
-              <FileText size={20} />
-            </div>
-            <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">Daily Operational Logs</h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {myReports.map(report => (
-              <div key={report._id} className="flex items-center justify-between bg-bg-input rounded-2xl px-6 py-5 border-2 border-border hover:border-accent-soft transition-all group">
-                <div className="flex items-center gap-5">
-                  <div className={`p-3 rounded-2xl border ${report.type === 'SOD' ? 'bg-accent-soft text-accent border-accent-soft' : 'bg-purple-soft text-purple border-purple-soft'}`}>
-                    {report.type === 'SOD' ? <Send size={20} className="rotate-[-20deg]" /> : <FileText size={20} />}
-                  </div>
-                  <div>
-                    <div className="font-black text-text-primary text-sm uppercase tracking-tight">{report.type} Log Entry</div>
-                    <div className="text-[10px] font-black text-text-muted uppercase tracking-[0.15em] mt-1">
-                      {report.type === 'SOD' ? `INIT: ${report.checkInTime}` : `TERM: ${report.checkOutTime}`} &nbsp;•&nbsp; {report.date}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setViewingReport(report)}
-                  className="px-6 py-3 bg-bg-card border-2 border-border text-text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-accent transition-all flex items-center gap-2 group-hover:bg-accent group-hover:text-white group-hover:border-accent shadow-sm"
-                >
-                  <Eye size={14} /> Analyze
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Violations Popup Modal */}
       {isViolationsModalOpen && (
@@ -1846,7 +2355,9 @@ const DashboardTab = () => {
 
             <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 bg-bg-card">
               {(() => {
-                const users = violationType === 'SOD' ? stats?.violations?.missingSodUsers : stats?.violations?.missingEodUsers;
+                const users = violationType === 'SOD' ? stats?.violations?.missingSodUsers :
+                  violationType === 'EOD' ? stats?.violations?.missingEodUsers :
+                    stats?.violations?.missingNoUpdateUsers;
 
                 if (!users || users.length === 0) {
                   return (

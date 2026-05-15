@@ -19,8 +19,10 @@ router.get('/', verifyToken, async (req, res) => {
       }
     } else {
       // Non-admins see tasks assigned to them OR created by them
+      const esc = req.user.fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nameRegex = new RegExp(`^\\s*${esc}\\s*$`, 'i');
       query.$or = [
-        { assignee: req.user.fullName },
+        { assignee: nameRegex },
         { createdBy: req.user.email }
       ];
     }
@@ -43,12 +45,22 @@ router.get('/', verifyToken, async (req, res) => {
 router.post('/', verifyToken, async (req, res) => {
   try {
     const linkedCaseId = req.body.caseId || '';
-    // Count existing tasks for this specific case to generate sequential number
-    const existingCount = linkedCaseId
+    const basePart = linkedCaseId || 'MAN';
+    
+    // Count existing tasks to get a starting number
+    let count = linkedCaseId
       ? await Task.countDocuments({ caseId: linkedCaseId })
       : await Task.countDocuments({ source: 'Manual' });
-    const basePart = linkedCaseId || 'MAN';
-    const taskId = `TSK-${basePart}-${String(existingCount + 1).padStart(3, '0')}`;
+      
+    let taskId = `TSK-${basePart}-${String(count + 1).padStart(3, '0')}`;
+    
+    // Ensure taskId is unique by checking if it already exists
+    let exists = await Task.findOne({ taskId });
+    while (exists) {
+      count++;
+      taskId = `TSK-${basePart}-${String(count + 1).padStart(3, '0')}`;
+      exists = await Task.findOne({ taskId });
+    }
     const newTask = new Task({
       ...req.body,
       taskId,
@@ -69,6 +81,7 @@ router.post('/', verifyToken, async (req, res) => {
 
     res.status(201).json(newTask);
   } catch (error) {
+    console.error('Task Create Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -82,7 +95,7 @@ router.put('/:id', verifyToken, async (req, res) => {
     let updated = await Task.findByIdAndUpdate(
       req.params.id, 
       { ...req.body },
-      { returnDocument: 'after' }
+      { new: true }
     );
 
     // 2. If not found in Task, it might be a Case
@@ -100,7 +113,7 @@ router.put('/:id', verifyToken, async (req, res) => {
       updated = await Case.findByIdAndUpdate(
         req.params.id,
         updatePayload,
-        { returnDocument: 'after' }
+        { new: true }
       );
       
       if (updated) {

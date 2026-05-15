@@ -179,10 +179,10 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed, onLogoutClick, onC
                 )}
               </div>
               <div className="max-h-[400px] overflow-y-auto scrollbar-thin">
-                {notifications.length === 0 ? (
+                {notifications.filter(n => !n.isRead).length === 0 ? (
                   <div className="p-8 text-center text-text-muted italic text-[11px]">No notifications yet</div>
                 ) : (
-                  notifications.map(n => (
+                  notifications.filter(n => !n.isRead).map(n => (
                     <div
                       key={n._id}
                       className={`p-4 border-b border-border/50 hover:bg-white/5 transition-colors cursor-pointer relative group ${!n.isRead ? 'bg-accent-soft/10' : ''}`}

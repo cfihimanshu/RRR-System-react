@@ -49,6 +49,9 @@ const MyTaskTab = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [linkedCase, setLinkedCase] = useState(null);
   const [fetchingCase, setFetchingCase] = useState(false);
+  const [showSavedNotes, setShowSavedNotes] = useState(false);
+  const [showTaskBrief, setShowTaskBrief] = useState(true);
+  const [newNote, setNewNote] = useState('');
   const [collapsedColumns, setCollapsedColumns] = useState({
     'To Do': false,
     'In Progress': false,
@@ -163,7 +166,12 @@ const MyTaskTab = () => {
   const handlePersistSelectedTask = async () => {
     if (!selectedTask) return;
     try {
-      await handleUpdateTask(selectedTask._id, selectedTask);
+      const updatedNotes = newNote.trim() 
+        ? (selectedTask.notes ? `${selectedTask.notes}\n\n${newNote.trim()}` : newNote.trim())
+        : selectedTask.notes;
+        
+      await handleUpdateTask(selectedTask._id, { ...selectedTask, notes: updatedNotes });
+      setNewNote(''); // Clear input box
       setIsSidePanelOpen(false);
     } catch (err) {
       console.error('Persistence failed:', err);
@@ -245,13 +253,17 @@ const MyTaskTab = () => {
 
     let matchesTimeFilter = true;
     if (taskFilter === 'overdue') {
-      matchesTimeFilter = t.dueDate < todayStr && !['Completed', 'Done'].includes(t.status);
+      matchesTimeFilter = t.reminderDateTime && t.reminderDateTime < new Date().toISOString() && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === 'today') {
       matchesTimeFilter = t.reminderDateTime && t.reminderDateTime < new Date().toISOString() && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === '24h') {
       matchesTimeFilter = t.dueDate === todayStr && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === '48h') {
       matchesTimeFilter = t.dueDate === yesterdayStr && !['Completed', 'Done'].includes(t.status);
+    } else if (taskFilter === 'completed_today') {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      matchesTimeFilter = t.status === 'Completed' && new Date(t.updatedAt) >= startOfToday;
     }
 
     return matchesSearch && matchesDate && matchesTimeFilter;
@@ -540,14 +552,43 @@ const MyTaskTab = () => {
 
               {/* Brief Section */}
               <div className="space-y-4">
-                <h3 className="text-[11px] font-black text-accent uppercase tracking-[0.2em] flex items-center gap-2">
-                  <div className="w-1.5 h-4 bg-accent rounded-full" />
-                  Task Brief
+                <h3 
+                  className="text-[11px] font-black text-accent uppercase tracking-[0.2em] flex items-center justify-between cursor-pointer bg-bg-input p-3 rounded-xl border border-border hover:bg-bg-card transition-all" 
+                  onClick={() => setShowTaskBrief(!showTaskBrief)}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-accent rounded-full" />
+                    Task Brief
+                  </div>
+                  <ChevronDown size={16} className={`transition-transform duration-300 ${showTaskBrief ? 'rotate-180' : 'rotate-0'}`} />
                 </h3>
-                <div className="text-[13px] text-text-primary font-medium leading-relaxed bg-accent-soft p-5 rounded-3xl border border-accent-soft shadow-inner min-h-[100px]">
-                  {selectedTask.details || selectedTask.description || 'No detailed description provided.'}
-                </div>
+                {showTaskBrief && (
+                  <div className="text-[13px] text-text-primary font-medium leading-relaxed bg-accent-soft p-5 rounded-3xl border border-accent-soft shadow-inner min-h-[100px]">
+                    {selectedTask.details || selectedTask.description || 'No detailed description provided.'}
+                  </div>
+                )}
               </div>
+
+              {/* Saved Notes Section */}
+              {selectedTask.notes && (
+                <div className="space-y-4">
+                  <h3
+                    className="text-[11px] font-black text-accent uppercase tracking-[0.2em] flex items-center justify-between cursor-pointer bg-bg-input p-3 rounded-xl border border-border hover:bg-bg-card transition-all"
+                    onClick={() => setShowSavedNotes(!showSavedNotes)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-4 bg-accent rounded-full" />
+                      Progress Notes
+                    </div>
+                    <ChevronDown size={16} className={`transition-transform duration-300 ${showSavedNotes ? 'rotate-180' : 'rotate-0'}`} />
+                  </h3>
+                  {showSavedNotes && (
+                    <div className="text-[13px] text-text-primary font-medium leading-relaxed bg-bg-input p-5 rounded-3xl border border-border shadow-inner whitespace-pre-wrap">
+                      {selectedTask.notes}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Reminder Section */}
               <div className="space-y-4">
@@ -585,8 +626,8 @@ const MyTaskTab = () => {
                 <textarea
                   className="w-full bg-bg-input border-2 border-border rounded-[2rem] p-6 text-sm font-medium text-text-primary outline-none focus:border-accent focus:bg-bg-card transition-all min-h-[150px] shadow-sm placeholder:text-text-muted"
                   placeholder="Add progress notes, observations, or next steps..."
-                  value={selectedTask.notes || ''}
-                  onChange={(e) => handleLocalUpdate({ notes: e.target.value })}
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
                 />
               </div>
             </div>
@@ -668,6 +709,7 @@ const MyTaskTab = () => {
                 <option value="Low">Low</option>
                 <option value="Medium">Medium</option>
                 <option value="High">High</option>
+                <option value="Critical">Critical</option>
               </select>
             </div>
 

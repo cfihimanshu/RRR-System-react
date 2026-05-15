@@ -172,6 +172,20 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
+// One-time migration: rename old FIR types to Criminal Complaint/FIR
+app.get('/api/admin/migrate-fir-types', require('./middleware/auth').verifyToken, async (req, res) => {
+  try {
+    const Case = require('./models/Case');
+    const result = await Case.updateMany(
+      { typeOfComplaint: { $in: ['Criminal FIR', 'FIR'] } },
+      { $set: { typeOfComplaint: 'Criminal Complaint/FIR' } }
+    );
+    res.json({ success: true, updated: result.modifiedCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async (req, res) => {
   try {
     const Case = require('./models/Case');
@@ -181,11 +195,17 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const Refund = require('./models/Refund');
     const Timeline = require('./models/Timeline');
 
-    const { teamFilter } = req.query;
+    const { teamFilter, userFilter, startDate, endDate } = req.query;
     let teamDateQuery = {};
     let commDateQuery = {};
 
-    if (teamFilter === '7days') {
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999); // Include full end day
+      teamDateQuery = { createdAt: { $gte: start, $lte: end } };
+      commDateQuery = { dateTime: { $gte: start.toISOString(), $lte: end.toISOString() } };
+    } else if (teamFilter === '7days') {
       const d = new Date();
       d.setDate(d.getDate() - 7);
       teamDateQuery = { createdAt: { $gte: d } };
@@ -197,16 +217,45 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       commDateQuery = { dateTime: { $gte: d.toISOString() } };
     } else if (teamFilter === '3months') {
       const d = new Date();
+      d.setDate(1); // Set to first day of current month
+      const end = new Date(d);
       d.setMonth(d.getMonth() - 3);
-      teamDateQuery = { createdAt: { $gte: d } };
-      commDateQuery = { dateTime: { $gte: d.toISOString() } };
+      const start = d;
+      teamDateQuery = { createdAt: { $gte: start, $lt: end } };
+      commDateQuery = { dateTime: { $gte: start.toISOString(), $lt: end.toISOString() } };
     }
 
-    let query = {};
+    let query = { ...teamDateQuery };
 
     // Always fetch the latest user record from DB (so name is always fresh)
     const dbUser = await User.findById(req.user.id).lean();
     let userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
+    
+    const bypassEodCheck = dbUser?.bypassEodCheck || false;
+    let isEodMissed = false;
+    
+    if (req.user.role !== 'Admin') {
+      const Report = require('./models/Report');
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      const missedEod = await Report.aggregate([
+        {
+          $group: {
+            _id: { email: "$userEmail", date: "$date" },
+            types: { $push: "$type" }
+          }
+        },
+        {
+          $match: {
+            "_id.email": req.user.email,
+            types: { $all: ["SOD"], $nin: ["EOD"] },
+            "_id.date": { $lt: todayStr }
+          }
+        }
+      ]);
+      
+      isEodMissed = missedEod.length > 0;
+    }
 
     // Non-admin: total cases = Assigned to me OR (Unassigned AND Initiated by me)
     // Non-admin: Isolated data view
@@ -216,6 +265,22 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
       // Case query: Cases assigned to me OR initiated by me
       query = {
+        ...query,
+        $or: [
+          { assignedTo: nameRegex },
+          {
+            $and: [
+              { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
+              { initiatedBy: nameRegex }
+            ]
+          }
+        ]
+      };
+    } else if (userFilter) {
+      const esc = userFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nameRegex = { $regex: new RegExp(`^\\s*${esc}\\s*$`, 'i') };
+      query = {
+        ...query,
         $or: [
           { assignedTo: nameRegex },
           {
@@ -238,6 +303,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     const completedStatuses = ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'];
     const totalCases = await Case.countDocuments(query);
+    const linkedByCount = await Case.countDocuments({ ...query, linkedBy: { $exists: true, $ne: '' } });
     const openCases = await Case.countDocuments({ ...query, currentStatus: { $nin: completedStatuses } });
 
     const settledMetrics = await getMetrics({ ...query, currentStatus: { $in: ['Settled', 'Settlement', 'Resolution'] } });
@@ -299,6 +365,11 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       createdAt: { $gte: startOfToday }
     });
 
+    const totalCommunications = await Timeline.countDocuments({
+      ...timelineQuery,
+      eventType: { $in: ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'] }
+    });
+
     const progressUpdatesToday = await Timeline.countDocuments({
       ...timelineQuery,
       eventType: { $in: ['Progress Update', 'Status Update'] },
@@ -320,6 +391,79 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     const refundsPaid = await Refund.find({ ...(req.user.role !== 'Admin' ? { requestedBy: req.user.email } : {}), status: 'Paid' }).lean();
     const totalRefundAmount = refundsPaid.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+    // Refund Provisions (Periodic)
+    const refundQuery = {
+      ...(req.user.role !== 'Admin' ? { requestedBy: req.user.email } : {}),
+      status: 'Approved'
+    };
+    const allRefunds = await Refund.find(refundQuery).lean();
+    
+    const provisions = {
+      today: { count: 0, amount: 0 },
+      thisWeek: { count: 0, amount: 0 },
+      thisMonth: { count: 0, amount: 0 },
+      next6Months: { count: 0, amount: 0 }
+    };
+
+    const now = new Date();
+    const startOfTodayForRefunds = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfTodayForRefunds = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    
+    const endOfThisWeekForRefunds = new Date(startOfTodayForRefunds);
+    endOfThisWeekForRefunds.setDate(endOfThisWeekForRefunds.getDate() + 7);
+    
+    const endOfThisMonthForRefunds = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    
+    const endOf6MonthsForRefunds = new Date(now.getFullYear(), now.getMonth() + 6, now.getDate(), 23, 59, 59, 999);
+
+    allRefunds.forEach(r => {
+      if (r.installments && r.installments.length > 0) {
+        r.installments.forEach(inst => {
+          if (inst.status === 'Pending' && inst.dueDate) {
+            const dueDate = new Date(inst.dueDate);
+            const amt = Number(inst.amount) || 0;
+            
+            if (dueDate >= startOfTodayForRefunds && dueDate <= endOfTodayForRefunds) {
+              provisions.today.count++;
+              provisions.today.amount += amt;
+            }
+            if (dueDate >= startOfTodayForRefunds && dueDate <= endOfThisWeekForRefunds) {
+              provisions.thisWeek.count++;
+              provisions.thisWeek.amount += amt;
+            }
+            if (dueDate >= startOfTodayForRefunds && dueDate <= endOfThisMonthForRefunds) {
+              provisions.thisMonth.count++;
+              provisions.thisMonth.amount += amt;
+            }
+            if (dueDate >= startOfTodayForRefunds && dueDate <= endOf6MonthsForRefunds) {
+              provisions.next6Months.count++;
+              provisions.next6Months.amount += amt;
+            }
+          }
+        });
+      } else {
+        const amt = Number(r.amount) || 0;
+        const date = r.paymentDate ? new Date(r.paymentDate) : (r.timestamp ? new Date(r.timestamp) : now);
+        
+        if (date >= startOfTodayForRefunds && date <= endOfTodayForRefunds) {
+          provisions.today.count++;
+          provisions.today.amount += amt;
+        }
+        if (date >= startOfTodayForRefunds && date <= endOfThisWeekForRefunds) {
+          provisions.thisWeek.count++;
+          provisions.thisWeek.amount += amt;
+        }
+        if (date >= startOfTodayForRefunds && date <= endOfThisMonthForRefunds) {
+          provisions.thisMonth.count++;
+          provisions.thisMonth.amount += amt;
+        }
+        if (date >= startOfTodayForRefunds && date <= endOf6MonthsForRefunds) {
+          provisions.next6Months.count++;
+          provisions.next6Months.amount += amt;
+        }
+      }
+    });
 
     // Financial Metrics Isolation: Show data for all communications related to cases the staff member OWNS
     let commQuery = {};
@@ -359,6 +503,69 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     ]);
     const caseTypeWiseData = caseTypeAggregation.map(item => ({ caseType: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
 
+    // ── Threat Trends (Last 30 Days) ──
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+    const threatTrendAggregation = await Case.aggregate([
+      { $match: { ...query, createdAt: { $gte: thirtyDaysAgo } } },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            type: "$typeOfComplaint"
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { "_id.date": 1 } }
+    ]);
+
+    // Reshape data for Recharts
+    const threatTrendData = [];
+    const dateMap = {};
+
+    // Get all unique case types found in this period
+    const foundTypes = new Set();
+    threatTrendAggregation.forEach(item => {
+      if (item._id.type) foundTypes.add(item._id.type);
+    });
+
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toISOString().split('T')[0];
+      const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      
+      dateMap[dayStr] = { date: label };
+      // Initialize all found types with 0
+      foundTypes.forEach(type => {
+        dateMap[dayStr][type] = 0;
+      });
+    }
+
+    threatTrendAggregation.forEach(item => {
+      const date = item._id.date;
+      const type = item._id.type;
+      const count = item.count;
+      
+      if (dateMap[date] && type) {
+        dateMap[date][type] = count;
+      }
+    });
+
+    const threatTrendDataArray = Object.values(dateMap);
+
+    // Sort types by total count in this period
+    const typeTotals = {};
+    threatTrendAggregation.forEach(item => {
+      const type = item._id.type || 'Unknown';
+      typeTotals[type] = (typeTotals[type] || 0) + item.count;
+    });
+
+    const sortedTypes = Object.keys(typeTotals).sort((a, b) => typeTotals[b] - typeTotals[a]);
+
     // Fetch Dynamic Source of Complaint Data
     const sourceAggregation = await Case.aggregate([
       { $match: query },
@@ -377,8 +584,19 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         casePipeline.push({ $match: teamDateQuery });
       }
       casePipeline.push({
+        $addFields: {
+          calculatedUser: {
+            $cond: {
+              if: { $eq: [{ $trim: { input: { $ifNull: ["$assignedTo", ""] } } }, ""] },
+              then: "$initiatedBy",
+              else: "$assignedTo"
+            }
+          }
+        }
+      });
+      casePipeline.push({
         $group: {
-          _id: "$assignedTo",
+          _id: "$calculatedUser",
           total: { $sum: 1 },
           pending: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution']] }] }, 1, 0] } },
           settled: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution']] }, 1, 0] } }
@@ -477,41 +695,74 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     };
 
     // ── Amount at Risk & Pending Approvals ──
-    const amountAtRiskResult = await Communication.aggregate([
-      { $group: { _id: null, total: { $sum: { $convert: { input: { $ifNull: ['$refundDemanded', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
-    ]);
-    const amountAtRisk = amountAtRiskResult.length > 0 ? amountAtRiskResult[0].total : 0;
-
+    const amountAtRisk = totalDemandAmount;
+    
     const RefundModel = require('./models/Refund');
-    const pendingApprovals = await RefundModel.countDocuments({ status: 'Pending Admin Approval' });
+    const pendingApprovalsResult = await RefundModel.aggregate([
+      { $match: { status: 'Pending Admin Approval' } },
+      { $group: { _id: null, total: { $sum: { $convert: { input: { $ifNull: ['$amount', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
+    ]);
+    const pendingApprovals = pendingApprovalsResult.length > 0 ? pendingApprovalsResult[0].total : 0;
 
     // ── Time Bound Actions ──
-    const todayStr = new Date().toISOString().split('T')[0];
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const todayObj = new Date();
+    const todayStr = todayObj.toISOString().split('T')[0];
+    
+    const tomorrowObj = new Date();
+    tomorrowObj.setDate(todayObj.getDate() + 1);
+    const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
+    
+    const dayAfterTomorrowObj = new Date();
+    dayAfterTomorrowObj.setDate(todayObj.getDate() + 2);
+    const dayAfterTomorrowStr = dayAfterTomorrowObj.toISOString().split('T')[0];
 
     const startOfTodayForTasks = new Date();
     startOfTodayForTasks.setHours(0, 0, 0, 0);
 
+    const targetUserStr = String(userFilter || userName || '');
+    const esc = targetUserStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nameRegex = new RegExp(`^\\s*${esc}\\s*$`, 'i');
+    const taskUserQuery = (req.user.role !== 'Admin' || userFilter) ? {
+      $or: [
+        { assignee: nameRegex },
+        { createdBy: req.user.email }
+      ]
+    } : {};
+    
+    // Removed hardcoded debug file writing
+
     const timeBoundActions = {
       dueToday: await Task.countDocuments({
+        ...taskUserQuery,
         status: { $nin: ['Completed', 'Done'] },
-        reminderDateTime: { $lt: new Date().toISOString(), $ne: '' }
+        $or: [
+          { dueDate: new RegExp(`^\\s*${todayStr}\\s*$`) },
+          { 
+            dueDate: { $in: [null, ""] },
+            createdAt: { $gte: startOfTodayForTasks }
+          }
+        ]
       }),
       dueWithin24h: await Task.countDocuments({
+        ...taskUserQuery,
         status: { $nin: ['Completed', 'Done'] },
-        dueDate: todayStr
+        dueDate: new RegExp(`^\\s*${tomorrowStr}\\s*$`)
       }),
       dueWithin48h: await Task.countDocuments({
+        ...taskUserQuery,
         status: { $nin: ['Completed', 'Done'] },
-        dueDate: yesterdayStr
+        dueDate: new RegExp(`^\\s*${dayAfterTomorrowStr}\\s*$`)
       }),
       overdue: await Task.countDocuments({
+        ...taskUserQuery,
         status: { $nin: ['Completed', 'Done'] },
-        dueDate: { $lt: todayStr }
+        $or: [
+          { reminderDateTime: { $lt: new Date().toISOString(), $ne: '' } },
+          { dueDate: { $lt: todayStr } }
+        ]
       }),
       actionTakenToday: await Task.countDocuments({
+        ...taskUserQuery,
         status: 'Completed',
         updatedAt: { $gte: startOfTodayForTasks }
       })
@@ -524,34 +775,153 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         createdAt: { $gte: startOfToday }
       }).lean();
 
+      const fortyEightHrsAgo = new Date();
+      fortyEightHrsAgo.setHours(fortyEightHrsAgo.getHours() - 48);
+      const reportsLast48Hrs = await Report.find({
+        createdAt: { $gte: fortyEightHrsAgo }
+      }).lean();
+
       // Simple compliance calculation: percentage of active users who submitted SOD today
       const allNonAdmins = await User.find({ role: { $ne: 'Admin' } }).lean();
       const missingSodUsers = [];
       const missingEodUsers = [];
+      const missingNoUpdateUsers = [];
 
       allNonAdmins.forEach(user => {
         const hasSod = reportsToday.some(r => r.type === 'SOD' && (r.userEmail === user.email || r.userName === user.fullName));
         const hasEod = reportsToday.some(r => r.type === 'EOD' && (r.userEmail === user.email || r.userName === user.fullName));
+        const hasReport48h = reportsLast48Hrs.some(r => r.userEmail === user.email || r.userName === user.fullName);
 
         if (!hasSod) missingSodUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
         if (!hasEod) missingEodUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
+        if (!hasReport48h) missingNoUpdateUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
       });
 
       const complianceRate = allNonAdmins.length > 0 ? Math.round(((allNonAdmins.length - missingSodUsers.length) / allNonAdmins.length) * 100) : 100;
 
+      const d = new Date();
+      let dateStr = '';
+      let reportQuery = {};
+      
+      if (teamFilter === '7days') {
+        d.setDate(d.getDate() - 7);
+        dateStr = d.toISOString().split('T')[0];
+        reportQuery = { date: { $gte: dateStr } };
+      } else if (teamFilter === '1month') {
+        d.setMonth(d.getMonth() - 1);
+        dateStr = d.toISOString().split('T')[0];
+        reportQuery = { date: { $gte: dateStr } };
+      } else if (teamFilter === '3months') {
+        d.setDate(1); // First day of current month
+        const endStr = d.toISOString().split('T')[0];
+        d.setMonth(d.getMonth() - 3);
+        const startStr = d.toISOString().split('T')[0];
+        reportQuery = { date: { $gte: startStr, $lt: endStr } };
+      } else if (startDate && endDate) {
+        dateStr = startDate.split('T')[0];
+        reportQuery = { date: { $gte: dateStr } };
+      } else {
+        d.setDate(d.getDate() - 7); // Default to 7 days
+        dateStr = d.toISOString().split('T')[0];
+        reportQuery = { date: { $gte: dateStr } };
+      }
+      
+      const reportsForDuration = await require('./models/Report').find(reportQuery);
+
+      const parseDuration = (durationStr) => {
+        if (!durationStr) return 0;
+        const hoursMatch = durationStr.match(/(\d+)\s*h/);
+        const minsMatch = durationStr.match(/(\d+)\s*m/);
+        const hours = hoursMatch ? parseInt(hoursMatch[1]) : 0;
+        const mins = minsMatch ? parseInt(minsMatch[1]) : 0;
+        return hours * 60 + mins;
+      };
+
+      const parseTimeString = (timeStr) => {
+        if (!timeStr) return null;
+        const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
+        if (!match) return null;
+        let hour = Number(match[1]);
+        const minute = Number(match[2]);
+        const period = match[3].toLowerCase();
+        if (period === 'pm' && hour !== 12) hour += 12;
+        if (period === 'am' && hour === 12) hour = 0;
+        const date = new Date();
+        date.setHours(hour, minute, 0, 0);
+        return date;
+      };
+
+      const formatDuration = (startTime, endTime) => {
+        const start = parseTimeString(startTime);
+        const end = parseTimeString(endTime);
+        if (!start || !end) return '';
+        let diff = (end - start) / 1000 / 60;
+        if (diff < 0) diff += 24 * 60;
+        const hours = Math.floor(diff / 60);
+        const minutes = Math.round(diff % 60);
+        return `${hours}h ${minutes}m`;
+      };
+
       teamPerformance = teamPerformance.map(staff => {
-        const hasSod = reportsToday.some(r => r.type === 'SOD' && (r.userName === staff.name || r.userEmail === staff.email));
+        const staffReports = reportsForDuration.filter(r => (r.userName === staff.name || r.userEmail === staff.email));
+        
+        // Group by date
+        const groups = {};
+        staffReports.forEach(r => {
+          const key = r.date || 'unknown';
+          if (!groups[key]) groups[key] = { sod: null, eod: null };
+          if (r.type === 'SOD') groups[key].sod = r;
+          if (r.type === 'EOD') groups[key].eod = r;
+        });
+
+        let totalMins = 0;
+        let count = 0;
+
+        Object.values(groups).forEach(group => {
+          const checkInTime = group.sod?.checkInTime || group.eod?.checkInTime || '';
+          const checkOutTime = group.eod?.checkOutTime || group.sod?.checkOutTime || '';
+          
+          let durationStr = group.eod?.workDuration;
+          if (!durationStr || durationStr === 'Calculating...') {
+            if (checkInTime && checkOutTime) {
+              durationStr = formatDuration(checkInTime, checkOutTime);
+            } else if (checkInTime && group.sod?.date === new Date().toISOString().split('T')[0]) {
+              // Fallback for today's ongoing work (using current time as end time)
+              const now = new Date();
+              const nowStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+              durationStr = formatDuration(checkInTime, nowStr);
+            }
+          }
+
+          if (durationStr && durationStr !== 'Calculating...') {
+            totalMins += parseDuration(durationStr);
+            count++;
+          }
+        });
+
+        let responseTime = 'N/A';
+        if (count > 0) {
+          const avgMins = Math.round(totalMins / count);
+          responseTime = `${Math.floor(avgMins / 60)}h ${avgMins % 60}m`;
+        }
+
+        const sodReport = reportsToday.find(r => r.type === 'SOD' && (r.userName === staff.name || r.userEmail === staff.email));
+
         return {
           ...staff,
-          isOnline: hasSod,
-          slaScore: hasSod ? 95 : 65
+          isOnline: !!sodReport,
+          responseTime: responseTime
         };
       });
 
+      // Removed hardcoded debug file writing
+
       violations.sodNotSubmitted = missingSodUsers.length;
       violations.eodNotSubmitted = missingEodUsers.length;
+      violations.noUpdate48Hrs = missingNoUpdateUsers.length;
       violations.missingSodUsers = missingSodUsers;
       violations.missingEodUsers = missingEodUsers;
+      violations.missingNoUpdateUsers = missingNoUpdateUsers;
 
       // ── Active Users Tracking ──
       const AuditLog = require('./models/AuditLog');
@@ -628,6 +998,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       });
 
       res.json({
+        threatTrendData: threatTrendDataArray,
+        linkedByCount,
+        threatTrendTypes: sortedTypes,
         totalCases,
         openCases,
         settledCases,
@@ -637,6 +1010,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         casesCreatedToday,
         documentsUploadedToday,
         communicationsToday,
+        totalCommunications,
         progressUpdatesToday,
         pendingTasksCount,
         highPriority,
@@ -666,11 +1040,17 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         timeBoundActions,
         activeUsers,
         amountAtRisk,
-        pendingApprovals
+        pendingApprovals,
+        provisions,
+        overdue: timeBoundActions.overdue,
+        isEodMissed,
+        bypassEodCheck
       });
     } else {
       // Non-Admin response
       res.json({
+        threatTrendData: threatTrendDataArray,
+        threatTrendTypes: sortedTypes,
         totalCases,
         openCases,
         settledCases,
@@ -680,6 +1060,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         casesCreatedToday,
         documentsUploadedToday,
         communicationsToday,
+        totalCommunications,
         progressUpdatesToday,
         pendingTasksCount,
         highPriority,
@@ -698,13 +1079,17 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         sourceWiseData,
         unassignedCount,
         totalAmountPaid,
-        trendData
+        trendData,
+        provisions,
+        overdue: timeBoundActions.overdue,
+        isEodMissed,
+        bypassEodCheck,
+        timeBoundActions
       });
     }
   } catch (error) {
     console.error('Dashboard Stats Error:', error);
-    // const fs = require('fs');
-    // fs.writeFileSync('c:\\Users\\dell\\RRR-System\\backend\\dashboard_error.txt', error.stack || error.message);
+    // Removed hardcoded error file writing
     res.status(500).json({ error: error.message });
   }
 });

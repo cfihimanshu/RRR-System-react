@@ -6,7 +6,8 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ["Admin", "Operations", "Staff", "Reviewer", "Accountant"], required: true },
   canAccessRecords: { type: Boolean, default: false },
-  schemaVersion: { type: Number, default: 2 }
+  schemaVersion: { type: Number, default: 2 },
+  bypassEodCheck: { type: Boolean, default: false }
 });
 
 module.exports = mongoose.model('User', userSchema);

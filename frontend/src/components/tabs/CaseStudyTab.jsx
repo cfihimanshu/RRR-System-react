@@ -35,6 +35,7 @@ const CaseStudyTab = ({ caseData = null }) => {
   const [actions, setActions] = useState([]);
   const [comms, setComms] = useState([]);
   const [docs, setDocs] = useState([]);
+  const [progressLogs, setProgressLogs] = useState([]);
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [showCommsModal, setShowCommsModal] = useState(false);
 
@@ -84,17 +85,19 @@ const CaseStudyTab = ({ caseData = null }) => {
 
       if (foundCase) foundCase.caseStudyGeneratedAt = now;
 
-      const [tlRes, actRes, commRes, docRes] = await Promise.all([
+      const [tlRes, actRes, commRes, docRes, progRes] = await Promise.all([
         api.get(`/timeline?caseId=${targetId}`),
         api.get(`/actions?caseId=${targetId}`),
         api.get(`/communications?caseId=${targetId}`),
-        api.get(`/documents?caseId=${targetId}`)
+        api.get(`/documents?caseId=${targetId}`),
+        api.get(`/progress?caseId=${targetId}`)
       ]);
 
       setTimeline(tlRes.data);
       setActions(actRes.data);
       setComms(commRes.data);
       setDocs(docRes.data);
+      setProgressLogs(progRes.data.logs || []);
 
       setGeneratedCase({ ...foundCase, caseStudyGeneratedAt: now });
       if (!caseData) setShowMobilePreview(true);
@@ -113,12 +116,13 @@ const CaseStudyTab = ({ caseData = null }) => {
 
     setLoading(true);
     try {
-      const [caseRes, tlRes, actRes, commRes, docRes] = await Promise.all([
+      const [caseRes, tlRes, actRes, commRes, docRes, progRes] = await Promise.all([
         caseData ? Promise.resolve({ data: caseData }) : api.get(`/cases?caseId=${caseId}`),
         api.get(`/timeline?caseId=${caseId}`),
         api.get(`/actions?caseId=${caseId}`),
         api.get(`/communications?caseId=${caseId}`),
-        api.get(`/documents?caseId=${caseId}`)
+        api.get(`/documents?caseId=${caseId}`),
+        api.get(`/progress?caseId=${caseId}`)
       ]);
 
       const foundCase = caseData || (Array.isArray(caseRes.data) ? caseRes.data.find(c => c.caseId === caseId) : caseRes.data);
@@ -127,6 +131,7 @@ const CaseStudyTab = ({ caseData = null }) => {
       setActions(actRes.data);
       setComms(commRes.data);
       setDocs(docRes.data);
+      setProgressLogs(progRes.data.logs || []);
       setGeneratedCase(foundCase);
       if (!caseData) setShowMobilePreview(true);
     } catch (err) {
@@ -197,7 +202,7 @@ const CaseStudyTab = ({ caseData = null }) => {
 
   const generatedCases = cases.filter(c => c.caseStudyGeneratedAt).sort((a, b) => new Date(b.caseStudyGeneratedAt) - new Date(a.caseStudyGeneratedAt));
 
-  const ReportContent = ({ data, timeline, actions, comms, docs, isMobile = false }) => {
+  const ReportContent = ({ data, timeline, actions, comms, docs, progressLogs = [], isMobile = false }) => {
     const totalPaid = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
     const totalMou = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
 
@@ -335,6 +340,9 @@ const CaseStudyTab = ({ caseData = null }) => {
                 <div className="w-20 text-[10px] font-bold text-[#2563eb] pt-1">{new Date(t.eventDate || t.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
                 <div className="flex-1">
                   <div className="text-[11px] font-bold text-gray-800">{t.summary}</div>
+                  {t.metadata?.nextAction && (
+                    <div className="text-[10px] font-bold text-[#2563eb] mt-1">Next Action: {t.metadata.nextAction}</div>
+                  )}
                   <div className="text-[8px] text-gray-400 font-black uppercase mt-0.5 tracking-widest">Source: {t.source || 'System'}</div>
                 </div>
               </div>
@@ -348,6 +356,21 @@ const CaseStudyTab = ({ caseData = null }) => {
             <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">{sectionNum++}. Recommended Next Steps</h2>
             <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 text-[11px] font-medium text-[#1e3a8a] leading-relaxed whitespace-pre-line">
               {data.recommendedNextSteps}
+            </div>
+          </section>
+        )}
+
+        {/* 8.5 Next Action Planned */}
+        {progressLogs && progressLogs.length > 0 && progressLogs[0].nextAction && (
+          <section className="mb-10">
+            <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">{sectionNum++}. Next Action Planned</h2>
+            <div className="bg-green-50 border border-green-100 rounded-lg p-6 text-[11px] font-medium text-green-700 leading-relaxed whitespace-pre-line">
+              {progressLogs[0].nextAction}
+              {progressLogs[0].followUpDate && (
+                <div className="text-[9px] text-green-600 font-bold mt-2 uppercase tracking-widest">
+                  Follow Up Date: {new Date(progressLogs[0].followUpDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+              )}
             </div>
           </section>
         )}
@@ -477,7 +500,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                   </div>
                 </div>
                 <div className="max-w-[1000px] mx-auto shadow-2xl rounded-[2.5rem] overflow-hidden border-8 border-border">
-                  <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} />
+                  <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} />
                 </div>
               </div>
             </div>
@@ -495,7 +518,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                   </div>
                   <div className="flex-1 overflow-y-auto bg-bg-input p-6">
                     <div className="shadow-xl rounded-[2rem] overflow-hidden border-4 border-border">
-                      <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} isMobile={true} />
+                      <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} isMobile={true} />
                     </div>
                   </div>
                 </div>
@@ -697,7 +720,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                 </div>
                 <div className="flex-1 overflow-auto bg-bg-input p-12 scrollbar-thin">
                   <div className="max-w-[850px] mx-auto shadow-2xl rounded-[2.5rem] overflow-hidden border-8 border-border">
-                    <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} />
+                    <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} />
                   </div>
                 </div>
               </div>
@@ -724,7 +747,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                 </div>
               ) : (
                 <div className="shadow-xl rounded-[2rem] overflow-hidden border-4 border-border">
-                  <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} isMobile={true} />
+                  <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} isMobile={true} />
                 </div>
               )}
             </div>

@@ -13,6 +13,7 @@ const AdminPanelTab = () => {
   const [roleUpdates, setRoleUpdates] = useState({});
   const [selectedRefund, setSelectedRefund] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [missedEodUsers, setMissedEodUsers] = useState([]);
   const { user } = useContext(AuthContext);
 
   const fetchPendingRefunds = async () => {
@@ -43,10 +44,30 @@ const AdminPanelTab = () => {
     }
   };
 
+  const fetchMissedEodUsers = async () => {
+    try {
+      const res = await api.get('/users/missed-eod');
+      setMissedEodUsers(res.data);
+    } catch (err) {
+      console.error('Failed to fetch missed EOD users', err);
+    }
+  };
+
+  const handleGrantSodAccess = async (email) => {
+    try {
+      await api.post(`/users/${email}/grant-sod-access`);
+      toast.success(`Access granted to ${email}`);
+      fetchMissedEodUsers();
+    } catch (err) {
+      toast.error('Failed to grant access');
+    }
+  };
+
   useEffect(() => {
     fetchPendingRefunds();
     fetchAllRefunds();
     fetchUsers();
+    fetchMissedEodUsers();
 
     if (window.location.hash === '#refund-actions') {
       setTimeout(() => {
@@ -154,130 +175,183 @@ const AdminPanelTab = () => {
         <div className="p-8 grid grid-cols-1 xl:grid-cols-[minmax(320px,1fr)_minmax(430px,1.3fr)] gap-8">
           <div className="bg-bg-card rounded-[2rem] border-2 border-border p-6">
             <form className="space-y-8" onSubmit={handleCreateUser}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-            <div>
-              <label className={labelClass}> FULL NAME</label>
-              <input
-                type="text"
-                className={inputClass}
-                placeholder="Ex: John Doe"
-                value={formData.fullName}
-                onChange={e => setFormData({ ...formData, fullName: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <label className={labelClass}>EMAIL</label>
-              <input
-                type="email"
-                className={inputClass}
-                placeholder="user@rrr-system.com"
-                value={formData.email}
-                onChange={e => setFormData({ ...formData, email: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <label className={labelClass}>PASSWORD</label>
-              <input
-                type="text"
-                className={inputClass}
-                placeholder="Secure password"
-                value={formData.password}
-                onChange={e => setFormData({ ...formData, password: e.target.value })}
-                required
-              />
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                <div>
+                  <label className={labelClass}> FULL NAME</label>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    placeholder="Ex: John Doe"
+                    value={formData.fullName}
+                    onChange={e => setFormData({ ...formData, fullName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>EMAIL</label>
+                  <input
+                    type="email"
+                    className={inputClass}
+                    placeholder="user@rrr-system.com"
+                    value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>PASSWORD</label>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    placeholder="Secure password"
+                    value={formData.password}
+                    onChange={e => setFormData({ ...formData, password: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-120 items-end">
+                <div>
+                  <label className={labelClass}>ROLE</label>
+                  <select
+                    className={inputClass}
+                    value={formData.role}
+                    onChange={e => setFormData({ ...formData, role: e.target.value })}
+                    required
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Operations">Operations</option>
+                    <option value="Reviewer">Reviewer</option>
+                    <option value="Accountant">Accountant</option>
+                    <option value="Staff">Staff</option>
+                  </select>
+                </div>
+                <div className="flex justify-end">
+                  <button type="submit" className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 rounded-2xl shadow-xl shadow-orange-900/20 transition-all text-xs uppercase tracking-[0.2em] active:scale-95">
+                    CREATE USER
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-120 items-end">
-            <div>
-              <label className={labelClass}>ROLE</label>
-              <select
-                className={inputClass}
-                value={formData.role}
-                onChange={e => setFormData({ ...formData, role: e.target.value })}
-                required
-              >
-                <option value="Admin">Admin</option>
-                <option value="Operations">Operations</option>
-                <option value="Reviewer">Reviewer</option>
-                <option value="Accountant">Accountant</option>
-                <option value="Staff">Staff</option>
-              </select>
+          <div className="bg-bg-card rounded-[2rem] border-2 border-border p-6 overflow-x-auto">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-accent-soft rounded-2xl flex items-center justify-center text-accent">
+                <span className="font-black text-lg">🔧</span>
+              </div>
+              <div>
+                <h3 className="text-base font-black text-text-primary uppercase tracking-tight">Change User Role</h3>
+                <p className="text-[10px] text-text-muted uppercase tracking-[0.2em] mt-1">Select a new role and submit to update a user.</p>
+              </div>
             </div>
-            <div className="flex justify-end">
-              <button type="submit" className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 rounded-2xl shadow-xl shadow-orange-900/20 transition-all text-xs uppercase tracking-[0.2em] active:scale-95">
-                CREATE USER
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
 
-      <div className="bg-bg-card rounded-[2rem] border-2 border-border p-6 overflow-x-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-accent-soft rounded-2xl flex items-center justify-center text-accent">
-            <span className="font-black text-lg">🔧</span>
-          </div>
-          <div>
-            <h3 className="text-base font-black text-text-primary uppercase tracking-tight">Change User Role</h3>
-            <p className="text-[10px] text-text-muted uppercase tracking-[0.2em] mt-1">Select a new role and submit to update a user.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
+                    <th className="px-4 py-4">User Name</th>
+                    <th className="px-4 py-4">Role</th>
+                    <th className="px-4 py-4 text-center">Records Module</th>
+                    <th className="px-4 py-4">Change Role</th>
+                    <th className="px-4 py-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
+                  {users.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="px-4 py-10 text-center text-text-muted uppercase tracking-[0.2em]">No users available for role change.</td>
+                    </tr>
+                  ) : (
+                    users.map(u => (
+                      <tr key={u._id} className="hover:bg-bg-input/30 transition-all">
+                        <td className="px-4 py-4 font-black text-text-primary uppercase tracking-tight">{u.fullName}</td>
+                        <td className="px-4 py-4 font-bold text-text-muted italic">{u.role}</td>
+                        <td className="px-4 py-4 text-center">
+                          <button
+                            onClick={() => handleToggleRecordsAccess(u._id, u.canAccessRecords)}
+                            className={`px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm ${u.canAccessRecords
+                                ? 'bg-green-soft text-green border border-green-soft hover:bg-green hover:text-white'
+                                : 'bg-bg-input text-text-muted border border-border hover:border-accent hover:text-accent'
+                              }`}
+                          >
+                            {u.canAccessRecords ? 'ENABLED' : 'DISABLED'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-4">
+                          <select
+                            className={inputClass}
+                            value={roleUpdates[u._id] || u.role}
+                            onChange={e => handleChangeUserRole(u._id, e.target.value)}
+                          >
+                            <option value="Admin">Admin</option>
+                            <option value="Operations">Operations</option>
+                            <option value="Reviewer">Reviewer</option>
+                            <option value="Accountant">Accountant</option>
+                            <option value="Staff">Staff</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <button
+                            onClick={() => handleUpdateUserRole(u._id)}
+                            className="bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-2xl transition-all active:scale-95 whitespace-nowrap"
+                          >
+                            Update Role
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="overflow-x-auto">
+      {/* SECTION: Missed EOD Users */}
+      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border mb-10 max-w-full overflow-hidden mt-10">
+        <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
+          <div className="w-10 h-10 bg-red-soft rounded-2xl flex items-center justify-center text-red">
+            <span className="font-black text-lg">⚠️</span>
+          </div>
+          <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">Missed EOD Users</h2>
+        </div>
+
+        <div className="table-wrap overflow-x-auto scrollbar-thin">
           <table className="w-full text-left border-collapse min-w-[600px]">
             <thead>
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
-                <th className="px-4 py-4">User Name</th>
-                <th className="px-4 py-4">Role</th>
-                <th className="px-4 py-4 text-center">Records Module</th>
-                <th className="px-4 py-4">Change Role</th>
-                <th className="px-4 py-4 text-right">Action</th>
+                <th className="px-4 py-5 whitespace-nowrap">User Name</th>
+                <th className="px-4 py-5 whitespace-nowrap">Email</th>
+                <th className="px-4 py-5">Missed Dates</th>
+                <th className="px-4 py-5 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
-              {users.length === 0 ? (
+              {missedEodUsers.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-4 py-10 text-center text-text-muted uppercase tracking-[0.2em]">No users available for role change.</td>
+                  <td colSpan="4" className="px-6 py-12 text-center text-text-muted italic">No users have missed EOD.</td>
                 </tr>
               ) : (
-                users.map(u => (
+                missedEodUsers.map(u => (
                   <tr key={u._id} className="hover:bg-bg-input/30 transition-all">
-                    <td className="px-4 py-4 font-black text-text-primary uppercase tracking-tight">{u.fullName}</td>
-                    <td className="px-4 py-4 font-bold text-text-muted italic">{u.role}</td>
-                    <td className="px-4 py-4 text-center">
-                      <button
-                        onClick={() => handleToggleRecordsAccess(u._id, u.canAccessRecords)}
-                        className={`px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm ${
-                          u.canAccessRecords 
-                            ? 'bg-green-soft text-green border border-green-soft hover:bg-green hover:text-white' 
-                            : 'bg-bg-input text-text-muted border border-border hover:border-accent hover:text-accent'
-                        }`}
-                      >
-                        {u.canAccessRecords ? 'ENABLED' : 'DISABLED'}
-                      </button>
+                    <td className="px-4 py-5 font-black text-text-primary uppercase tracking-tighter">{u.name || u._id}</td>
+                    <td className="px-4 py-5 font-bold text-text-muted">{u._id}</td>
+                    <td className="px-4 py-5">
+                      <div className="flex flex-wrap gap-1">
+                        {u.missedDates.map(d => (
+                          <span key={d} className="bg-red-soft text-red px-2 py-0.5 rounded-md text-[9px] font-black">{d}</span>
+                        ))}
+                      </div>
                     </td>
-                    <td className="px-4 py-4">
-                      <select
-                        className={inputClass}
-                        value={roleUpdates[u._id] || u.role}
-                        onChange={e => handleChangeUserRole(u._id, e.target.value)}
-                      >
-                        <option value="Admin">Admin</option>
-                        <option value="Operations">Operations</option>
-                        <option value="Reviewer">Reviewer</option>
-                        <option value="Accountant">Accountant</option>
-                        <option value="Staff">Staff</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-4 text-right">
+                    <td className="px-4 py-5 text-center">
                       <button
-                        onClick={() => handleUpdateUserRole(u._id)}
-                        className="bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-2xl transition-all active:scale-95 whitespace-nowrap"
+                        onClick={() => handleGrantSodAccess(u._id)}
+                        className="bg-accent hover:bg-accent-hover text-white text-[9px] font-black py-2 px-4 rounded-xl shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all active:scale-95"
                       >
-                        Update Role
+                        Grant Access
                       </button>
                     </td>
                   </tr>
@@ -287,8 +361,6 @@ const AdminPanelTab = () => {
           </table>
         </div>
       </div>
-    </div>
-  </div>
 
       {/* SECTION 1: Refund Requests & Approvals */}
       <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border mb-10 max-w-5xl overflow-hidden">
@@ -306,7 +378,7 @@ const AdminPanelTab = () => {
                 <th className="px-4 py-5 whitespace-nowrap">Submission Date</th>
                 <th className="px-4 py-5 whitespace-nowrap">Case Link</th>
                 <th className="px-4 py-5 text-center">Amount Requested</th>
-                <th className="px-4 py-5">Initiated By</th>
+                <th className="px-4 py-5">Assign To</th>
                 <th className="px-4 py-5 text-center">Final Decision</th>
               </tr>
             </thead>

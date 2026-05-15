@@ -186,11 +186,11 @@ router.get('/', verifyToken, async (req, res) => {
     }
 
     if (req.query.hasDemand === 'true') {
-      const commsWithDemand = await Communication.find({ 
+      const commsWithDemand = await Communication.find({
         $or: [
-          { demandAmount: { $gt: 0 } }, 
+          { demandAmount: { $gt: 0 } },
           { refundDemanded: { $regex: /[1-9]/ } } // Any string containing a non-zero digit
-        ] 
+        ]
       }).distinct('caseId');
       query.caseId = { $in: commsWithDemand };
     }
@@ -223,7 +223,37 @@ router.get('/available-dates', verifyToken, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+router.get('/check-duplicate', verifyToken, async (req, res) => {
+  try {
+    const { companyName } = req.query;
+    if (!companyName) return res.json({ exists: false });
+    
+    const existing = await Case.findOne({ 
+      companyName: { $regex: new RegExp(`^\\s*${companyName.trim()}\\s*$`, 'i') } 
+    });
+    
+    res.json({ exists: !!existing });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
+router.get('/search-client', verifyToken, async (req, res) => {
+  try {
+    const { name, mobile } = req.query;
+    if (!name && !mobile) return res.json([]);
+    
+    let query = { $or: [] };
+    
+    if (name) query.$or.push({ clientName: { $regex: new RegExp(name.trim(), 'i') } });
+    if (mobile) query.$or.push({ clientMobile: { $regex: new RegExp(mobile.trim(), 'i') } });
+    
+    const cases = await Case.find(query, 'caseId companyName clientName clientMobile').limit(10).lean();
+    res.json(cases);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async (req, res) => {
   try {
@@ -232,21 +262,13 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
     const companyName = req.body.companyName?.trim();
     const typeOfComplaint = req.body.typeOfComplaint;
 
-    // Duplicate Check - Strict match on Mobile + Company or Name + Company + Type
-    const existingCase = await Case.findOne({
-      $or: [
-        { clientMobile: clientMobile, companyName: companyName },
-        { clientName: clientName, companyName: companyName, typeOfComplaint: typeOfComplaint }
-      ].filter(q => {
-        // Only include queries that have all required fields for that check
-        if (q.clientMobile && q.companyName) return true;
-        if (q.clientName && q.companyName && q.typeOfComplaint) return true;
-        return false;
-      })
+    // Duplicate Check - Strict match on Company Name only
+    const existingCase = await Case.findOne({ 
+      companyName: { $regex: new RegExp(`^\\s*${companyName.trim()}\\s*$`, 'i') } 
     });
     if (existingCase) {
       return res.status(400).json({
-        error: `Entry already exists! A case with these details was already registered with Case ID: ${existingCase.caseId}.`,
+        error: `Company name already exists! A case with this company name was already registered with Case ID: ${existingCase.caseId}.`,
         existingCase: existingCase
       });
     }
@@ -471,7 +493,7 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
     const assigneeToUse = (req.body.assignedTo && req.body.assignedTo.trim()) || (existingCase.assignedTo && existingCase.assignedTo.trim());
     const initiatorToUse = (req.body.initiatedBy && req.body.initiatedBy.trim()) || (existingCase.initiatedBy && existingCase.initiatedBy.trim());
     const hasAssignee = !!(assigneeToUse || initiatorToUse);
-    
+
     if (hasAssignee && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged')) {
       req.body.currentStatus = 'Assigned';
       req.body.progressPercentage = 25;
@@ -626,12 +648,12 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
     const changedFields = Object.keys(updateData).filter(key => {
       // Skip complex objects/arrays for simple string comparison
       if (typeof updateData[key] === 'object') return false;
-      
+
       const oldVal = String(existingCase[key] ?? '').trim();
       const newVal = String(updateData[key] ?? '').trim();
       return oldVal !== newVal;
     });
-    
+
     changedFields.forEach(async (field) => {
       let fieldLabel = field;
       let oldVal = existingCase[field];
@@ -717,15 +739,15 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
 router.delete('/:caseId', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     const { caseId } = req.params;
-    
+
     // Fetch the case first to have details for the email
     const deletedCase = await Case.findOneAndDelete({ caseId });
     if (!deletedCase) {
       return res.status(404).json({ error: 'Case not found' });
     }
-    
+
     await Timeline.deleteMany({ caseId });
-    
+
     // Send email to Admin
     try {
       const admins = await User.find({ role: 'Admin' });
