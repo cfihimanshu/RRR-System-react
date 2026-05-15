@@ -96,7 +96,27 @@ const CaseStudyTab = ({ caseData = null }) => {
       setTimeline(tlRes.data);
       setActions(actRes.data);
       setComms(commRes.data);
-      setDocs(docRes.data);
+      
+      const fetchedDocs1 = docRes.data || [];
+      const combinedDocs1 = [...fetchedDocs1];
+      if (foundCase?.importDocumentLink) {
+        combinedDocs1.push({
+          fileLink: foundCase.importDocumentLink,
+          fileSummary: `Imported Document (${foundCase.typeOfComplaint})`,
+          docType: foundCase.typeOfComplaint,
+          uploadDate: foundCase.createdAt
+        });
+      }
+      if (foundCase?.firFileLink) {
+        combinedDocs1.push({
+          fileLink: foundCase.firFileLink,
+          fileSummary: `FIR Document`,
+          docType: 'FIR',
+          uploadDate: foundCase.createdAt
+        });
+      }
+      setDocs(combinedDocs1);
+      
       setProgressLogs(progRes.data.logs || []);
 
       setGeneratedCase({ ...foundCase, caseStudyGeneratedAt: now });
@@ -130,7 +150,27 @@ const CaseStudyTab = ({ caseData = null }) => {
       setTimeline(tlRes.data);
       setActions(actRes.data);
       setComms(commRes.data);
-      setDocs(docRes.data);
+      
+      const fetchedDocs2 = docRes.data || [];
+      const combinedDocs2 = [...fetchedDocs2];
+      if (foundCase?.importDocumentLink) {
+        combinedDocs2.push({
+          fileLink: foundCase.importDocumentLink,
+          fileSummary: `Imported Document (${foundCase.typeOfComplaint})`,
+          docType: foundCase.typeOfComplaint,
+          uploadDate: foundCase.createdAt
+        });
+      }
+      if (foundCase?.firFileLink) {
+        combinedDocs2.push({
+          fileLink: foundCase.firFileLink,
+          fileSummary: `FIR Document`,
+          docType: 'FIR',
+          uploadDate: foundCase.createdAt
+        });
+      }
+      setDocs(combinedDocs2);
+      
       setProgressLogs(progRes.data.logs || []);
       setGeneratedCase(foundCase);
       if (!caseData) setShowMobilePreview(true);

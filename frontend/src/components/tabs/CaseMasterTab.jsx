@@ -215,14 +215,21 @@ const CaseMasterTab = () => {
     typeOfComplaint: ['All Types'],
     date: null
   });
-  const [appliedFilters, setAppliedFilters] = useState({
-    status: ['All Status'],
-    priority: ['All Priority'],
-    assignee: ['All Assignees'],
-    typeOfComplaint: ['All Types'],
-    date: null,
-    linkedOnly: false
+  const [appliedFilters, setAppliedFilters] = useState(() => {
+    const saved = localStorage.getItem('caseMasterFilters');
+    return saved ? JSON.parse(saved) : {
+      status: ['All Status'],
+      priority: ['All Priority'],
+      assignee: ['All Assignees'],
+      typeOfComplaint: ['All Types'],
+      date: null,
+      linkedOnly: false
+    };
   });
+
+  useEffect(() => {
+    localStorage.setItem('caseMasterFilters', JSON.stringify(appliedFilters));
+  }, [appliedFilters]);
   const { user } = useContext(AuthContext);
 
   // Form states for editable case details
@@ -579,7 +586,7 @@ const CaseMasterTab = () => {
       matchStatus = appliedFilters.status.some(selectedStatus => {
         if (selectedStatus === 'Active') {
           return normalizedCaseStatus !== 'Settlement' && normalizedCaseStatus !== 'Closure' && normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed' && normalizedCaseStatus !== 'Resolution';
-        } else if (selectedStatus === 'Closed') {
+        } else if (selectedStatus === 'Closed' || selectedStatus === 'Closure') {
           return normalizedCaseStatus === 'Settlement' || normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Settled' || normalizedCaseStatus === 'Closed' || normalizedCaseStatus === 'Resolution';
         } else if (selectedStatus === 'Unassigned') {
           const initiatedByValue = c.initiatedBy?.toString?.() || '';
@@ -1520,7 +1527,7 @@ const CaseMasterTab = () => {
 
                         {activeFilterType === 'Type' && (
                           <div className="space-y-3">
-                            {['All Types', 'Legal Notice', 'Cyber Complaint', 'Consumer Complaint', 'FIR', 'Litigation', 'Escalation', 'General Query', 'Lien', 'TollFree'].map((t) => {
+                            {['All Types', 'Legal Notice', '1930 Cyber Complaint', 'Consumer Complaint', 'Criminal Complaint/FIR', 'Civil Case', 'Social Media', 'General Query', 'NA Non Agreement', 'Demand Pressure', 'Bank Hold'].map((t) => {
                               const isChecked = tempFilters.typeOfComplaint.includes(t);
                               return (
                                 <label key={t} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">

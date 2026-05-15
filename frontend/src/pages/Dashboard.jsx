@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
@@ -47,6 +47,15 @@ const Dashboard = () => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const { logout } = useContext(AuthContext);
+
+  useEffect(() => {
+    // Auto-heartbeat every 5 minutes to update lastSeen
+    const heartbeatInterval = setInterval(() => {
+      api.get('/auth/me').catch(err => console.error('Heartbeat failed:', err));
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(heartbeatInterval);
+  }, []);
 
   return (
     <div className="app-container h-screen flex flex-col overflow-hidden">

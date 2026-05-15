@@ -8,6 +8,11 @@ const verifyToken = (req, res, next) => {
     const tokenParts = token.split(' ');
     const decoded = jwt.verify(tokenParts[tokenParts.length - 1], process.env.JWT_SECRET);
     req.user = decoded;
+    
+    // Update lastSeen asynchronously
+    const User = require('../models/User');
+    User.findByIdAndUpdate(decoded.id, { lastSeen: new Date() }).exec().catch(err => console.error('Failed to update lastSeen:', err));
+
     next();
   } catch (err) {
     return res.status(401).json({ error: "Unauthorized" });

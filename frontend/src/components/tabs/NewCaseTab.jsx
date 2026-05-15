@@ -285,7 +285,7 @@ const NewCaseTab = () => {
       updates.engagementNote = `This is a multi-stage consultancy and execution support engagement. ₹${value || '0'} was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.`;
     }
 
-    if (name === 'typeOfComplaint' && !['Legal Notice', 'Cyber Complaint', 'Consumer Complaint'].includes(value)) {
+    if (name === 'typeOfComplaint' && !['Legal Notice', '1930 Cyber Complaint', 'Consumer Complaint'].includes(value)) {
       updates.importDocumentLink = '';
     }
 
@@ -542,7 +542,7 @@ const NewCaseTab = () => {
                 <option value="Startupflora">Startupflora</option>
               </select>
             </div>
-            {['Legal Notice', 'Cyber Complaint', 'Consumer Complaint'].includes(formData.typeOfComplaint) && (
+            {['Legal Notice', '1930 Cyber Complaint', 'Consumer Complaint'].includes(formData.typeOfComplaint) && (
               <div>
                 <label className={labelClass}>Import Document ({formData.typeOfComplaint})</label>
                 <FileUpload
@@ -553,45 +553,46 @@ const NewCaseTab = () => {
                 />
               </div>
             )}
-            {(formData.typeOfComplaint === 'Cyber Complaint' || formData.typeOfComplaint === 'FIR' || formData.typeOfComplaint === 'Consumer Complaint') && (
+            
+            {formData.typeOfComplaint === '1930 Cyber Complaint' && (
+              <div>
+                <label className={labelClass}>Acknowledgment Numbers</label>
+                {cyberAcks.map((ack, idx) => (
+                  <div key={idx} className="flex gap-3 mb-3">
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="e.g. 1234567890"
+                      value={ack}
+                      onChange={(e) => handleCyberAckChange(idx, e.target.value)}
+                    />
+                    {cyberAcks.length > 1 && (
+                      <button type="button" onClick={() => removeCyberAck(idx)} className="bg-red-soft text-red px-4 rounded-xl font-black hover:bg-red hover:text-white transition-all">×</button>
+                    )}
+                  </div>
+                ))}
+                <button type="button" onClick={addCyberAck} className="text-xs text-accent font-black hover:underline mt-1 uppercase tracking-widest">+ Add Another Number</button>
+              </div>
+            )}
+
+            {formData.typeOfComplaint === 'Criminal Complaint/FIR' && (
               <div className="md:col-span-2">
-                {formData.typeOfComplaint === 'Cyber Complaint' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className={labelClass}>Cyber Acknowledgment Numbers</label>
-                    {cyberAcks.map((ack, idx) => (
-                      <div key={idx} className="flex gap-3 mb-3">
-                        <input
-                          type="text"
-                          className={inputClass}
-                          placeholder="e.g. 1234567890"
-                          value={ack}
-                          onChange={(e) => handleCyberAckChange(idx, e.target.value)}
-                        />
-                        {cyberAcks.length > 1 && (
-                          <button type="button" onClick={() => removeCyberAck(idx)} className="bg-red-soft text-red px-4 rounded-xl font-black hover:bg-red hover:text-white transition-all">×</button>
-                        )}
-                      </div>
-                    ))}
-                    <button type="button" onClick={addCyberAck} className="text-xs text-accent font-black hover:underline mt-1 uppercase tracking-widest">+ Add Another Number</button>
+                    <label className={labelClass}>FIR Number</label>
+                    <input type="text" className={inputClass} name="firNumber" value={formData.firNumber} onChange={handleChange} />
                   </div>
-                )}
-                {formData.typeOfComplaint === 'FIR' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className={labelClass}>FIR Number</label>
-                      <input type="text" className={inputClass} name="firNumber" value={formData.firNumber} onChange={handleChange} />
-                    </div>
-                    <div>
-                      <FileUpload onUploadSuccess={(url) => setFormData(p => ({ ...p, firFileLink: url }))} label="Upload FIR Document" compact={true} />
-                    </div>
-                  </div>
-                )}
-                {formData.typeOfComplaint === 'Consumer Complaint' && (
                   <div>
-                    <label className={labelClass}>Grievance Number</label>
-                    <input type="text" className={inputClass} name="grievanceNumber" value={formData.grievanceNumber} onChange={handleChange} />
+                    <FileUpload onUploadSuccess={(url) => setFormData(p => ({ ...p, firFileLink: url }))} label="Upload FIR Document" compact={true} />
                   </div>
-                )}
+                </div>
+              </div>
+            )}
+
+            {formData.typeOfComplaint === 'Consumer Complaint' && (
+              <div>
+                <label className={labelClass}>Grievance Number</label>
+                <input type="text" className={inputClass} name="grievanceNumber" value={formData.grievanceNumber} onChange={handleChange} />
               </div>
             )}
           </div>

@@ -626,10 +626,10 @@ const DashboardTab = () => {
     }
   };
 
-  if (!stats) return <div className="section active bg-[#f8fafc] h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div></div>;
+  if (!stats) return <div className="section active bg-[#dee1e6] h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div></div>;
 
   return (
-    <div className="section active w-full pb-10 px-4 bg-[#f8fafc]">
+    <div className="section active w-full pb-10 px-4 bg-[#dee1e6]">
       <div className="section-header flex flex-col lg:flex-row justify-between items-start lg:items-center mb-10 w-full gap-6 pt-4">
         <div className="flex-1 text-left">
         </div>
@@ -1132,12 +1132,12 @@ const DashboardTab = () => {
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">TYPE OF THREAT – SUMMARY</div>
                 <div className="flex justify-between items-start gap-4">
                   {[
-                    { label: '1930 / Criminal FIR', type: 'Cyber Complaint', color: 'text-blue', bg: 'bg-blue-soft', icon: ShieldAlert },
+                    { label: '1930 Cyber Complaint', type: '1930 Cyber Complaint', color: 'text-blue', bg: 'bg-blue-soft', icon: ShieldAlert },
                     { label: 'Consumer Complaint', type: 'Consumer Complaint', color: 'text-green', bg: 'bg-green-soft', icon: Users },
                     { label: 'Legal Notice', type: 'Legal Notice', color: 'text-purple', bg: 'bg-purple-soft', icon: Scale },
                     { label: 'Demand Pressure', type: 'Demand Pressure', color: 'text-orange', bg: 'bg-orange-soft', icon: AlertTriangle },
                     { label: 'Social Media', type: 'Social Media', color: 'text-cyan', bg: 'bg-cyan-soft', icon: MessageCircle },
-                    { label: 'NA (Non-Agreement) Cases', type: 'FIR', color: 'text-yellow', bg: 'bg-yellow-soft', icon: HelpCircle },
+                    { label: 'NA (Non-Agreement)', type: 'NA Non Agreement', color: 'text-yellow', bg: 'bg-yellow-soft', icon: HelpCircle },
                   ].map((item, index) => {
                     const dbItem = stats?.caseTypeWiseData?.find(c => c.caseType === item.type) || { count: 0, totalAmount: 0 };
                     const percentage = ((dbItem.count / (stats?.totalCases || 1)) * 100).toFixed(2);
@@ -1205,15 +1205,15 @@ const DashboardTab = () => {
                       <div className="space-y-2">
                         <div className="flex justify-between text-[11px] font-bold text-text-secondary">
                           <span>Daily Checklist</span>
-                          <span className="font-black">6 / 6</span>
+                          <span className="font-black">{stats?.timeBoundActions?.completedTasksToday || 0} / {stats?.timeBoundActions?.totalTasksToday || 0}</span>
                         </div>
                         <div className="flex justify-between text-[11px] font-bold text-text-secondary">
                           <span>Priority Cases Plan</span>
-                          <span className="font-black">5 / 5</span>
+                          <span className="font-black">{stats?.closedCriticalCases || 0} / {stats?.totalCriticalCases || 0}</span>
                         </div>
                         <div className="flex justify-between text-[11px] font-bold text-text-secondary">
                           <span>Yesterday's EOD Review</span>
-                          <span className="font-black">1 / 1</span>
+                          <span className="font-black">{stats?.yesterdayEodFilled ? 'Filled' : 'Pending'}</span>
                         </div>
                       </div>
                     </div>
@@ -1463,15 +1463,15 @@ const DashboardTab = () => {
                     <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Today</div>
                     <div className="text-2xl font-black text-red">{stats?.timeBoundActions?.dueToday || 0}</div>
                   </div>
-                  <div className="bg-bg-secondary p-4 rounded-xl text-center">
+                  <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}>
                     <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Within 24 Hrs</div>
                     <div className="text-2xl font-black text-orange">{stats?.timeBoundActions?.dueWithin24h || 0}</div>
                   </div>
-                  <div className="bg-bg-secondary p-4 rounded-xl text-center">
+                  <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}>
                     <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Within 48 Hrs</div>
                     <div className="text-2xl font-black text-yellow">{stats?.timeBoundActions?.dueWithin48h || 0}</div>
                   </div>
-                  <div className="bg-bg-secondary p-4 rounded-xl text-center">
+                  <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
                     <div className="text-[10px] font-black text-text-muted uppercase mb-1">Overdue</div>
                     <div className="text-2xl font-black text-red">{stats?.timeBoundActions?.overdue || 0}</div>
                   </div>
@@ -1540,9 +1540,9 @@ const DashboardTab = () => {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
             {/* Main Cards (Left) */}
-            <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-4 gap-4">
               {/* Card 1: Total Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master')}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master')}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
@@ -1556,7 +1556,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 2: Active Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master')}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master')}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-green-soft rounded-lg text-green">
@@ -1570,7 +1570,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 3: High Risk Cases */}
-              <div className="bg-red-soft/20 rounded-2xl p-5 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:bg-red-soft/30" onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}>
+              <div className="bg-white rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-red-soft/30" onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-red-soft rounded-lg text-red">
@@ -1582,15 +1582,151 @@ const DashboardTab = () => {
                   <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.highPriorityAmount || 0).toLocaleString('en-IN')}</div>
                 </div>
               </div>
+
+              {/* Card 4: Closure Cases */}
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { statusFilter: 'Closure' } })}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-green-soft rounded-lg text-green">
+                      <CheckCircle size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Closure Cases</div>
+                  </div>
+                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.closedCases || 0}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.closedAmount || 0).toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+
+              {/* Card 5: Critical Priority */}
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Critical' } })}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-bg-input rounded-lg text-red">
+                      <AlertCircle size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Critical</div>
+                  </div>
+                  <div className="text-3xl font-black text-red tracking-tight">{stats?.criticalPriority || 0}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.criticalPriorityAmount || 0).toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+
+              {/* Card 6: Medium Priority */}
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Medium' } })}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-bg-input rounded-lg text-yellow-600">
+                      <Clock size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Medium</div>
+                  </div>
+                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.mediumPriority || 0}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.mediumPriorityAmount || 0).toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+
+              {/* Card 7: Low Priority */}
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Low' } })}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-bg-input rounded-lg text-green">
+                      <Folder size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Low</div>
+                  </div>
+                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.lowPriority || 0}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.lowPriorityAmount || 0).toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+
+              {/* Card 8: Settlement Stage Cases */}
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { statusFilter: 'Settlement' } })}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-bg-input rounded-lg text-blue">
+                      <Receipt size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Settlement</div>
+                  </div>
+                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.settledCases || 0}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.settledAmount || 0).toLocaleString('en-IN')}</div>
+                </div>
+              </div>
             </div>
 
-            {/* Type of Threat (Right) */}
-            <div className="lg:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm">
+            {/* Active Users (Right) */}
+            <div className="lg:col-span-6 bg-bg-card rounded-2xl p-5 shadow-sm">
+              <div className="flex justify-between items-center mb-5">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Users</div>
+              </div>
+              <div className="max-h-[200px] overflow-y-auto pr-2">
+                <table className="w-full text-left text-[10px] font-bold uppercase tracking-widest text-text-secondary border-collapse">
+                  <thead>
+                    <tr className="border-b border-border/50">
+                      <th className="pb-2 text-text-muted">Name</th>
+                      <th className="pb-2 text-text-muted">SOD / EOD</th>
+                      <th className="pb-2 text-text-muted">Duration</th>
+                      <th className="pb-2 text-text-muted text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...(stats?.activeUsers || [])].sort((a, b) => (a.status === 'Active' ? -1 : 1)).map((u, index) => (
+                      <tr key={index} className="border-b border-border/10 last:border-0">
+                        <td className="py-3">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${u.status === 'Active' ? 'bg-green' : 'bg-text-muted'}`}></div>
+                            <div>
+                              <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{u.name}</div>
+                              <div className="text-[9px] font-bold text-text-muted mt-0.5 normal-case">{u.role}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3">
+                          {u.sodTime && (
+                            <div className="text-text-primary">SOD: {u.sodTime}</div>
+                          )}
+                          {u.eodTime && (
+                            <div className="text-text-muted mt-0.5">EOD: {u.eodTime}</div>
+                          )}
+                          {!u.sodTime && !u.eodTime && <span className="text-text-muted">—</span>}
+                        </td>
+                        <td className="py-3">
+                          <span className="text-text-primary">{u.duration || '—'}</span>
+                        </td>
+                        <td className="py-3 text-right">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${u.status === 'Active' ? 'bg-green-soft text-green' : 'bg-bg-input text-text-muted'}`}>
+                            {u.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {(!stats?.activeUsers || stats.activeUsers.length === 0) && (
+                  <div className="text-xs font-bold text-text-muted text-center py-4">No user data available</div>
+                )}
+              </div>
+            </div>
+
+            {/* Type of Complaint (Below) */}
+            <div className="lg:col-span-12 bg-bg-card rounded-2xl p-5 shadow-sm">
               <div className="flex justify-between items-center mb-5">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Type of Complaint</div>
               </div>
-              <div className="flex justify-between items-start gap-4">
-                {stats?.caseTypeWiseData?.slice(0, 6).map((item, index) => {
+              <div className="flex overflow-x-auto gap-4 pb-2">
+                {[
+                  'Legal Notice',
+                  '1930 Cyber Complaint',
+                  'Consumer Complaint',
+                  'Criminal Complaint/FIR',
+                  'Civil Case',
+                  'Social Media',
+                  'General Query',
+                  'NA Non Agreement',
+                  'Demand Pressure',
+                  'Bank Hold'
+                ].map((typeName, index) => {
+                  const item = stats?.caseTypeWiseData?.find(d => d.caseType === typeName) || { caseType: typeName, count: 0, totalAmount: 0 };
                   const percentage = ((item.count / (stats?.totalCases || 1)) * 100).toFixed(2);
                   const colors = [
                     { bg: 'bg-blue-soft', text: 'text-blue' },
@@ -1607,7 +1743,7 @@ const DashboardTab = () => {
                   return (
                     <div
                       key={index}
-                      className="flex flex-col flex-1 min-w-[120px] border-r border-border last:border-r-0 pr-4 last:pr-0 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg"
+                      className="flex flex-col p-4 bg-bg-secondary/50 rounded-xl border border-border/50 cursor-pointer hover:bg-bg-secondary/80 transition-all min-w-[160px] flex-shrink-0"
                       onClick={() => navigate('/case-master', { state: { typeFilter: item.caseType } })}
                     >
                       <div className="flex items-center gap-2 mb-2">
@@ -1917,7 +2053,7 @@ const DashboardTab = () => {
                   <span className="text-[8px] font-black text-orange-500 uppercase">No Update &gt; 48 Hrs</span>
                   <span className="text-2xl font-black text-orange-500 mt-1">{stats?.violations?.noUpdate48Hrs || 0}</span>
                 </div>
-                <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all">
+                <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => openViolationsModal('SLA')}>
                   <span className="text-[8px] font-black text-red-500 uppercase">SLA Breached</span>
                   <span className="text-2xl font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</span>
                 </div>
@@ -1943,7 +2079,7 @@ const DashboardTab = () => {
       {user?.role === 'Admin' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
           {/* Top Urgent Cases Table */}
-          <div className="lg:col-span-7 bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
+          <div className="lg:col-span-7 bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col h-[90%]">
             <div className="flex justify-between items-center mb-6 px-2">
               <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Top Urgent Cases</h3>
             </div>
@@ -2223,7 +2359,7 @@ const DashboardTab = () => {
             )}
 
             {/* Source of Complaint Table */}
-            <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch mt-1">
+            <div className="bg-bg-card border-2 border-border rounded-2xl w-[88%] overflow-hidden shadow-sm self-stretch mt-[-12%]">
               <div className="px-6 py-4 border-b-2 border-border flex items-center gap-2">
                 <Target size={20} className="text-accent" />
                 <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">Source of Complaint</h3>
@@ -2348,10 +2484,10 @@ const DashboardTab = () => {
               <div>
                 <h2 className="text-xl font-black flex items-center gap-3 uppercase tracking-tight">
                   <AlertTriangle size={24} />
-                  {violationType} Missing Users
+                  {violationType === 'SLA' ? 'SLA Breached' : violationType === '48H' ? 'No Update > 48 Hrs' : `${violationType} Missing Users`}
                 </h2>
                 <p className="text-[10px] opacity-80 font-black uppercase tracking-[0.2em] mt-1">
-                  Users who have not submitted {violationType} today
+                  {violationType === 'SLA' || violationType === '48H' ? 'Users with no update for 48 hours' : `Users who have not submitted ${violationType} today`}
                 </p>
               </div>
               <button onClick={() => setIsViolationsModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all"><X size={20} /></button>
