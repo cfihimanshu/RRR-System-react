@@ -578,9 +578,9 @@ const CaseMasterTab = () => {
     } else {
       matchStatus = appliedFilters.status.some(selectedStatus => {
         if (selectedStatus === 'Active') {
-          return normalizedCaseStatus !== 'Settlement' && normalizedCaseStatus !== 'Closure' && normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed';
+          return normalizedCaseStatus !== 'Settlement' && normalizedCaseStatus !== 'Closure' && normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed' && normalizedCaseStatus !== 'Resolution';
         } else if (selectedStatus === 'Closed') {
-          return normalizedCaseStatus === 'Settlement' || normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Settled' || normalizedCaseStatus === 'Closed';
+          return normalizedCaseStatus === 'Settlement' || normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Settled' || normalizedCaseStatus === 'Closed' || normalizedCaseStatus === 'Resolution';
         } else if (selectedStatus === 'Unassigned') {
           const initiatedByValue = c.initiatedBy?.toString?.() || '';
           const assignedToValue = c.assignedTo?.toString?.() || '';

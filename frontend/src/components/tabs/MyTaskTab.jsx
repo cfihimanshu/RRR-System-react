@@ -258,7 +258,9 @@ const MyTaskTab = () => {
     if (taskFilter === 'overdue') {
       matchesTimeFilter = t.reminderDateTime && t.reminderDateTime < new Date().toISOString() && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === 'today') {
-      matchesTimeFilter = (t.dueDate === todayStr || (!t.dueDate && taskCreatedAtDate === todayStr)) && !['Completed', 'Done'].includes(t.status);
+      matchesTimeFilter = t.dueDate === todayStr && !['Completed', 'Done'].includes(t.status);
+    } else if (taskFilter === 'followups') {
+      matchesTimeFilter = t.reminderDateTime && t.reminderDateTime.startsWith(todayStr) && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === '24h') {
       matchesTimeFilter = t.dueDate === tomorrowStr && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === '48h') {

@@ -195,7 +195,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const Refund = require('./models/Refund');
     const Timeline = require('./models/Timeline');
 
-    const { teamFilter, userFilter, startDate, endDate } = req.query;
+    const { teamFilter, userFilter, startDate, endDate, perfStartDate, perfEndDate } = req.query;
     let teamDateQuery = {};
     let commDateQuery = {};
 
@@ -372,7 +372,10 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       }),
       Timeline.countDocuments({
         ...timelineQuery,
-        eventType: { $in: ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'] }
+        eventType: { $in: ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'] },
+        ...(perfStartDate && perfEndDate ? {
+          createdAt: { $gte: new Date(perfStartDate), $lte: new Date(perfEndDate) }
+        } : {})
       }),
       Timeline.countDocuments({
         ...timelineQuery,
@@ -756,13 +759,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       dueToday: await Task.countDocuments({
         ...taskUserQuery,
         status: { $nin: ['Completed', 'Done'] },
-        $or: [
-          { dueDate: today },
-          { 
-            dueDate: { $in: [null, ""] },
-            createdAt: { $gte: startOfToday }
-          }
-        ]
+        dueDate: today
       }),
       dueWithin24h: await Task.countDocuments({
         ...taskUserQuery,
@@ -783,6 +780,45 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         ...taskUserQuery,
         status: 'Completed',
         updatedAt: { $gte: startOfToday }
+      }),
+      followUpsToday: await Task.countDocuments({
+        ...taskUserQuery,
+        status: { $nin: ['Completed', 'Done'] },
+        reminderDateTime: { $regex: new RegExp(`^${today}`) }
+      })
+    };
+
+    const perfDateQuery = perfStartDate && perfEndDate ? {
+      createdAt: { 
+        $gte: new Date(perfStartDate), 
+        $lte: new Date(new Date(perfEndDate).setHours(23, 59, 59, 999)) 
+      }
+    } : {};
+
+    const perfCaseQuery = {
+      ...query,
+      ...perfDateQuery
+    };
+
+    const myPerformance = {
+      totalCommunications: await Communication.countDocuments({
+        loggedBy: { $in: [req.user.fullName, req.user.email] },
+        ...(perfStartDate && perfEndDate ? {
+          dateTime: { $gte: perfStartDate, $lte: perfEndDate + "T23:59:59Z" }
+        } : {})
+      }),
+      casesResolved: await Case.countDocuments({
+        ...perfCaseQuery,
+        currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] }
+      }),
+      naCases: await Case.countDocuments({
+        ...perfCaseQuery,
+        typeOfComplaint: 'FIR'
+      }),
+      overdueCases: await Case.countDocuments({
+        ...perfCaseQuery,
+        nextActionDate: { $lt: today },
+        currentStatus: { $nin: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] }
       })
     };
 
@@ -1023,6 +1059,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       });
 
       res.json({
+        myPerformance,
         threatTrendData: threatTrendDataArray,
         linkedByCount,
         threatTrendTypes: sortedTypes,
@@ -1074,6 +1111,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     } else {
       // Non-Admin response
       res.json({
+        myPerformance,
         threatTrendData: threatTrendDataArray,
         threatTrendTypes: sortedTypes,
         totalCases,

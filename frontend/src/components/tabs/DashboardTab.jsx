@@ -83,6 +83,12 @@ const DashboardTab = () => {
   const [userFilter, setUserFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [perfStartDate, setPerfStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [perfEndDate, setPerfEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [activePeriod, setActivePeriod] = useState('7 Days');
   const [allUsers, setAllUsers] = useState([]);
   const { user } = useContext(AuthContext);
@@ -423,6 +429,7 @@ const DashboardTab = () => {
       let url = `/dashboard/stats?teamFilter=${filter}`;
       if (userFilter) url += `&userFilter=${encodeURIComponent(userFilter)}`;
       if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
+      if (perfStartDate && perfEndDate) url += `&perfStartDate=${perfStartDate}&perfEndDate=${perfEndDate}`;
 
       const res = await api.get(url);
       const data = res.data;
@@ -494,7 +501,7 @@ const DashboardTab = () => {
     }, 30000);
 
     return () => clearInterval(statsInterval);
-  }, [teamFilter, userFilter, startDate, endDate]);
+  }, [teamFilter, userFilter, startDate, endDate, perfStartDate, perfEndDate]);
 
   const handleRefundSubmit = async (e) => {
     e.preventDefault();
@@ -1162,7 +1169,7 @@ const DashboardTab = () => {
                 <div className="grid grid-cols-4 gap-2 h-full items-center">
                   <div className="text-center cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/case-master')}>
                     <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Active Cases</div>
-                    <div className="text-xl font-black text-text-primary mt-2">{(stats?.totalCases || 0) - (stats?.closedCases || 0)}</div>
+                    <div className="text-xl font-black text-text-primary mt-2">{stats?.openCases || 0}</div>
                   </div>
                   <div className="text-center border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
                     <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Follow Ups</div>
@@ -1294,8 +1301,8 @@ const DashboardTab = () => {
                             if (label === '7 Days') start.setDate(end.getDate() - 7);
                             else if (label === '1 Month') start.setMonth(end.getMonth() - 1);
                             else if (label === '3 Months') start.setMonth(end.getMonth() - 3);
-                            setStartDate(start.toISOString().split('T')[0]);
-                            setEndDate(end.toISOString().split('T')[0]);
+                            setPerfStartDate(start.toISOString().split('T')[0]);
+                            setPerfEndDate(end.toISOString().split('T')[0]);
                           }}
                           className={`px-2 py-1 text-[8px] font-black uppercase rounded ${activePeriod === label ? 'bg-blue-600 text-white' : 'bg-bg-secondary text-text-muted'}`}
                         >
@@ -1307,24 +1314,21 @@ const DashboardTab = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-[9px] font-black text-text-muted uppercase mb-1">Client Communication</div>
-                      <div className="text-xl font-black text-green">{stats?.totalCommunications || 0}</div>
+                      <div className="text-xl font-black text-green">{stats?.myPerformance?.totalCommunications || 0}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-black text-text-muted uppercase mb-1">Cases Resolved</div>
-                      <div className="text-xl font-black text-green">54</div>
+                      <div className="text-xl font-black text-green">{stats?.myPerformance?.casesResolved || 0}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-black text-text-muted uppercase mb-1">NA Cases</div>
-                      <div className="text-xl font-black text-red">{stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0}</div>
+                      <div className="text-xl font-black text-red">{stats?.myPerformance?.naCases || 0}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-black text-text-muted uppercase mb-1">Overdue Cases</div>
-                      <div className="text-xl font-black text-red">{stats?.overdueActions?.length || 0}</div>
+                      <div className="text-xl font-black text-red">{stats?.myPerformance?.overdueCases || 0}</div>
                     </div>
-                    <div>
-                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Callbacks Done</div>
-                      <div className="text-xl font-black text-green">96</div>
-                    </div>
+
 
                   </div>
                 </div>
