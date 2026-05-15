@@ -274,7 +274,7 @@ const CaseMasterTab = () => {
         console.error('Failed to fetch linked cases', err);
       }
     };
-    
+
     const debounceTimer = setTimeout(fetchLinkedCases, 500);
     return () => clearTimeout(debounceTimer);
   }, [formData.clientName, formData.clientMobile]);
@@ -1808,7 +1808,7 @@ const CaseMasterTab = () => {
               <div>
                 <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Linked By</div>
                 <div className="text-sm font-black text-text-primary whitespace-nowrap">
-                  <select 
+                  <select
                     className="bg-transparent border-none text-blue hover:underline cursor-pointer outline-none text-sm font-black max-w-[150px] truncate"
                     onChange={(e) => {
                       const val = e.target.value;
@@ -1821,8 +1821,8 @@ const CaseMasterTab = () => {
                     value=""
                   >
                     <option value="">
-                      {linkedCases.find(c => c.caseId === viewCase.linkedBy) 
-                        ? `${linkedCases.find(c => c.caseId === viewCase.linkedBy).companyName} (${viewCase.linkedBy})` 
+                      {linkedCases.find(c => c.caseId === viewCase.linkedBy)
+                        ? `${linkedCases.find(c => c.caseId === viewCase.linkedBy).companyName} (${viewCase.linkedBy})`
                         : (viewCase.linkedBy || '-- Select --')}
                     </option>
                     {linkedCases.filter(c => c.caseId !== viewCase.linkedBy).map(c => (
@@ -1901,6 +1901,7 @@ const CaseMasterTab = () => {
                         <option value="General Query">General Query</option>
                         <option value="NA Non Agreement">NA Non Agreement</option>
                         <option value="Demand Pressure">Demand Pressure</option>
+                        <option value="Bank Hold">Bank Hold</option>
                       </select>
                     </div>
                     <div>
@@ -2076,10 +2077,10 @@ const CaseMasterTab = () => {
                     </div>
                     <div>
                       <label className={labelClass}>Linked By</label>
-                      <select 
-                        className={inputClass} 
-                        name="linkedBy" 
-                        value={formData.linkedBy || ''} 
+                      <select
+                        className={inputClass}
+                        name="linkedBy"
+                        value={formData.linkedBy || ''}
                         onChange={handleFormChange}
                         disabled={!isEditing}
                       >
@@ -3053,9 +3054,9 @@ const CaseMasterTab = () => {
                             <div className="text-[9px] font-black text-accent uppercase tracking-widest opacity-80">Updated by: {log.updatedBy === user?.email ? 'You' : log.updatedBy?.split('@')[0] || 'System'}</div>
                             {log.attachment && (
                               <div className="mt-1">
-                                <a 
-                                  href={log.attachment} 
-                                  target="_blank" 
+                                <a
+                                  href={log.attachment}
+                                  target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-[9px] font-black text-blue hover:underline uppercase tracking-widest flex items-center gap-1"
                                 >

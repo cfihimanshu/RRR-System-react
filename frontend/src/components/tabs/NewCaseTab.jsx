@@ -239,7 +239,7 @@ const NewCaseTab = () => {
         console.error('Failed to fetch linked cases', err);
       }
     };
-    
+
     const debounceTimer = setTimeout(fetchLinkedCases, 500);
     return () => clearTimeout(debounceTimer);
   }, [formData.clientName, formData.clientMobile]);
@@ -482,15 +482,15 @@ const NewCaseTab = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-4 gap-6">
             <div>
               <label className={`${labelClass} after:content-['*'] after:text-red`}>Company Name</label>
-              <input 
-                type="text" 
-                className={`${inputClass} ${errors.companyName ? 'border-red bg-red-soft' : ''}`} 
-                name="companyName" 
-                value={formData.companyName || ''} 
-                onChange={handleChange} 
+              <input
+                type="text"
+                className={`${inputClass} ${errors.companyName ? 'border-red bg-red-soft' : ''}`}
+                name="companyName"
+                value={formData.companyName || ''}
+                onChange={handleChange}
                 onBlur={(e) => checkCompanyNameDuplicate(e.target.value)}
-                placeholder="e.g. ABC Solutions Pvt Ltd" 
-                required 
+                placeholder="e.g. ABC Solutions Pvt Ltd"
+                required
               />
               {errors.companyName && <p className="text-[9px] text-red font-black mt-2 uppercase tracking-widest">{errors.companyName}</p>}
             </div>
@@ -532,6 +532,7 @@ const NewCaseTab = () => {
                 <option value="General Query">General Query</option>
                 <option value="NA Non Agreement">NA Non Agreement</option>
                 <option value="Demand Pressure">Demand Pressure</option>
+                <option value="Bank Hold">Bank Hold</option>
               </select>
             </div>
             <div>
@@ -724,10 +725,10 @@ const NewCaseTab = () => {
               </div>
               <div>
                 <label className={labelClass}>Linked By</label>
-                <select 
-                  className={inputClass} 
-                  name="linkedBy" 
-                  value={formData.linkedBy || ''} 
+                <select
+                  className={inputClass}
+                  name="linkedBy"
+                  value={formData.linkedBy || ''}
                   onChange={handleChange}
                 >
                   <option value="">-- Select Linked Case --</option>

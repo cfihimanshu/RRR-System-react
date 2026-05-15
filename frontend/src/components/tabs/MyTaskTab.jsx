@@ -247,19 +247,22 @@ const MyTaskTab = () => {
 
     // Time Bound Filters
     const todayStr = new Date().toISOString().split('T')[0];
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const dayAfterTomorrow = new Date();
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+    const dayAfterTomorrowStr = dayAfterTomorrow.toISOString().split('T')[0];
 
     let matchesTimeFilter = true;
     if (taskFilter === 'overdue') {
       matchesTimeFilter = t.reminderDateTime && t.reminderDateTime < new Date().toISOString() && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === 'today') {
-      matchesTimeFilter = t.reminderDateTime && t.reminderDateTime < new Date().toISOString() && !['Completed', 'Done'].includes(t.status);
+      matchesTimeFilter = (t.dueDate === todayStr || (!t.dueDate && taskCreatedAtDate === todayStr)) && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === '24h') {
-      matchesTimeFilter = t.dueDate === todayStr && !['Completed', 'Done'].includes(t.status);
+      matchesTimeFilter = t.dueDate === tomorrowStr && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === '48h') {
-      matchesTimeFilter = t.dueDate === yesterdayStr && !['Completed', 'Done'].includes(t.status);
+      matchesTimeFilter = t.dueDate === dayAfterTomorrowStr && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === 'completed_today') {
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);

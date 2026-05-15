@@ -1455,7 +1455,7 @@ const DashboardTab = () => {
               <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Time Bound Actions</div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-bg-secondary p-4 rounded-xl text-center">
+                  <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
                     <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Today</div>
                     <div className="text-2xl font-black text-red">{stats?.timeBoundActions?.dueToday || 0}</div>
                   </div>
@@ -1690,7 +1690,7 @@ const DashboardTab = () => {
               </div>
               <div className="mt-2">
                 <div className="text-lg font-black text-text-primary">₹ {Number(stats?.amountAtRisk || 0).toLocaleString('en-IN')}</div>
-                <div className="text-[10px] font-bold text-text-muted mt-0.5">Approved Pending</div>
+
               </div>
               <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master')}>
                 View Details <ArrowRight size={12} />
