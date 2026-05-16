@@ -23,6 +23,7 @@ router.get('/', verifyToken, async (req, res) => {
             stage: targetCase.currentStatus || 'Case Logged',
             percentage: targetCase.progressPercentage || 0,
             summary: `Case Registered: ${targetCase.typeOfComplaint} setup complete.`,
+            nextAction: targetCase.nextActionPlanned || '',
             updatedBy: targetCase.initiatedBy || 'System',
             checklist: [
               { id: 1, label: 'Initial contact made', completed: false },
@@ -40,14 +41,44 @@ router.get('/', verifyToken, async (req, res) => {
         console.error('Error auto-initializing progress:', err);
       }
     }
-
     const latestLog = logs[0];
+    const targetCase = await Case.findOne({ caseId }).lean();
+
+    // Enrich logs with nextAction from Timeline if missing (for older logs)
+    const enrichedLogs = await Promise.all(logs.map(async (log, idx) => {
+      const logObj = log.toObject ? log.toObject() : log;
+      if (!logObj.nextAction) {
+        // Try to find matching timeline event with a larger window (5 mins)
+        const timelineEvent = await Timeline.findOne({
+          caseId: log.caseId,
+          $or: [
+            { 'metadata.nextAction': { $exists: true, $ne: '' } },
+            { 'metadata.recommendedNextSteps': { $exists: true, $ne: '' } }
+          ],
+          createdAt: { 
+            $gte: new Date(new Date(log.createdAt).getTime() - 300000), 
+            $lte: new Date(new Date(log.createdAt).getTime() + 300000) 
+          }
+        }).lean();
+        
+        if (timelineEvent && timelineEvent.metadata) {
+          logObj.nextAction = timelineEvent.metadata.nextAction || timelineEvent.metadata.recommendedNextSteps;
+        }
+        
+        // Fallback for latest log or initial logs
+        if (!logObj.nextAction && targetCase) {
+          if (idx === 0) {
+            logObj.nextAction = targetCase.recommendedNextSteps;
+          }
+        }
+      }
+      return logObj;
+    }));
 
     res.json({
-      logs,
+      logs: enrichedLogs,
       checklist: latestLog ? latestLog.checklist : []
-    });
-  } catch (error) {
+    });  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

@@ -203,37 +203,81 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     if (startDate && endDate) {
       const start = new Date(startDate);
       const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999); // Include full end day
+      end.setHours(23, 59, 59, 999);
       teamDateQuery = { createdAt: { $gte: start, $lte: end } };
-      commDateQuery = { dateTime: { $gte: start.toISOString(), $lte: end.toISOString() } };
     } else if (teamFilter === '7days') {
       const d = new Date();
+      d.setHours(0,0,0,0);
       d.setDate(d.getDate() - 7);
       teamDateQuery = { createdAt: { $gte: d } };
-      commDateQuery = { dateTime: { $gte: d.toISOString() } };
     } else if (teamFilter === '1month') {
       const d = new Date();
+      d.setHours(0,0,0,0);
       d.setMonth(d.getMonth() - 1);
       teamDateQuery = { createdAt: { $gte: d } };
-      commDateQuery = { dateTime: { $gte: d.toISOString() } };
     } else if (teamFilter === '3months') {
       const d = new Date();
-      d.setDate(1); // Set to first day of current month
+      d.setHours(0,0,0,0);
+      d.setDate(1);
       const end = new Date(d);
       d.setMonth(d.getMonth() - 3);
-      const start = d;
-      teamDateQuery = { createdAt: { $gte: start, $lt: end } };
-      commDateQuery = { dateTime: { $gte: start.toISOString(), $lt: end.toISOString() } };
+      teamDateQuery = { createdAt: { $gte: d, $lt: end } };
     }
 
-    let query = { ...teamDateQuery };
-
-    // Always fetch the latest user record from DB (so name is always fresh)
+    // Ownership filter logic
     const dbUser = await User.findById(req.user.id).lean();
     let userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
-    const esc = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const nameRegex = { $regex: new RegExp(esc, 'i') };
+    let userEmail = (dbUser?.email || req.user.email || '').trim();
+    let userId = req.user.id;
     
+    // Ultra-flexible regex: match any part of name, email, or ID
+    // We filter out very short common words but keep significant ones
+    const firstName = userName.split(/\s+/)[0];
+    const parts = [userName, userEmail, userId];
+    if (firstName && firstName.length >= 3) {
+      parts.push(firstName);
+    }
+    const filteredParts = parts.filter(p => p && p.trim().length > 0);
+    const uniqueParts = [...new Set(filteredParts.map(p => p.toLowerCase()))];
+    const escapedParts = uniqueParts.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    
+    const myNameRegex = { $regex: new RegExp(escapedParts.join('|'), 'i') };
+
+    let ownershipQuery = {};
+    let activeNameRegex = myNameRegex;
+
+    if (req.user.role !== 'Admin') {
+      ownershipQuery = {
+        $or: [
+          { assignedTo: myNameRegex },
+          {
+            $and: [
+              { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
+              { initiatedBy: myNameRegex }
+            ]
+          }
+        ]
+      };
+    } else if (userFilter) {
+      const filterEsc = userFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      activeNameRegex = { $regex: new RegExp(`^\\s*${filterEsc}\\s*$`, 'i') };
+      ownershipQuery = {
+        $or: [
+          { assignedTo: activeNameRegex },
+          {
+            $and: [
+              { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
+              { initiatedBy: activeNameRegex }
+            ]
+          }
+        ]
+      };
+    }
+
+    let baseQuery = { ...ownershipQuery };
+    let query = { ...teamDateQuery, ...ownershipQuery };
+    const nameRegex = activeNameRegex; 
+
     const bypassEodCheck = dbUser?.bypassEodCheck || false;
     let isEodMissed = false;
     
@@ -252,42 +296,10 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         }
       }
     }
-
     // Non-admin: total cases = Assigned to me OR (Unassigned AND Initiated by me)
     // Non-admin: Isolated data view
-    if (req.user.role !== 'Admin') {
-      const esc = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const nameRegex = { $regex: new RegExp(esc, 'i') };
+    // Removed redundant query re-definitions
 
-      // Case query: Cases assigned to me OR initiated by me
-      query = {
-        ...query,
-        $or: [
-          { assignedTo: nameRegex },
-          {
-            $and: [
-              { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
-              { initiatedBy: nameRegex }
-            ]
-          }
-        ]
-      };
-    } else if (userFilter) {
-      const esc = userFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const nameRegex = { $regex: new RegExp(`^\\s*${esc}\\s*$`, 'i') };
-      query = {
-        ...query,
-        $or: [
-          { assignedTo: nameRegex },
-          {
-            $and: [
-              { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
-              { initiatedBy: nameRegex }
-            ]
-          }
-        ]
-      };
-    }
     
     const completedStatuses = ['Settled', 'settled', 'Settlement', 'settlement', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed'];
     const nowForIST = new Date();
@@ -331,14 +343,14 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     let myCaseIds = [];
     if (req.user.role !== 'Admin') {
-      myCaseIds = await Case.find(query).distinct('caseId');
+      myCaseIds = await Case.distinct('caseId', query);
     }
     const timelineQuery = req.user.role !== 'Admin' ? { caseId: { $in: myCaseIds } } : {};
 
 
     const [caseMetricsFacet, timelineMetrics, refundMetrics, taskMetrics] = await Promise.all([
       Case.aggregate([
-        { $match: query },
+        { $match: baseQuery },
         {
           $facet: {
             basic: [
@@ -426,7 +438,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         }
       ]),
       Timeline.aggregate([
-        { $match: { ...timelineQuery, source: req.user.fullName } },
+        { $match: { ...timelineQuery, source: nameRegex } },
         {
           $facet: {
             docsToday: [
@@ -557,48 +569,70 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const yesterdayEod = await Report.findOne({ userEmail: req.user.email, type: 'EOD', date: yesterdayStr }).lean();
     const yesterdayEodFilled = yesterdayEod ? 1 : 0;
 
-    const perfDateQuery = perfStartDate && perfEndDate ? {
-      createdAt: { 
-        $gte: new Date(perfStartDate), 
-        $lte: new Date(new Date(perfEndDate).setHours(23, 59, 59, 999)) 
-      }
-    } : {};
+    const todaySod = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean();
+    const todayEod = await Report.findOne({ userEmail: req.user.email, type: 'EOD', date: dateStrIST }).lean();
+    const lastTimeline = await Timeline.findOne({ source: nameRegex, createdAt: { $gte: startOfToday } }).sort({ createdAt: -1 }).lean();
 
-    const perfCaseQuery = {
-      ...query,
-      ...perfDateQuery
-    };
+    const perfDateRange = perfStartDate && perfEndDate ? {
+      $gte: new Date(`${perfStartDate}T00:00:00`), 
+      $lte: new Date(`${perfEndDate}T23:59:59.999`) 
+    } : null;
 
-    const myPerformance = {
-      totalCommunications: await Communication.countDocuments({
-        loggedBy: nameRegex,
-        ...(perfStartDate && perfEndDate ? {
-          dateTime: { $gte: perfStartDate, $lte: perfEndDate + "T23:59:59Z" }
-        } : {})
-      }),
-      casesResolved: await Case.countDocuments({
-        ...perfCaseQuery,
-        currentStatus: { $in: ['Settled', 'Settlement', 'Closed', 'closed', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed'] }
-      }),
-      naCases: await Case.countDocuments({
-        ...perfCaseQuery,
-        typeOfComplaint: 'NA Non Agreement'
-      }),
-      overdueCases: await Case.countDocuments({
-        ...perfCaseQuery,
-        nextActionDate: { $lt: today },
-        currentStatus: { $nin: ['Settled', 'Settlement', 'Closed', 'closed', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed'] }
-      })
-    };
+    const statusRegex = /Settled|Settlement|Closed|Closure|Resolution|Resolved|Done|Complete/i;
 
     const overdueActions = facet.overdueActions || [];
     const dueSoonActions = facet.dueSoonActions || [];
     const recentCases = facet.recentCases || [];
     const highPriorityCases = facet.highPriorityCases || [];
     const caseTypeWiseData = (facet.caseTypeWise || []).map(item => ({ caseType: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
-    const sourceWiseData = (facet.sourceWise || []).map(item => ({ source: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
+    const sourceWiseData = (facet.sourceWise || []).map(item => ({ source: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));    // Performance Evaluation logic
+    const perfCaseIds = await Case.distinct('caseId', ownershipQuery);
 
-    // Reshape threatTrends
+    const myPerformance = {
+      totalCommunications: 0,
+      casesResolved: 0,
+      naCases: 0,
+      overdueCases: await Case.countDocuments({
+        ...ownershipQuery,
+        currentStatus: { $not: { $regex: /Settled|Closed|Closure|Resolution|Resolved|Done|Complete|NA/i } },
+        $or: [
+          { nextActionDate: { $lt: dateStrIST } }, 
+          { nextActionDate: { $lt: new Date().toISOString().split('T')[0] } }
+        ]
+      })
+    };
+
+    if (perfDateRange) {
+      myPerformance.totalCommunications = await Communication.countDocuments({
+        loggedBy: activeNameRegex,
+        createdAt: perfDateRange
+      });
+
+      myPerformance.casesResolved = await Case.countDocuments({
+        ...ownershipQuery,
+        currentStatus: { $in: completedStatuses },
+        updatedAt: perfDateRange
+      });
+
+      myPerformance.naCases = await Case.countDocuments({
+        ...ownershipQuery,
+        typeOfComplaint: { $regex: /NA Non Agreement/i },
+        updatedAt: perfDateRange
+      });
+    } else {
+      // Default (all time)
+      myPerformance.totalCommunications = await Communication.countDocuments({
+        loggedBy: activeNameRegex
+      });
+      myPerformance.casesResolved = await Case.countDocuments({
+        ...ownershipQuery,
+        currentStatus: { $in: completedStatuses }
+      });
+      myPerformance.naCases = await Case.countDocuments({
+        ...ownershipQuery,
+        typeOfComplaint: { $regex: /NA Non Agreement/i }
+      });
+    }    // Reshape threatTrends
     const threatTrendAggregation = facet.threatTrends || [];
     const foundTypes = new Set();
     threatTrendAggregation.forEach(item => { if (item._id.type) foundTypes.add(item._id.type); });
@@ -689,6 +723,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     }, 0);
 
     let teamPerformance = [];
+    let missingSodUsers = [];
+    let missingEodUsers = [];
+    let missingNoUpdateUsers = [];
 
     if (req.user.role === 'Admin') {
       const Report = require('./models/Report');
@@ -704,9 +741,6 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
       // Simple compliance calculation: percentage of active users who submitted SOD today
       const allNonAdmins = await User.find({ role: { $ne: 'Admin' } }).lean();
-      const missingSodUsers = [];
-      const missingEodUsers = [];
-      const missingNoUpdateUsers = [];
 
       // ── Team Performance (Admin Only) ──
       const casePipeline = [];
@@ -846,7 +880,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         reportQuery = { date: { $gte: dateStr } };
       }
       
-      const reportsForDuration = await require('./models/Report').find(reportQuery);
+      const reportsForDuration = await require('./models/Report').find(reportQuery).lean();
 
       const parseDuration = (durationStr) => {
         if (!durationStr) return 0;
@@ -1045,7 +1079,10 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         provisions,
         overdue: timeBoundActions.overdue,
         isEodMissed,
-        bypassEodCheck
+        bypassEodCheck,
+        todaySod,
+        todayEod,
+        lastTimeline
       });
     } else {
       // Non-Admin response
@@ -1093,7 +1130,13 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         linkedByCount,
         liveEscalations,
         collectionPotential,
-        amountAtRisk
+        amountAtRisk,
+        todaySod,
+        todayEod,
+        lastTimeline,
+        myPerformance,
+        teamPerformance,
+        missingSodUsers
       });
     }
   } catch (error) {

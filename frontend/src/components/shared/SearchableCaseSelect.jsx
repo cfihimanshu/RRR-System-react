@@ -23,7 +23,8 @@ const SearchableCaseSelect = ({ cases, value, onChange, placeholder = "Type or s
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [wrapperRef]);
 
-  const filteredCases = cases.filter(c => 
+  const safeCases = Array.isArray(cases) ? cases : (cases?.cases || []);
+  const filteredCases = safeCases.filter(c => 
     c.caseId.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (c.companyName && c.companyName.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (c.clientName && c.clientName.toLowerCase().includes(searchTerm.toLowerCase()))

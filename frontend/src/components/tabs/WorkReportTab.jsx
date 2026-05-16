@@ -43,7 +43,8 @@ const WorkReportTab = () => {
         api.get('/reports')
       ]);
       setStats(statsRes.data);
-      setReports(reportsRes.data || []);
+      const reportList = reportsRes.data.reports || (Array.isArray(reportsRes.data) ? reportsRes.data : []);
+      setReports(reportList || []);
 
       if (statsRes.data?.role === 'Admin') {
         try {
@@ -191,8 +192,11 @@ const WorkReportTab = () => {
       const tasksPromise = api.get(`/tasks?${taskParams.toString()}`);
 
       const [timelineRes, tasksRes] = await Promise.all([timelinePromise, tasksPromise]);
-      setDayActivities(timelineRes.data);
-      setDayTasks(tasksRes.data);
+      const tlData = timelineRes.data.logs || timelineRes.data.timeline || (Array.isArray(timelineRes.data) ? timelineRes.data : []);
+      const taskData = tasksRes.data.tasks || (Array.isArray(tasksRes.data) ? tasksRes.data : []);
+      
+      setDayActivities(tlData);
+      setDayTasks(taskData);
     } catch (err) {
       console.error('Failed to fetch day activities or tasks:', err);
     } finally {
@@ -218,22 +222,25 @@ const WorkReportTab = () => {
           api.get(`/tasks?date=${r.date}&assignee=${users.find(u => u.email === r.userEmail)?.fullName || r.userName}`)
         ]);
 
-        const comms = timelineRes.data
-          .filter(a => ['Call', 'Email', 'Whatsapp', 'Meeting'].includes(a.eventType))
+        const timelineData = timelineRes.data.logs || timelineRes.data.timeline || (Array.isArray(timelineRes.data) ? timelineRes.data : []);
+        const taskData = tasksRes.data.tasks || (Array.isArray(tasksRes.data) ? tasksRes.data : []);
+
+        const comms = timelineData
+          .filter(a => ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'].includes(a.eventType))
           .map(a => `${a.caseId || 'N/A'}: ${a.summary}`)
           .join(' | ');
 
-        const docs = timelineRes.data
+        const docs = timelineData
           .filter(a => a.eventType === 'Document Upload')
           .map(a => `${a.caseId || 'N/A'}: ${a.summary}`)
           .join(' | ');
 
-        const progress = timelineRes.data
+        const progress = timelineData
           .filter(a => a.eventType === 'Progress Update')
           .map(a => `${a.caseId || 'N/A'}: ${a.summary}`)
           .join(' | ');
 
-        const tasks = tasksRes.data
+        const tasks = taskData
           .map(t => `${t.taskId || 'N/A'}: ${t.title} [${t.status}]`)
           .join(' | ');
 

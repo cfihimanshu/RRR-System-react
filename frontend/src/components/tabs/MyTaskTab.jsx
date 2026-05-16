@@ -58,6 +58,10 @@ const MyTaskTab = () => {
     'Completed': true // Start with some collapsed on mobile for better focus
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -70,24 +74,46 @@ const MyTaskTab = () => {
     status: 'To Do'
   });
 
-  const fetchTasks = async (showToast = false) => {
+  const fetchTasks = async (showToast = false, pageNum = 1) => {
     try {
-      if (showToast) setLoading(true);
+      if (showToast && pageNum === 1) setLoading(true);
       const assigneeFilter = selectedUser === 'All Users' ? 'All Users' : selectedUser;
-      const res = await api.get(`/tasks?assignee=${assigneeFilter}`);
+      const limit = 50;
+      const res = await api.get(`/tasks?assignee=${assigneeFilter}&page=${pageNum}&limit=${limit}`);
+      
+      const taskList = res.data.tasks || (Array.isArray(res.data) ? res.data : []);
       const prevCount = tasks.length;
-      setTasks(res.data);
+      
+      if (pageNum === 1) {
+        setTasks(taskList);
+      } else {
+        setTasks(prev => [...prev, ...taskList]);
+      }
+      
+      setTotalPages(res.data.pages || 1);
+      setTotalCount(res.data.total || taskList.length);
+
       if (showToast) {
-        if (res.data.length === prevCount && prevCount > 0) {
-          toast.success('Already imported the cases', { icon: '✅' });
+        if (taskList.length === 0 && pageNum === 1) {
+          toast.success('No tasks found');
         } else {
-          toast.success(`Successfully synced ${res.data.length} tasks/cases`);
+          toast.success(`Successfully synced tasks`);
         }
       }
     } catch (err) {
       if (showToast) toast.error('Failed to sync tasks');
     } finally {
       setLoading(false);
+      setIsLoadingMore(false);
+    }
+  };
+
+  const loadMore = () => {
+    if (page < totalPages) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      setIsLoadingMore(true);
+      fetchTasks(false, nextPage);
     }
   };
 
@@ -465,7 +491,12 @@ const MyTaskTab = () => {
                           {task.source === 'Auto (Case)' && <Zap size={10} className="text-accent" title="Auto-generated" />}
                         </div>
                       </div>
-                      <h3 className="font-bold text-text-primary text-sm mb-2 leading-tight group-hover:text-accent transition-colors">{task.title}</h3>
+                      <h3 className="font-bold text-text-primary text-sm mb-1 leading-tight group-hover:text-accent transition-colors">{task.title}</h3>
+                      {task.companyName && (
+                        <div className="text-[10px] font-black text-accent uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <Building2 size={10} /> {task.companyName}
+                        </div>
+                      )}
                       <p className="text-[11px] text-text-muted line-clamp-2 mb-4 font-medium leading-relaxed">{task.details || task.description}</p>
                       <div className="flex items-center justify-between pt-4 border-t border-border">
                         <div className="flex items-center gap-2">
@@ -494,6 +525,28 @@ const MyTaskTab = () => {
             </div>
           ))}
         </div>
+
+        {page < totalPages && (
+          <div className="p-8 flex justify-center border-t border-border bg-bg-secondary/30 mt-8 rounded-3xl border-2 border-dashed">
+            <button
+              onClick={loadMore}
+              disabled={isLoadingMore}
+              className="flex items-center gap-3 px-10 py-4 bg-bg-card hover:bg-bg-input text-text-primary border-2 border-border rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition-all active:scale-95 disabled:opacity-50 shadow-xl"
+            >
+              {isLoadingMore ? (
+                <div className="flex items-center gap-2">
+                  <Activity size={16} className="animate-spin text-accent" />
+                  <span>Loading...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <ChevronDown size={16} />
+                  <span>Load More Tasks ({tasks.length} of {totalCount})</span>
+                </div>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* TASK DETAILS SIDE PANEL */}
@@ -551,6 +604,12 @@ const MyTaskTab = () => {
                     <span className="text-text-muted font-bold text-xs">Case ID</span>
                     <span className="font-bold text-accent text-sm">{selectedTask.caseId || '---'}</span>
                   </div>
+                  {selectedTask.companyName && (
+                    <div className="flex justify-between items-center p-3.5 bg-bg-input rounded-2xl border border-border border-accent/20">
+                      <span className="text-text-muted font-bold text-xs">Company Name</span>
+                      <span className="font-bold text-text-primary text-sm text-right">{selectedTask.companyName}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center p-3.5 bg-bg-input rounded-2xl border border-border">
                     <span className="text-text-muted font-bold text-xs">Creation Source</span>
                     <span className="font-bold text-text-primary text-[10px] flex items-center gap-1.5 uppercase tracking-wide px-3 py-1 bg-bg-card rounded-lg border border-border">

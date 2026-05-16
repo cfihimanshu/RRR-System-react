@@ -18,4 +18,8 @@ const communicationSchema = new mongoose.Schema({
   amountSaved: { type: Number, default: 0 }
 }, { timestamps: true });
 
+communicationSchema.index({ caseId: 1 });
+communicationSchema.index({ loggedBy: 1 });
+communicationSchema.index({ createdAt: -1 });
+
 module.exports = mongoose.model('Communication', communicationSchema);

@@ -80,7 +80,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed, onLogoutClick, onC
   useEffect(() => {
     if (user) {
       fetchNotifications(true);
-      const interval = setInterval(() => fetchNotifications(false), 5000); // Polling every 5 seconds
+      const interval = setInterval(() => fetchNotifications(false), 30000); // Polling every 30 seconds for performance
       return () => clearInterval(interval);
     }
   }, [user]);

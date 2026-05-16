@@ -109,6 +109,10 @@ const normalizeStatus = (status, assignedTo, initiatedBy) => {
 // Modernized Case Master with Integrated Detail View
 const CaseMasterTab = () => {
   const [cases, setCases] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -388,13 +392,43 @@ const CaseMasterTab = () => {
     return groups;
   }, [fullHistory]);
 
-  const fetchCases = async (hasDemand = false) => {
+  const fetchCases = async (hasDemand = false, pageNum = 1) => {
     try {
-      const url = hasDemand ? '/cases?hasDemand=true' : '/cases';
+      if (pageNum === 1) setCases([]); // Reset for new search/filter
+      
+      const limit = 50;
+      const url = hasDemand 
+        ? `/cases?hasDemand=true&page=${pageNum}&limit=${limit}` 
+        : `/cases?page=${pageNum}&limit=${limit}`;
+      
       const res = await api.get(url);
-      setCases(res.data);
+      
+      if (res.data && res.data.cases) {
+        if (pageNum === 1) {
+          setCases(res.data.cases);
+        } else {
+          setCases(prev => [...prev, ...res.data.cases]);
+        }
+        setTotalPages(res.data.pages || 1);
+        setTotalCount(res.data.total || 0);
+      } else {
+        const data = Array.isArray(res.data) ? res.data : [];
+        setCases(data);
+        setTotalCount(data.length);
+      }
     } catch (err) {
       toast.error('Failed to fetch cases');
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const loadMore = () => {
+    if (page < totalPages) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      setIsLoadingMore(true);
+      fetchCases(!!location.state?.hasDemand, nextPage);
     }
   };
 
@@ -664,10 +698,9 @@ const CaseMasterTab = () => {
 
   const handleViewCase = async (c) => {
     try {
-      // Fetch fresh case data from backend to ensure we have latest status/assignment
-      const freshRes = await api.get('/cases');
-      const freshCase = freshRes.data.find(fc => fc.caseId === c.caseId);
-      const caseToUse = freshCase || c;
+      // Fetch fresh case data from backend for this specific case
+      const freshRes = await api.get(`/cases/${c.caseId}`);
+      const caseToUse = freshRes.data || c;
 
       setViewCase(caseToUse);
       setActiveDetailTab('Case Study');
@@ -794,7 +827,13 @@ const CaseMasterTab = () => {
   }, [services, viewCase]);
 
   const handleFormChange = (e) => {
-    const { name, value } = e.target;
+    let { name, value } = e.target;
+    
+    // Numbers only restriction for specific fields
+    if (name === 'clientMobile' || name === 'totalAmtPaid' || name === 'totalMouValue' || name === 'amtInDispute') {
+      value = value.replace(/\D/g, ''); // Remove all non-digits
+    }
+
     let updates = { [name]: value };
 
     if (name === 'companyName' || name === 'typeOfComplaint') {
@@ -831,8 +870,12 @@ const CaseMasterTab = () => {
   };
 
   const handleServiceChange = (index, field, value) => {
+    let valToSet = value;
+    if (field === 'serviceAmount' || field === 'signedMouAmount') {
+      valToSet = value.replace(/\D/g, '');
+    }
     const updatedServices = [...services];
-    updatedServices[index][field] = value;
+    updatedServices[index][field] = valToSet;
     setServices(updatedServices);
   };
 
@@ -870,8 +913,8 @@ const CaseMasterTab = () => {
       fetchCases();
 
       // Refresh the viewCase data to reflect backend auto-updates (like status changed to Assigned)
-      const res = await api.get('/cases');
-      const updatedCase = res.data.find(c => c.caseId === viewCase.caseId);
+      const res = await api.get(`/cases/${viewCase.caseId}`);
+      const updatedCase = res.data;
       if (updatedCase) {
         setViewCase(updatedCase);
         // Sync progress form immediately
@@ -1683,9 +1726,30 @@ const CaseMasterTab = () => {
                 )}
               </div>
             )}
-          </div>
-        </>
-      )}
+            </div>
+
+            {/* Case Count Display */}
+            <div className="flex items-center gap-3 mb-6 px-1">
+              <div className="flex items-center gap-2 bg-accent/10 text-accent px-4 py-2.5 rounded-2xl border border-accent/20 shadow-sm animate-in fade-in slide-in-from-left-2 duration-300">
+                <Inbox size={14} className="opacity-70" />
+                <span className="text-[10px] font-black uppercase tracking-[0.15em]">Total Cases:</span>
+                <span className="text-sm font-black tabular-nums">
+                  {searchTerm || !appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date
+                    ? filteredCases.length
+                    : totalCount
+                  }
+                </span>
+              </div>
+              
+              {searchTerm && (
+                <div className="flex items-center gap-2 bg-text-primary/5 text-text-muted px-4 py-2.5 rounded-2xl border border-border animate-in fade-in slide-in-from-left-4 duration-500">
+                  <Search size={14} className="opacity-50" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest italic">Filtering for "{searchTerm}"</span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
       {viewCase ? (
         <div className="animate-in fade-in duration-300 pb-20">
@@ -1707,7 +1771,7 @@ const CaseMasterTab = () => {
 
               </div>
               <button
-                onClick={() => navigate('/new-case')}
+                onClick={() => navigate('/new-case', { state: { clear: true } })}
                 className="bg-accent text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-orange-900/20 active:scale-95 transition-all"
               >
                 + New Case
@@ -2383,7 +2447,7 @@ const CaseMasterTab = () => {
                             <input
                               type="text"
                               value={commFormData.refundDemanded}
-                              onChange={(e) => setCommFormData({ ...commFormData, refundDemanded: e.target.value })}
+                              onChange={(e) => setCommFormData({ ...commFormData, refundDemanded: e.target.value.replace(/\D/g, '') })}
                               placeholder="0"
                               className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-4 text-xs font-black text-text-primary outline-none focus:border-accent transition-all shadow-sm"
                             />
@@ -3295,6 +3359,28 @@ const CaseMasterTab = () => {
               </tbody>
             </table>
           </div>
+          
+          {page < totalPages && (
+            <div className="p-8 flex justify-center bg-bg-secondary border-t border-border">
+              <button
+                onClick={loadMore}
+                disabled={isLoadingMore}
+                className="flex items-center gap-3 px-8 py-3 bg-bg-card hover:bg-bg-input text-text-primary border-2 border-border rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition-all active:scale-95 disabled:opacity-50 shadow-sm"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Activity size={16} className="animate-spin text-accent" />
+                    Loading More...
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={16} />
+                    Load More Cases ({cases.length} of {totalCount})
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

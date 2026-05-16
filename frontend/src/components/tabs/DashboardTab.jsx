@@ -151,8 +151,8 @@ const DashboardTab = () => {
 
   const fetchUserCases = async () => {
     try {
-      const res = await api.get('/cases');
-      setUserCases(res.data);
+      const res = await api.get('/cases?limit=100'); // Limit for dashboard preview
+      setUserCases(res.data.cases || (Array.isArray(res.data) ? res.data : []));
     } catch (err) {
       console.error(err);
     }
@@ -161,8 +161,9 @@ const DashboardTab = () => {
   const fetchMyTodayTasks = async () => {
     try {
       const res = await api.get('/tasks');
+      const taskList = res.data.tasks || (Array.isArray(res.data) ? res.data : []);
       // Fetch ALL pending tasks (To Do or In Progress) for the user
-      const pending = res.data.filter(t => t.status !== 'Completed' && t.status !== 'Done');
+      const pending = taskList.filter(t => t.status !== 'Completed' && t.status !== 'Done');
       setMyTodayTasks(pending);
     } catch (err) {
       console.error(err);
@@ -203,10 +204,11 @@ const DashboardTab = () => {
     try {
       const d = new Date();
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const res = await api.get('/reports');
+      const res = await api.get('/reports?limit=100');
+      const reportList = res.data.reports || (Array.isArray(res.data) ? res.data : []);
 
       // Filter reports: must be SOD, today's date, and current user's email
-      const todaysSod = res.data.find(r =>
+      const todaysSod = reportList.find(r =>
         r.type === 'SOD' &&
         r.date === today &&
         r.userEmail?.trim().toLowerCase() === user?.email?.trim().toLowerCase()
@@ -233,8 +235,11 @@ const DashboardTab = () => {
         api.get('/reports')
       ]);
 
-      const tlData = tlRes.status === 'fulfilled' ? tlRes.value.data : [];
-      const reportsData = reportsRes.status === 'fulfilled' ? reportsRes.value.data : [];
+      const tlDataRaw = tlRes.status === 'fulfilled' ? tlRes.value.data : [];
+      const reportsDataRaw = reportsRes.status === 'fulfilled' ? reportsRes.value.data : [];
+
+      const tlData = Array.isArray(tlDataRaw) ? tlDataRaw : (tlDataRaw.logs || tlDataRaw.timeline || []);
+      const reportsData = Array.isArray(reportsDataRaw) ? reportsDataRaw : (reportsDataRaw.reports || []);
 
       const tlActivities = (Array.isArray(tlData) ? tlData : [])
         .filter(item => {
@@ -417,8 +422,9 @@ const DashboardTab = () => {
   const fetchMyReports = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      const res = await api.get('/reports');
-      const todayReports = res.data.filter(r => r.date === today);
+      const res = await api.get('/reports?limit=100');
+      const reportList = res.data.reports || (Array.isArray(res.data) ? res.data : []);
+      const todayReports = reportList.filter(r => r.date === today);
       setMyReports(todayReports);
     } catch (err) {
       console.error(err);
@@ -1143,11 +1149,11 @@ const DashboardTab = () => {
 
         {user?.role === 'Operations' ? (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
               {/* TYPE OF THREAT - SUMMARY (Left, Wide) */}
-              <div className="lg:col-span-9 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+              <div className="xl:col-span-8 2xl:col-span-9 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">TYPE OF THREAT – SUMMARY</div>
-                <div className="flex justify-between items-start gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 2xl:flex 2xl:justify-between 2xl:items-start gap-4">
                   {[
                     { label: '1930 Cyber Complaint', type: '1930 Cyber Complaint', color: 'text-blue', bg: 'bg-blue-soft', icon: ShieldAlert },
                     { label: 'Consumer Complaint', type: 'Consumer Complaint', color: 'text-green', bg: 'bg-green-soft', icon: Users },
@@ -1157,12 +1163,11 @@ const DashboardTab = () => {
                     { label: 'NA (Non-Agreement)', type: 'NA Non Agreement', color: 'text-yellow', bg: 'bg-yellow-soft', icon: HelpCircle },
                   ].map((item, index) => {
                     const dbItem = stats?.caseTypeWiseData?.find(c => c.caseType === item.type) || { count: 0, totalAmount: 0 };
-                    const percentage = ((dbItem.count / (stats?.totalCases || 1)) * 100).toFixed(2);
                     const IconComponent = item.icon;
                     return (
                       <div
                         key={index}
-                        className="flex flex-col flex-1 min-w-[100px] border-r border-border last:border-r-0 pr-2 last:pr-0 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg"
+                        className="flex flex-col flex-1 min-w-[100px] 2xl:border-r border-border last:border-r-0 2xl:pr-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-2 2xl:p-0"
                         onClick={() => navigate('/case-master', { state: { typeFilter: item.type } })}
                       >
                         <div className="flex items-center gap-1.5 mb-2">
@@ -1173,7 +1178,6 @@ const DashboardTab = () => {
                         </div>
                         <div className="text-xl font-black text-text-primary tracking-tight">{dbItem.count}</div>
                         <div className="text-[9px] font-bold text-text-muted mt-0.5">₹{Number(dbItem.totalAmount || 0).toLocaleString('en-IN')}</div>
-                        {/* <div className="text-[9px] font-black text-text-muted/60 mt-0.5">{percentage}%</div> */}
                       </div>
                     );
                   })}
@@ -1181,22 +1185,22 @@ const DashboardTab = () => {
               </div>
 
               {/* MY KEY NUMBERS (TODAY) (Right, Narrow) */}
-              <div className="lg:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+              <div className="xl:col-span-4 2xl:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY KEY NUMBERS (TODAY)</div>
-                <div className="grid grid-cols-4 gap-2 h-full items-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 h-full items-center">
                   <div className="text-center cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/case-master')}>
                     <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Active Cases</div>
                     <div className="text-xl font-black text-text-primary mt-2">{stats?.openCases || 0}</div>
                   </div>
-                  <div className="text-center border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
+                  <div className="text-center sm:border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
                     <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Follow Ups</div>
                     <div className="text-xl font-black text-text-primary mt-2">{stats?.timeBoundActions?.dueToday || 0}</div>
                   </div>
-                  <div className="text-center border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task')}>
+                  <div className="text-center border-t sm:border-t-0 sm:border-l border-border pt-2 sm:pt-0 sm:pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task')}>
                     <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Pending Actions</div>
                     <div className="text-xl font-black text-text-primary mt-2">{stats?.pendingTasksCount || 0}</div>
                   </div>
-                  <div className="text-center border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
+                  <div className="text-center border-t sm:border-t-0 sm:border-l border-border pt-2 sm:pt-0 sm:pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
                     <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Overdue</div>
                     <div className="text-xl font-black text-red mt-2">{stats?.overdue || 0}</div>
                   </div>
@@ -1205,9 +1209,9 @@ const DashboardTab = () => {
             </div>
 
             {/* NEW GRID FOR TASKS & PERFORMANCE */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-6">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8 mt-6">
               {/* MY TASKS – SOD TO EOD */}
-              <div className="lg:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+              <div className="xl:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY TASKS – SOD TO EOD</div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* SOD SUBMISSION */}
@@ -1217,27 +1221,28 @@ const DashboardTab = () => {
                         <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
                           <Zap size={16} />
                         </div>
-                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">SOD
-                          Submission</div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">SOD Submission</div>
                       </div>
                       <div className="space-y-2">
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                          <span>Daily Checklist</span>
-                          <span className="font-black">{stats?.timeBoundActions?.completedTasksToday || 0} / {stats?.timeBoundActions?.totalTasksToday || 0}</span>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Daily Checklist</span>
+                          <span className="font-black whitespace-nowrap">{stats?.timeBoundActions?.completedTasksToday || 0} / {stats?.timeBoundActions?.totalTasksToday || 0}</span>
                         </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                          <span>Priority Cases Plan</span>
-                          <span className="font-black">{stats?.closedCriticalCases || 0} / {stats?.totalCriticalCases || 0}</span>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Priority Cases Plan</span>
+                          <span className="font-black whitespace-nowrap">{stats?.closedCriticalCases || 0} / {stats?.totalCriticalCases || 0}</span>
                         </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                          <span>Yesterday's EOD Review</span>
-                          <span className="font-black">{stats?.yesterdayEodFilled ? 'Filled' : 'Pending'}</span>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Yesterday's EOD</span>
+                          <span className="font-black whitespace-nowrap">{stats?.yesterdayEodFilled ? 'Filled' : 'Pending'}</span>
                         </div>
                       </div>
                     </div>
                     <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
                       <span className="text-text-muted">SOD Submitted At</span>
-                      <span className="text-green">09:15 AM</span>
+                      <span className={stats?.todaySod ? "text-green" : "text-red"}>
+                        {stats?.todaySod ? new Date(stats.todaySod.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Pending'}
+                      </span>
                     </div>
                   </div>
 
@@ -1251,23 +1256,25 @@ const DashboardTab = () => {
                         <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Work Task Submission</div>
                       </div>
                       <div className="space-y-2">
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                          <span>Case Updates</span>
-                          <span className="font-black">{stats?.progressUpdatesToday || 0}</span>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Case Updates</span>
+                          <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday || 0}</span>
                         </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                          <span>Client Communications</span>
-                          <span className="font-black">{stats?.communicationsToday || 0}</span>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Client Comms</span>
+                          <span className="font-black whitespace-nowrap">{stats?.communicationsToday || 0}</span>
                         </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                          <span>Legal Document Uploads</span>
-                          <span className="font-black">{stats?.documentsUploadedToday || 0}</span>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Doc Uploads</span>
+                          <span className="font-black whitespace-nowrap">{stats?.documentsUploadedToday || 0}</span>
                         </div>
                       </div>
                     </div>
                     <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
                       <span className="text-text-muted">Last Submission</span>
-                      <span className="text-blue">12:30 PM</span>
+                      <span className="text-blue">
+                        {stats?.lastTimeline ? new Date(stats.lastTimeline.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'No Activity'}
+                      </span>
                     </div>
                   </div>
 
@@ -1281,17 +1288,17 @@ const DashboardTab = () => {
                         <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">EOD Submission</div>
                       </div>
                       <div className="space-y-2">
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                          <span>Daily Case Summary</span>
-                          <span className="font-black">0 / 1</span>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Daily Case Summary</span>
+                          <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday > 0 ? '1 / 1' : '0 / 1'}</span>
                         </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                          <span>Calls & Meetings Log</span>
-                          <span className="font-black">0 / 1</span>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Calls & Meetings</span>
+                          <span className="font-black whitespace-nowrap">{stats?.communicationsToday > 0 ? '1 / 1' : '0 / 1'}</span>
                         </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                          <span>Next Day Plan</span>
-                          <span className="font-black">0 / 1</span>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Next Day Plan</span>
+                          <span className="font-black whitespace-nowrap">{stats?.todayEod ? '1 / 1' : '0 / 1'}</span>
                         </div>
                       </div>
                     </div>
@@ -1304,11 +1311,11 @@ const DashboardTab = () => {
               </div>
 
               {/* MY PERFORMANCE */}
-              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 flex flex-col justify-between">
+              <div className="xl:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 flex flex-col justify-between">
                 <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Performance (Evaluation)</div>
-                    <div className="flex gap-1">
+                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2 mb-4">
+                    <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Performance</div>
+                    <div className="flex flex-wrap gap-1">
                       {['7 Days', '1 Month', '3 Months'].map((label, idx) => (
                         <button
                           key={idx}
@@ -1322,7 +1329,7 @@ const DashboardTab = () => {
                             setPerfStartDate(start.toISOString().split('T')[0]);
                             setPerfEndDate(end.toISOString().split('T')[0]);
                           }}
-                          className={`px-2 py-1 text-[8px] font-black uppercase rounded ${activePeriod === label ? 'bg-blue-600 text-white' : 'bg-bg-secondary text-text-muted'}`}
+                          className={`px-2 py-1 text-[8px] font-black uppercase rounded ${activePeriod === label ? 'bg-blue-600 text-white' : 'bg-bg-secondary text-text-muted hover:bg-bg-secondary/50 transition-colors'}`}
                         >
                           {label}
                         </button>
@@ -1335,7 +1342,7 @@ const DashboardTab = () => {
                       <div className="text-xl font-black text-green">{stats?.myPerformance?.totalCommunications || 0}</div>
                     </div>
                     <div>
-                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Cases Resolved</div>
+                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Cases Settled</div>
                       <div className="text-xl font-black text-green">{stats?.myPerformance?.casesResolved || 0}</div>
                     </div>
                     <div>
@@ -1359,9 +1366,9 @@ const DashboardTab = () => {
             </div>
 
             {/* Top Urgent Cases Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
               {/* MY CASES OVERVIEW */}
-              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+              <div className="xl:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">My Cases Overview</div>
                 <div className="flex flex-col items-center justify-center h-full">
                   <div className="w-full h-32 mb-4 relative">
@@ -1426,7 +1433,7 @@ const DashboardTab = () => {
               </div>
 
               {/* TOP URGENT CASES */}
-              <div className="lg:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+              <div className="xl:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Top Urgent Cases (My Cases)</div>
                 <div className="table-wrap overflow-x-auto scrollbar-thin">
                   <table className="w-full text-left border-collapse">

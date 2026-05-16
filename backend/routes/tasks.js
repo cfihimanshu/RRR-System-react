@@ -20,7 +20,7 @@ router.get('/', verifyToken, async (req, res) => {
     } else {
       // Non-admins see tasks assigned to them OR created by them
       const esc = req.user.fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const nameRegex = new RegExp(`^\\s*${esc}\\s*$`, 'i');
+      const nameRegex = new RegExp(`${esc}`, 'i');
       query.$or = [
         { assignee: nameRegex },
         { createdBy: req.user.email }
@@ -34,8 +34,41 @@ router.get('/', verifyToken, async (req, res) => {
       query.updatedAt = { $gte: start, $lte: end };
     }
 
-    const tasks = await Task.find(query).sort({ updatedAt: -1 });
-    res.json(tasks);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 1000;
+    const skip = (page - 1) * limit;
+
+    const total = await Task.countDocuments(query);
+    
+    const tasks = await Task.aggregate([
+      { $match: query },
+      { $sort: { updatedAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'cases',
+          localField: 'caseId',
+          foreignField: 'caseId',
+          as: 'caseInfo'
+        }
+      },
+      {
+        $addFields: {
+          companyName: { $arrayElemAt: ['$caseInfo.companyName', 0] }
+        }
+      },
+      {
+        $project: { caseInfo: 0 }
+      }
+    ]);
+
+    res.json({
+      tasks,
+      total,
+      page,
+      pages: Math.ceil(total / limit)
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

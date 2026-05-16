@@ -35,7 +35,8 @@ const SodEodReportTab = () => {
     try {
       setLoading(true);
       const res = await api.get('/reports');
-      setReports(res.data);
+      const reportList = res.data.reports || (Array.isArray(res.data) ? res.data : []);
+      setReports(reportList);
     } catch (err) {
       toast.error('Failed to fetch reports');
     } finally {

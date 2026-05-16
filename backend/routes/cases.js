@@ -170,7 +170,8 @@ router.get('/', verifyToken, async (req, res) => {
       const dbUser = await User.findById(req.user.id).lean();
       const userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
       const esc = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const nameRegex = { $regex: new RegExp(`^\\s*${esc}\\s*$`, 'i') };
+      // Use partial match to match "Divya" even if user is "Divya Operations"
+      const nameRegex = { $regex: new RegExp(`${esc}`, 'i') };
 
       query = {
         $or: [
@@ -195,8 +196,23 @@ router.get('/', verifyToken, async (req, res) => {
       query.caseId = { $in: commsWithDemand };
     }
 
-    const cases = await Case.find(query).sort({ createdAt: -1 });
-    res.json(cases);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 1000; // Default large but capped
+    const skip = (page - 1) * limit;
+
+    const total = await Case.countDocuments(query);
+    const cases = await Case.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    res.json({
+      cases,
+      total,
+      page,
+      pages: Math.ceil(total / limit)
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -230,13 +246,15 @@ router.get('/check-duplicate', verifyToken, async (req, res) => {
     
     const existing = await Case.findOne({ 
       companyName: { $regex: new RegExp(`^\\s*${companyName.trim()}\\s*$`, 'i') } 
-    });
+    }).lean();
     
     res.json({ exists: !!existing });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+
 
 router.get('/search-client', verifyToken, async (req, res) => {
   try {
@@ -250,6 +268,18 @@ router.get('/search-client', verifyToken, async (req, res) => {
     
     const cases = await Case.find(query, 'caseId companyName clientName clientMobile').limit(10).lean();
     res.json(cases);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /:caseId — Get a single case by its custom caseId
+router.get('/:caseId', verifyToken, async (req, res) => {
+  try {
+    const { caseId } = req.params;
+    const caseData = await Case.findOne({ caseId }).lean();
+    if (!caseData) return res.status(404).json({ error: 'Case not found' });
+    res.json(caseData);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -417,6 +447,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
         stage: req.body.currentStatus || 'Case Logged',
         percentage: 0,
         summary: 'Case initiated and added to the register.',
+        nextAction: req.body.nextActionPlanned || '',
         updatedBy: req.user.fullName || req.user.email,
         checklist: [
           { id: 1, label: 'Initial contact made', completed: false },
@@ -610,6 +641,7 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
             stage: 'Assigned',
             percentage: 25,
             summary: `Case assigned to ${req.body.assignedTo} for initial analysis and review.`,
+            nextAction: req.body.nextActionPlanned || updated.nextActionPlanned || '',
             updatedBy: req.user.fullName || req.user.email || 'System',
             checklist: [
               { id: 1, label: 'Initial contact made', completed: false },

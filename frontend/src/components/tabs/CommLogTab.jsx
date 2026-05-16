@@ -149,11 +149,11 @@ const CommLogTab = () => {
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-3">
               <label className={labelClass}>Refund Volume (₹)</label>
-              <input type="text" className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-xs font-black text-text-primary focus:border-accent outline-none transition-all shadow-sm" placeholder="0" value={formData.refundDemanded} onChange={e => setFormData({ ...formData, refundDemanded: e.target.value })} />
+              <input type="text" className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-xs font-black text-text-primary focus:border-accent outline-none transition-all shadow-sm" placeholder="0" value={formData.refundDemanded} onChange={e => setFormData({ ...formData, refundDemanded: e.target.value.replace(/\D/g, '') })} />
             </div>
             <div className="space-y-3">
               <label className={labelClass}>Demand Amount (₹)</label>
-              <input type="text" className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-xs font-black text-text-primary focus:border-accent outline-none transition-all shadow-sm" placeholder="0" value={formData.demandAmount} onChange={e => setFormData({ ...formData, demandAmount: e.target.value })} />
+              <input type="text" className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-xs font-black text-text-primary focus:border-accent outline-none transition-all shadow-sm" placeholder="0" value={formData.demandAmount} onChange={e => setFormData({ ...formData, demandAmount: e.target.value.replace(/\D/g, '') })} />
             </div>
 
             <div className="space-y-3">

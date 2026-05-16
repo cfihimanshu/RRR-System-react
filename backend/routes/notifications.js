@@ -14,9 +14,8 @@ router.get('/', verifyToken, async (req, res) => {
     const userEmail = req.user.email;
     const userRole  = req.user.role;
 
-    // Resolve fullName from DB (JWT may not carry it after renames)
-    const dbUser = await User.findById(req.user.id).lean();
-    const fullName = dbUser?.fullName || req.user.fullName || '';
+    // Use req.user directly if available, otherwise find in DB once
+    const fullName = req.user.fullName || '';
 
     // 1. Fetch persisted DB notifications for this user
     let notifications = await Notification.find({
@@ -31,10 +30,10 @@ router.get('/', verifyToken, async (req, res) => {
     // ── Task Reminders ──
     if (fullName) {
       const reminders = await Task.find({
-        assignee: { $regex: new RegExp(`^\\s*${fullName.trim()}\\s*$`, 'i') },
+        assignee: { $regex: new RegExp(fullName, 'i') },
         status: { $nin: ['Completed', 'Done'] },
         reminderDateTime: { $exists: true, $ne: '' }
-      }).lean();
+      }, 'title reminderDateTime').lean();
 
       for (const t of reminders) {
         const remDate = new Date(t.reminderDateTime);
@@ -71,7 +70,7 @@ router.get('/', verifyToken, async (req, res) => {
       }
     } else if (fullName) {
       pendingCount = await Task.countDocuments({
-        assignee: { $regex: new RegExp(`^\\s*${fullName.trim()}\\s*$`, 'i') },
+        assignee: { $regex: new RegExp(fullName, 'i') },
         status: 'To Do'
       });
       if (pendingCount > 0) {

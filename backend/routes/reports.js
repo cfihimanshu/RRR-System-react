@@ -13,9 +13,15 @@ router.get('/', verifyToken, async (req, res) => {
       matchQuery.userEmail = req.user.email;
     }
 
+    const page = parseInt(req.query.page) || 1;
+    const limitNum = parseInt(req.query.limit) || 50;
+    const skipNum = (page - 1) * limitNum;
+
     const reports = await Report.aggregate([
       { $match: matchQuery },
       { $sort: { createdAt: -1 } },
+      { $skip: skipNum },
+      { $limit: limitNum },
       {
         $lookup: {
           from: 'timelines',
@@ -186,8 +192,8 @@ router.get('/stats', verifyToken, async (req, res) => {
 
     let workingHours = 0;
     if (!isAdmin) {
-      const firstSod = await Report.findOne({ ...query, type: 'SOD', createdAt: { $gte: today } }).sort({ createdAt: 1 });
-      const lastEod = await Report.findOne({ ...query, type: 'EOD', createdAt: { $gte: today } }).sort({ createdAt: -1 });
+      const firstSod = await Report.findOne({ ...query, type: 'SOD', createdAt: { $gte: today } }).sort({ createdAt: 1 }).lean();
+      const lastEod = await Report.findOne({ ...query, type: 'EOD', createdAt: { $gte: today } }).sort({ createdAt: -1 }).lean();
       
       if (firstSod) {
         const startTime = new Date(firstSod.createdAt);

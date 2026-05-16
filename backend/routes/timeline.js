@@ -117,9 +117,12 @@ router.get('/', verifyToken, async (req, res) => {
       } 
     });
 
-    if (!date && !caseId) {
-      pipeline.push({ $limit: 100 });
-    }
+    const page = parseInt(req.query.page) || 1;
+    const limitNum = parseInt(req.query.limit) || 100;
+    const skipNum = (page - 1) * limitNum;
+
+    pipeline.push({ $skip: skipNum });
+    pipeline.push({ $limit: limitNum });
 
     const docs = await Timeline.aggregate(pipeline);
     res.json(docs);

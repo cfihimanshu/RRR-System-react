@@ -103,6 +103,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
             <NavLink
               key={tab.id}
               to={tab.path}
+              state={tab.id === 'new-case' ? { clear: true } : null}
               end={tab.path === '/'}
               title={isCollapsed ? tab.label : ''}
               className={({ isActive }) =>

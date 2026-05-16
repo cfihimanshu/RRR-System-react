@@ -66,6 +66,13 @@ const NewCaseTab = () => {
   const editCase = location.state?.editCase || null;
 
   const [formData, setFormData] = useState(() => {
+    if (location.state?.clear) {
+      localStorage.removeItem('rrr_new_case_form');
+      localStorage.removeItem('rrr_new_case_services');
+      localStorage.removeItem('rrr_new_case_mode');
+      localStorage.removeItem('rrr_new_case_acks');
+      return initialFormData;
+    }
     if (editCase) return initialFormData;
     const saved = localStorage.getItem('rrr_new_case_form');
     return saved ? JSON.parse(saved) : initialFormData;
@@ -80,12 +87,14 @@ const NewCaseTab = () => {
   const [userList, setUserList] = useState([]); // List of users for dropdown
 
   const [serviceMode, setServiceMode] = useState(() => {
+    if (location.state?.clear) return 'Single Service';
     if (editCase) return 'Single Service';
     const saved = localStorage.getItem('rrr_new_case_mode');
     return saved || 'Single Service';
   });
 
   const [services, setServices] = useState(() => {
+    if (location.state?.clear) return [{ ...initialService }];
     if (editCase) return [{ ...initialService }];
     const saved = localStorage.getItem('rrr_new_case_services');
     return saved ? JSON.parse(saved) : [{ ...initialService }];
@@ -272,7 +281,13 @@ const NewCaseTab = () => {
   }, [services]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    let { name, value } = e.target;
+    
+    // Numbers only restriction for specific fields
+    if (name === 'clientMobile' || name === 'totalAmtPaid' || name === 'totalMouValue' || name === 'amtInDispute') {
+      value = value.replace(/\D/g, ''); // Remove all non-digits
+    }
+
     let updates = { [name]: value };
 
     if (name === 'companyName' || name === 'typeOfComplaint') {
@@ -327,8 +342,12 @@ const NewCaseTab = () => {
   };
 
   const handleServiceChange = (index, field, value) => {
+    let valToSet = value;
+    if (field === 'serviceAmount' || field === 'signedMouAmount') {
+      valToSet = value.replace(/\D/g, '');
+    }
     const updatedServices = [...services];
-    updatedServices[index][field] = value;
+    updatedServices[index][field] = valToSet;
     setServices(updatedServices);
   };
 

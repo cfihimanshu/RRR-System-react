@@ -15,7 +15,7 @@ router.get('/', verifyToken, async (req, res) => {
       query.loggedBy = { $in: myIds };
     }
 
-    const docs = await Communication.find(query).sort({ dateTime: -1 });
+    const docs = await Communication.find(query).sort({ dateTime: -1 }).lean();
     res.json(docs);
   } catch (error) {
     res.status(500).json({ error: error.message });
