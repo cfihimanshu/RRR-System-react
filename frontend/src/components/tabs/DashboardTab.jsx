@@ -196,6 +196,7 @@ const DashboardTab = () => {
   };
 
   const [hasSodToday, setHasSodToday] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const checkSodStatus = async () => {
     if (user?.role === 'Admin') return;
@@ -444,8 +445,12 @@ const DashboardTab = () => {
           '1930 Cyber Complaint',
           'Consumer Complaint',
           'Criminal Complaint/FIR',
+          'Civil Case',
           'Social Media',
-          'Civil Case'
+          'General Query',
+          'NA Non Agreement',
+          'Demand Pressure',
+          'Bank Hold'
         ];
 
         const finalData = fixedTypes.map(type => {
@@ -535,6 +540,8 @@ const DashboardTab = () => {
 
   const handleReportSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     const loadingToast = toast.loading(`Submitting ${reportType} report...`);
     try {
       const d = new Date();
@@ -623,6 +630,8 @@ const DashboardTab = () => {
       const errMsg = err.response?.data?.error || `Failed to submit ${reportType} report`;
       toast.error(errMsg, { id: loadingToast, duration: 5000 });
       console.error('Submission Error:', err.response?.data);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1027,6 +1036,11 @@ const DashboardTab = () => {
                                 <div className="text-[9px] font-black uppercase tracking-widest mt-0.5 opacity-60">
                                   {task.caseId || 'Personal Task'} • {task.priority}
                                 </div>
+                                {task.caseId && userCases?.find(c => c.caseId === task.caseId)?.companyName && (
+                                  <div className="text-[9px] font-bold uppercase tracking-widest mt-0.5 text-accent opacity-80 flex items-center gap-1">
+                                    <Building2 size={10} /> {userCases.find(c => c.caseId === task.caseId).companyName}
+                                  </div>
+                                )}
                               </div>
 
                               {/* Expansion Toggle */}
@@ -1073,12 +1087,15 @@ const DashboardTab = () => {
                     {reportType === 'SOD' ? 'Skip For Now' : 'Cancel'}
                   </button>
                 )}
-                <button
-                  type="submit"
-                  className={`w-full sm:w-auto px-6 sm:px-12 py-4 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-white shadow-sm transition-all flex items-center justify-center gap-3 active:scale-95 ${reportType === 'SOD' ? 'bg-accent hover:bg-accent-hover' : 'bg-purple hover:bg-purple-600'}`}
-                >
-                  <Send size={18} /> Submit {reportType}
-                </button>
+                {!(reportType === 'SOD' && stats?.isEodMissed && !stats?.bypassEodCheck) && (
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className={`w-full sm:w-auto px-6 sm:px-12 py-4 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-white shadow-sm transition-all flex items-center justify-center gap-3 active:scale-95 ${isSubmitting ? 'opacity-70 cursor-wait' : ''} ${reportType === 'SOD' ? 'bg-accent hover:bg-accent-hover' : 'bg-purple hover:bg-purple-600'}`}
+                  >
+                    <Send size={18} /> {isSubmitting ? 'Submitting...' : `Submit ${reportType}`}
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -1200,7 +1217,8 @@ const DashboardTab = () => {
                         <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
                           <Zap size={16} />
                         </div>
-                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">SOD Submission</div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">SOD
+                          Submission</div>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between text-[11px] font-bold text-text-secondary">
@@ -1510,7 +1528,7 @@ const DashboardTab = () => {
                     className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
                   >
                     <Activity size={16} className="text-orange mb-1" />
-                    <span className="text-[9px] font-black uppercase text-text-primary">SOD Submission</span>
+                    <span className="text-[9px] font-black uppercase text-text-primary">Work Report</span>
                   </button>
                   <button
                     onClick={() => navigate('/my-task')}

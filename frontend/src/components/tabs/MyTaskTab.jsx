@@ -57,6 +57,7 @@ const MyTaskTab = () => {
     'In Progress': false,
     'Completed': true // Start with some collapsed on mobile for better focus
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -315,6 +316,8 @@ const MyTaskTab = () => {
 
   const handleCreateTask = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       // Use description (details) as title if title is empty
       const titleFromDesc = newTask.description?.split('\n')[0].substring(0, 50) || 'Untitled Task';
@@ -341,6 +344,8 @@ const MyTaskTab = () => {
     } catch (err) {
       toast.error('Failed to create task');
       console.error(err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -471,7 +476,7 @@ const MyTaskTab = () => {
                           <div className="flex items-center gap-2">
                             <span className="text-[9px] font-bold text-text-muted flex items-center gap-1">
                               <Calendar size={12} className="text-accent" />
-                              {task.dueDate || (task.createdAt ? new Date(task.createdAt).toLocaleDateString('en-IN') : 'No Date')}
+                              {task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-IN') : (task.createdAt ? new Date(task.createdAt).toLocaleDateString('en-IN') : 'No Date')}
                             </span>
                             {task.createdAt && (
                               <span className="text-[9px] font-bold text-accent flex items-center gap-1 bg-accent/5 px-2 py-0.5 ">
@@ -540,7 +545,7 @@ const MyTaskTab = () => {
                   </div>
                   <div className="flex justify-between items-center p-3.5 bg-bg-input rounded-2xl border border-border">
                     <span className="text-text-muted font-bold text-xs">Due Date</span>
-                    <span className="font-bold text-text-primary text-sm flex items-center gap-2"><Calendar size={18} className="text-white" /> {selectedTask.dueDate || 'Not set'}</span>
+                    <span className="font-bold text-text-primary text-sm flex items-center gap-2"><Calendar size={18} className="text-white" /> {selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString('en-IN') : 'Not set'}</span>
                   </div>
                   <div className="flex justify-between items-center p-3.5 bg-bg-input rounded-2xl border border-border">
                     <span className="text-text-muted font-bold text-xs">Case ID</span>
@@ -773,9 +778,10 @@ const MyTaskTab = () => {
             </button>
             <button
               type="submit"
-              className="btn btn-primary !py-3.5 !px-12 !rounded-2xl shadow-lg shadow-orange-900/20"
+              disabled={isSubmitting}
+              className={`btn btn-primary !py-3.5 !px-12 !rounded-2xl shadow-lg shadow-orange-900/20 ${isSubmitting ? 'opacity-70 cursor-wait' : ''}`}
             >
-              Create Task
+              {isSubmitting ? 'Creating...' : 'Create Task'}
             </button>
           </div>
         </form>

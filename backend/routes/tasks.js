@@ -137,4 +137,18 @@ router.put('/:id', verifyToken, async (req, res) => {
   }
 });
 
+// Delete task
+router.delete('/:id', verifyToken, async (req, res) => {
+  try {
+    const deletedTask = await Task.findByIdAndDelete(req.params.id);
+    if (!deletedTask) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    res.json({ message: 'Task deleted successfully' });
+  } catch (error) {
+    console.error('Delete Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

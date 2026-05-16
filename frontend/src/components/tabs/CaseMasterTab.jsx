@@ -166,6 +166,7 @@ const CaseMasterTab = () => {
     completed: stageChecklistMap[stage]?.includes(item.id) || false
   }));
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [progressFormData, setProgressFormData] = useState({
     stage: 'Case Logged',
     percentage: 20,
@@ -1050,6 +1051,9 @@ const CaseMasterTab = () => {
       if (!progressFormData.savedAmount) return toast.error('Saved Amount is required');
     }
 
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     const loadingToast = toast.loading('Saving progress update...');
     try {
       await api.post('/progress', {
@@ -1088,12 +1092,16 @@ const CaseMasterTab = () => {
       fetchCases(); // Refresh global list
     } catch (err) {
       toast.error('Failed to update progress', { id: loadingToast });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleCommSubmit = async (e) => {
     e.preventDefault();
     if (!commFormData.summary) return toast.error('Summary is required');
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
     const loadingToast = toast.loading('Logging communication...');
     try {
@@ -1118,12 +1126,16 @@ const CaseMasterTab = () => {
       fetchCaseComms(viewCase.caseId);
     } catch (err) {
       toast.error('Failed to log communication', { id: loadingToast });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDocSubmit = async (e) => {
     e.preventDefault();
     if (!docFormData.summary) return toast.error('Description is required');
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
     const loadingToast = toast.loading('Indexing document...');
     try {
@@ -1145,6 +1157,8 @@ const CaseMasterTab = () => {
       fetchCaseDocs(viewCase.caseId);
     } catch (err) {
       toast.error('Failed to index document', { id: loadingToast });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

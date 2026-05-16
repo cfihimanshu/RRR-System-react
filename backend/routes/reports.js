@@ -116,6 +116,25 @@ router.post('/', verifyToken, async (req, res) => {
       userEmail: req.user.email,
       userName: req.user.fullName
     };
+
+    if (reportData.type === 'SOD' && req.user.role !== 'Admin') {
+      const User = require('../models/User');
+      const user = await User.findById(req.user.id).lean();
+      if (!user?.bypassEodCheck) {
+        const nowForIST = new Date();
+        const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
+        const todayStr = istTime.toISOString().split('T')[0];
+        
+        const lastSod = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: { $lt: todayStr } }).sort({ date: -1 }).lean();
+        if (lastSod) {
+          const lastEod = await Report.findOne({ userEmail: req.user.email, type: 'EOD', date: lastSod.date }).lean();
+          if (!lastEod) {
+            return res.status(403).json({ error: 'You missed filling your EOD report on a previous day. Please contact Admin to grant you access to fill SOD.' });
+          }
+        }
+      }
+    }
+
     const report = new Report(reportData);
     await report.save();
 

@@ -16,6 +16,6 @@ const communicationSchema = new mongoose.Schema({
   loggedBy: String,
   demandAmount: { type: Number, default: 0 },
   amountSaved: { type: Number, default: 0 }
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Communication', communicationSchema);

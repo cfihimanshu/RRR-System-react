@@ -239,7 +239,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     
     if (req.user.role !== 'Admin') {
       const Report = require('./models/Report');
-      const todayStr = new Date().toISOString().split('T')[0];
+      const nowForIST = new Date();
+      const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
+      const todayStr = istTime.toISOString().split('T')[0];
       
       const lastSod = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: { $lt: todayStr } }).sort({ date: -1 }).lean();
       
@@ -708,7 +710,16 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
       // ── Team Performance (Admin Only) ──
       const casePipeline = [];
-      if (Object.keys(teamDateQuery).length > 0) casePipeline.push({ $match: teamDateQuery });
+      if (Object.keys(teamDateQuery).length > 0) {
+        casePipeline.push({ 
+          $match: { 
+            $or: [
+              teamDateQuery,
+              { updatedAt: teamDateQuery.createdAt }
+            ] 
+          } 
+        });
+      }
       casePipeline.push({
         $addFields: {
           calculatedUser: {
