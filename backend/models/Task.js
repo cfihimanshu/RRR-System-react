@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const taskSchema = new mongoose.Schema({
   taskId: { type: String, unique: true },
   title: { type: String, required: true },
-  priority: { type: String, enum: ['High', 'Medium', 'Low'], default: 'Medium' },
+  priority: { type: String, enum: ['Critical', 'High', 'Medium', 'Low'], default: 'Medium' },
   assignee: { type: String, required: true },
   dueDate: String,
   caseId: String,

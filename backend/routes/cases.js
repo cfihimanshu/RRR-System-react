@@ -164,8 +164,8 @@ router.get('/', verifyToken, async (req, res) => {
   try {
     let query = {};
 
-    // Logic: Admin sees all. Others see only their assigned or unassigned-initiated cases.
-    if (req.user.role !== 'Admin') {
+    // Logic: Admin, Reviewer, and Accountant see all. Others see only their assigned or unassigned-initiated cases.
+    if (!['Admin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
       const User = require('../models/User');
       const dbUser = await User.findById(req.user.id).lean();
       const userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
@@ -239,6 +239,19 @@ router.get('/available-dates', verifyToken, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+router.get('/available-states', verifyToken, async (req, res) => {
+  try {
+    const states = await Case.distinct('state');
+    const cleanStates = states
+      .filter(s => s && String(s).trim() !== '')
+      .map(s => String(s).trim());
+    res.json([...new Set(cleanStates)].sort());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/check-duplicate', verifyToken, async (req, res) => {
   try {
     const { companyName } = req.query;
@@ -842,11 +855,14 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
         clientName: getVal(['clientname', 'client', 'customername', 'name', 'person', 'contactperson']),
         clientMobile: getVal(['mobile', 'contact', 'phone', 'mobilenumber', 'whatsapp', 'tel']),
         clientEmail: getVal(['email', 'emailid', 'mail', 'emailaddress']),
-        state: getVal(['state', 'region', 'location', 'city', 'address']),
+        state: getVal(['state', 'region']),
+        city: getVal(['city', 'town', 'district']),
+        pincode: getVal(['pincode', 'postalcode', 'zip', 'zipcode', 'pin']),
         totalAmtPaid: getVal(['amountpaid', 'paid', 'totalpaid', 'received', 'payment']),
         mouSigned: getVal(['mousigned', 'mou', 'contract', 'agreement']) || 'No',
         totalMouValue: getVal(['mouvalue', 'totalmou', 'value', 'contractvalue']),
         amtInDispute: getVal(['disputeamount', 'dispute', 'conflictamount', 'amountindispute']),
+        dateOfLastPayment: getVal(['dateoflastpayment', 'lastpaymentdate', 'paymentdate', 'lastpayment'], true),
         caseSummary: getVal(['summary', 'description', 'caseinfo', 'narrative', 'details']),
         clientAllegation: getVal(['allegation', 'clientallegation', 'claims']),
         initiatedBy: ['staff', 'rajda mansuri'].includes(getVal(['initiatedby', 'salesperson', 'createdby', 'initiator'])?.toLowerCase()) ? '' : getVal(['initiatedby', 'salesperson', 'createdby', 'initiator']),

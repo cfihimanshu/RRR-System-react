@@ -54,7 +54,9 @@ import {
   Building2,
   Phone,
   MessageCircle,
-  HelpCircle
+  HelpCircle,
+  ChevronUp,
+  Layers
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
@@ -73,6 +75,16 @@ const CHART_COLORS = [
 const DashboardTab = () => {
   const [stats, setStats] = useState(null);
   const [myRefunds, setMyRefunds] = useState([]);
+  const [isRefundReportModalOpen, setIsRefundReportModalOpen] = useState(false);
+  const [allRefundsList, setAllRefundsList] = useState([]);
+  const [allCasesList, setAllCasesList] = useState([]);
+  const [allActiveCasesList, setAllActiveCasesList] = useState([]);
+  const [loadingRefundReport, setLoadingRefundReport] = useState(false);
+  const [expandedRefundIds, setExpandedRefundIds] = useState({});
+  const [reportStartDate, setReportStartDate] = useState('');
+  const [reportEndDate, setReportEndDate] = useState('');
+  const [reportPeriodFilter, setReportPeriodFilter] = useState('All');
+  const [reportStatusFilter, setReportStatusFilter] = useState('All');
   const [userCases, setUserCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [editingRefund, setEditingRefund] = useState(null);
@@ -428,6 +440,27 @@ const DashboardTab = () => {
       setMyReports(todayReports);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const fetchRefundReportData = async () => {
+    setLoadingRefundReport(true);
+    try {
+      const [refundsRes, casesRes] = await Promise.all([
+        api.get('/refunds'),
+        api.get('/cases?limit=1000')
+      ]);
+      setAllRefundsList(refundsRes.data || []);
+      const allCases = casesRes.data.cases || (Array.isArray(casesRes.data) ? casesRes.data : []);
+      setAllCasesList(allCases);
+      const completedStatuses = ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution', 'Resolved', 'Done', 'Complete', 'Completed', 'closed', 'settled'];
+      const activeCases = allCases.filter(c => !completedStatuses.includes(c.currentStatus || c.status));
+      setAllActiveCasesList(activeCases);
+    } catch (err) {
+      console.error('Failed to fetch refund report data', err);
+      toast.error('Failed to load refund report ledger');
+    } finally {
+      setLoadingRefundReport(false);
     }
   };
 
@@ -1581,7 +1614,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 2: Active Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master')}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-green-soft rounded-lg text-green">
@@ -1589,8 +1622,8 @@ const DashboardTab = () => {
                     </div>
                     <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Cases</div>
                   </div>
-                  <div className="text-3xl font-black text-text-primary tracking-tight">{(stats?.totalCases || 0) - (stats?.closedCases || 0)}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number((stats?.totalAmountPaid || 0) - (stats?.closedAmount || 0)).toLocaleString('en-IN')}</div>
+                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.openCases || 0}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.openCasesAmount || 0).toLocaleString('en-IN')}</div>
                 </div>
               </div>
 
@@ -1608,21 +1641,7 @@ const DashboardTab = () => {
                 </div>
               </div>
 
-              {/* Card 4: Closure Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { statusFilter: 'Closure' } })}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-green-soft rounded-lg text-green">
-                      <CheckCircle size={16} />
-                    </div>
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Closure Cases</div>
-                  </div>
-                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.closedCases || 0}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.closedAmount || 0).toLocaleString('en-IN')}</div>
-                </div>
-              </div>
-
-              {/* Card 5: Critical Priority */}
+              {/* Card 4: Critical Priority */}
               <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Critical' } })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
@@ -1633,6 +1652,20 @@ const DashboardTab = () => {
                   </div>
                   <div className="text-3xl font-black text-red tracking-tight">{stats?.criticalPriority || 0}</div>
                   <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.criticalPriorityAmount || 0).toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+
+              {/* Card 5: Closure Cases */}
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { statusFilter: 'Closure' } })}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-green-soft rounded-lg text-green">
+                      <CheckCircle size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Closure Cases</div>
+                  </div>
+                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.closedCases || 0}</div>
+                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.closedAmount || 0).toLocaleString('en-IN')}</div>
                 </div>
               </div>
 
@@ -1789,13 +1822,45 @@ const DashboardTab = () => {
       </div>
 
       {/* Refund Provisions & Stats Section */}
-      {user?.role === 'Admin' && (
+      {(user?.role === 'Admin' || user?.role === 'Accountant') && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
           {/* Refund Provisions (Left) */}
-          <div className="lg:col-span-5 bg-bg-card rounded-2xl p-5 shadow-sm">
-            <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Refund Provisions (Approved)</div>
+          <div
+            onClick={() => {
+              setReportPeriodFilter('All');
+              setReportStatusFilter('All');
+              setIsRefundReportModalOpen(true);
+              setExpandedRefundIds({});
+              setReportStartDate('');
+              setReportEndDate('');
+              fetchRefundReportData();
+            }}
+            className="lg:col-span-5 bg-bg-card hover:bg-bg-input border-2 border-transparent hover:border-accent/40 rounded-2xl p-5 shadow-sm cursor-pointer transition-all active:scale-[0.99] group"
+          >
+            <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4 flex justify-between items-center group-hover:text-accent transition-all">
+              <span>Refund Provisions (Approved)</span>
+              <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-4px] group-hover:translate-x-0 text-accent" />
+            </div>
             <div className="grid grid-cols-4 gap-4">
-              <div className="border-r border-border last:border-r-0 pr-4 last:pr-0">
+              <div
+                className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const getLocalDateString = (d) => {
+                    const offset = d.getTimezoneOffset();
+                    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+                    return localDate.toISOString().split('T')[0];
+                  };
+                  const todayStr = getLocalDateString(new Date());
+                  setReportPeriodFilter('Today');
+                  setReportStatusFilter('All');
+                  setIsRefundReportModalOpen(true);
+                  setExpandedRefundIds({});
+                  setReportStartDate(todayStr);
+                  setReportEndDate(todayStr);
+                  fetchRefundReportData();
+                }}
+              >
                 <div className="text-[10px] font-black text-text-primary uppercase mb-2">Today</div>
                 <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
                   <span>No.</span>
@@ -1806,7 +1871,34 @@ const DashboardTab = () => {
                   <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.today?.amount || 0).toLocaleString('en-IN')}</span>
                 </div>
               </div>
-              <div className="border-r border-border last:border-r-0 pr-4 last:pr-0">
+              <div
+                className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const getLocalDateString = (d) => {
+                    const offset = d.getTimezoneOffset();
+                    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+                    return localDate.toISOString().split('T')[0];
+                  };
+                  const now = new Date();
+                  const day = now.getDay();
+                  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+                  const startOfWeek = new Date(now);
+                  startOfWeek.setDate(diff);
+                  const startOfWeekStr = getLocalDateString(startOfWeek);
+                  const endOfWeek = new Date(startOfWeek);
+                  endOfWeek.setDate(endOfWeek.getDate() + 6);
+                  const endOfWeekStr = getLocalDateString(endOfWeek);
+
+                  setReportPeriodFilter('This Week');
+                  setReportStatusFilter('All');
+                  setIsRefundReportModalOpen(true);
+                  setExpandedRefundIds({});
+                  setReportStartDate(startOfWeekStr);
+                  setReportEndDate(endOfWeekStr);
+                  fetchRefundReportData();
+                }}
+              >
                 <div className="text-[10px] font-black text-text-primary uppercase mb-2">This Week</div>
                 <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
                   <span>No.</span>
@@ -1817,7 +1909,29 @@ const DashboardTab = () => {
                   <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.thisWeek?.amount || 0).toLocaleString('en-IN')}</span>
                 </div>
               </div>
-              <div className="border-r border-border last:border-r-0 pr-4 last:pr-0">
+              <div
+                className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const getLocalDateString = (d) => {
+                    const offset = d.getTimezoneOffset();
+                    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+                    return localDate.toISOString().split('T')[0];
+                  };
+                  const now = new Date();
+                  const startOfMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+                  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                  const endOfMonthStr = getLocalDateString(endOfMonth);
+
+                  setReportPeriodFilter('This Month');
+                  setReportStatusFilter('All');
+                  setIsRefundReportModalOpen(true);
+                  setExpandedRefundIds({});
+                  setReportStartDate(startOfMonthStr);
+                  setReportEndDate(endOfMonthStr);
+                  fetchRefundReportData();
+                }}
+              >
                 <div className="text-[10px] font-black text-text-primary uppercase mb-2">This Month</div>
                 <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
                   <span>No.</span>
@@ -1829,7 +1943,30 @@ const DashboardTab = () => {
                 </div>
               </div>
 
-              <div className="border-r border-border last:border-r-0 pr-4 last:pr-0">
+              <div
+                className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const getLocalDateString = (d) => {
+                    const offset = d.getTimezoneOffset();
+                    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+                    return localDate.toISOString().split('T')[0];
+                  };
+                  const now = new Date();
+                  const startStr = getLocalDateString(now);
+                  const endOfNext6Months = new Date(now);
+                  endOfNext6Months.setMonth(endOfNext6Months.getMonth() + 6);
+                  const endOfNext6MonthsStr = getLocalDateString(endOfNext6Months);
+
+                  setReportPeriodFilter('Next 6 Months');
+                  setReportStatusFilter('All');
+                  setIsRefundReportModalOpen(true);
+                  setExpandedRefundIds({});
+                  setReportStartDate(startStr);
+                  setReportEndDate(endOfNext6MonthsStr);
+                  fetchRefundReportData();
+                }}
+              >
                 <div className="text-[10px] font-black text-text-primary uppercase mb-2">Next 6 Months</div>
                 <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
                   <span>No.</span>
@@ -2551,6 +2688,378 @@ const DashboardTab = () => {
                   </div>
                 ));
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund Report Popup Modal */}
+      {isRefundReportModalOpen && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsRefundReportModalOpen(false)}>
+          <div className="bg-bg-card border-2 border-border rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-6 flex items-center justify-between text-white bg-gradient-to-r from-amber-600 to-amber-800">
+              <div>
+                <h2 className="text-xl font-black flex items-center gap-3 uppercase tracking-tight">
+                  <IndianRupee size={24} />
+                  Refund Report
+                </h2>
+              </div>
+              <button onClick={() => setIsRefundReportModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2.5 rounded-xl transition-all"><X size={20} /></button>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 max-h-[65vh] overflow-y-auto bg-bg-card space-y-6">
+              {loadingRefundReport ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <Activity className="animate-spin text-amber-600" size={48} />
+                  <div className="text-xs font-black uppercase tracking-widest text-text-muted">Compiling Financial Ledger...</div>
+                </div>
+              ) : (
+                <>
+                  {(() => {
+                    const parseLocalDate = (dateVal) => {
+                      if (!dateVal) return new Date();
+                      if (dateVal instanceof Date) return dateVal;
+                      const str = String(dateVal);
+                      if (str.includes('T')) {
+                        return new Date(str);
+                      }
+                      const parts = str.split('-');
+                      if (parts.length === 3) {
+                        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 0, 0, 0, 0);
+                      }
+                      return new Date(str);
+                    };
+
+                    const filteredRefundsList = allRefundsList.filter(r => {
+                      // 0. Only Approved Provisions (Pending Payment or Paid)
+                      if (!['Pending Payment', 'Paid'].includes(r.status)) {
+                        return false;
+                      }
+
+                      // 1. Status Filter (All Approved, Pending Payment, Paid)
+                      if (reportStatusFilter && reportStatusFilter !== 'All') {
+                        const instList = r.installments || [];
+                        const allInstPaid = instList.length > 0 && instList.every(inst => inst.status === 'Paid');
+                        const isPaid = r.status === 'Paid' || allInstPaid;
+                        const effectiveStatus = isPaid ? 'Paid' : 'Pending';
+
+                        if (reportStatusFilter === 'Paid' && effectiveStatus !== 'Paid') return false;
+                        if (reportStatusFilter === 'Pending' && effectiveStatus !== 'Pending') return false;
+                      }
+
+                      // 2. Date Filter (Check if ANY installment falls within start and end date)
+                      const installments = r.installments && r.installments.length > 0 
+                        ? r.installments 
+                        : [{ status: r.status, dueDate: r.paymentDate || r.timestamp, amount: r.amount, paymentDate: r.paymentDate, transactionId: r.transactionId }];
+
+                      const hasMatchingInstallment = installments.some(inst => {
+                        let refDate = null;
+                        if (inst.status === 'Paid' && inst.paymentDate) {
+                          refDate = parseLocalDate(inst.paymentDate);
+                        } else if (inst.dueDate) {
+                          refDate = parseLocalDate(inst.dueDate);
+                        } else {
+                          refDate = parseLocalDate(r.timestamp || r.paymentDate);
+                        }
+
+                        // Start Date Boundary Check
+                        if (reportStartDate) {
+                          const start = parseLocalDate(reportStartDate);
+                          start.setHours(0, 0, 0, 0);
+                          if (refDate < start) return false;
+                        }
+
+                        // End Date Boundary Check
+                        if (reportEndDate) {
+                          const end = parseLocalDate(reportEndDate);
+                          end.setHours(23, 59, 59, 999);
+                          if (refDate > end) return false;
+                        }
+
+                        return true;
+                      });
+
+                      if (!hasMatchingInstallment) return false;
+
+                      return true;
+                    });
+
+                    const totalActiveAmt = allActiveCasesList.reduce((sum, c) => sum + (Number(c.totalAmtPaid) || 0), 0);
+                    const totalRefundsPaid = filteredRefundsList.reduce((sum, r) => {
+                      const instList = r.installments || [];
+                      const allInstPaid = instList.length > 0 && instList.every(inst => inst.status === 'Paid');
+                      if (r.status === 'Paid' || allInstPaid) {
+                        return sum + (Number(r.amount) || 0);
+                      }
+                      if (instList.length > 0) {
+                        return sum + instList
+                          .filter(inst => inst.status === 'Paid')
+                          .reduce((s, inst) => s + (Number(inst.amount) || 0), 0);
+                      }
+                      return sum;
+                    }, 0);
+                    const netBusinessValue = totalActiveAmt - totalRefundsPaid;
+
+                    const toggleRefundExpand = (id) => {
+                      setExpandedRefundIds(prev => ({
+                        ...prev,
+                        [id] : !prev[id]
+                      }));
+                    };
+
+                    return (
+                      <>
+                        {/* Date Filter Header */}
+                        <div className="flex flex-col sm:flex-row gap-4 items-end justify-between bg-bg-secondary/50 p-4 rounded-2xl border border-border mb-4">
+                          <div className="flex flex-wrap gap-4 items-center flex-1">
+                            <div className="flex flex-wrap gap-3">
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black uppercase text-text-muted tracking-widest mb-1.5 ml-1">Start Date</label>
+                                <input
+                                  type="date"
+                                  value={reportStartDate}
+                                  onChange={(e) => {
+                                    setReportStartDate(e.target.value);
+                                    setReportPeriodFilter('All');
+                                  }}
+                                  className="border border-border/80 rounded-xl px-3 py-2 text-xs font-black text-text-primary bg-bg-card focus:border-amber-600 outline-none transition-all"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black uppercase text-text-muted tracking-widest mb-1.5 ml-1">End Date</label>
+                                <input
+                                  type="date"
+                                  value={reportEndDate}
+                                  onChange={(e) => {
+                                    setReportEndDate(e.target.value);
+                                    setReportPeriodFilter('All');
+                                  }}
+                                  className="border border-border/80 rounded-xl px-3 py-2 text-xs font-black text-text-primary bg-bg-card focus:border-amber-600 outline-none transition-all"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black uppercase text-text-muted tracking-widest mb-1.5 ml-1">Refund Status</label>
+                                <select
+                                  value={reportStatusFilter}
+                                  onChange={(e) => setReportStatusFilter(e.target.value)}
+                                  className="border border-border/80 rounded-xl px-3 py-2 text-xs font-black text-text-primary bg-bg-card focus:border-amber-600 outline-none transition-all cursor-pointer font-black"
+                                >
+                                  <option value="All">All Approved</option>
+                                  <option value="Pending">Pending Payment</option>
+                                  <option value="Paid">Paid</option>
+                                </select>
+                              </div>
+                            </div>
+                            {(reportStartDate || reportEndDate) && (
+                              <button
+                                onClick={() => {
+                                  setReportStartDate('');
+                                  setReportEndDate('');
+                                  setReportPeriodFilter('All');
+                                }}
+                                className="text-[9px] font-black uppercase tracking-widest bg-red-soft hover:bg-red/20 text-red px-3 py-2 rounded-xl transition-all self-end mb-0.5"
+                              >
+                                Clear Dates
+                              </button>
+                            )}
+                            {reportPeriodFilter && reportPeriodFilter !== 'All' && (
+                              <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl text-[10px] font-black text-amber-700 uppercase tracking-widest self-end mb-0.5">
+                                <span>Period: {reportPeriodFilter}</span>
+                                <button onClick={() => setReportPeriodFilter('All')} className="hover:bg-amber-500/20 p-0.5 rounded transition-all text-amber-900"><X size={10} /></button>
+                              </div>
+                            )}
+                            {reportStatusFilter && reportStatusFilter !== 'All' && (
+                              <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl text-[10px] font-black text-amber-700 uppercase tracking-widest self-end mb-0.5">
+                                <span>Status: {reportStatusFilter === 'Pending' ? 'Pending Payment' : 'Paid'}</span>
+                                <button onClick={() => setReportStatusFilter('All')} className="hover:bg-amber-500/20 p-0.5 rounded transition-all text-amber-900"><X size={10} /></button>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-[10px] font-black uppercase text-text-muted tracking-widest bg-bg-card px-3 py-2 rounded-xl border border-border/40">
+                            Showing <span className="text-amber-600">{new Set(filteredRefundsList.map(r => r.caseId)).size}</span> of <span className="text-text-primary">{new Set(allRefundsList.filter(r => ['Pending Payment', 'Paid'].includes(r.status)).map(r => r.caseId)).size}</span> Cases
+                          </div>
+                        </div>
+
+                        {/* Ledger Table */}
+                        <div className="overflow-x-auto rounded-2xl border border-border bg-bg-secondary/40">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-bg-secondary text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
+                                <th className="px-4 py-3.5">Case & Company</th>
+                                <th className="px-4 py-3.5">Client Details</th>
+                                <th className="px-4 py-3.5 text-right">Amount Paid</th>
+                                <th className="px-4 py-3.5 text-right">Refund Requested</th>
+                                <th className="px-4 py-3.5 text-right">Paid Refund</th>
+                                <th className="px-4 py-3.5 text-right">Left Refund</th>
+                                <th className="px-4 py-3.5 text-center">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="text-xs text-text-secondary divide-y divide-border">
+                              {filteredRefundsList.length === 0 ? (
+                                <tr>
+                                  <td colSpan="7" className="px-4 py-12 text-center text-text-muted font-bold uppercase tracking-wider">
+                                    No refund requests found matching the filter criteria
+                                  </td>
+                                </tr>
+                              ) : (
+                                filteredRefundsList.map(r => {
+                                  // Resolve case details from allCasesList (guarantees EVERY case's company name is shown, regardless of active status!)
+                                  const matchingCase = allCasesList.find(c => c.caseId === r.caseId);
+                                  const instList = r.installments || [];
+                                  const allInstPaid = instList.length > 0 && instList.every(inst => inst.status === 'Paid');
+                                  const isFullyPaid = r.status === 'Paid' || allInstPaid;
+                                  const currentRefundStatus = isFullyPaid ? 'Paid' : (r.status || 'Pending');
+
+                                  let paidAmt = 0;
+                                  if (isFullyPaid) {
+                                    paidAmt = Number(r.amount) || 0;
+                                  } else if (instList.length > 0) {
+                                    paidAmt = instList
+                                      .filter(inst => inst.status === 'Paid')
+                                      .reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0);
+                                  }
+
+                                  const refundRequested = Number(r.amount) || 0;
+                                  const leftAmt = Math.max(0, refundRequested - paidAmt);
+                                  const amtPaidByClient = Number(matchingCase?.totalAmtPaid) || 0;
+                                  const isExpanded = !!expandedRefundIds[r._id];
+
+                                  return (
+                                    <React.Fragment key={r._id}>
+                                      <tr
+                                        onClick={() => toggleRefundExpand(r._id)}
+                                        className="hover:bg-bg-input/30 transition-all border-b border-border/50 cursor-pointer"
+                                      >
+                                        <td className="px-4 py-4 font-black">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-amber-600 uppercase tracking-tighter">{r.caseId}</span>
+                                            {isExpanded ? (
+                                              <ChevronUp size={14} className="text-amber-600 shrink-0" />
+                                            ) : (
+                                              <ChevronDown size={14} className="text-text-muted shrink-0" />
+                                            )}
+                                          </div>
+                                          <div className="text-[10px] text-text-muted font-bold uppercase tracking-wider mt-0.5 max-w-[150px] truncate text-left" title={matchingCase?.companyName || '—'}>
+                                            {matchingCase?.companyName || '—'}
+                                          </div>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                          <div className="font-black text-text-primary text-sm">{r.requestedByName || matchingCase?.clientName || 'N/A'}</div>
+                                          <div className="text-[10px] text-text-muted font-bold uppercase tracking-wider">{matchingCase?.clientEmail || '—'}</div>
+                                        </td>
+                                        <td className="px-4 py-4 font-black text-text-primary text-right">
+                                          {amtPaidByClient > 0 ? `₹${amtPaidByClient.toLocaleString('en-IN')}` : '—'}
+                                        </td>
+                                        <td className="px-4 py-4 font-black text-text-primary text-right">
+                                          ₹{refundRequested.toLocaleString('en-IN')}
+                                        </td>
+                                        <td className="px-4 py-4 font-black text-green text-right">
+                                          {paidAmt > 0 ? `₹${paidAmt.toLocaleString('en-IN')}` : '—'}
+                                        </td>
+                                        <td className="px-4 py-4 font-black text-red text-right">
+                                          {leftAmt > 0 ? `₹${leftAmt.toLocaleString('en-IN')}` : '—'}
+                                        </td>
+                                        <td className="px-4 py-4 text-center" onClick={e => e.stopPropagation()}>
+                                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${currentRefundStatus === 'Paid'
+                                            ? 'bg-green-soft text-green border-green-soft'
+                                            : 'bg-yellow-soft text-yellow border-yellow-soft'
+                                            }`}>
+                                            {currentRefundStatus}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                      {isExpanded && (
+                                        <tr className="bg-bg-secondary/10">
+                                          <td colSpan="7" className="px-4 py-3">
+                                            <div className="rounded-xl border border-border bg-bg-card p-4 space-y-3 shadow-inner">
+                                              <div className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+                                                <Layers size={14} /> Installment Breakdown
+                                              </div>
+                                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                                {r.installments && r.installments.length > 0 ? (
+                                                  r.installments.map((inst, index) => (
+                                                    <div key={index} className="p-3 bg-bg-secondary/40 rounded-xl border border-border/60 flex flex-col justify-between gap-1">
+                                                      <div className="flex items-center justify-between">
+                                                        <span className="text-[10px] font-black text-text-primary uppercase">Installment #{index + 1}</span>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${inst.status === 'Paid'
+                                                          ? 'bg-green-soft text-green border-green-soft'
+                                                          : 'bg-yellow-soft text-yellow border-yellow-soft'
+                                                          }`}>
+                                                          {inst.status || 'Pending'}
+                                                        </span>
+                                                      </div>
+                                                      <div className="flex justify-between items-baseline mt-1 text-[10px]">
+                                                        <span className="text-text-muted font-bold uppercase">Amount</span>
+                                                        <span className="font-black text-text-primary">₹{(Number(inst.amount) || 0).toLocaleString('en-IN')}</span>
+                                                      </div>
+                                                      <div className="flex justify-between items-baseline text-[9px]">
+                                                        <span className="text-text-muted font-bold uppercase">Due Date</span>
+                                                        <span className="font-bold text-text-secondary">
+                                                          {inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                                                        </span>
+                                                      </div>
+                                                      <div className="flex justify-between items-baseline text-[9px]">
+                                                        <span className="text-text-muted font-bold uppercase">Paid Date</span>
+                                                        <span className="font-bold text-green">
+                                                          {inst.paymentDate ? new Date(inst.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                                                        </span>
+                                                      </div>
+                                                      {inst.transactionId && (
+                                                        <div className="flex justify-between items-baseline text-[9px] pt-1.5 border-t border-border/40 mt-1">
+                                                          <span className="text-text-muted font-bold uppercase">Bank UTR</span>
+                                                          <span className="font-black text-amber-600 select-all" title="Click to copy">{inst.transactionId}</span>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  ))
+                                                ) : (
+                                                  <div className="p-3 bg-bg-secondary/40 rounded-xl border border-border/60 flex flex-col justify-between gap-1 col-span-full">
+                                                    <div className="flex items-center justify-between">
+                                                      <span className="text-[10px] font-black text-text-primary uppercase">Single Payout</span>
+                                                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${r.status === 'Paid' || r.transactionId
+                                                        ? 'bg-green-soft text-green border-green-soft'
+                                                        : 'bg-yellow-soft text-yellow border-yellow-soft'
+                                                        }`}>
+                                                        {r.status === 'Paid' || r.transactionId ? 'Paid' : 'Pending'}
+                                                      </span>
+                                                    </div>
+                                                    <div className="flex justify-between items-baseline mt-1 text-[10px]">
+                                                      <span className="text-text-muted font-bold uppercase">Amount</span>
+                                                      <span className="font-black text-text-primary">₹{(Number(r.amount) || 0).toLocaleString('en-IN')}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-baseline text-[9px]">
+                                                      <span className="text-text-muted font-bold uppercase">Payment Date</span>
+                                                      <span className="font-bold text-green">
+                                                        {r.paymentDate ? new Date(r.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                                                      </span>
+                                                    </div>
+                                                    {r.transactionId && (
+                                                      <div className="flex justify-between items-baseline text-[9px] pt-1.5 border-t border-border/40 mt-1">
+                                                        <span className="text-text-muted font-bold uppercase">Bank UTR</span>
+                                                        <span className="font-black text-amber-600 select-all" title="Click to copy">{r.transactionId}</span>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </>
+              )}
             </div>
           </div>
         </div>

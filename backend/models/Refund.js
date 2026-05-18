@@ -26,7 +26,11 @@ const refundSchema = new mongoose.Schema({
   installments: [{
     amount: String,
     dueDate: String,
-    status: { type: String, default: 'Pending' }
+    status: { type: String, default: 'Pending' },
+    transactionId: String,
+    paymentDate: String,
+    paymentProof: String,
+    paidBy: String
   }],
   lastStatusAtMs: Number,
   timestamp: String

@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema({
   canAccessRecords: { type: Boolean, default: false },
   schemaVersion: { type: Number, default: 2 },
   bypassEodCheck: { type: Boolean, default: false },
+  sodAccessGrantedAt: { type: String, default: "" },
   lastSeen: { type: Date, default: Date.now }
 });
 

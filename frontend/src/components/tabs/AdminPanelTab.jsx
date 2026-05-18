@@ -159,9 +159,27 @@ const AdminPanelTab = () => {
   return (
     <div className="h-full bg-bg-primary p-4 md:p-8 overflow-y-auto">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-8 flex justify-between items-center">
         <h1 className="text-2xl font-black text-text-primary tracking-tight uppercase">ADMIN PANEL</h1>
-
+        <button 
+          onClick={async () => {
+            const loadToast = toast.loading('Syncing latest financial logs...');
+            try {
+              await Promise.all([
+                fetchPendingRefunds(),
+                fetchAllRefunds(),
+                fetchUsers(),
+                fetchMissedEodUsers()
+              ]);
+              toast.success('System database successfully synced!', { id: loadToast });
+            } catch (err) {
+              toast.error('Failed to sync system logs', { id: loadToast });
+            }
+          }}
+          className="bg-accent hover:bg-accent-hover text-white text-[10px] font-black py-2.5 px-6 rounded-2xl shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2"
+        >
+          <span>Sync Database</span> 🔄
+        </button>
       </div>
       {/* SECTION 2: Create New User */}
       <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-full my-8 overflow-hidden">
@@ -272,8 +290,8 @@ const AdminPanelTab = () => {
                           <button
                             onClick={() => handleToggleRecordsAccess(u._id, u.canAccessRecords)}
                             className={`px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm ${u.canAccessRecords
-                                ? 'bg-green-soft text-green border border-green-soft hover:bg-green hover:text-white'
-                                : 'bg-bg-input text-text-muted border border-border hover:border-accent hover:text-accent'
+                              ? 'bg-green-soft text-green border border-green-soft hover:bg-green hover:text-white'
+                              : 'bg-bg-input text-text-muted border border-border hover:border-accent hover:text-accent'
                               }`}
                           >
                             {u.canAccessRecords ? 'ENABLED' : 'DISABLED'}
@@ -347,12 +365,25 @@ const AdminPanelTab = () => {
                       </div>
                     </td>
                     <td className="px-4 py-5 text-center">
-                      <button
-                        onClick={() => handleGrantSodAccess(u._id)}
-                        className="bg-accent hover:bg-accent-hover text-white text-[9px] font-black py-2 px-4 rounded-xl shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all active:scale-95"
-                      >
-                        Grant Access
-                      </button>
+                      {u.bypassEodCheck ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="bg-green-soft text-green border border-green-soft text-[9px] font-black px-3 py-1.5 rounded-xl uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap">
+                            ✨ ACCESS GRANTED
+                          </span>
+                          {u.sodAccessGrantedAt && (
+                            <span className="text-[8px] text-green font-black uppercase tracking-wider opacity-85 whitespace-nowrap">
+                              {new Date(u.sodAccessGrantedAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleGrantSodAccess(u._id)}
+                          className="bg-accent hover:bg-accent-hover text-white text-[9px] font-black py-2 px-4 rounded-xl shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all active:scale-95 whitespace-nowrap"
+                        >
+                          Grant Access
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -456,7 +487,12 @@ const AdminPanelTab = () => {
               ) : (
                 allRefunds.map(r => (
                   <tr key={r._id} className="hover:bg-bg-input/30 transition-all">
-                    <td className="px-4 py-5 font-black text-accent uppercase tracking-tighter">{r.caseId}</td>
+                    <td className="px-4 py-5 font-black text-accent uppercase tracking-tighter">
+                      <div>{r.caseId}</div>
+                      {r.companyName && (
+                        <div className="text-[10px] text-text-muted font-bold tracking-normal normal-case mt-0.5">{r.companyName}</div>
+                      )}
+                    </td>
                     <td className="px-4 py-5 font-black text-green">₹{Number(r.amount).toLocaleString('en-IN')}</td>
                     <td className="px-4 py-5 font-bold uppercase text-[10px]">{r.requestedByName || r.requestedBy}</td>
                     <td className="px-4 py-5 text-center">
@@ -482,88 +518,126 @@ const AdminPanelTab = () => {
       </div>
 
       {/* Detail View Modal for Admin */}
-      <Modal isOpen={isDetailOpen} onClose={() => setIsDetailOpen(false)} title="Audit Disclosure: Refund Request">
-        {selectedRefund && (
-          <div className="p-6 flex flex-col gap-8">
+      <Modal isOpen={isDetailOpen} onClose={() => setIsDetailOpen(false)} title="Refund Request">
+        {selectedRefund && (() => {
+          const refundToRender = allRefunds.find(r => r._id === selectedRefund._id) || pendingRefunds.find(r => r._id === selectedRefund._id) || selectedRefund;
+          const totalAmount = Number(refundToRender.amount) || 0;
+          const isSinglePaidFallback = refundToRender.transactionId && (refundToRender.installments || []).length === 1;
+          const paidAmount = refundToRender.status === 'Paid' || isSinglePaidFallback
+            ? totalAmount
+            : (refundToRender.installments || []).reduce((sum, inst) => {
+                const isPaidInst = inst.status === 'Paid' || refundToRender.status === 'Paid';
+                return isPaidInst ? sum + (Number(inst.amount) || 0) : sum;
+              }, 0);
+          const leftAmount = Math.max(0, totalAmount - paidAmount);
+
+          return (
+            <div className="p-6 flex flex-col gap-8">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-bg-input p-5 rounded-3xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Case Anchor</p>
-                <p className="font-black text-accent text-sm tracking-tighter uppercase">{selectedRefund.caseId}</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Case Id</p>
+                <p className="font-black text-accent text-sm tracking-tighter uppercase">{refundToRender.caseId}</p>
+                {refundToRender.companyName && (
+                  <p className="text-[10px] text-text-muted font-bold tracking-normal normal-case mt-1">{refundToRender.companyName}</p>
+                )}
               </div>
               <div className="bg-bg-input p-5 rounded-3xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Payout Volume</p>
-                <p className="font-black text-green text-sm tracking-tight">₹{Number(selectedRefund.amount).toLocaleString('en-IN')}</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Payout amount</p>
+                <p className="font-black text-green text-sm tracking-tight">₹{Number(refundToRender.amount).toLocaleString('en-IN')}</p>
               </div>
               <div className="bg-bg-input p-5 rounded-3xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Requester</p>
-                <p className="text-text-primary font-black uppercase text-[10px] tracking-wider">{selectedRefund.requestedByName || selectedRefund.requestedBy}</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Requested by</p>
+                <p className="text-text-primary font-black uppercase text-[10px] tracking-wider">{refundToRender.requestedByName || refundToRender.requestedBy}</p>
               </div>
               <div className="bg-bg-input p-5 rounded-3xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">System Status</p>
-                <p className="font-black text-orange-400 uppercase text-[10px] tracking-widest">{selectedRefund.status}</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Status</p>
+                <p className="font-black text-orange-400 uppercase text-[10px] tracking-widest">
+                  {refundToRender.status === 'Paid' || isSinglePaidFallback ? 'Paid' : refundToRender.status}
+                </p>
               </div>
             </div>
 
             <div className="bg-bg-secondary rounded-[2rem] border-2 border-border overflow-hidden shadow-sm">
               <div className="bg-bg-card px-6 py-4 border-b border-border font-black text-text-muted text-[10px] uppercase tracking-[0.2em]">
-                Verified Beneficiary Configuration
+                Bank Details
               </div>
               <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-sm">
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Target Institution</p>
-                  <p className="font-black text-text-primary uppercase tracking-tight">{selectedRefund.bankName}</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Bank Name</p>
+                  <p className="font-black text-text-primary uppercase tracking-tight">{refundToRender.bankName}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Identified Holder</p>
-                  <p className="font-black text-text-primary uppercase tracking-tight">{selectedRefund.accHolder}</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Account holder name</p>
+                  <p className="font-black text-text-primary uppercase tracking-tight">{refundToRender.accHolder}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Ledger Number</p>
-                  <p className="font-mono font-black text-accent select-all">{selectedRefund.accNum}</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Acc Number</p>
+                  <p className="font-mono font-black text-accent select-all">{refundToRender.accNum}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Routing Code (IFSC)</p>
-                  <p className="font-mono font-black text-accent select-all">{selectedRefund.ifsc}</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">IFSC Code</p>
+                  <p className="font-mono font-black text-accent select-all">{refundToRender.ifsc}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Classification</p>
-                  <p className="text-text-secondary font-bold uppercase text-[10px]">{selectedRefund.accType}</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Account type</p>
+                  <p className="text-text-secondary font-bold uppercase text-[10px]">{refundToRender.accType}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Operational Branch</p>
-                  <p className="text-text-secondary font-bold uppercase text-[10px]">{selectedRefund.branch}</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Branch</p>
+                  <p className="text-text-secondary font-bold uppercase text-[10px]">{refundToRender.branch}</p>
                 </div>
               </div>
             </div>
 
-            {selectedRefund.installments && selectedRefund.installments.length > 0 && (
+            {refundToRender.installments && refundToRender.installments.length > 0 && (
               <div className="bg-bg-secondary rounded-[2rem] border-2 border-border overflow-hidden shadow-sm">
                 <div className="bg-bg-card px-6 py-4 border-b border-border font-black text-text-muted text-[10px] uppercase tracking-[0.2em]">
-                  Authorized Installment Structure
+                  Installment Details
                 </div>
                 <div className="p-0 overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-bg-input text-text-muted text-[9px] font-black uppercase tracking-widest border-b border-border">
-                        <th className="px-6 py-4">Milestone</th>
+                        <th className="px-6 py-4">Installment Number</th>
                         <th className="px-6 py-4">Release Date</th>
                         <th className="px-6 py-4">Credit Amount</th>
-                        <th className="px-6 py-4">Current Status</th>
+                        <th className="px-6 py-4">Payment Date</th>
+                        <th className="px-6 py-4">Bank UTR</th>
+                        <th className="px-6 py-4">Status</th>
                       </tr>
                     </thead>
                     <tbody className="text-[10px] text-text-secondary divide-y divide-border/50">
-                      {selectedRefund.installments && selectedRefund.installments.length > 0 ? (
-                        selectedRefund.installments.map((inst, i) => (
-                          <tr key={i}>
-                            <td className="px-6 py-4 font-black">Inst. #{i + 1}</td>
-                            <td className="px-6 py-4 font-bold">{inst.dueDate}</td>
-                            <td className="px-6 py-4 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
-                            <td className="px-6 py-4 font-black uppercase tracking-widest text-[9px] opacity-60">{inst.status}</td>
-                          </tr>
-                        ))
+                      {refundToRender.installments && refundToRender.installments.length > 0 ? (
+                        refundToRender.installments.map((inst, i) => {
+                          const isPaid = inst.status === 'Paid' || refundToRender.status === 'Paid' || isSinglePaidFallback;
+                          const payDate = inst.paymentDate || (isPaid ? refundToRender.paymentDate : null);
+                          const utr = inst.transactionId || (isPaid ? refundToRender.transactionId : null);
+
+                          return (
+                            <tr key={i} className="hover:bg-bg-input/20 transition-colors">
+                              <td className="px-6 py-4 font-black">Inst. #{i + 1}</td>
+                              <td className="px-6 py-4 font-bold">{inst.dueDate}</td>
+                              <td className="px-6 py-4 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
+                              <td className="px-6 py-4 font-bold text-text-secondary">
+                                {payDate ? new Date(payDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                              </td>
+                              <td className="px-6 py-4 font-mono font-black text-accent select-all">
+                                {utr || '—'}
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${isPaid
+                                  ? 'bg-green-soft text-green'
+                                  : 'bg-yellow-soft text-yellow'
+                                  }`}>
+                                  {isPaid ? 'Paid' : inst.status || 'Pending'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
-                          <td colSpan="4" className="px-6 py-8 text-center text-[10px] font-black text-text-muted uppercase tracking-widest italic">
+                          <td colSpan="6" className="px-6 py-8 text-center text-[10px] font-black text-text-muted uppercase tracking-widest italic">
                             Single installment payment structure
                           </td>
                         </tr>
@@ -571,38 +645,82 @@ const AdminPanelTab = () => {
                     </tbody>
                   </table>
                 </div>
+
+                {/* financial details ledger card */}
+                <div className="bg-bg-input px-8 py-5 border-t border-border flex flex-wrap justify-between items-center gap-6">
+                  <div className="flex gap-8">
+                    <div>
+                      <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Total Payout</p>
+                      <p className="text-sm font-black text-text-primary">₹{Number(totalAmount).toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className="border-l border-border/80 pl-6">
+                      <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Disbursed (Paid)</p>
+                      <p className="text-sm font-black text-green">₹{Number(paidAmount).toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className="border-l border-border/80 pl-6">
+                      <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Remaining (Left)</p>
+                      <p className={`text-sm font-black ${leftAmount > 0 ? 'text-accent' : 'text-text-muted'}`}>
+                        ₹{Number(leftAmount).toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${leftAmount === 0 ? 'bg-green' : 'bg-accent'}`}></span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-text-secondary">
+                      {leftAmount === 0 ? 'Fully Settled' : 'Partially Settled'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(refundToRender.status === 'Paid' || isSinglePaidFallback || refundToRender.transactionId || refundToRender.paymentDate || refundToRender.paymentProof) && (
+              <div className="bg-bg-secondary rounded-[2rem] border-2 border-border overflow-hidden shadow-sm animate-in fade-in duration-300">
+                <div className="bg-green-soft px-6 py-4 border-b border-border font-black text-green text-[10px] uppercase tracking-[0.2em] flex items-center gap-2">
+                  <span>✅ Payment Receipt</span>
+                </div>
+                <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-sm">
+                  <div>
+                    <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Date</p>
+                    <p className="font-black text-text-primary uppercase tracking-tight">
+                      {refundToRender.paymentDate ? new Date(refundToRender.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Transaction UTR</p>
+                    <p className="font-mono font-black text-accent select-all tracking-wider uppercase">{refundToRender.transactionId || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Paid By</p>
+                    <p className="text-text-primary font-black uppercase text-[10px] tracking-wider">{refundToRender.paidBy || '—'}</p>
+                  </div>
+                  {refundToRender.paymentProof && (
+                    <div className="md:col-span-2 lg:col-span-3 border-t border-border/50 pt-6">
+                      <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3">Verification Document</p>
+                      <a
+                        href={refundToRender.paymentProof}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-bg-input hover:bg-bg-card-hover border-2 border-border rounded-xl text-[10px] font-black uppercase tracking-widest text-text-secondary transition-all"
+                      >
+                        📄 View Uploaded Screenshot / Proof
+                      </a>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             <div className="bg-bg-input p-6 rounded-[2.5rem] border border-border shadow-inner">
-              <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3 ml-2">Disclosure Narrative / Justification</p>
+              <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3 ml-2">Summary</p>
               <p className="text-sm text-text-secondary leading-relaxed italic border-l-4 border-accent pl-5">
-                "{selectedRefund.summary}"
+                "{refundToRender.summary}"
               </p>
             </div>
 
-            <div className="flex gap-4 justify-end mt-4">
-              <button
-                className="bg-bg-input hover:bg-bg-card-hover text-text-secondary font-black py-4 px-10 rounded-2xl border-2 border-border transition-all text-xs uppercase tracking-widest active:scale-95"
-                onClick={() => setIsDetailOpen(false)}
-              >
-                Close Audit
-              </button>
-              <button
-                className="bg-red hover:bg-red-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl shadow-red-900/20 transition-all text-xs uppercase tracking-widest active:scale-95"
-                onClick={() => { setIsDetailOpen(false); handleRejectRefund(selectedRefund._id); }}
-              >
-                Deny Disbursement
-              </button>
-              <button
-                className="bg-green hover:bg-green-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl shadow-green-900/20 transition-all text-xs uppercase tracking-widest active:scale-95"
-                onClick={() => { setIsDetailOpen(false); handleApproveRefund(selectedRefund._id); }}
-              >
-                Authorize Payout
-              </button>
-            </div>
+
           </div>
-        )}
+        )})()}
       </Modal>
     </div>
   );

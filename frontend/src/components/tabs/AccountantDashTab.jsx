@@ -11,6 +11,8 @@ const AccountantDashTab = () => {
   const [isModalOpen, setModalOpen] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState(null);
   const [paymentData, setPaymentData] = useState({ transactionId: '', paymentDate: '', paymentProof: '' });
+  const [selectedInstIndex, setSelectedInstIndex] = useState(null);
+  const [instPaymentData, setInstPaymentData] = useState({ transactionId: '', paymentDate: '', paymentProof: '' });
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [lastUTR, setLastUTR] = useState('');
   const { user } = useContext(AuthContext);
@@ -28,22 +30,72 @@ const AccountantDashTab = () => {
     fetchRefunds();
   }, []);
 
-  const handleMarkPaid = async () => {
-    if (!paymentData.transactionId || !paymentData.paymentDate || !paymentData.paymentProof) {
+  const handlePayInstallment = async () => {
+    if (!instPaymentData.transactionId || !instPaymentData.paymentDate || !instPaymentData.paymentProof) {
       return toast.error('Please fill all details and upload payment proof');
     }
     try {
-      await api.put(`/refunds/${selectedRefund._id}`, {
-        status: 'Paid',
-        transactionId: paymentData.transactionId,
-        paymentDate: paymentData.paymentDate,
-        paymentProof: paymentData.paymentProof,
-        paidBy: user.email
+      const updatedInstallments = (selectedRefund.installments || []).map((inst, idx) => {
+        if (idx === selectedInstIndex) {
+          return {
+            ...inst,
+            status: 'Paid',
+            transactionId: instPaymentData.transactionId,
+            paymentDate: instPaymentData.paymentDate,
+            paymentProof: instPaymentData.paymentProof,
+            paidBy: user.email
+          };
+        }
+        return inst;
       });
-      setLastUTR(paymentData.transactionId);
+
+      const allPaid = updatedInstallments.every(inst => inst.status === 'Paid');
+
+      await api.put(`/refunds/${selectedRefund._id}`, {
+        status: allPaid ? 'Paid' : 'Pending Payment',
+        transactionId: instPaymentData.transactionId,
+        paymentDate: instPaymentData.paymentDate,
+        paymentProof: instPaymentData.paymentProof,
+        paidBy: user.email,
+        installments: updatedInstallments
+      });
+
+      setLastUTR(instPaymentData.transactionId);
       setModalOpen(false);
       setIsSuccessModalOpen(true);
-      setPaymentData({ transactionId: '', paymentDate: '', paymentProof: '' });
+      setInstPaymentData({ transactionId: '', paymentDate: '', paymentProof: '' });
+      setSelectedInstIndex(null);
+      fetchRefunds();
+    } catch (err) {
+      toast.error('Failed to process installment payment');
+    }
+  };
+
+  const handleMarkPaid = async () => {
+    if (!instPaymentData.transactionId || !instPaymentData.paymentDate || !instPaymentData.paymentProof) {
+      return toast.error('Please fill all details and upload payment proof');
+    }
+    try {
+      const updatedInstallments = (selectedRefund.installments || []).map(inst => ({
+        ...inst,
+        status: 'Paid',
+        transactionId: instPaymentData.transactionId,
+        paymentDate: instPaymentData.paymentDate,
+        paymentProof: instPaymentData.paymentProof,
+        paidBy: user.email
+      }));
+      await api.put(`/refunds/${selectedRefund._id}`, {
+        status: 'Paid',
+        transactionId: instPaymentData.transactionId,
+        paymentDate: instPaymentData.paymentDate,
+        paymentProof: instPaymentData.paymentProof,
+        paidBy: user.email,
+        installments: updatedInstallments
+      });
+      setLastUTR(instPaymentData.transactionId);
+      setModalOpen(false);
+      setIsSuccessModalOpen(true);
+      setInstPaymentData({ transactionId: '', paymentDate: '', paymentProof: '' });
       fetchRefunds();
     } catch (err) {
       toast.error('Failed to mark as paid');
@@ -64,21 +116,20 @@ const AccountantDashTab = () => {
           <h3 className="text-sm font-black text-text-primary uppercase tracking-widest">Payments </h3>
         </div>
         <div className="table-wrap overflow-x-auto scrollbar-thin">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                 <th className="px-4 py-5">Case ID</th>
-                <th className="px-4 py-5">Beneficiary Details</th>
+                <th className="px-4 py-5">Bank Details</th>
                 <th className="px-4 py-5">Payout Amount</th>
                 <th className="px-4 py-5">Audit History</th>
-                <th className="px-4 py-5">Final Execution</th>
-                <th className="px-4 py-5">Verification Doc</th>
+                <th className="px-4 py-5 text-right">Final Execution</th>
               </tr>
             </thead>
             <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
               {refunds.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-4 py-24 text-center">
+                  <td colSpan="5" className="px-4 py-24 text-center">
                     <div className="flex flex-col items-center gap-4 opacity-30">
                       <div className="p-6 bg-bg-input rounded-full">
                         <CheckCircle size={48} className="text-text-muted" />
@@ -89,10 +140,15 @@ const AccountantDashTab = () => {
                 </tr>
               ) : refunds.map(r => (
                 <tr key={r._id} className="hover:bg-bg-input/30 transition-all group">
-                  <td className="px-4 py-5 align-top">
+                  <td className="px-4 py-5 align-top flex flex-col items-start gap-2">
                     <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border border-accent-soft">
                       {r.caseId}
                     </span>
+                    {r.companyName && (
+                      <div className="text-[10px] text-text-secondary font-black tracking-wide uppercase bg-bg-input/60 px-2.5 py-1 rounded-xl border border-border inline-block shadow-sm">
+                        🏢 {r.companyName}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-5 align-top">
                     <div className="font-black text-text-primary mb-1 uppercase text-xs tracking-tight">{r.bankName}</div>
@@ -102,47 +158,28 @@ const AccountantDashTab = () => {
                   </td>
                   <td className="px-4 py-5 align-top">
                     <div className="text-lg font-black text-green tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</div>
+                    <div className="text-[9px] font-black uppercase text-accent mt-2 tracking-wider">
+                      {r.installments && r.installments.length > 0
+                        ? `${r.installments.filter(i => i.status === 'Paid').length} of ${r.installments.length} PAID`
+                        : 'Single Payout'}
+                    </div>
                   </td>
                   <td className="px-4 py-5 align-top">
                     <div className="text-text-primary font-bold mb-1">Req: <span className="text-text-secondary font-medium">{r.requestedByName || r.requestedBy}</span></div>
                     <div className="text-text-primary font-bold mb-2">Appr: <span className="text-text-secondary font-medium">{r.approvedBy}</span></div>
                     <div className="text-[10px] text-text-muted leading-relaxed italic border-l-2 border-border pl-3">"{r.summary}"</div>
                   </td>
-                  <td className="px-4 py-5 align-top">
+                  <td className="px-4 py-5 align-top text-right">
                     <button
-                      className={`font-black py-2.5 px-6 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-sm active:scale-95 whitespace-nowrap ${paymentData.paymentProof ? 'bg-green text-white shadow-lg shadow-green-900/20' : 'bg-bg-input text-text-muted/40 cursor-not-allowed border border-border'}`}
+                      className="bg-accent hover:bg-accent-hover text-white font-black py-2.5 px-6 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-md shadow-orange-950/20 active:scale-95 whitespace-nowrap"
                       onClick={() => {
-                        if (!paymentData.paymentProof) return toast.error('Please upload proof first');
                         setSelectedRefund(r);
+                        setSelectedInstIndex(null);
                         setModalOpen(true);
                       }}
                     >
-                      Process Payment
+                      Manage Payouts 💰
                     </button>
-                  </td>
-                  <td className="px-4 py-5 align-top">
-                    <div className="flex flex-col items-center gap-3">
-                      {paymentData.paymentProof ? (
-                        <div className="flex flex-col items-center gap-2 animate-in zoom-in-95">
-                          <div className="p-3 bg-green-soft rounded-2xl text-green border border-green-soft shadow-sm">
-                            <CheckCircle size={24} />
-                          </div>
-                          <button
-                            onClick={() => setPaymentData({ ...paymentData, paymentProof: '' })}
-                            className="text-[9px] text-red font-black uppercase tracking-[0.2em] hover:underline"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="w-full min-w-[140px]">
-                          <FileUpload
-                            onUploadSuccess={(url) => setPaymentData({ ...paymentData, paymentProof: url })}
-                            label="Attach Screenshot"
-                          />
-                        </div>
-                      )}
-                    </div>
                   </td>
                 </tr>
               ))}
@@ -151,57 +188,188 @@ const AccountantDashTab = () => {
         </div>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title="Execution Details">
+      <Modal isOpen={isModalOpen} onClose={() => { setModalOpen(false); setSelectedInstIndex(null); }} title="Payout Details">
         <div className="p-4 flex flex-col gap-6">
-          {selectedRefund && selectedRefund.installments && selectedRefund.installments.length > 0 && (
-            <div className="bg-bg-secondary rounded-2xl border-2 border-border overflow-hidden mb-2">
-              <div className="p-4 border-b border-border bg-bg-card font-black text-text-muted text-[9px] uppercase tracking-widest">
-                Authorized Payout Schedule
+          {selectedRefund && (
+            <>
+              <div className="bg-bg-input p-5 rounded-3xl border border-border shadow-sm flex flex-col gap-1 mb-2">
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest">Target Case ID</p>
+                <p className="font-black text-accent text-sm tracking-tighter uppercase mb-1">{selectedRefund.caseId}</p>
+                {selectedRefund.companyName && (
+                  <div className="text-[10px] text-text-secondary font-black tracking-wide uppercase bg-bg-card px-2.5 py-1 rounded-xl border border-border inline-block self-start shadow-sm mt-1">
+                    🏢 {selectedRefund.companyName}
+                  </div>
+                )}
               </div>
-              <div className="p-0">
-                <table className="w-full text-left border-collapse">
-                  <tbody className="text-[10px] text-text-secondary divide-y divide-border/50">
-                    {selectedRefund.installments.map((inst, i) => (
-                      <tr key={i}>
-                        <td className="px-4 py-3 font-black text-accent uppercase tracking-tighter">Inst. #{i + 1}</td>
-                        <td className="px-4 py-3 font-bold">{inst.dueDate}</td>
-                        <td className="px-4 py-3 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+              {selectedInstIndex === null ? (
+                <div className="flex flex-col gap-6 animate-in fade-in duration-200">
+                  <div className="bg-bg-secondary rounded-2xl border-2 border-border overflow-hidden">
+                    <div className="p-4 border-b border-border bg-bg-card font-black text-text-muted text-[9px] uppercase tracking-widest">
+                      Authorized Payout Schedule
+                    </div>
+                    <div className="p-0">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-bg-input text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
+                            <th className="px-4 py-3">Milestone</th>
+                            <th className="px-4 py-3">Due Date</th>
+                            <th className="px-4 py-3">Amount</th>
+                            <th className="px-4 py-3 text-center">Status</th>
+                            <th className="px-4 py-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-[10px] text-text-secondary divide-y divide-border/50">
+                          {selectedRefund.installments && selectedRefund.installments.length > 0 ? (
+                            selectedRefund.installments.map((inst, i) => (
+                              <tr key={i} className="hover:bg-bg-input/20 transition-colors">
+                                <td className="px-4 py-3 font-black text-accent uppercase tracking-tighter">Inst. #{i + 1}</td>
+                                <td className="px-4 py-3 font-bold">{inst.dueDate}</td>
+                                <td className="px-4 py-3 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${inst.status === 'Paid' ? 'bg-green-soft text-green' : 'bg-yellow-soft text-yellow'
+                                    }`}>
+                                    {inst.status || 'Pending'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {inst.status === 'Paid' ? (
+                                    <span className="text-[9px] font-bold text-text-muted">Settled ✅</span>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        setSelectedInstIndex(i);
+                                        setInstPaymentData({ transactionId: '', paymentDate: new Date().toISOString().split('T')[0], paymentProof: '' });
+                                      }}
+                                      className="bg-accent hover:bg-accent-hover text-white text-[8px] font-black py-1 px-3 rounded-lg shadow-sm uppercase tracking-widest transition-all active:scale-95"
+                                    >
+                                      Pay
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr className="hover:bg-bg-input/20 transition-colors">
+                              <td className="px-4 py-4 font-black text-accent uppercase tracking-tighter">Single Payout</td>
+                              <td className="px-4 py-4 font-bold">{selectedRefund.paymentDate || selectedRefund.timestamp ? new Date(selectedRefund.paymentDate || selectedRefund.timestamp).toLocaleDateString('en-IN') : '—'}</td>
+                              <td className="px-4 py-4 font-black text-green">₹{Number(selectedRefund.amount).toLocaleString('en-IN')}</td>
+                              <td className="px-4 py-4 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${selectedRefund.status === 'Paid' ? 'bg-green-soft text-green' : 'bg-yellow-soft text-yellow'
+                                  }`}>
+                                  {selectedRefund.status || 'Pending'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 text-right">
+                                {selectedRefund.status === 'Paid' ? (
+                                  <span className="text-[9px] font-bold text-text-muted">Settled ✅</span>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedInstIndex(-1);
+                                      setInstPaymentData({ transactionId: '', paymentDate: new Date().toISOString().split('T')[0], paymentProof: '' });
+                                    }}
+                                    className="bg-accent hover:bg-accent-hover text-white text-[8px] font-black py-1 px-3 rounded-lg shadow-sm uppercase tracking-widest transition-all active:scale-95"
+                                  >
+                                    Pay Payout
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <button className="flex-1 bg-bg-input hover:bg-bg-card-hover text-text-secondary border-2 border-border font-black py-3.5 rounded-2xl transition-all text-xs uppercase tracking-widest active:scale-95" onClick={() => setModalOpen(false)}>
+                      Close Schedule
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Installment Payout Form */
+                <div className="flex flex-col gap-6 animate-in zoom-in-95 duration-200">
+                  <div className="bg-bg-input p-4 rounded-2xl border border-border/80 flex justify-between items-center">
+                    <div>
+                      <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-0.5">Settle Target</p>
+                      <h4 className="text-sm font-black text-text-primary uppercase tracking-tight">
+                        {selectedInstIndex === -1 ? 'Single Payout' : `Installment #${selectedInstIndex + 1}`}
+                      </h4>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-0.5">Amount</p>
+                      <h4 className="text-sm font-black text-green tracking-tight">
+                        ₹{Number(selectedInstIndex === -1 ? selectedRefund.amount : selectedRefund.installments[selectedInstIndex].amount).toLocaleString('en-IN')}
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-3 ml-1">Bank UTR / Transaction Hash</label>
+                    <input
+                      type="text"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm text-text-primary focus:border-accent outline-none font-bold placeholder:text-text-muted/30"
+                      placeholder="Ex: 123456789012"
+                      value={instPaymentData.transactionId}
+                      onChange={e => setInstPaymentData({ ...instPaymentData, transactionId: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-3 ml-1">Payment Date</label>
+                    <input
+                      type="date"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm text-text-primary focus:border-accent outline-none font-bold"
+                      value={instPaymentData.paymentDate}
+                      onChange={e => setInstPaymentData({ ...instPaymentData, paymentDate: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-3 ml-1">Attach Payment Screenshot / Proof</label>
+                    <div className="p-1.5 bg-bg-input border-2 border-border rounded-2xl">
+                      {instPaymentData.paymentProof ? (
+                        <div className="flex justify-between items-center p-3.5 bg-green-soft text-green rounded-xl border border-green-soft animate-in zoom-in-95">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle size={16} />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Screenshot Attached</span>
+                          </div>
+                          <button
+                            onClick={() => setInstPaymentData({ ...instPaymentData, paymentProof: '' })}
+                            className="text-[9px] text-red font-black uppercase tracking-widest hover:underline"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <FileUpload
+                          onUploadSuccess={(url) => setInstPaymentData({ ...instPaymentData, paymentProof: url })}
+                          label="Attach Screenshot"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 mt-2">
+                    <button
+                      className="flex-1 bg-green hover:bg-green-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-green-900/20 transition-all text-xs uppercase tracking-widest active:scale-95"
+                      onClick={selectedInstIndex === -1 ? handleMarkPaid : handlePayInstallment}
+                    >
+                      Submit Payment✅
+                    </button>
+                    <button
+                      className="flex-1 bg-bg-input hover:bg-bg-card-hover text-text-secondary border-2 border-border font-black py-4 rounded-2xl transition-all text-xs uppercase tracking-widest active:scale-95"
+                      onClick={() => { setSelectedInstIndex(null); setInstPaymentData({ transactionId: '', paymentDate: '', paymentProof: '' }); }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
-          <div>
-            <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-3 ml-1">Bank UTR / Transaction Hash</label>
-            <input
-              type="text"
-              className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm text-text-primary focus:border-accent outline-none font-bold placeholder:text-text-muted/30"
-              placeholder="Ex: 123456789012"
-              value={paymentData.transactionId}
-              onChange={e => setPaymentData({ ...paymentData, transactionId: e.target.value })}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-3 ml-1">Dispatch Date</label>
-            <input
-              type="date"
-              className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm text-text-primary focus:border-accent outline-none font-bold"
-              value={paymentData.paymentDate}
-              onChange={e => setPaymentData({ ...paymentData, paymentDate: e.target.value })}
-              required
-            />
-          </div>
-          <div className="flex gap-4 mt-4">
-            <button className="flex-1 bg-green hover:bg-green-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-green-900/20 transition-all text-xs uppercase tracking-widest active:scale-95" onClick={handleMarkPaid}>
-              Confirm Settlement
-            </button>
-            <button className="flex-1 bg-bg-input hover:bg-bg-card-hover text-text-secondary border-2 border-border font-black py-4 rounded-2xl transition-all text-xs uppercase tracking-widest active:scale-95" onClick={() => setModalOpen(false)}>
-              Cancel
-            </button>
-          </div>
         </div>
       </Modal>
 

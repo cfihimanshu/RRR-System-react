@@ -326,8 +326,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const dayAfterTomorrowStr = dayAfterTomorrowObj.toISOString().split('T')[0];
 
     const refundQuery = {
-      ...(req.user.role !== 'Admin' ? { requestedBy: req.user.email } : {}),
-      status: 'Approved'
+      ...((req.user.role !== 'Admin' && req.user.role !== 'Accountant') ? { requestedBy: req.user.email } : {}),
+      status: { $in: ['Pending Payment', 'Paid'] }
     };
 
     const targetUserStr = String(userFilter || userName || '');
@@ -358,7 +358,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
                 _id: null, 
                 totalCases: { $sum: 1 },
                 totalAmountPaid: { $sum: { $ifNull: ['$totalAmtPaid', 0] } },
-                openCases: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, 1, 0] } },
+                openCases: { $sum: { $cond: [{ $and: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, 1, 0] } },
+                openCasesAmount: { $sum: { $cond: [{ $and: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
                 settledCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement']] }, 1, 0] } },
                 settledAmount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement']] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
                 closedCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed']] }, 1, 0] } },
@@ -462,7 +463,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       ]),
       (async () => {
         const [refundsPaid, allRefunds, pendingApprovalsResult] = await Promise.all([
-          Refund.find({ ...(req.user.role !== 'Admin' ? { requestedBy: req.user.email } : {}), status: 'Paid' }).lean(),
+          Refund.find({ ...((req.user.role !== 'Admin' && req.user.role !== 'Accountant') ? { requestedBy: req.user.email } : {}), status: 'Paid' }).lean(),
           Refund.find(refundQuery).lean(),
           Refund.aggregate([
             { $match: { status: 'Pending Admin Approval' } },
@@ -531,6 +532,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const totalCases = b.totalCases || 0;
     const totalAmountPaid = b.totalAmountPaid || 0;
     const openCases = b.openCases || 0;
+    const openCasesAmount = b.openCasesAmount || 0;
     const settledCases = b.settledCount || 0;
     const settledAmount = b.settledAmount || 0;
     const closedCases = b.closedCount || 0;
@@ -610,7 +612,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
       myPerformance.casesResolved = await Case.countDocuments({
         ...ownershipQuery,
-        currentStatus: { $in: completedStatuses },
+        currentStatus: { $in: ['Settled', 'settled', 'Settlement', 'settlement'] },
         updatedAt: perfDateRange
       });
 
@@ -626,7 +628,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       });
       myPerformance.casesResolved = await Case.countDocuments({
         ...ownershipQuery,
-        currentStatus: { $in: completedStatuses }
+        currentStatus: { $in: ['Settled', 'settled', 'Settlement', 'settlement'] }
       });
       myPerformance.naCases = await Case.countDocuments({
         ...ownershipQuery,
@@ -677,28 +679,97 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       slaBreached: b.slaBreached || 0
     };
 
-    const provisions = { today: { count: 0, amount: 0 }, thisWeek: { count: 0, amount: 0 }, thisMonth: { count: 0, amount: 0 }, next6Months: { count: 0, amount: 0 } };
+    const provisions = { 
+      today: { count: 0, amount: 0 }, 
+      thisWeek: { count: 0, amount: 0 }, 
+      thisMonth: { count: 0, amount: 0 }, 
+      next6Months: { count: 0, amount: 0 } 
+    };
+
     const nowForRefunds = new Date();
-    const startOfTodayForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth(), nowForRefunds.getDate());
+    
+    // Today Boundaries
+    const startOfTodayForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth(), nowForRefunds.getDate(), 0, 0, 0, 0);
     const endOfTodayForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth(), nowForRefunds.getDate(), 23, 59, 59, 999);
-    const endOfThisWeekForRefunds = new Date(startOfTodayForRefunds);
-    endOfThisWeekForRefunds.setDate(endOfThisWeekForRefunds.getDate() + 7);
+
+    // This Week Boundaries (Monday to Sunday of the current week)
+    const startOfThisWeekForRefunds = new Date(startOfTodayForRefunds);
+    const dayVal = startOfThisWeekForRefunds.getDay();
+    const diffVal = startOfThisWeekForRefunds.getDate() - dayVal + (dayVal === 0 ? -6 : 1);
+    startOfThisWeekForRefunds.setDate(diffVal);
+    startOfThisWeekForRefunds.setHours(0, 0, 0, 0);
+    
+    const endOfThisWeekForRefunds = new Date(startOfThisWeekForRefunds);
+    endOfThisWeekForRefunds.setDate(endOfThisWeekForRefunds.getDate() + 6);
+    endOfThisWeekForRefunds.setHours(23, 59, 59, 999);
+
+    // This Month Boundaries
+    const startOfThisMonthForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth(), 1, 0, 0, 0, 0);
     const endOfThisMonthForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth() + 1, 0, 23, 59, 59, 999);
-    const endOf6MonthsForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth() + 6, nowForRefunds.getDate(), 23, 59, 59, 999);
+
+    // Next 6 Months Boundary (Today inclusive, up to 6 months from now)
+    const endOfNext6MonthsForRefunds = new Date(nowForRefunds);
+    endOfNext6MonthsForRefunds.setMonth(endOfNext6MonthsForRefunds.getMonth() + 6);
+    endOfNext6MonthsForRefunds.setHours(23, 59, 59, 999);
+
+    // Sets to count UNIQUE cases per period
+    const caseSets = {
+      today: new Set(),
+      thisWeek: new Set(),
+      thisMonth: new Set(),
+      next6Months: new Set()
+    };
 
     allRefunds.forEach(r => {
-      const installments = r.installments && r.installments.length > 0 ? r.installments : [{ status: 'Pending', dueDate: r.paymentDate || r.timestamp, amount: r.amount }];
+      if (r.status === 'Rejected') return;
+
+      const installments = r.installments && r.installments.length > 0 
+        ? r.installments 
+        : [{ status: r.status, dueDate: r.paymentDate || r.timestamp, amount: r.amount, paymentDate: r.paymentDate, transactionId: r.transactionId }];
+
       installments.forEach(inst => {
-        if (inst.status === 'Pending' && inst.dueDate) {
-          const dueDate = new Date(inst.dueDate);
-          const amt = Number(inst.amount) || 0;
-          if (dueDate >= startOfTodayForRefunds && dueDate <= endOfTodayForRefunds) { provisions.today.count++; provisions.today.amount += amt; }
-          if (dueDate >= startOfTodayForRefunds && dueDate <= endOfThisWeekForRefunds) { provisions.thisWeek.count++; provisions.thisWeek.amount += amt; }
-          if (dueDate >= startOfTodayForRefunds && dueDate <= endOfThisMonthForRefunds) { provisions.thisMonth.count++; provisions.thisMonth.amount += amt; }
-          if (dueDate >= startOfTodayForRefunds && dueDate <= endOf6MonthsForRefunds) { provisions.next6Months.count++; provisions.next6Months.amount += amt; }
+        const amt = Number(inst.amount) || 0;
+        
+        let refDate = null;
+        if (inst.status === 'Paid' && inst.paymentDate) {
+          refDate = new Date(inst.paymentDate);
+        } else if (inst.dueDate) {
+          refDate = new Date(inst.dueDate);
+        } else {
+          refDate = new Date(r.timestamp || r.paymentDate || new Date());
+        }
+
+        // Today
+        if (refDate >= startOfTodayForRefunds && refDate <= endOfTodayForRefunds) {
+          caseSets.today.add(r.caseId);
+          provisions.today.amount += amt;
+        }
+
+        // This Week
+        if (refDate >= startOfThisWeekForRefunds && refDate <= endOfThisWeekForRefunds) {
+          caseSets.thisWeek.add(r.caseId);
+          provisions.thisWeek.amount += amt;
+        }
+
+        // This Month
+        if (refDate >= startOfThisMonthForRefunds && refDate <= endOfThisMonthForRefunds) {
+          caseSets.thisMonth.add(r.caseId);
+          provisions.thisMonth.amount += amt;
+        }
+
+        // Next 6 Months
+        if (refDate >= startOfTodayForRefunds && refDate <= endOfNext6MonthsForRefunds) {
+          caseSets.next6Months.add(r.caseId);
+          provisions.next6Months.amount += amt;
         }
       });
     });
+
+    // Set count to size of unique case sets
+    provisions.today.count = caseSets.today.size;
+    provisions.thisWeek.count = caseSets.thisWeek.size;
+    provisions.thisMonth.count = caseSets.thisMonth.size;
+    provisions.next6Months.count = caseSets.next6Months.size;
 
     // Collection Potential and Total Demand/Saved
     let commQuery = {};
@@ -1036,6 +1107,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         threatTrendTypes: sortedTypes,
         totalCases,
         openCases,
+        openCasesAmount,
         settledCases,
         settledAmount,
         closedCases,
@@ -1095,6 +1167,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         threatTrendTypes: sortedTypes,
         totalCases,
         openCases,
+        openCasesAmount,
         settledCases,
         settledAmount,
         closedCases,

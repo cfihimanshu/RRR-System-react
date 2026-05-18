@@ -55,7 +55,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
     const fetchCount = async () => {
       try {
         const res = await api.get('/cases');
-        setCaseCount(res.data.length);
+        setCaseCount(res.data.total !== undefined ? res.data.total : (Array.isArray(res.data) ? res.data.length : 0));
       } catch (err) {
         console.error("Failed to fetch cases count", err);
       }

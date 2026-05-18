@@ -1,5 +1,5 @@
 export const TAB_ACCESS = {
-  "dashboard":            ["Admin", "Operations", "Staff", "Reviewer", "Accountant"],
+  "dashboard":            ["Admin", "Operations", "Staff", "Accountant"],
   "new-case":             ["Admin", "Operations", "Staff"],
   "case-master":          ["Admin", "Operations"],
   "history":              ["Admin", "Operations", "Staff"],

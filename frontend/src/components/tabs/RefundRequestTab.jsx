@@ -160,15 +160,15 @@ const RefundRequestTab = () => {
           </div>
           <div className="flex flex-col gap-3">
             <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">IFSC Code</label>
-            <input type="text" name="ifsc" required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-[0.2em] placeholder:text-text-muted" placeholder="HDFC0001234" />
+            <input type="text" name="ifsc" required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-[0.2em] placeholder:text-text-muted" placeholder="" />
           </div>
           <div className="flex flex-col gap-3">
             <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Number</label>
-            <input type="text" name="accNum" required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner tracking-[0.1em] placeholder:text-text-muted" placeholder="0000 0000 0000" />
+            <input type="text" name="accNum" required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner tracking-[0.1em] placeholder:text-text-muted" placeholder="" />
           </div>
           <div className="flex flex-col gap-3">
             <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Branch Location</label>
-            <input type="text" name="branch" required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="CITY CENTER" />
+            <input type="text" name="branch" required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-gray text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="CITY" />
           </div>
           <div className="flex flex-col gap-3">
             <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Type</label>

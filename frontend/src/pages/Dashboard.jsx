@@ -46,7 +46,7 @@ const Dashboard = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const { logout } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
 
   useEffect(() => {
     // Auto-heartbeat every 5 minutes to update lastSeen
@@ -78,7 +78,11 @@ const Dashboard = () => {
         <div className={`flex-1 overflow-auto transition-all duration-300 ease-in-out`}>
           <div className="main h-full p-0 flex flex-col">
           <Routes>
-            <Route path="/" element={<DashboardTab />} />
+            <Route path="/" element={
+              user?.role === 'Reviewer' 
+                ? <Navigate to="/reviewer-panel" replace /> 
+                : <DashboardTab />
+            } />
             
             <Route path="/new-case" element={
               <ProtectedRoute id="new-case"><NewCaseTab /></ProtectedRoute>

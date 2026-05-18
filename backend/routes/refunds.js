@@ -1,5 +1,6 @@
 const express = require('express');
 const Refund = require('../models/Refund');
+const Case = require('../models/Case');
 const AuditLog = require('../models/AuditLog');
 const Timeline = require('../models/Timeline');
 const User = require('../models/User');
@@ -21,7 +22,22 @@ router.get('/', verifyToken, async (req, res) => {
     }
 
     const docs = await Refund.find(query).sort({ timestamp: -1 });
-    res.json(docs);
+    
+    // Fetch and map company names from matching Case documents
+    const caseIds = docs.map(d => d.caseId).filter(Boolean);
+    const matchingCases = await Case.find({ caseId: { $in: caseIds } }, 'caseId companyName');
+    const caseMap = {};
+    matchingCases.forEach(c => {
+      caseMap[c.caseId] = c.companyName;
+    });
+
+    const populatedDocs = docs.map(doc => {
+      const docObj = doc.toObject();
+      docObj.companyName = caseMap[doc.caseId] || '';
+      return docObj;
+    });
+
+    res.json(populatedDocs);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -69,6 +85,14 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
     await doc.save();
     console.log("Refund Saved Successfully:", doc._id);
 
+    // Sync Case refundStatus to 'Pending' in MongoDB on creation of refund request
+    try {
+      await Case.findOneAndUpdate({ caseId: doc.caseId }, { refundStatus: 'Pending' });
+      console.log(`Synced Case ${doc.caseId} refundStatus to Pending upon creation`);
+    } catch (e) {
+      console.error('Failed to sync case refundStatus on creation:', e);
+    }
+
     // Notify Reviewers and Admins
     try {
       const staffToNotify = ['Reviewer', 'Admin'];
@@ -102,7 +126,10 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       summary: `Submitted refund request for ₹${doc.amount}`
     }).save();
 
-    res.status(201).json(doc);
+    const matchingCase = await Case.findOne({ caseId: doc.caseId }, 'companyName');
+    const docObj = doc.toObject();
+    docObj.companyName = matchingCase ? matchingCase.companyName : '';
+    res.status(201).json(docObj);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -118,11 +145,44 @@ router.put('/:id', verifyToken, async (req, res) => {
     // Workflow Security: You can add role-based enforcement here if needed.
     // For now, we trust the explicit status from the authorized consoles.
 
-    const doc = await Refund.findByIdAndUpdate(req.params.id, {
-      ...req.body,
-      status: newStatus,
-      lastStatusAtMs: Date.now()
-    }, { returnDocument: 'after' });
+    Object.assign(currentRefund, req.body);
+    if (newStatus) {
+      currentRefund.status = newStatus;
+    }
+    currentRefund.lastStatusAtMs = Date.now();
+    const doc = await currentRefund.save();
+
+    // Dynamically sync refundStatus to the Case document in MongoDB!
+    try {
+      const caseDoc = await Case.findOne({ caseId: doc.caseId });
+      if (caseDoc) {
+        let mappedRefundStatus = 'Pending';
+        if (doc.status === 'Paid') {
+          mappedRefundStatus = 'Paid';
+        } else if (doc.status === 'Rejected') {
+          mappedRefundStatus = '';
+        } else {
+          // If there are installments, check if all are paid
+          if (doc.installments && doc.installments.length > 0) {
+            const allPaid = doc.installments.every(inst => inst.status === 'Paid');
+            if (allPaid) {
+              mappedRefundStatus = 'Paid';
+            }
+          } else {
+            // Single payment payout check: if they supplied transaction UTR and payment date
+            if (doc.transactionId && doc.paymentDate) {
+              mappedRefundStatus = 'Paid';
+            }
+          }
+        }
+
+        caseDoc.refundStatus = mappedRefundStatus;
+        await caseDoc.save();
+        console.log(`Synced Case ${doc.caseId} refundStatus to: ${mappedRefundStatus}`);
+      }
+    } catch (caseErr) {
+      console.error(`Failed to sync refundStatus to Case: ${caseErr.message}`);
+    }
 
     // Workflow Notifications
     try {
@@ -166,7 +226,10 @@ router.put('/:id', verifyToken, async (req, res) => {
       summary: `Refund status updated to ${doc.status}`
     }).save();
 
-    res.json(doc);
+    const matchingCase = await Case.findOne({ caseId: doc.caseId }, 'companyName');
+    const docObj = doc.toObject();
+    docObj.companyName = matchingCase ? matchingCase.companyName : '';
+    res.json(docObj);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

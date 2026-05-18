@@ -4,6 +4,7 @@ const Report = require('../models/Report');
 const Task = require('../models/Task');
 const Case = require('../models/Case');
 const { verifyToken } = require('../middleware/auth');
+const User = require('../models/User');
 
 // Get all reports or user-specific reports
 router.get('/', verifyToken, async (req, res) => {
@@ -146,8 +147,10 @@ router.post('/', verifyToken, async (req, res) => {
 
     // Reset bypassEodCheck if this was a SOD submission
     if (report.type === 'SOD') {
-      const User = require('../models/User');
-      await User.findByIdAndUpdate(req.user.id, { bypassEodCheck: false });
+      await User.findByIdAndUpdate(req.user.id, { 
+        bypassEodCheck: false,
+        sodAccessGrantedAt: ""
+      });
     }
 
     res.status(201).json(report);

@@ -59,6 +59,19 @@ const initialFormData = {
   linkedBy: ''
 };
 
+const formatDateForInput = (dateVal) => {
+  if (!dateVal) return '';
+  try {
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch (e) {
+    // Ignore
+  }
+  return '';
+};
+
 const NewCaseTab = () => {
   const { user } = useContext(AuthContext);
   const location = useLocation();
@@ -134,7 +147,7 @@ const NewCaseTab = () => {
           totalAmtPaid: editCase.totalAmtPaid || editCase.amountPaid || '',
           totalMouValue: editCase.totalMouValue || editCase.mouValue || '',
           amtInDispute: editCase.amtInDispute || editCase.disputeAmount || '',
-          dateOfLastPayment: editCase.dateOfLastPayment || '',
+          dateOfLastPayment: formatDateForInput(editCase.dateOfLastPayment || editCase.lastUpdateDate),
           initiatedBy: editCase.initiatedBy || editCase.initiator || '',
           accountable: editCase.accountable || '',
           legalOfficer: editCase.legalOfficer || '',
@@ -770,7 +783,7 @@ const NewCaseTab = () => {
                   className="!bg-bg-input !border-border h-12"
                 />
               </div>
-              {formData.state && (
+              {(formData.state || formData.city || formData.pincode) && (
                 <>
                   <div>
                     <label className={labelClass}>City</label>

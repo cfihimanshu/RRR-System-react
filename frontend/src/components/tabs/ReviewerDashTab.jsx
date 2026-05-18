@@ -106,12 +106,17 @@ const ReviewerDashTab = () => {
                   onClick={() => { setSelectedRefund(r); setIsDetailOpen(true); }}
                 >
                   <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => navigate('/case-master', { state: { searchId: r.caseId } })}
-                      className="bg-accent-soft text-accent px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all shadow-sm"
-                    >
-                      {r.caseId}
-                    </button>
+                    <div className="flex flex-col items-start gap-1">
+                      <button
+                        onClick={() => navigate('/case-master', { state: { searchId: r.caseId } })}
+                        className="bg-accent-soft text-accent px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all shadow-sm"
+                      >
+                        {r.caseId}
+                      </button>
+                      {r.companyName && (
+                        <span className="text-[10px] text-text-muted font-bold tracking-normal normal-case ml-1 mt-0.5">{r.companyName}</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-5 font-black text-green text-sm tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</td>
                   <td className="px-6 py-5">
@@ -165,6 +170,9 @@ const ReviewerDashTab = () => {
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
                 <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Protocol ID</p>
                 <p className="font-black text-accent text-sm tracking-tighter uppercase">{selectedRefund.caseId}</p>
+                {selectedRefund.companyName && (
+                  <p className="text-[10px] text-text-muted font-bold tracking-normal normal-case mt-1">{selectedRefund.companyName}</p>
+                )}
               </div>
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
                 <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Payment Volume</p>
@@ -255,13 +263,7 @@ const ReviewerDashTab = () => {
               </p>
             </div>
 
-            <div className="flex gap-4 justify-end mt-4">
-              <button
-                className="bg-bg-input hover:bg-bg-card-hover text-text-secondary font-black py-4 px-10 rounded-2xl border-2 border-border transition-all text-xs uppercase tracking-widest active:scale-95"
-                onClick={() => setIsDetailOpen(false)}
-              >
-                Exit Audit
-              </button>
+            {/* <div className="flex gap-4 justify-end mt-4">
               <button
                 className="bg-red hover:bg-red-600 text-white font-black py-4 px-10 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-widest active:scale-95"
                 onClick={() => { setIsDetailOpen(false); setModalOpen(true); }}
@@ -274,7 +276,7 @@ const ReviewerDashTab = () => {
               >
                 Make Payment
               </button>
-            </div>
+            </div> */}
           </div>
         )}
       </Modal>

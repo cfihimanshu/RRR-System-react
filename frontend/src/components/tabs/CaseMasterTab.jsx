@@ -70,6 +70,19 @@ const initialService = {
   department: 'Operations'
 };
 
+const formatDateForInput = (dateVal) => {
+  if (!dateVal) return '';
+  try {
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch (e) {
+    // Ignore
+  }
+  return '';
+};
+
 // Normalize legacy/incorrect status values to correct display labels
 const normalizeStatus = (status, assignedTo, initiatedBy) => {
   const legacyMap = {
@@ -123,6 +136,7 @@ const CaseMasterTab = () => {
   const [activeDetailTab, setActiveDetailTab] = useState('Case Details');
   const [timelineLogs, setTimelineLogs] = useState([]);
   const [expandedRows, setExpandedRows] = useState({});
+  const [refundsList, setRefundsList] = useState([]);
 
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
@@ -211,24 +225,78 @@ const CaseMasterTab = () => {
   const [checklist, setChecklist] = useState(buildChecklistForStage('Case Logged'));
   const [opsUsers, setOpsUsers] = useState([]);
   const [availableDates, setAvailableDates] = useState([]);
+  const [availableStates, setAvailableStates] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilterType, setActiveFilterType] = useState('Status');
+  const [expandedCustomFields, setExpandedCustomFields] = useState({});
   const [tempFilters, setTempFilters] = useState({
     status: ['All Status'],
     priority: ['All Priority'],
     assignee: ['All Assignees'],
     typeOfComplaint: ['All Types'],
-    date: null
+    date: null,
+    state: ['All States'],
+    refundStatus: ['All Refunds'],
+    sourceOfComplaint: '',
+    serviceMode: '',
+    serviceName: '',
+    city: '',
+    lastPaymentStart: '',
+    lastPaymentEnd: '',
+    customFilters: {
+      companyName: '',
+      clientName: '',
+      clientEmail: '',
+      clientMobile: '',
+      anyDetail: ''
+    }
   });
   const [appliedFilters, setAppliedFilters] = useState(() => {
     const saved = localStorage.getItem('caseMasterFilters');
-    return saved ? JSON.parse(saved) : {
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (!parsed.state) parsed.state = ['All States'];
+        if (!parsed.refundStatus) parsed.refundStatus = ['All Refunds'];
+        if (parsed.sourceOfComplaint === undefined) parsed.sourceOfComplaint = '';
+        if (parsed.serviceMode === undefined) parsed.serviceMode = '';
+        if (parsed.serviceName === undefined) parsed.serviceName = '';
+        if (parsed.city === undefined) parsed.city = '';
+        if (parsed.lastPaymentStart === undefined) parsed.lastPaymentStart = '';
+        if (parsed.lastPaymentEnd === undefined) parsed.lastPaymentEnd = '';
+        if (!parsed.customFilters) parsed.customFilters = {
+          companyName: '',
+          clientName: '',
+          clientEmail: '',
+          clientMobile: '',
+          anyDetail: ''
+        };
+        if (parsed.customFilters.anyDetail === undefined) parsed.customFilters.anyDetail = '';
+        return parsed;
+      } catch (e) {}
+    }
+    return {
       status: ['All Status'],
       priority: ['All Priority'],
       assignee: ['All Assignees'],
       typeOfComplaint: ['All Types'],
       date: null,
-      linkedOnly: false
+      state: ['All States'],
+      refundStatus: ['All Refunds'],
+      sourceOfComplaint: '',
+      serviceMode: '',
+      serviceName: '',
+      city: '',
+      lastPaymentStart: '',
+      lastPaymentEnd: '',
+      linkedOnly: false,
+      customFilters: {
+        companyName: '',
+        clientName: '',
+        clientEmail: '',
+        clientMobile: '',
+        anyDetail: ''
+      }
     };
   });
 
@@ -243,7 +311,7 @@ const CaseMasterTab = () => {
     typeOfComplaint: '', brandName: '',
     engagementNote: '',
     clientName: '', clientMobile: '', clientEmail: '', state: '', city: '', pincode: '',
-    totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '',
+    totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '', dateOfLastPayment: '',
     smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
     importDocumentLink: '',
     proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
@@ -262,6 +330,15 @@ const CaseMasterTab = () => {
   const [formErrors, setFormErrors] = useState({});
 
   const [linkedCases, setLinkedCases] = useState([]);
+
+  const sourceOptions = useMemo(() => {
+    const unique = new Set();
+    cases.forEach((c) => {
+      const value = c.sourceOfComplaint?.trim();
+      if (value) unique.add(value);
+    });
+    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  }, [cases]);
 
   useEffect(() => {
     const fetchLinkedCases = async () => {
@@ -396,7 +473,7 @@ const CaseMasterTab = () => {
     try {
       if (pageNum === 1) setCases([]); // Reset for new search/filter
       
-      const limit = 50;
+      const limit = 1000;
       const url = hasDemand 
         ? `/cases?hasDemand=true&page=${pageNum}&limit=${limit}` 
         : `/cases?page=${pageNum}&limit=${limit}`;
@@ -465,6 +542,24 @@ const CaseMasterTab = () => {
     }
   };
 
+  const fetchAvailableStates = async () => {
+    try {
+      const res = await api.get('/cases/available-states');
+      setAvailableStates(res.data);
+    } catch (err) {
+      console.error('Failed to fetch available states', err);
+    }
+  };
+
+  const fetchRefundsList = async () => {
+    try {
+      const res = await api.get('/refunds');
+      setRefundsList(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch refunds list', err);
+    }
+  };
+
   useEffect(() => {
     // Check if we have a special demand filter from dashboard
     const hasDemandFilter = location.state?.hasDemand;
@@ -477,6 +572,8 @@ const CaseMasterTab = () => {
     fetchCases(!!hasDemandFilter);
     fetchOpsUsers();
     fetchAvailableDates();
+    fetchAvailableStates();
+    fetchRefundsList();
 
     // Check for other auto-filters from Dashboard
     if (location.state?.statusFilter) {
@@ -620,9 +717,11 @@ const CaseMasterTab = () => {
     } else {
       matchStatus = appliedFilters.status.some(selectedStatus => {
         if (selectedStatus === 'Active') {
-          return normalizedCaseStatus !== 'Settlement' && normalizedCaseStatus !== 'Closure' && normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed' && normalizedCaseStatus !== 'Resolution';
+          const isStatusNotCompleted = normalizedCaseStatus !== 'Settlement' && normalizedCaseStatus !== 'Closure' && normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed' && normalizedCaseStatus !== 'Resolution';
+          const isRefundNotPaid = c.refundStatus !== 'Paid';
+          return isStatusNotCompleted && isRefundNotPaid;
         } else if (selectedStatus === 'Closed' || selectedStatus === 'Closure') {
-          return normalizedCaseStatus === 'Settlement' || normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Settled' || normalizedCaseStatus === 'Closed' || normalizedCaseStatus === 'Resolution';
+          return normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Closed' || normalizedCaseStatus === 'Resolution';
         } else if (selectedStatus === 'Unassigned') {
           const initiatedByValue = c.initiatedBy?.toString?.() || '';
           const assignedToValue = c.assignedTo?.toString?.() || '';
@@ -647,11 +746,96 @@ const CaseMasterTab = () => {
       matchDate = caseDate === appliedFilters.date;
     }
 
+    let matchState = true;
+    if (appliedFilters.state && !appliedFilters.state.includes('All States') && appliedFilters.state.length > 0) {
+      const caseState = c.state ? String(c.state).trim() : '';
+      matchState = appliedFilters.state.some(selectedState => {
+        if (selectedState === 'Blank') {
+          return !caseState || caseState.trim() === '';
+        }
+        return caseState.toLowerCase() === selectedState.trim().toLowerCase();
+      });
+    }
+
     const matchType = appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.typeOfComplaint.length === 0 || appliedFilters.typeOfComplaint.includes(c.typeOfComplaint);
+
+    const matchSourceOfComplaint = !appliedFilters.sourceOfComplaint || c.sourceOfComplaint?.toLowerCase().includes(appliedFilters.sourceOfComplaint.toLowerCase());
+    const matchServiceMode = !appliedFilters.serviceMode || c.serviceMode?.toLowerCase().includes(appliedFilters.serviceMode.toLowerCase());
+    const matchServiceName = !appliedFilters.serviceName || c.serviceName?.toLowerCase().includes(appliedFilters.serviceName.toLowerCase());
+    const matchCity = !appliedFilters.city || c.city?.toLowerCase().includes(appliedFilters.city.toLowerCase());
+
+    let matchLastPayment = true;
+    if (appliedFilters.lastPaymentStart || appliedFilters.lastPaymentEnd) {
+      const lastPaymentDate = c.dateOfLastPayment ? new Date(c.dateOfLastPayment) : null;
+      if (!lastPaymentDate || Number.isNaN(lastPaymentDate.getTime())) {
+        matchLastPayment = false;
+      } else {
+        if (appliedFilters.lastPaymentStart) {
+          const startDate = new Date(appliedFilters.lastPaymentStart);
+          matchLastPayment = matchLastPayment && lastPaymentDate >= startDate;
+        }
+        if (appliedFilters.lastPaymentEnd) {
+          const endDate = new Date(appliedFilters.lastPaymentEnd);
+          matchLastPayment = matchLastPayment && lastPaymentDate <= endDate;
+        }
+      }
+    }
 
     const matchLinkedOnly = !appliedFilters.linkedOnly || (c.linkedBy && c.linkedBy.trim() !== '');
 
-    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchType && matchLinkedOnly;
+    let matchRefund = true;
+    if (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds') && appliedFilters.refundStatus.length > 0) {
+      const caseRefundStatus = c.refundStatus || 'Pending';
+      matchRefund = appliedFilters.refundStatus.some(selectedRefund => {
+        return caseRefundStatus.toLowerCase() === selectedRefund.toLowerCase();
+      });
+    }
+
+    let matchCustom = true;
+    if (appliedFilters.customFilters) {
+      const customFilters = appliedFilters.customFilters;
+      if (customFilters.companyName && !c.companyName?.toLowerCase().includes(customFilters.companyName.toLowerCase())) {
+        matchCustom = false;
+      }
+      if (customFilters.clientName && !c.clientName?.toLowerCase().includes(customFilters.clientName.toLowerCase())) {
+        matchCustom = false;
+      }
+      if (customFilters.clientEmail && !c.clientEmail?.toLowerCase().includes(customFilters.clientEmail.toLowerCase())) {
+        matchCustom = false;
+      }
+      if (customFilters.clientMobile && !c.clientMobile?.toLowerCase().includes(customFilters.clientMobile.toLowerCase())) {
+        matchCustom = false;
+      }
+      if (customFilters.anyDetail) {
+        const searchValue = customFilters.anyDetail.toLowerCase();
+        const anyFields = [
+          c.caseId,
+          c.companyName,
+          c.caseTitle,
+          c.priority,
+          c.sourceOfComplaint,
+          c.typeOfComplaint,
+          c.brandName,
+          c.serviceMode,
+          c.serviceName,
+          c.clientName,
+          c.clientEmail,
+          c.clientMobile,
+          c.city,
+          c.state,
+          c.pincode,
+          c.createdDate,
+          c.dateOfLastPayment,
+          c.assignedTo,
+          c.initiatedBy,
+          c.currentStatus,
+          c.refundStatus
+        ];
+        matchCustom = anyFields.some(value => value?.toString?.().toLowerCase().includes(searchValue));
+      }
+    }
+
+    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchState && matchType && matchSourceOfComplaint && matchServiceMode && matchServiceName && matchCity && matchLastPayment && matchLinkedOnly && matchRefund && matchCustom;
   });
 
   const handleApplyFilters = () => {
@@ -665,7 +849,22 @@ const CaseMasterTab = () => {
       priority: ['All Priority'],
       assignee: ['All Assignees'],
       typeOfComplaint: ['All Types'],
-      date: null
+      date: null,
+      state: ['All States'],
+      refundStatus: ['All Refunds'],
+      sourceOfComplaint: '',
+      serviceMode: '',
+      serviceName: '',
+      city: '',
+      lastPaymentStart: '',
+      lastPaymentEnd: '',
+      customFilters: {
+        companyName: '',
+        clientName: '',
+        clientEmail: '',
+        clientMobile: '',
+        anyDetail: ''
+      }
     };
     setTempFilters(reset);
     setAppliedFilters(reset);
@@ -720,12 +919,15 @@ const CaseMasterTab = () => {
         clientMobile: caseToUse.clientMobile || '',
         clientEmail: caseToUse.clientEmail || '',
         state: caseToUse.state || '',
+        city: caseToUse.city || '',
+        pincode: caseToUse.pincode || '',
         engagementNote: caseToUse.engagementNote || '',
         caseSummary: caseToUse.caseSummary || caseToUse.summary || '',
         clientAllegation: caseToUse.clientAllegation || caseToUse.allegation || '',
         totalAmtPaid: caseToUse.totalAmtPaid || caseToUse.amountPaid || '',
         totalMouValue: caseToUse.totalMouValue || caseToUse.mouValue || '',
         amtInDispute: caseToUse.amtInDispute || caseToUse.disputeAmount || '',
+        dateOfLastPayment: formatDateForInput(caseToUse.dateOfLastPayment || caseToUse.lastUpdateDate),
         initiatedBy: caseToUse.initiatedBy || caseToUse.initiator || '',
         accountable: caseToUse.accountable || '',
         legalOfficer: caseToUse.legalOfficer || '',
@@ -917,12 +1119,64 @@ const CaseMasterTab = () => {
       const updatedCase = res.data;
       if (updatedCase) {
         setViewCase(updatedCase);
+        
+        // Sync the editable form data with fresh data
+        setFormData({
+          companyName: updatedCase.companyName || '',
+          caseTitle: updatedCase.caseTitle || '',
+          priority: updatedCase.priority || 'Medium',
+          sourceOfComplaint: updatedCase.sourceOfComplaint || '',
+          typeOfComplaint: updatedCase.typeOfComplaint || '',
+          brandName: updatedCase.brandName || '',
+          clientName: updatedCase.clientName || '',
+          clientMobile: updatedCase.clientMobile || '',
+          clientEmail: updatedCase.clientEmail || '',
+          state: updatedCase.state || '',
+          city: updatedCase.city || '',
+          pincode: updatedCase.pincode || '',
+          engagementNote: updatedCase.engagementNote || '',
+          caseSummary: updatedCase.caseSummary || updatedCase.summary || '',
+          clientAllegation: updatedCase.clientAllegation || updatedCase.allegation || '',
+          totalAmtPaid: updatedCase.totalAmtPaid || updatedCase.amountPaid || '',
+          totalMouValue: updatedCase.totalMouValue || updatedCase.mouValue || '',
+          amtInDispute: updatedCase.amtInDispute || updatedCase.disputeAmount || '',
+          dateOfLastPayment: formatDateForInput(updatedCase.dateOfLastPayment || updatedCase.lastUpdateDate),
+          initiatedBy: updatedCase.initiatedBy || updatedCase.initiator || '',
+          accountable: updatedCase.accountable || '',
+          legalOfficer: updatedCase.legalOfficer || '',
+          accounts: updatedCase.accounts || '',
+          assignedTo: updatedCase.assignedTo || updatedCase.owner || '',
+          firNumber: updatedCase.firNumber || '',
+          firFileLink: updatedCase.firFileLink || '',
+          grievanceNumber: updatedCase.grievanceNumber || '',
+          proofCallRec: updatedCase.proofCallRec || 'No',
+          proofWaChat: updatedCase.proofWaChat || 'No',
+          proofVideoCall: updatedCase.proofVideoCall || 'No',
+          proofFundingEmail: updatedCase.proofFundingEmail || 'No',
+          mouSigned: updatedCase.mouSigned || 'No',
+          smRisk: updatedCase.smRisk || 'None',
+          consumerComplaintFiled: updatedCase.consumerComplaintFiled || 'No',
+          policeThreat: updatedCase.policeThreat || 'None',
+          lienMarkedOn: updatedCase.lienMarkedOn || '',
+          lienBank: updatedCase.lienBank || '',
+          refundStatus: updatedCase.refundStatus || '',
+          acc1No: updatedCase.bankAccountDetails?.acc1No || '',
+          acc1Ifsc: updatedCase.bankAccountDetails?.acc1Ifsc || '',
+          acc2No: updatedCase.bankAccountDetails?.acc2No || '',
+          acc2Ifsc: updatedCase.bankAccountDetails?.acc2Ifsc || '',
+          importDocumentLink: updatedCase.importDocumentLink || '',
+          keyPendingIssue: updatedCase.keyPendingIssue || '',
+          recommendedNextSteps: updatedCase.recommendedNextSteps || ''
+        });
+
         // Sync progress form immediately
         setProgressFormData(prev => ({
           ...prev,
           stage: updatedCase.currentStatus === 'New' ? 'Case Logged' : updatedCase.currentStatus,
           percentage: updatedCase.progressPercentage || 10
         }));
+
+        setIsEditing(false);
       }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to update case', { id: loadingToast });
@@ -1428,16 +1682,16 @@ const CaseMasterTab = () => {
             <div className="relative">
               <button
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || !appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || appliedFilters.date
+                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || !appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || appliedFilters.date || (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds'))
                   ? 'bg-accent text-white border-accent shadow-sm'
                   : 'bg-bg-card text-text-secondary border-border hover:bg-bg-card-hover'
                   }`}
               >
                 <Filter size={16} />
                 Filters
-                {(!appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date) && (
+                {(!appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date || (appliedFilters.state && !appliedFilters.state.includes('All States')) || (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds')) || appliedFilters.sourceOfComplaint || appliedFilters.serviceMode || appliedFilters.serviceName || appliedFilters.city || appliedFilters.lastPaymentStart || appliedFilters.lastPaymentEnd || (appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v))) && (
                   <span className="bg-white text-accent rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">
-                    {[!appliedFilters.status.includes('All Status'), !appliedFilters.priority.includes('All Priority'), !appliedFilters.assignee.includes('All Assignees'), !appliedFilters.typeOfComplaint.includes('All Types'), !!appliedFilters.date].filter(Boolean).length}
+                    {[!appliedFilters.status.includes('All Status'), !appliedFilters.priority.includes('All Priority'), !appliedFilters.assignee.includes('All Assignees'), !appliedFilters.typeOfComplaint.includes('All Types'), !!appliedFilters.date, appliedFilters.state && !appliedFilters.state.includes('All States'), appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds'), !!appliedFilters.sourceOfComplaint, !!appliedFilters.serviceMode, !!appliedFilters.serviceName, !!appliedFilters.city, !!appliedFilters.lastPaymentStart, !!appliedFilters.lastPaymentEnd, appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v)].filter(Boolean).length}
                   </span>
                 )}
               </button>
@@ -1449,7 +1703,7 @@ const CaseMasterTab = () => {
                     <div className="flex flex-1 min-h-[300px] md:min-h-[350px]">
                       {/* Left Sidebar */}
                       <div className="w-[100px] md:w-1/3 bg-bg-secondary border-r border-border py-4">
-                        {['Status', 'Priority', 'Assignees', 'Type', 'Date'].map((type) => (
+                        {['Status', 'Priority', 'Assignees', 'Type', 'Date', 'State', 'Refund', 'Source', 'Service', 'City', 'Last Payment', 'Custom'].map((type) => (
                           <button
                             key={type}
                             onClick={() => setActiveFilterType(type)}
@@ -1668,6 +1922,221 @@ const CaseMasterTab = () => {
                           </div>
                         )}
 
+                        {activeFilterType === 'Source' && (
+                          <div className="space-y-3">
+                            <label className="block text-sm font-bold text-text-secondary">Source of Complaint</label>
+                            <select
+                              value={tempFilters.sourceOfComplaint}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setTempFilters(prev => ({ ...prev, sourceOfComplaint: value }));
+                                setAppliedFilters(prev => ({ ...prev, sourceOfComplaint: value }));
+                              }}
+                              className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary focus:outline-none focus:border-accent transition-all"
+                            >
+                              <option value="">All Sources</option>
+                              {sourceOptions.map((source) => (
+                                <option key={source} value={source}>{source}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {activeFilterType === 'Service' && (
+                          <div className="space-y-4">
+                            <label className="block text-sm font-bold text-text-secondary">Service Mode</label>
+                            <div className="flex gap-3">
+                              {['Single Service', 'Multiple Service'].map((mode) => {
+                                const isSelected = tempFilters.serviceMode === mode;
+                                return (
+                                  <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => {
+                                      setTempFilters(prev => ({ ...prev, serviceMode: mode }));
+                                      setAppliedFilters(prev => ({ ...prev, serviceMode: mode }));
+                                    }}
+                                    className={`w-full py-2 px-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-all ${isSelected ? 'bg-accent text-white' : 'bg-bg-input text-text-secondary hover:bg-bg-card'}`}
+                                  >
+                                    {mode.replace(' Service', '')}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {/* <label className="block text-sm font-bold text-text-secondary">Service Name</label> */}
+                            {/* <input
+                              type="text"
+                              placeholder="Enter service name"
+                              value={tempFilters.serviceName}
+                              onChange={(e) => setTempFilters(prev => ({ ...prev, serviceName: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-all"
+                            /> */}
+                          </div>
+                        )}
+
+                        {activeFilterType === 'City' && (
+                          <div className="space-y-3">
+                            <label className="block text-sm font-bold text-text-secondary">City</label>
+                            <input
+                              type="text"
+                              placeholder="Enter city"
+                              value={tempFilters.city}
+                              onChange={(e) => setTempFilters(prev => ({ ...prev, city: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-all"
+                            />
+                          </div>
+                        )}
+
+                        {activeFilterType === 'Last Payment' && (
+                          <div className="space-y-4">
+                            <label className="block text-sm font-bold text-text-secondary">Last Payment Start</label>
+                            <input
+                              type="date"
+                              value={tempFilters.lastPaymentStart}
+                              onChange={(e) => setTempFilters(prev => ({ ...prev, lastPaymentStart: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary focus:outline-none focus:border-accent transition-all"
+                            />
+                            <label className="block text-sm font-bold text-text-secondary">Last Payment End</label>
+                            <input
+                              type="date"
+                              value={tempFilters.lastPaymentEnd}
+                              onChange={(e) => setTempFilters(prev => ({ ...prev, lastPaymentEnd: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary focus:outline-none focus:border-accent transition-all"
+                            />
+                          </div>
+                        )}
+
+                        {activeFilterType === 'State' && (
+                          <div className="space-y-3">
+                            <label className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                              <input
+                                type="checkbox"
+                                name="state"
+                                checked={tempFilters.state.includes('All States')}
+                                onChange={() => {
+                                  setTempFilters(prev => ({ ...prev, state: ['All States'] }));
+                                }}
+                                className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                              />
+                              <span className={`text-sm font-bold ${tempFilters.state.includes('All States') ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>All States</span>
+                            </label>
+                            <label className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                              <input
+                                type="checkbox"
+                                name="state"
+                                checked={tempFilters.state.includes('Blank')}
+                                onChange={() => {
+                                  setTempFilters(prev => {
+                                    let newState;
+                                    const filtered = prev.state.filter(item => item !== 'All States');
+                                    if (prev.state.includes('Blank')) {
+                                      newState = filtered.filter(item => item !== 'Blank');
+                                      if (newState.length === 0) newState = ['All States'];
+                                    } else {
+                                      newState = [...filtered, 'Blank'];
+                                    }
+                                    return { ...prev, state: newState };
+                                  });
+                                }}
+                                className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                              />
+                              <span className={`text-sm font-bold ${tempFilters.state.includes('Blank') ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>Blank</span>
+                            </label>
+                            {availableStates.map((st) => {
+                              const isChecked = tempFilters.state.includes(st);
+                              return (
+                                <label key={st} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                  <input
+                                    type="checkbox"
+                                    name="state"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setTempFilters(prev => {
+                                        let newState;
+                                        const filtered = prev.state.filter(item => item !== 'All States');
+                                        if (isChecked) {
+                                          newState = filtered.filter(item => item !== st);
+                                          if (newState.length === 0) newState = ['All States'];
+                                        } else {
+                                          newState = [...filtered, st];
+                                        }
+                                        return { ...prev, state: newState };
+                                      });
+                                    }}
+                                    className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                                  />
+                                  <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{st}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {activeFilterType === 'Refund' && (
+                          <div className="space-y-3">
+                            {['All Refunds', 'Paid', 'Pending'].map((ref) => {
+                              const isChecked = tempFilters.refundStatus?.includes(ref);
+                              return (
+                                <label key={ref} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                  <input
+                                    type="checkbox"
+                                    name="refundStatus"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setTempFilters(prev => {
+                                        let newRefund;
+                                        if (ref === 'All Refunds') {
+                                          newRefund = ['All Refunds'];
+                                        } else {
+                                          const filtered = (prev.refundStatus || []).filter(item => item !== 'All Refunds');
+                                          if (isChecked) {
+                                            newRefund = filtered.filter(item => item !== ref);
+                                            if (newRefund.length === 0) newRefund = ['All Refunds'];
+                                          } else {
+                                            newRefund = [...filtered, ref];
+                                          }
+                                        }
+                                        return { ...prev, refundStatus: newRefund };
+                                      });
+                                    }}
+                                    className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                                  />
+                                  <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{ref}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {activeFilterType === 'Custom' && (
+                          <div className="space-y-3">
+                            <label className="block text-sm font-bold text-text-secondary mb-2">Any Case Detail</label>
+                            <input
+                              type="text"
+                              placeholder="Type any case detail to filter instantly"
+                              value={tempFilters.customFilters?.anyDetail || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setTempFilters(prev => ({
+                                  ...prev,
+                                  customFilters: {
+                                    ...prev.customFilters,
+                                    anyDetail: value
+                                  }
+                                }));
+                                setAppliedFilters(prev => ({
+                                  ...prev,
+                                  customFilters: {
+                                    ...prev.customFilters,
+                                    anyDetail: value
+                                  }
+                                }));
+                              }}
+                              className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-all"
+                            />
+                          </div>
+                        )}
+
                       </div>
                     </div>
                     {/* Footer */}
@@ -1734,7 +2203,7 @@ const CaseMasterTab = () => {
                 <Inbox size={14} className="opacity-70" />
                 <span className="text-[10px] font-black uppercase tracking-[0.15em]">Total Cases:</span>
                 <span className="text-sm font-black tabular-nums">
-                  {searchTerm || !appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date
+                  {searchTerm || !appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date || (appliedFilters.state && !appliedFilters.state.includes('All States'))
                     ? filteredCases.length
                     : totalCount
                   }
@@ -2192,7 +2661,7 @@ const CaseMasterTab = () => {
                         disabled={!isEditing}
                       />
                     </div>
-                    {formData.state && (
+                    {(formData.state || formData.city || formData.pincode || isEditing) && (
                       <>
                         <div>
                           <label className={labelClass}>City</label>
@@ -3320,6 +3789,7 @@ const CaseMasterTab = () => {
                   <th className="px-2 py-3 w-[7%]">Amount Paid</th>
                   <th className="px-2 py-3 w-[5%]">Priority</th>
                   <th className="px-2 py-3 w-[5%]">Status</th>
+                  <th className="px-2 py-3 w-[7%] text-center">Refund</th>
                   <th className="px-2 py-3 w-[10%]">Assigned To</th>
                   <th className="px-2 py-4 w-[8%]">Last Update</th>
                   <th className="px-2 py-4 w-[15%] text-center">Actions</th>
@@ -3328,7 +3798,7 @@ const CaseMasterTab = () => {
               <tbody className="text-xs text-text-secondary divide-y divide-border">
                 {filteredCases.length === 0 ? (
                   <tr>
-                    <td colSpan="11" className="px-6 py-20 text-center">
+                    <td colSpan="12" className="px-6 py-20 text-center">
                       <div className="flex justify-center mb-4">
                         <div className="p-6 bg-bg-input rounded-full">
                           <Inbox size={48} className="text-text-muted opacity-20" />
@@ -3338,23 +3808,32 @@ const CaseMasterTab = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredCases.map(c => (
-                    <CaseRow
-                      key={c._id}
-                      c={c}
-                      isSelected={selectedCases.includes(c.caseId)}
-                      bulkAssignUser={bulkAssignUser}
-                      toggleSelectCase={toggleSelectCase}
-                      handleViewCase={handleViewCase}
-                      navigate={navigate}
-                      assignmentInput={assignmentInputs[c.caseId]}
-                      handleAssignmentInputChange={handleAssignmentInputChange}
-                      opsUsers={opsUsers}
-                      handleAssign={handleAssign}
-                      handleDeleteCase={handleDeleteCase}
-                      user={user}
-                    />
-                  ))
+                  filteredCases.map(c => {
+                    const caseRefund = refundsList.find(r => r.caseId === c.caseId);
+                    let refundStatus = '';
+                    if (caseRefund) {
+                      const isSinglePaidFallback = caseRefund.transactionId && (caseRefund.installments || []).length <= 1;
+                      refundStatus = (caseRefund.status === 'Paid' || isSinglePaidFallback) ? 'Paid' : 'Pending';
+                    }
+                    return (
+                      <CaseRow
+                        key={c._id}
+                        c={c}
+                        isSelected={selectedCases.includes(c.caseId)}
+                        bulkAssignUser={bulkAssignUser}
+                        toggleSelectCase={toggleSelectCase}
+                        handleViewCase={handleViewCase}
+                        navigate={navigate}
+                        assignmentInput={assignmentInputs[c.caseId]}
+                        handleAssignmentInputChange={handleAssignmentInputChange}
+                        opsUsers={opsUsers}
+                        handleAssign={handleAssign}
+                        handleDeleteCase={handleDeleteCase}
+                        user={user}
+                        refundStatus={refundStatus}
+                      />
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -3401,7 +3880,8 @@ const CaseRow = memo(({
   opsUsers,
   handleAssign,
   handleDeleteCase,
-  user
+  user,
+  refundStatus
 }) => {
   const svcs = Array.isArray(c.servicesSold)
     ? c.servicesSold.slice(0, 3).map(s => s.serviceName).join(', ') + (c.servicesSold.length > 3 ? '...' : '')
@@ -3468,6 +3948,19 @@ const CaseRow = memo(({
             </div>
           );
         })()}
+      </td>
+      <td className="px-3 py-5 text-center">
+        {refundStatus ? (
+          <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
+            refundStatus === 'Paid' 
+              ? 'bg-green-soft text-green border-green-soft' 
+              : 'bg-yellow-soft text-yellow border-yellow-soft'
+          }`}>
+            {refundStatus}
+          </span>
+        ) : (
+          <span className="text-text-muted/30 font-bold">—</span>
+        )}
       </td>
       <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-black text-[10px] uppercase tracking-wider">
         {c.assignedTo || c.initiatedBy || '-'}
