@@ -197,6 +197,8 @@ const CaseMasterTab = () => {
     savedAmount: '',
     attachment: ''
   });
+  const [closureReady, setClosureReady] = useState(false); // true when a Closure progress update was submitted
+  const [isResolvedDisplay, setIsResolvedDisplay] = useState(false); // true when case is already closed/resolved
   const [mouFormData, setMouFormData] = useState({
     mouType: 'Legal Notice',
     otherType: '',
@@ -303,6 +305,18 @@ const CaseMasterTab = () => {
   useEffect(() => {
     localStorage.setItem('caseMasterFilters', JSON.stringify(appliedFilters));
   }, [appliedFilters]);
+
+  // Keep resolved display in sync with loaded case
+  useEffect(() => {
+    if (viewCase) {
+      setIsResolvedDisplay((viewCase.currentStatus === 'Closure') || (viewCase.progressPercentage >= 100));
+      // clear any transient closure-ready flag when a fresh case is loaded
+      setClosureReady(false);
+    } else {
+      setIsResolvedDisplay(false);
+      setClosureReady(false);
+    }
+  }, [viewCase]);
   const { user } = useContext(AuthContext);
 
   // Form states for editable case details
@@ -606,6 +620,11 @@ const CaseMasterTab = () => {
       setAppliedFilters(prev => ({ ...prev, date: df }));
       setTempFilters(prev => ({ ...prev, date: df }));
     }
+    if (location.state?.sourceFilter) {
+      const sf = location.state.sourceFilter;
+      setAppliedFilters(prev => ({ ...prev, sourceOfComplaint: sf }));
+      setTempFilters(prev => ({ ...prev, sourceOfComplaint: sf }));
+    }
 
     // Clear state after applying so it doesn't persist on refresh
     if (location.state) {
@@ -759,7 +778,10 @@ const CaseMasterTab = () => {
 
     const matchType = appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.typeOfComplaint.length === 0 || appliedFilters.typeOfComplaint.includes(c.typeOfComplaint);
 
-    const matchSourceOfComplaint = !appliedFilters.sourceOfComplaint || c.sourceOfComplaint?.toLowerCase().includes(appliedFilters.sourceOfComplaint.toLowerCase());
+    const matchSourceOfComplaint = !appliedFilters.sourceOfComplaint || 
+      (appliedFilters.sourceOfComplaint.toLowerCase() === 'unknown'
+        ? (!c.sourceOfComplaint || c.sourceOfComplaint.toLowerCase().trim() === '' || c.sourceOfComplaint.toLowerCase() === 'unknown')
+        : c.sourceOfComplaint?.toLowerCase().includes(appliedFilters.sourceOfComplaint.toLowerCase()));
     const matchServiceMode = !appliedFilters.serviceMode || c.serviceMode?.toLowerCase().includes(appliedFilters.serviceMode.toLowerCase());
     const matchServiceName = !appliedFilters.serviceName || c.serviceName?.toLowerCase().includes(appliedFilters.serviceName.toLowerCase());
     const matchCity = !appliedFilters.city || c.city?.toLowerCase().includes(appliedFilters.city.toLowerCase());
@@ -1207,6 +1229,8 @@ const CaseMasterTab = () => {
       fetchCases();
       // Update local view
       setViewCase(prev => ({ ...prev, currentStatus: 'Closure', progressPercentage: 100 }));
+      setIsResolvedDisplay(true);
+      setClosureReady(false);
     } catch (err) {
       toast.error('Failed to resolve case', { id: loadingToast });
     }
@@ -1375,6 +1399,11 @@ const CaseMasterTab = () => {
         progressPercentage: progressFormData.percentage
       };
       setViewCase(updatedCase);
+
+      // If progress stage is Closure, mark closureReady so the Resolve button can be shown
+      if (progressFormData.stage === 'Closure') {
+        setClosureReady(true);
+      }
 
       setProgressFormData({
         ...progressFormData,
@@ -2270,14 +2299,18 @@ const CaseMasterTab = () => {
                   <h2 className="text-2xl font-black text-text-primary uppercase tracking-tight max-w-4xl">
                     {viewCase.typeOfComplaint || 'Payment Dispute'} — {viewCase.companyName}
                   </h2>
-                  {((activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Closure' || (activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Resolution' || (activeDetailTab === 'Progress Update' ? progressFormData.stage : viewCase.currentStatus) === 'Settled' || viewCase.progressPercentage >= 100) && (
+                  {isResolvedDisplay ? (
+                    <div className="bg-green text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-900/20 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+                      <CheckCircle size={14} strokeWidth={3} /> Resolved
+                    </div>
+                  ) : closureReady ? (
                     <button
                       onClick={handleMarkResolved}
                       className="bg-green text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
                     >
                       <CheckCircle size={14} strokeWidth={3} /> Mark Case Resolved
                     </button>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <div className="flex gap-3">
@@ -2307,7 +2340,7 @@ const CaseMasterTab = () => {
                     let currentIdx = steps.indexOf(displayStatus);
                     if (currentIdx === -1) {
                       if (displayStatus === 'Settlement' || displayStatus === 'Closure' || displayStatus === 'Settled' || viewCase.progressPercentage >= 100) {
-                        currentIdx = 5; // All steps completed
+                        currentIdx = steps.length; // All steps completed (mark Closure as completed)
                       } else {
                         currentIdx = 0;
                       }
@@ -3934,7 +3967,7 @@ const CaseRow = memo(({
           const isAssigned = (c.assignedTo && c.assignedTo.trim() !== '') || (c.initiatedBy && c.initiatedBy.trim() !== '');
           const pct = (isAssigned && (c.progressPercentage || 0) < 25) ? 25 : (c.progressPercentage || 10);
           const badgeClass =
-            (displayStatus === 'Settled' || displayStatus === 'Closed') ? 'bg-green-soft text-green border-green-soft' :
+            (displayStatus === 'Settled' || displayStatus === 'Closed' || displayStatus === 'Closure') ? 'bg-green-soft text-green border-green-soft' :
               displayStatus === 'Escalated' ? 'bg-red-soft text-red border-red-soft' :
                 displayStatus === 'Assigned' ? 'bg-blue-soft text-blue border-blue-soft' :
                   displayStatus === 'Negotiation' ? 'bg-yellow-soft text-yellow border-yellow-soft' :

@@ -512,6 +512,38 @@ const DashboardTab = () => {
         data.caseTypeWiseData = finalData;
       }
 
+      if (data.sourceWiseData) {
+        const dbSourceData = data.sourceWiseData;
+
+        const fixedSources = [
+          'Email',
+          'Call',
+          'Office Visit',
+          'Social Media',
+          'Toll Free',
+          'Notice'
+        ];
+
+        const finalSourceData = fixedSources.map(source => {
+          // Match DB entries that correspond to this display source
+          const matchingItems = dbSourceData.filter(i => {
+            const key = (i.source || '').toLowerCase().trim();
+            return key === source.toLowerCase().trim();
+          });
+
+          const totalCount = matchingItems.reduce((sum, i) => sum + i.count, 0);
+          const totalAmt = matchingItems.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+
+          return {
+            source: source,
+            count: totalCount,
+            totalAmount: totalAmt
+          };
+        });
+
+        data.sourceWiseData = finalSourceData;
+      }
+
       setStats(data);
     } catch (error) {
       console.error(error);
@@ -1401,7 +1433,7 @@ const DashboardTab = () => {
             {/* Top Urgent Cases Section */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
               {/* MY CASES OVERVIEW */}
-              <div className="xl:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+              <div className="xl:col-span-4 bg-bg-card rounded-2xl p-5 border border-border/50">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">My Cases Overview</div>
                 <div className="flex flex-col items-center justify-center h-full">
                   <div className="w-full h-32 mb-4 relative">
@@ -1418,11 +1450,12 @@ const DashboardTab = () => {
                           outerRadius={50}
                           paddingAngle={2}
                           dataKey="value"
+                          isAnimationActive={false}
                         >
-                          <Cell fill="#3B82F6" /> {/* Blue */}
-                          <Cell fill="#10B981" /> {/* Green */}
-                          <Cell fill="#F59E0B" /> {/* Yellow */}
-                          <Cell fill="#8B5CF6" /> {/* Purple */}
+                          <Cell fill="#3B82F6" />
+                          <Cell fill="#10B981" />
+                          <Cell fill="#F59E0B" />
+                          <Cell fill="#8B5CF6" />
                         </Pie>
                         <Tooltip />
                       </PieChart>
@@ -2093,8 +2126,9 @@ const DashboardTab = () => {
                       dataKey={type}
                       stroke={color}
                       strokeWidth={1.5}
-                      dot={{ r: 3, fill: color, strokeWidth: 0 }}
-                      activeDot={{ r: 5 }}
+                      dot={false}
+                      activeDot={{ r: 3, strokeWidth: 0 }}
+                      isAnimationActive={false}
                     />
                   );
                 })}
@@ -2548,7 +2582,6 @@ const DashboardTab = () => {
                       else if (sourceLower.includes('toll')) { Icon = Phone; colorClass = 'text-pink-500'; bgClass = 'bg-pink-500/10'; }
                       else if (sourceLower.includes('notice')) { Icon = FileText; colorClass = 'text-purple-500'; bgClass = 'bg-purple-500/10'; }
                       else if (sourceLower.includes('social')) { Icon = MessageCircle; colorClass = 'text-green-500'; bgClass = 'bg-green-500/10'; }
-                      else if (sourceLower.includes('unknown')) { Icon = HelpCircle; colorClass = 'text-blue-500'; bgClass = 'bg-blue-500/10'; }
 
                       return (
                         <tr key={idx} className="hover:bg-bg-input/50 transition-all cursor-pointer" onClick={() => navigate('/case-master', { state: { sourceFilter: item.source } })}>
@@ -2750,8 +2783,8 @@ const DashboardTab = () => {
                       }
 
                       // 2. Date Filter (Check if ANY installment falls within start and end date)
-                      const installments = r.installments && r.installments.length > 0 
-                        ? r.installments 
+                      const installments = r.installments && r.installments.length > 0
+                        ? r.installments
                         : [{ status: r.status, dueDate: r.paymentDate || r.timestamp, amount: r.amount, paymentDate: r.paymentDate, transactionId: r.transactionId }];
 
                       const hasMatchingInstallment = installments.some(inst => {
@@ -2805,7 +2838,7 @@ const DashboardTab = () => {
                     const toggleRefundExpand = (id) => {
                       setExpandedRefundIds(prev => ({
                         ...prev,
-                        [id] : !prev[id]
+                        [id]: !prev[id]
                       }));
                     };
 

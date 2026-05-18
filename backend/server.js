@@ -350,7 +350,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     const [caseMetricsFacet, timelineMetrics, refundMetrics, taskMetrics] = await Promise.all([
       Case.aggregate([
-        { $match: baseQuery },
+        { $match: query },
         {
           $facet: {
             basic: [
@@ -389,11 +389,23 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
               { $count: "count" }
             ],
             caseTypeWise: [
-              { $group: { _id: '$typeOfComplaint', count: { $sum: 1 }, totalAmount: { $sum: { $ifNull: ['$totalAmtPaid', 0] } } } },
+              {
+                $group: {
+                  _id: { $toUpper: { $trim: { input: { $ifNull: ['$typeOfComplaint', 'Unknown'] } } } },
+                  count: { $sum: 1 },
+                  totalAmount: { $sum: { $ifNull: ['$totalAmtPaid', 0] } }
+                }
+              },
               { $sort: { count: -1 } }
             ],
             sourceWise: [
-              { $group: { _id: '$sourceOfComplaint', count: { $sum: 1 }, totalAmount: { $sum: { $ifNull: ['$totalAmtPaid', 0] } } } },
+              {
+                $group: {
+                  _id: { $toUpper: { $trim: { input: { $ifNull: ['$sourceOfComplaint', 'Unknown'] } } } },
+                  count: { $sum: 1 },
+                  totalAmount: { $sum: { $ifNull: ['$totalAmtPaid', 0] } }
+                }
+              },
               { $sort: { count: -1 } }
             ],
             trendData: [
@@ -728,12 +740,12 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         : [{ status: r.status, dueDate: r.paymentDate || r.timestamp, amount: r.amount, paymentDate: r.paymentDate, transactionId: r.transactionId }];
 
       installments.forEach(inst => {
+        if (inst.status === 'Paid') return; // Skip already paid installments, only show pending!
+        
         const amt = Number(inst.amount) || 0;
         
         let refDate = null;
-        if (inst.status === 'Paid' && inst.paymentDate) {
-          refDate = new Date(inst.paymentDate);
-        } else if (inst.dueDate) {
+        if (inst.dueDate) {
           refDate = new Date(inst.dueDate);
         } else {
           refDate = new Date(r.timestamp || r.paymentDate || new Date());
