@@ -23,6 +23,28 @@ router.get('/', verifyToken, async (req, res) => {
 
     const docs = await Refund.find(query).sort({ timestamp: -1 });
     
+    // Auto-update any installments whose due date has passed and are not paid
+    const nowForIST = new Date();
+    const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
+    const todayStr = istTime.toISOString().split('T')[0];
+
+    for (let doc of docs) {
+      let changed = false;
+      if (doc.installments && doc.installments.length > 0) {
+        doc.installments.forEach(inst => {
+          if (inst.status !== 'Paid' && inst.dueDate && inst.dueDate < todayStr) {
+            if (inst.status !== 'Due') {
+              inst.status = 'Due';
+              changed = true;
+            }
+          }
+        });
+      }
+      if (changed) {
+        await doc.save();
+      }
+    }
+    
     // Fetch and map company names from matching Case documents
     const caseIds = docs.map(d => d.caseId).filter(Boolean);
     const matchingCases = await Case.find({ caseId: { $in: caseIds } }, 'caseId companyName');
@@ -149,6 +171,19 @@ router.put('/:id', verifyToken, async (req, res) => {
     if (newStatus) {
       currentRefund.status = newStatus;
     }
+    
+    // Auto-update any installments whose due date has passed and are not paid
+    const nowForIST = new Date();
+    const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
+    const todayStr = istTime.toISOString().split('T')[0];
+    if (currentRefund.installments && currentRefund.installments.length > 0) {
+      currentRefund.installments.forEach(inst => {
+        if (inst.status !== 'Paid' && inst.dueDate && inst.dueDate < todayStr) {
+          inst.status = 'Due';
+        }
+      });
+    }
+
     currentRefund.lastStatusAtMs = Date.now();
     const doc = await currentRefund.save();
 

@@ -36,6 +36,7 @@ const CaseStudyTab = ({ caseData = null }) => {
   const [comms, setComms] = useState([]);
   const [docs, setDocs] = useState([]);
   const [progressLogs, setProgressLogs] = useState([]);
+  const [refunds, setRefunds] = useState([]);
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [showCommsModal, setShowCommsModal] = useState(false);
 
@@ -85,18 +86,19 @@ const CaseStudyTab = ({ caseData = null }) => {
 
       if (foundCase) foundCase.caseStudyGeneratedAt = now;
 
-      const [tlRes, actRes, commRes, docRes, progRes] = await Promise.all([
+      const [tlRes, actRes, commRes, docRes, progRes, refundRes] = await Promise.all([
         api.get(`/timeline?caseId=${targetId}`),
         api.get(`/actions?caseId=${targetId}`),
         api.get(`/communications?caseId=${targetId}`),
         api.get(`/documents?caseId=${targetId}`),
-        api.get(`/progress?caseId=${targetId}`)
+        api.get(`/progress?caseId=${targetId}`),
+        api.get(`/refunds?caseId=${targetId}`)
       ]);
 
       setTimeline(tlRes.data);
       setActions(actRes.data);
       setComms(commRes.data);
-      
+
       const fetchedDocs1 = docRes.data || [];
       const combinedDocs1 = [...fetchedDocs1];
       if (foundCase?.importDocumentLink) {
@@ -116,8 +118,9 @@ const CaseStudyTab = ({ caseData = null }) => {
         });
       }
       setDocs(combinedDocs1);
-      
+
       setProgressLogs(progRes.data.logs || []);
+      setRefunds(refundRes.data || []);
 
       setGeneratedCase({ ...foundCase, caseStudyGeneratedAt: now });
       if (!caseData) setShowMobilePreview(true);
@@ -136,13 +139,14 @@ const CaseStudyTab = ({ caseData = null }) => {
 
     setLoading(true);
     try {
-      const [caseRes, tlRes, actRes, commRes, docRes, progRes] = await Promise.all([
+      const [caseRes, tlRes, actRes, commRes, docRes, progRes, refundRes] = await Promise.all([
         caseData ? Promise.resolve({ data: caseData }) : api.get(`/cases?caseId=${caseId}`),
         api.get(`/timeline?caseId=${caseId}`),
         api.get(`/actions?caseId=${caseId}`),
         api.get(`/communications?caseId=${caseId}`),
         api.get(`/documents?caseId=${caseId}`),
-        api.get(`/progress?caseId=${caseId}`)
+        api.get(`/progress?caseId=${caseId}`),
+        api.get(`/refunds?caseId=${caseId}`)
       ]);
 
       const foundCase = caseData || (Array.isArray(caseRes.data) ? caseRes.data.find(c => c.caseId === caseId) : caseRes.data);
@@ -150,7 +154,7 @@ const CaseStudyTab = ({ caseData = null }) => {
       setTimeline(tlRes.data);
       setActions(actRes.data);
       setComms(commRes.data);
-      
+
       const fetchedDocs2 = docRes.data || [];
       const combinedDocs2 = [...fetchedDocs2];
       if (foundCase?.importDocumentLink) {
@@ -170,8 +174,9 @@ const CaseStudyTab = ({ caseData = null }) => {
         });
       }
       setDocs(combinedDocs2);
-      
+
       setProgressLogs(progRes.data.logs || []);
+      setRefunds(refundRes.data || []);
       setGeneratedCase(foundCase);
       if (!caseData) setShowMobilePreview(true);
     } catch (err) {
@@ -242,7 +247,7 @@ const CaseStudyTab = ({ caseData = null }) => {
 
   const generatedCases = cases.filter(c => c.caseStudyGeneratedAt).sort((a, b) => new Date(b.caseStudyGeneratedAt) - new Date(a.caseStudyGeneratedAt));
 
-  const ReportContent = ({ data, timeline, actions, comms, docs, progressLogs = [], isMobile = false }) => {
+  const ReportContent = ({ data, timeline, actions, comms, docs, progressLogs = [], refunds = [], isMobile = false }) => {
     const totalPaid = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
     const totalMou = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
 
@@ -322,6 +327,96 @@ const CaseStudyTab = ({ caseData = null }) => {
             </tbody>
           </table>
         </section>
+
+        {/* Refund Details */}
+        {refunds && refunds.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">{sectionNum++}. Refund Request Details</h2>
+            {refunds.map((ref, rIdx) => (
+              <div key={rIdx} className="mb-6 last:mb-0 border border-gray-200 rounded-lg p-5 bg-white page-break-inside-avoid">
+                <table className="w-full border-collapse border border-gray-200 mb-4">
+                  <tbody>
+
+                    <tr>
+                      <td className={labelClass}>Requested Amount</td>
+                      <td className={`${valueClass} font-black text-red-600`}>Rs. {Number(ref.amount).toLocaleString('en-IN')}/-</td>
+                    </tr>
+                    <tr>
+                      <td className={labelClass}>Status</td>
+                      <td className={valueClass}>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${ref.status === 'Paid' ? 'bg-green-100 text-green-700' :
+                          ref.status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                            'bg-yellow-100 text-yellow-700'
+                          }`}>
+                          {ref.status}
+                        </span>
+                      </td>
+                    </tr>
+                    {ref.summary && (
+                      <tr>
+                        <td className={labelClass}>Reason / Summary</td>
+                        <td className={valueClass}>{ref.summary}</td>
+                      </tr>
+                    )}
+                    {ref.requestedByName && (
+                      <tr>
+                        <td className={labelClass}>Requested By</td>
+                        <td className={valueClass}>{ref.requestedByName} ({ref.requestedBy})</td>
+                      </tr>
+                    )}
+
+                    {ref.paymentDate && (
+                      <tr>
+                        <td className={labelClass}>Last Payment Date</td>
+                        <td className={valueClass}>{new Date(ref.paymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</td>
+                      </tr>
+                    )}
+                    {ref.reviewerRemark && (
+                      <tr>
+                        <td className={labelClass}>Reviewer Remarks</td>
+                        <td className={valueClass}>{ref.reviewerRemark}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Installment details for this refund request */}
+                {ref.installments && ref.installments.length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-2">Installment Schedule</div>
+                    <table className="w-full border-collapse border border-gray-200 text-[10px]">
+                      <thead className="bg-gray-50 border-b border-gray-300">
+                        <tr>
+                          <th className="p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a] w-12">No.</th>
+                          <th className="p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a]">Amount</th>
+                          <th className="p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a]">Due Date</th>
+                          <th className="p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a]">Status</th>
+                          <th className="p-2 border border-gray-200 text-left font-bold uppercase text-[#1e3a8a]">Payment Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ref.installments.map((inst, iIdx) => (
+                          <tr key={iIdx}>
+                            <td className="p-2 border border-gray-200 text-gray-700 font-bold">{iIdx + 1}</td>
+                            <td className="p-2 border border-gray-200 font-bold text-gray-900">Rs. {Number(inst.amount).toLocaleString('en-IN')}/-</td>
+                            <td className="p-2 border border-gray-200 text-gray-700">{inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
+                            <td className="p-2 border border-gray-200">
+                              <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${inst.status === 'Paid' ? 'bg-green-100 text-green-700' : inst.status === 'Due' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                {inst.status}
+                              </span>
+                            </td>
+                            <td className="p-2 border border-gray-200 text-gray-700">{inst.paymentDate ? new Date(inst.paymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+          </section>
+        )}
 
         {/* 4. Bank Details */}
         {(data?.bankAccountDetails?.acc1No || data?.bankAccountDetails?.acc2No) && (
@@ -540,7 +635,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                   </div>
                 </div>
                 <div className="max-w-[1000px] mx-auto shadow-2xl rounded-[2.5rem] overflow-hidden border-8 border-border">
-                  <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} />
+                  <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} />
                 </div>
               </div>
             </div>
@@ -558,7 +653,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                   </div>
                   <div className="flex-1 overflow-y-auto bg-bg-input p-6">
                     <div className="shadow-xl rounded-[2rem] overflow-hidden border-4 border-border">
-                      <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} isMobile={true} />
+                      <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} isMobile={true} />
                     </div>
                   </div>
                 </div>
@@ -760,7 +855,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                 </div>
                 <div className="flex-1 overflow-auto bg-bg-input p-12 scrollbar-thin">
                   <div className="max-w-[850px] mx-auto shadow-2xl rounded-[2.5rem] overflow-hidden border-8 border-border">
-                    <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} />
+                    <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} />
                   </div>
                 </div>
               </div>
@@ -787,7 +882,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                 </div>
               ) : (
                 <div className="shadow-xl rounded-[2rem] overflow-hidden border-4 border-border">
-                  <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} isMobile={true} />
+                  <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} isMobile={true} />
                 </div>
               )}
             </div>

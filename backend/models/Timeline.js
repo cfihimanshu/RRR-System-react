@@ -14,6 +14,7 @@ const timelineSchema = new mongoose.Schema({
 timelineSchema.index({ createdAt: -1 });
 timelineSchema.index({ eventType: 1 });
 timelineSchema.index({ caseId: 1, eventType: 1 });
+timelineSchema.index({ source: 1 });
 
 
 module.exports = mongoose.model('Timeline', timelineSchema);

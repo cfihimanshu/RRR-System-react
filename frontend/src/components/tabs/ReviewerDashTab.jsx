@@ -243,7 +243,17 @@ const ReviewerDashTab = () => {
                           <td className="px-6 py-4 font-black">#{i + 1}</td>
                           <td className="px-6 py-4 font-bold">{inst.dueDate}</td>
                           <td className="px-6 py-4 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
-                          <td className="px-6 py-4 font-black uppercase tracking-widest text-[9px] opacity-60">{inst.status}</td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${
+                              inst.status === 'Paid'
+                                ? 'bg-green-soft text-green'
+                                : inst.status === 'Due'
+                                ? 'bg-red-soft text-red'
+                                : 'bg-yellow-soft text-yellow'
+                            }`}>
+                              {inst.status || 'Pending'}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

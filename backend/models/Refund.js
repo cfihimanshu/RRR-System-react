@@ -36,4 +36,7 @@ const refundSchema = new mongoose.Schema({
   timestamp: String
 });
 
+refundSchema.index({ requestedBy: 1 });
+refundSchema.index({ status: 1 });
+
 module.exports = mongoose.model('Refund', refundSchema);

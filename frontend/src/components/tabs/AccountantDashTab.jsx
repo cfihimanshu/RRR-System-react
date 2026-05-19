@@ -226,7 +226,7 @@ const AccountantDashTab = () => {
                                 <td className="px-4 py-3 font-bold">{inst.dueDate}</td>
                                 <td className="px-4 py-3 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
                                 <td className="px-4 py-3 text-center">
-                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${inst.status === 'Paid' ? 'bg-green-soft text-green' : 'bg-yellow-soft text-yellow'
+                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${inst.status === 'Paid' ? 'bg-green-soft text-green' : inst.status === 'Due' ? 'bg-red-soft text-red' : 'bg-yellow-soft text-yellow'
                                     }`}>
                                     {inst.status || 'Pending'}
                                   </span>

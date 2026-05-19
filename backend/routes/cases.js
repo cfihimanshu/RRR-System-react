@@ -455,13 +455,16 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
 
     // Create initial Progress log to show in the Progress Timeline
     try {
-      await Progress.create({
-        caseId: caseId,
+      const initialLog = {
         stage: req.body.currentStatus || 'Case Logged',
         percentage: 0,
         summary: 'Case initiated and added to the register.',
         nextAction: req.body.nextActionPlanned || '',
-        updatedBy: req.user.fullName || req.user.email,
+        updatedBy: req.user.fullName || req.user.email
+      };
+      await Progress.create({
+        caseId: caseId,
+        ...initialLog,
         checklist: [
           { id: 1, label: 'Initial contact made', completed: false },
           { id: 2, label: 'Documents received ', completed: false },
@@ -469,7 +472,8 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
           { id: 4, label: 'Signed MOU received', completed: false },
           { id: 5, label: 'Final settlement agreed', completed: false },
           { id: 6, label: 'Case closed', completed: false }
-        ]
+        ],
+        updates: [initialLog]
       });
     } catch (err) {
       console.error('Error creating initial progress log:', err);
@@ -563,8 +567,15 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
       try {
         const existingProgress = await Progress.findOne({ caseId });
         if (existingProgress) {
+          const updateLog = {
+            stage: req.body.currentStatus,
+            percentage: req.body.progressPercentage || existingProgress.percentage,
+            summary: `Case status changed to ${req.body.currentStatus}.`,
+            updatedBy: req.user.fullName || req.user.email || 'System'
+          };
           existingProgress.stage = req.body.currentStatus;
           existingProgress.percentage = req.body.progressPercentage || existingProgress.percentage;
+          existingProgress.updates.push(updateLog);
           await existingProgress.save();
         }
       } catch (err) {
@@ -646,25 +657,40 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
           createNotification('Admin', 'Case Assignment Update', `Case ${caseId} has been assigned to ${req.body.assignedTo} by ${req.user.fullName}.`, 'Assignment', `/case-master?search=${caseId}`);
         }
 
-        // Auto-create a Progress Log for the assignment if we auto-updated the status
+        // Auto-create/update a Progress Log for the assignment if we auto-updated the status
         if (req.body.currentStatus === 'Assigned') {
           const Progress = require('../models/Progress');
-          await Progress.create({
-            caseId: caseId,
+          const assignmentLog = {
             stage: 'Assigned',
             percentage: 25,
             summary: `Case assigned to ${req.body.assignedTo} for initial analysis and review.`,
             nextAction: req.body.nextActionPlanned || updated.nextActionPlanned || '',
-            updatedBy: req.user.fullName || req.user.email || 'System',
-            checklist: [
-              { id: 1, label: 'Initial contact made', completed: false },
-              { id: 2, label: 'Documents received', completed: false },
-              { id: 3, label: 'MOU draft prepared', completed: false },
-              { id: 4, label: 'Signed MOU received', completed: false },
-              { id: 5, label: 'Final settlement agreed', completed: false },
-              { id: 6, label: 'Case closed', completed: false }
-            ]
-          });
+            updatedBy: req.user.fullName || req.user.email || 'System'
+          };
+          const existingProgress = await Progress.findOne({ caseId });
+          if (existingProgress) {
+            existingProgress.stage = 'Assigned';
+            existingProgress.percentage = 25;
+            existingProgress.summary = assignmentLog.summary;
+            existingProgress.nextAction = assignmentLog.nextAction;
+            existingProgress.updatedBy = assignmentLog.updatedBy;
+            existingProgress.updates.push(assignmentLog);
+            await existingProgress.save();
+          } else {
+            await Progress.create({
+              caseId: caseId,
+              ...assignmentLog,
+              checklist: [
+                { id: 1, label: 'Initial contact made', completed: false },
+                { id: 2, label: 'Documents received', completed: false },
+                { id: 3, label: 'MOU draft prepared', completed: false },
+                { id: 4, label: 'Signed MOU received', completed: false },
+                { id: 5, label: 'Final settlement agreed', completed: false },
+                { id: 6, label: 'Case closed', completed: false }
+              ],
+              updates: [assignmentLog]
+            });
+          }
         }
       } catch (err) { console.error('Assignment Notification Error:', err); }
     } else {

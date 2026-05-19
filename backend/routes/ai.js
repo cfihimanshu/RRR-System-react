@@ -158,18 +158,22 @@ router.post('/case-insights', verifyToken, async (req, res) => {
       });
     }
 
-    const [historyEntries, comms, progressLogs, documents] = await Promise.all([
+    const [historyEntries, comms, progressDoc, documents] = await Promise.all([
       History.find({ caseId }).sort({ timestamp: 1 }).limit(20),
       Communication.find({ caseId }).sort({ dateTime: -1 }).limit(20),
-      Progress.find({ caseId }).sort({ createdAt: -1 }).limit(20),
+      Progress.findOne({ caseId }).lean(),
       Document.find({ caseId }).sort({ uploadDate: -1 }).limit(20),
     ]);
+    const progressLogs = progressDoc ? (progressDoc.updates || []) : [];
+    // Sort updates by createdAt descending, limited to 20
+    progressLogs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const limitedProgressLogs = progressLogs.slice(0, 20);
 
     const caseContext = buildCaseContext(
       caseData,
       historyEntries,
       comms,
-      progressLogs,
+      limitedProgressLogs,
       documents
     );
 

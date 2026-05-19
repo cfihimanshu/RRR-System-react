@@ -72,6 +72,7 @@ caseSchema.index({ priority: 1 });
 caseSchema.index({ nextActionDate: 1 });
 caseSchema.index({ companyName: 1 });
 caseSchema.index({ clientMobile: 1 });
-
+caseSchema.index({ typeOfComplaint: 1 });
+caseSchema.index({ sourceOfComplaint: 1 });
 
 module.exports = mongoose.model('Case', caseSchema);

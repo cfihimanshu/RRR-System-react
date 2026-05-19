@@ -11,20 +11,23 @@ router.get('/', verifyToken, async (req, res) => {
     const { caseId } = req.query;
     if (!caseId) return res.status(400).json({ error: 'caseId is required' });
 
-    let logs = await Progress.find({ caseId }).sort({ createdAt: -1 });
+    let progressDoc = await Progress.findOne({ caseId });
 
     // If no logs exist, create an initial one automatically
-    if (logs.length === 0) {
+    if (!progressDoc) {
       try {
         const targetCase = await Case.findOne({ caseId });
         if (targetCase) {
-          await Progress.create({
-            caseId,
+          const initialLog = {
             stage: targetCase.currentStatus || 'Case Logged',
             percentage: targetCase.progressPercentage || 0,
             summary: `Case Registered: ${targetCase.typeOfComplaint} setup complete.`,
             nextAction: targetCase.nextActionPlanned || '',
-            updatedBy: targetCase.initiatedBy || 'System',
+            updatedBy: targetCase.initiatedBy || 'System'
+          };
+          progressDoc = await Progress.create({
+            caseId,
+            ...initialLog,
             checklist: [
               { id: 1, label: 'Initial contact made', completed: false },
               { id: 2, label: 'Documents received ', completed: false },
@@ -32,16 +35,19 @@ router.get('/', verifyToken, async (req, res) => {
               { id: 4, label: 'Signed MOU received', completed: false },
               { id: 5, label: 'Final settlement agreed', completed: false },
               { id: 6, label: 'Case closed', completed: false }
-            ]
+            ],
+            updates: [initialLog]
           });
-          // Re-fetch to get the one with createdAt timestamp
-          logs = await Progress.find({ caseId }).sort({ createdAt: -1 });
         }
       } catch (err) {
         console.error('Error auto-initializing progress:', err);
       }
     }
-    const latestLog = logs[0];
+
+    const logs = progressDoc ? (progressDoc.updates || []) : [];
+    // Sort updates by createdAt descending
+    logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
     const targetCase = await Case.findOne({ caseId }).lean();
 
     // Enrich logs with nextAction from Timeline if missing (for older logs)
@@ -50,7 +56,7 @@ router.get('/', verifyToken, async (req, res) => {
       if (!logObj.nextAction) {
         // Try to find matching timeline event with a larger window (5 mins)
         const timelineEvent = await Timeline.findOne({
-          caseId: log.caseId,
+          caseId: caseId,
           $or: [
             { 'metadata.nextAction': { $exists: true, $ne: '' } },
             { 'metadata.recommendedNextSteps': { $exists: true, $ne: '' } }
@@ -77,8 +83,9 @@ router.get('/', verifyToken, async (req, res) => {
 
     res.json({
       logs: enrichedLogs,
-      checklist: latestLog ? latestLog.checklist : []
-    });  } catch (error) {
+      checklist: progressDoc ? progressDoc.checklist : []
+    });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -88,8 +95,7 @@ router.post('/', verifyToken, async (req, res) => {
   try {
     const { caseId, stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, updatedBy, checklist, refundedAmount, savedAmount, attachment } = req.body;
 
-    const newLog = new Progress({
-      caseId,
+    const newLog = {
       stage,
       percentage,
       summary,
@@ -98,13 +104,49 @@ router.post('/', verifyToken, async (req, res) => {
       followUpDate,
       escalateTo,
       updatedBy,
-      checklist,
       refundedAmount,
       savedAmount,
-      attachment
-    });
+      attachment,
+      createdAt: new Date()
+    };
 
-    await newLog.save();
+    let progressDoc = await Progress.findOne({ caseId });
+    if (!progressDoc) {
+      progressDoc = new Progress({
+        caseId,
+        stage,
+        percentage,
+        summary,
+        nextAction,
+        blockers,
+        followUpDate,
+        escalateTo,
+        updatedBy,
+        checklist,
+        refundedAmount,
+        savedAmount,
+        attachment,
+        updates: [newLog]
+      });
+    } else {
+      progressDoc.stage = stage || progressDoc.stage;
+      progressDoc.percentage = percentage !== undefined ? percentage : progressDoc.percentage;
+      progressDoc.summary = summary || progressDoc.summary;
+      progressDoc.nextAction = nextAction || progressDoc.nextAction;
+      progressDoc.blockers = blockers || progressDoc.blockers;
+      progressDoc.followUpDate = followUpDate || progressDoc.followUpDate;
+      progressDoc.escalateTo = escalateTo || progressDoc.escalateTo;
+      progressDoc.refundedAmount = refundedAmount !== undefined ? refundedAmount : progressDoc.refundedAmount;
+      progressDoc.savedAmount = savedAmount !== undefined ? savedAmount : progressDoc.savedAmount;
+      progressDoc.attachment = attachment || progressDoc.attachment;
+      progressDoc.updatedBy = updatedBy || progressDoc.updatedBy;
+      if (checklist) {
+        progressDoc.checklist = checklist;
+      }
+      progressDoc.updates.push(newLog);
+    }
+
+    await progressDoc.save();
 
     // Create Document record if attachment is provided
     if (attachment) {
@@ -157,7 +199,8 @@ router.post('/', verifyToken, async (req, res) => {
     });
     await timelineEvent.save();
 
-    res.status(201).json(newLog);
+    const savedLog = progressDoc.updates[progressDoc.updates.length - 1];
+    res.status(201).json(savedLog);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

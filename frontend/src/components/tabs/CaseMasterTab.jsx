@@ -807,7 +807,7 @@ const CaseMasterTab = () => {
 
     let matchRefund = true;
     if (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds') && appliedFilters.refundStatus.length > 0) {
-      const caseRefundStatus = c.refundStatus || 'Pending';
+      const caseRefundStatus = c.refundStatus || '';
       matchRefund = appliedFilters.refundStatus.some(selectedRefund => {
         return caseRefundStatus.toLowerCase() === selectedRefund.toLowerCase();
       });
@@ -859,6 +859,25 @@ const CaseMasterTab = () => {
 
     return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchState && matchType && matchSourceOfComplaint && matchServiceMode && matchServiceName && matchCity && matchLastPayment && matchLinkedOnly && matchRefund && matchCustom;
   });
+
+  const hasActiveFilters = !!(
+    searchTerm ||
+    !appliedFilters.status.includes('All Status') ||
+    !appliedFilters.priority.includes('All Priority') ||
+    !appliedFilters.assignee.includes('All Assignees') ||
+    !appliedFilters.typeOfComplaint.includes('All Types') ||
+    appliedFilters.date ||
+    (appliedFilters.state && !appliedFilters.state.includes('All States')) ||
+    (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds')) ||
+    appliedFilters.sourceOfComplaint ||
+    appliedFilters.serviceMode ||
+    appliedFilters.serviceName ||
+    appliedFilters.city ||
+    appliedFilters.lastPaymentStart ||
+    appliedFilters.lastPaymentEnd ||
+    appliedFilters.linkedOnly ||
+    (appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v))
+  );
 
   const handleApplyFilters = () => {
     setAppliedFilters(tempFilters);
@@ -2232,10 +2251,7 @@ const CaseMasterTab = () => {
                 <Inbox size={14} className="opacity-70" />
                 <span className="text-[10px] font-black uppercase tracking-[0.15em]">Total Cases:</span>
                 <span className="text-sm font-black tabular-nums">
-                  {searchTerm || !appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date || (appliedFilters.state && !appliedFilters.state.includes('All States'))
-                    ? filteredCases.length
-                    : totalCount
-                  }
+                  {hasActiveFilters ? filteredCases.length : totalCount}
                 </span>
               </div>
               
@@ -2352,7 +2368,7 @@ const CaseMasterTab = () => {
                       <div
                         key={step}
                         className={`flex-1 flex items-center justify-center text-[9px] font-black uppercase tracking-widest transition-all duration-300 whitespace-nowrap ${isCompleted ? 'bg-green text-white' :
-                          isActive ? 'bg-accent text-white border-x border-white/10' :
+                          isActive ? 'bg-green text-white border-x border-white/10' :
                             'bg-bg-input text-text-muted hover:bg-bg-secondary/50'
                           }`}
                       >

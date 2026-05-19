@@ -91,6 +91,14 @@ const DashboardTab = () => {
   const [totalAmount, setTotalAmount] = useState('');
   const [installments, setInstallments] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [visibleActivitiesCount, setVisibleActivitiesCount] = useState(15);
+
+  const handleActivityScroll = (e) => {
+    const bottom = e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 10;
+    if (bottom && visibleActivitiesCount < activities.length) {
+      setVisibleActivitiesCount(prev => prev + 15);
+    }
+  };
   const [teamFilter, setTeamFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -709,7 +717,7 @@ const DashboardTab = () => {
   if (!stats) return <div className="section active bg-[#dee1e6] h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div></div>;
 
   return (
-    <div className="section active w-full pb-10 px-4 bg-[#dee1e6]">
+    <div className="section active w-full pb-10 px-4 bg-[#dee1e6] overflow-x-hidden max-w-full">
       <div className="section-header flex flex-col lg:flex-row justify-between items-start lg:items-center mb-10 w-full gap-6 pt-4">
         <div className="flex-1 text-left">
         </div>
@@ -1176,15 +1184,15 @@ const DashboardTab = () => {
       {/* War Room Overview */}
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <div>
+          <div className="flex items-center gap-4">
             <h2 className="text-xl font-black text-text-primary uppercase tracking-tight">Overview</h2>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             {user?.role === 'Admin' && (
               <select
                 value={userFilter}
                 onChange={(e) => setUserFilter(e.target.value)}
-                className="bg-bg-card border-2 border-border px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none"
+                className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none w-full sm:w-auto"
               >
                 <option value="">All Users</option>
                 {allUsers.map(u => (
@@ -1193,19 +1201,19 @@ const DashboardTab = () => {
               </select>
             )}
             {user?.role === 'Admin' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 w-full sm:w-auto">
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="bg-bg-card border-2 border-border px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none"
+                  className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none min-w-0 flex-1"
                 />
-                <span className="text-text-muted font-black text-xs">TO</span>
+                <span className="text-text-muted font-black text-[10px] sm:text-xs">TO</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="bg-bg-card border-2 border-border px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none"
+                  className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none min-w-0 flex-1"
                 />
               </div>
             )}
@@ -1253,7 +1261,7 @@ const DashboardTab = () => {
               <div className="xl:col-span-4 2xl:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY KEY NUMBERS (TODAY)</div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 h-full items-center">
-                  <div className="text-center cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/case-master')}>
+                  <div className="text-center cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}>
                     <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Active Cases</div>
                     <div className="text-xl font-black text-text-primary mt-2">{stats?.openCases || 0}</div>
                   </div>
@@ -1429,7 +1437,6 @@ const DashboardTab = () => {
                 </div> */}
               </div>
             </div>
-
             {/* Top Urgent Cases Section */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
               {/* MY CASES OVERVIEW */}
@@ -1631,7 +1638,7 @@ const DashboardTab = () => {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
             {/* Main Cards (Left) */}
-            <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="lg:col-span-6 grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
               {/* Card 1: Total Cases */}
               <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master')}>
                 <div>
@@ -1746,11 +1753,11 @@ const DashboardTab = () => {
             </div>
 
             {/* Active Users (Right) */}
-            <div className="lg:col-span-6 bg-bg-card rounded-2xl p-5 shadow-sm">
+            <div className="lg:col-span-6 bg-bg-card rounded-2xl p-5 shadow-sm min-w-0 overflow-hidden">
               <div className="flex justify-between items-center mb-5">
                 <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Users</div>
               </div>
-              <div className="max-h-[200px] overflow-y-auto pr-2">
+              <div className="max-h-[200px] overflow-y-auto overflow-x-auto pr-2 scrollbar-thin">
                 <table className="w-full text-left text-[10px] font-bold uppercase tracking-widest text-text-secondary border-collapse">
                   <thead>
                     <tr className="border-b border-border/50">
@@ -1986,9 +1993,9 @@ const DashboardTab = () => {
                     return localDate.toISOString().split('T')[0];
                   };
                   const now = new Date();
-                  const startStr = getLocalDateString(now);
-                  const endOfNext6Months = new Date(now);
-                  endOfNext6Months.setMonth(endOfNext6Months.getMonth() + 6);
+                  const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+                  const startStr = getLocalDateString(startOfNextMonth);
+                  const endOfNext6Months = new Date(now.getFullYear(), now.getMonth() + 7, 0);
                   const endOfNext6MonthsStr = getLocalDateString(endOfNext6Months);
 
                   setReportPeriodFilter('Next 6 Months');
@@ -2091,16 +2098,16 @@ const DashboardTab = () => {
 
       {/* Threat Trends Section */}
       {user?.role === 'Admin' && (
-        <div className="bg-bg-card rounded-2xl p-5 shadow-sm mb-8">
+        <div className="bg-bg-card rounded-2xl p-5 shadow-sm mb-8 min-w-0 overflow-hidden">
           <div className="flex justify-between items-center mb-5">
             <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Threat Trends (Last 30 Days)</div>
             {/* <div className="text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest">
             View Analytics <ArrowRight size={12} />
           </div> */}
           </div>
-          <div className="h-[200px] w-full">
+          <div className="h-[320px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats?.threatTrendData || []} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+              <LineChart data={stats?.threatTrendData || []} margin={{ top: 10, right: 30, left: 10, bottom: 25 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                 <XAxis dataKey="date" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
@@ -2110,11 +2117,11 @@ const DashboardTab = () => {
                   labelStyle={{ color: '#9CA3AF', fontWeight: 'bold' }}
                 />
                 <Legend
-                  verticalAlign="top"
+                  verticalAlign="bottom"
                   align="center"
                   iconType="circle"
                   iconSize={8}
-                  wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '20px' }}
+                  wrapperStyle={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', paddingTop: '15px' }}
                 />
                 {(stats?.threatTrendTypes || []).map((type, index) => {
                   const colors = ['#0066FF', '#094e2bff', '#7C3AED', '#d1593bff', '#0a8585ff', '#915c0eff'];
@@ -2275,7 +2282,7 @@ const DashboardTab = () => {
       {user?.role === 'Admin' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
           {/* Top Urgent Cases Table */}
-          <div className="lg:col-span-7 bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col h-[90%]">
+          <div className="lg:col-span-7 bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col h-auto lg:h-[60%]">
             <div className="flex justify-between items-center mb-6 px-2">
               <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Top Urgent Cases</h3>
             </div>
@@ -2357,14 +2364,17 @@ const DashboardTab = () => {
                 <Clock size={18} className="text-blue" />
                 <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Recent Activity</h3>
               </div>
-              <div className="space-y-6 flex-1 overflow-y-auto scrollbar-thin max-h-[420px] pr-2">
+              <div
+                className="space-y-6 flex-1 overflow-y-auto scrollbar-thin max-h-[420px] pr-2"
+                onScroll={handleActivityScroll}
+              >
                 {activities.length === 0 ? (
                   <div className="text-center py-20 opacity-20">
                     <Timer size={40} className="mx-auto mb-4" />
                     <div className="text-[10px] font-black uppercase tracking-widest">Awaiting Pulse...</div>
                   </div>
                 ) : (
-                  activities.map((activity, idx) => (
+                  activities.slice(0, visibleActivitiesCount).map((activity, idx) => (
                     <div key={activity.id || idx} className="relative pl-6 before:absolute before:left-0 before:top-2 before:bottom-[-24px] before:w-[2px] last:before:hidden before:bg-border/50">
                       <div className={`absolute left-[-5px] top-1.5 w-3 h-3 rounded-full z-10 border-2 border-bg-card shadow-[0_0_10px_rgba(0,0,0,0.5)] ${activity.color === 'green' ? 'bg-green shadow-[0_0_8px_rgba(34,197,94,0.4)]' :
                         activity.color === 'red' ? 'bg-red shadow-[0_0_8px_rgba(239,68,68,0.4)]' :
@@ -2555,7 +2565,7 @@ const DashboardTab = () => {
             )}
 
             {/* Source of Complaint Table */}
-            <div className="bg-bg-card border-2 border-border rounded-2xl w-[88%] overflow-hidden shadow-sm self-stretch mt-[-12%]">
+            <div className="bg-bg-card border-2 border-border rounded-2xl w-full lg:w-[87%] mt-0 lg:mt-[-35%] overflow-hidden shadow-sm self-stretch">
               <div className="px-6 py-4 border-b-2 border-border flex items-center gap-2">
                 <Target size={20} className="text-accent" />
                 <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">Source of Complaint</h3>
@@ -3017,7 +3027,9 @@ const DashboardTab = () => {
                                                       <div className="flex items-center justify-between">
                                                         <span className="text-[10px] font-black text-text-primary uppercase">Installment #{index + 1}</span>
                                                         <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${inst.status === 'Paid'
-                                                          ? 'bg-green-soft text-green border-green-soft'
+                                                                                                                     ? 'bg-green-soft text-green border-green-soft'
+                                                           : inst.status === 'Due'
+                                                           ? 'bg-red-soft text-red border-red-soft'
                                                           : 'bg-yellow-soft text-yellow border-yellow-soft'
                                                           }`}>
                                                           {inst.status || 'Pending'}

@@ -78,7 +78,7 @@ const MyTaskTab = () => {
     try {
       if (showToast && pageNum === 1) setLoading(true);
       const assigneeFilter = selectedUser === 'All Users' ? 'All Users' : selectedUser;
-      const limit = 50;
+      const limit = 10000;
       const res = await api.get(`/tasks?assignee=${assigneeFilter}&page=${pageNum}&limit=${limit}`);
       
       const taskList = res.data.tasks || (Array.isArray(res.data) ? res.data : []);

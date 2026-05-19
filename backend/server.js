@@ -94,6 +94,27 @@ const connectToDatabase = async () => {
       retryWrites: true,
     });
     console.log('MongoDB Connected');
+    
+    // Force index verification/creation on startup
+    const Case = require('./models/Case');
+    const Timeline = require('./models/Timeline');
+    const Task = require('./models/Task');
+    const Refund = require('./models/Refund');
+    const Report = require('./models/Report');
+    const User = require('./models/User');
+
+    Promise.all([
+      Case.createIndexes(),
+      Timeline.createIndexes(),
+      Task.createIndexes(),
+      Refund.createIndexes(),
+      Report.createIndexes(),
+      User.createIndexes()
+    ]).then(() => {
+      console.log('✓ All database indexes verified/built successfully');
+    }).catch(err => {
+      console.error('✗ Error building database indexes:', err);
+    });
   } catch (err) {
     console.error('DATABASE CONNECTION ERROR:', err);
     throw err; // Throw instead of exiting
@@ -301,7 +322,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     // Removed redundant query re-definitions
 
     
-    const completedStatuses = ['Settled', 'settled', 'Settlement', 'settlement', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed'];
+    const completedStatuses = ['Settled', 'settled', 'Settlement', 'settlement', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed', 'NA', 'na', 'Na', 'nA', 'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'];
     const nowForIST = new Date();
     const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
     const dateStrIST = istTime.toISOString().split('T')[0];
@@ -719,10 +740,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const startOfThisMonthForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth(), 1, 0, 0, 0, 0);
     const endOfThisMonthForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    // Next 6 Months Boundary (Today inclusive, up to 6 months from now)
-    const endOfNext6MonthsForRefunds = new Date(nowForRefunds);
-    endOfNext6MonthsForRefunds.setMonth(endOfNext6MonthsForRefunds.getMonth() + 6);
-    endOfNext6MonthsForRefunds.setHours(23, 59, 59, 999);
+    // Next 6 Months Boundary (Next month 1st to end of 6th month)
+    const startOfNext6MonthsForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth() + 1, 1, 0, 0, 0, 0);
+    const endOfNext6MonthsForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth() + 7, 0, 23, 59, 59, 999);
 
     // Sets to count UNIQUE cases per period
     const caseSets = {
@@ -770,7 +790,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         }
 
         // Next 6 Months
-        if (refDate >= startOfTodayForRefunds && refDate <= endOfNext6MonthsForRefunds) {
+        if (refDate >= startOfNext6MonthsForRefunds && refDate <= endOfNext6MonthsForRefunds) {
           caseSets.next6Months.add(r.caseId);
           provisions.next6Months.amount += amt;
         }
@@ -853,7 +873,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
           _id: "$calculatedUser",
           total: { $sum: 1 },
           pending: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, 1, 0] } },
-          settled: { $sum: { $cond: [{ $in: ["$currentStatus", completedStatuses] }, 1, 0] } },
+          settled: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']] }, 1, 0] } },
           overdue: { 
             $sum: { 
               $cond: [
