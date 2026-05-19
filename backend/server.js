@@ -368,8 +368,25 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     }
     const timelineQuery = req.user.role !== 'Admin' ? { caseId: { $in: myCaseIds } } : {};
 
+    let timelineMatch = { ...timelineQuery };
+    if (req.user.role !== 'Admin' || userFilter) {
+      timelineMatch.source = nameRegex;
+    }
 
-    const [caseMetricsFacet, timelineMetrics, refundMetrics, taskMetrics] = await Promise.all([
+    const yesterday = new Date(istTime);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const [
+      caseMetricsFacet,
+      timelineMetrics,
+      refundMetrics,
+      taskMetrics,
+      yesterdayEod,
+      todaySod,
+      todayEod,
+      lastTimeline
+    ] = await Promise.all([
       Case.aggregate([
         { $match: query },
         {
@@ -397,7 +414,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
                 createdToday: { $sum: { $cond: [{ $gte: ["$createdAt", startOfToday] }, 1, 0] } },
                 liveEscalations: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $gte: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
                 noUpdate48Hrs: { $sum: { $cond: [{ $and: [{ $lt: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
-                slaBreached: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $lt: ["$nextActionDate", today] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } }
+                slaBreached: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $lt: ["$nextActionDate", today] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
+                totalCriticalCases: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } },
+                closedCriticalCases: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution', 'settled', 'settlement', 'closed', 'closure', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']] }] }, 1, 0] } }
               }}
             ],
             unassigned: [
@@ -472,7 +491,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         }
       ]),
       Timeline.aggregate([
-        { $match: { ...timelineQuery, source: nameRegex } },
+        { $match: timelineMatch },
         {
           $facet: {
             docsToday: [
@@ -506,57 +525,104 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         return { refundsPaid, allRefunds, pendingApprovalsResult };
       })(),
       (async () => {
-        const sodReport = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST });
+        const sodReport = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean();
         const sodTasksCount = sodReport ? (sodReport.myTasksToday?.length || 0) : 0;
 
-        const [pendingTasksCount, dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday, totalTasksToday, completedTasksToday] = await Promise.all([
-          Task.countDocuments({
-            ...(req.user.role !== 'Admin' ? { assignee: userName } : {}),
-            status: { $ne: 'Completed' }
-          }),
-          (async () => {
-            const manualCount = await Task.countDocuments({
-              ...taskUserQuery,
-              status: { $nin: ['Completed', 'Done'] },
-              createdAt: { $gte: startOfToday }
-            });
-            return manualCount + sodTasksCount;
-          })(),
-          Task.countDocuments({
-            ...taskUserQuery,
-            status: { $nin: ['Completed', 'Done'] },
-            dueDate: tomorrowStr
-          }),
-          Task.countDocuments({
-            ...taskUserQuery,
-            status: { $nin: ['Completed', 'Done'] },
-            dueDate: dayAfterTomorrowStr
-          }),
-          Task.countDocuments({
-            ...taskUserQuery,
-            status: { $nin: ['Completed', 'Done'] },
-            reminderDateTime: { $lt: new Date().toISOString(), $ne: '' }
-          }),
-          Task.countDocuments({
-            ...taskUserQuery,
-            status: 'Completed',
-            updatedAt: { $gte: startOfToday }
-          }),
-          (async () => {
-            const manualCount = await Task.countDocuments({
-              ...taskUserQuery,
-              createdAt: { $gte: startOfToday }
-            });
-            return manualCount + sodTasksCount;
-          })(),
-          Task.countDocuments({
-            ...taskUserQuery,
-            createdAt: { $gte: startOfToday },
-            status: { $in: ['Completed', 'Done'] }
-          })
+        const taskCountsResult = await Task.aggregate([
+          { $match: taskUserQuery },
+          {
+            $facet: {
+              pendingTasksCount: [
+                {
+                  $match: {
+                    status: { $ne: 'Completed' },
+                    ...(req.user.role !== 'Admin' ? { assignee: userName } : {})
+                  }
+                },
+                { $count: 'count' }
+              ],
+              dueTodayCount: [
+                {
+                  $match: {
+                    status: { $nin: ['Completed', 'Done'] },
+                    createdAt: { $gte: startOfToday }
+                  }
+                },
+                { $count: 'count' }
+              ],
+              dueWithin24h: [
+                {
+                  $match: {
+                    status: { $nin: ['Completed', 'Done'] },
+                    dueDate: tomorrowStr
+                  }
+                },
+                { $count: 'count' }
+              ],
+              dueWithin48h: [
+                {
+                  $match: {
+                    status: { $nin: ['Completed', 'Done'] },
+                    dueDate: dayAfterTomorrowStr
+                  }
+                },
+                { $count: 'count' }
+              ],
+              overdue: [
+                {
+                  $match: {
+                    status: { $nin: ['Completed', 'Done'] },
+                    reminderDateTime: { $lt: new Date().toISOString(), $ne: '' }
+                  }
+                },
+                { $count: 'count' }
+              ],
+              actionTakenToday: [
+                {
+                  $match: {
+                    status: 'Completed',
+                    updatedAt: { $gte: startOfToday }
+                  }
+                },
+                { $count: 'count' }
+              ],
+              totalTasksTodayCount: [
+                {
+                  $match: {
+                    createdAt: { $gte: startOfToday }
+                  }
+                },
+                { $count: 'count' }
+              ],
+              completedTasksToday: [
+                {
+                  $match: {
+                    createdAt: { $gte: startOfToday },
+                    status: { $in: ['Completed', 'Done'] }
+                  }
+                },
+                { $count: 'count' }
+              ]
+            }
+          }
         ]);
-        return { pendingTasksCount, dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday, totalTasksToday, completedTasksToday };
-      })()
+
+        const tc = taskCountsResult[0] || {};
+        return {
+          pendingTasksCount: tc.pendingTasksCount?.[0]?.count || 0,
+          dueToday: (tc.dueTodayCount?.[0]?.count || 0) + sodTasksCount,
+          dueWithin24h: tc.dueWithin24h?.[0]?.count || 0,
+          dueWithin48h: tc.dueWithin48h?.[0]?.count || 0,
+          overdue: tc.overdue?.[0]?.count || 0,
+          actionTakenToday: tc.actionTakenToday?.[0]?.count || 0,
+          totalTasksToday: (tc.totalTasksTodayCount?.[0]?.count || 0) + sodTasksCount,
+          completedTasksToday: tc.completedTasksToday?.[0]?.count || 0
+        };
+      })(),
+      Report.findOne({ userEmail: req.user.email, type: 'EOD', date: yesterdayStr }).lean(),
+      Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean(),
+      Report.findOne({ userEmail: req.user.email, type: 'EOD', date: dateStrIST }).lean(),
+      Timeline.findOne({ source: nameRegex, createdAt: { $gte: startOfToday } }).sort({ createdAt: -1 }).lean()
     ]);
 
     const facet = caseMetricsFacet[0] || {};
@@ -595,18 +661,10 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const { pendingTasksCount, dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday, totalTasksToday, completedTasksToday } = taskMetrics;
     const timeBoundActions = { dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday, totalTasksToday, completedTasksToday };
 
-    const totalCriticalCases = await Case.countDocuments({ ...query, priority: 'High' });
-    const closedCriticalCases = await Case.countDocuments({ ...query, priority: 'High', currentStatus: { $in: ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution'] } });
+    const totalCriticalCases = b.totalCriticalCases || 0;
+    const closedCriticalCases = b.closedCriticalCases || 0;
 
-    const yesterday = new Date(istTime);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
-    const yesterdayEod = await Report.findOne({ userEmail: req.user.email, type: 'EOD', date: yesterdayStr }).lean();
     const yesterdayEodFilled = yesterdayEod ? 1 : 0;
-
-    const todaySod = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean();
-    const todayEod = await Report.findOne({ userEmail: req.user.email, type: 'EOD', date: dateStrIST }).lean();
-    const lastTimeline = await Timeline.findOne({ source: nameRegex, createdAt: { $gte: startOfToday } }).sort({ createdAt: -1 }).lean();
 
     const perfDateRange = perfStartDate && perfEndDate ? {
       $gte: new Date(`${perfStartDate}T00:00:00`), 
@@ -620,54 +678,44 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const recentCases = facet.recentCases || [];
     const highPriorityCases = facet.highPriorityCases || [];
     const caseTypeWiseData = (facet.caseTypeWise || []).map(item => ({ caseType: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
-    const sourceWiseData = (facet.sourceWise || []).map(item => ({ source: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));    // Performance Evaluation logic
-    const perfCaseIds = await Case.distinct('caseId', ownershipQuery);
+    const sourceWiseData = (facet.sourceWise || []).map(item => ({ source: item._id || 'Unknown', count: item.count, totalAmount: item.totalAmount || 0 }));
 
     const myPerformance = {
       totalCommunications: 0,
       casesResolved: 0,
       naCases: 0,
-      overdueCases: await Case.countDocuments({
+      overdueCases: 0
+    };
+
+    const [overdueCasesCount, totalCommsCount, casesResolvedCount, naCasesCount] = await Promise.all([
+      Case.countDocuments({
         ...ownershipQuery,
         currentStatus: { $not: { $regex: /Settled|Closed|Closure|Resolution|Resolved|Done|Complete|NA/i } },
         $or: [
           { nextActionDate: { $lt: dateStrIST } }, 
           { nextActionDate: { $lt: new Date().toISOString().split('T')[0] } }
         ]
-      })
-    };
-
-    if (perfDateRange) {
-      myPerformance.totalCommunications = await Communication.countDocuments({
+      }),
+      Communication.countDocuments({
         loggedBy: activeNameRegex,
-        createdAt: perfDateRange
-      });
-
-      myPerformance.casesResolved = await Case.countDocuments({
+        ...(perfDateRange ? { createdAt: perfDateRange } : {})
+      }),
+      Case.countDocuments({
         ...ownershipQuery,
         currentStatus: { $in: ['Settled', 'settled', 'Settlement', 'settlement'] },
-        updatedAt: perfDateRange
-      });
-
-      myPerformance.naCases = await Case.countDocuments({
+        ...(perfDateRange ? { updatedAt: perfDateRange } : {})
+      }),
+      Case.countDocuments({
         ...ownershipQuery,
         typeOfComplaint: { $regex: /NA Non Agreement/i },
-        updatedAt: perfDateRange
-      });
-    } else {
-      // Default (all time)
-      myPerformance.totalCommunications = await Communication.countDocuments({
-        loggedBy: activeNameRegex
-      });
-      myPerformance.casesResolved = await Case.countDocuments({
-        ...ownershipQuery,
-        currentStatus: { $in: ['Settled', 'settled', 'Settlement', 'settlement'] }
-      });
-      myPerformance.naCases = await Case.countDocuments({
-        ...ownershipQuery,
-        typeOfComplaint: { $regex: /NA Non Agreement/i }
-      });
-    }    // Reshape threatTrends
+        ...(perfDateRange ? { updatedAt: perfDateRange } : {})
+      })
+    ]);
+
+    myPerformance.overdueCases = overdueCasesCount;
+    myPerformance.totalCommunications = totalCommsCount;
+    myPerformance.casesResolved = casesResolvedCount;
+    myPerformance.naCases = naCasesCount;    // Reshape threatTrends
     const threatTrendAggregation = facet.threatTrends || [];
     const foundTypes = new Set();
     threatTrendAggregation.forEach(item => { if (item._id.type) foundTypes.add(item._id.type); });

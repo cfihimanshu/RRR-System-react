@@ -579,10 +579,10 @@ const DashboardTab = () => {
     fetchUserCases();
     fetchMyTodayTasks();
 
-    // Auto-refresh stats every 30 seconds so case add/delete reflects immediately
+    // Auto-refresh stats every 2 minutes to prevent database load and queue stacking
     const statsInterval = setInterval(() => {
       fetchStats(teamFilter);
-    }, 30000);
+    }, 120000);
 
     return () => clearInterval(statsInterval);
   }, [teamFilter, userFilter, startDate, endDate, perfStartDate, perfEndDate]);

@@ -40,28 +40,23 @@ router.get('/', verifyToken, async (req, res) => {
 
     const total = await Task.countDocuments(query);
     
-    const tasks = await Task.aggregate([
-      { $match: query },
-      { $sort: { updatedAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-      {
-        $lookup: {
-          from: 'cases',
-          localField: 'caseId',
-          foreignField: 'caseId',
-          as: 'caseInfo'
-        }
-      },
-      {
-        $addFields: {
-          companyName: { $arrayElemAt: ['$caseInfo.companyName', 0] }
-        }
-      },
-      {
-        $project: { caseInfo: 0 }
-      }
-    ]);
+    const rawTasks = await Task.find(query)
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const caseIds = [...new Set(rawTasks.map(t => t.caseId).filter(Boolean))];
+    const cases = await Case.find({ caseId: { $in: caseIds } }, 'caseId companyName').lean();
+    const caseMap = {};
+    cases.forEach(c => {
+      caseMap[c.caseId] = c.companyName;
+    });
+
+    const tasks = rawTasks.map(t => ({
+      ...t,
+      companyName: caseMap[t.caseId] || ''
+    }));
 
     res.json({
       tasks,
