@@ -5,6 +5,7 @@ if (!process.env.VERCEL) {
   dns.setServers(['8.8.8.8', '8.8.4.4']);
 }
 dns.setDefaultResultOrder('ipv4first');
+// Rebuild trigger to clear Vercel queue
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
