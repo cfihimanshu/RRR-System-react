@@ -385,7 +385,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       yesterdayEod,
       todaySod,
       todayEod,
-      lastTimeline
+      lastTimeline,
+      perfCaseIds
     ] = await Promise.all([
       Case.aggregate([
         { $match: query },
@@ -622,7 +623,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       Report.findOne({ userEmail: req.user.email, type: 'EOD', date: yesterdayStr }).lean(),
       Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean(),
       Report.findOne({ userEmail: req.user.email, type: 'EOD', date: dateStrIST }).lean(),
-      Timeline.findOne({ source: nameRegex, createdAt: { $gte: startOfToday } }).sort({ createdAt: -1 }).lean()
+      Timeline.findOne({ source: nameRegex, createdAt: { $gte: startOfToday } }).sort({ createdAt: -1 }).lean(),
+      Case.distinct('caseId', ownershipQuery)
     ]);
 
     const facet = caseMetricsFacet[0] || {};

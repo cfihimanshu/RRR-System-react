@@ -64,7 +64,6 @@ const caseSchema = new mongoose.Schema({
   recommendedNextSteps: String
 }, { timestamps: true });
 
-caseSchema.index({ caseId: 1 }, { unique: true });
 caseSchema.index({ createdAt: -1 });
 caseSchema.index({ assignedTo: 1 });
 caseSchema.index({ initiatedBy: 1 });
