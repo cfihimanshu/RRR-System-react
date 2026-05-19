@@ -5,7 +5,6 @@ if (!process.env.VERCEL) {
   dns.setServers(['8.8.8.8', '8.8.4.4']);
 }
 dns.setDefaultResultOrder('ipv4first');
-// Rebuild trigger to clear Vercel queue
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -95,7 +94,7 @@ const connectToDatabase = async () => {
       retryWrites: true,
     });
     console.log('MongoDB Connected');
-    
+
     // Force index verification/creation on startup
     const Case = require('./models/Case');
     const Timeline = require('./models/Timeline');
@@ -229,17 +228,17 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       teamDateQuery = { createdAt: { $gte: start, $lte: end } };
     } else if (teamFilter === '7days') {
       const d = new Date();
-      d.setHours(0,0,0,0);
+      d.setHours(0, 0, 0, 0);
       d.setDate(d.getDate() - 7);
       teamDateQuery = { createdAt: { $gte: d } };
     } else if (teamFilter === '1month') {
       const d = new Date();
-      d.setHours(0,0,0,0);
+      d.setHours(0, 0, 0, 0);
       d.setMonth(d.getMonth() - 1);
       teamDateQuery = { createdAt: { $gte: d } };
     } else if (teamFilter === '3months') {
       const d = new Date();
-      d.setHours(0,0,0,0);
+      d.setHours(0, 0, 0, 0);
       d.setDate(1);
       const end = new Date(d);
       d.setMonth(d.getMonth() - 3);
@@ -251,7 +250,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     let userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
     let userEmail = (dbUser?.email || req.user.email || '').trim();
     let userId = req.user.id;
-    
+
     // Ultra-flexible regex: match any part of name, email, or ID
     // We filter out very short common words but keep significant ones
     const firstName = userName.split(/\s+/)[0];
@@ -262,7 +261,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const filteredParts = parts.filter(p => p && p.trim().length > 0);
     const uniqueParts = [...new Set(filteredParts.map(p => p.toLowerCase()))];
     const escapedParts = uniqueParts.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    
+
     const myNameRegex = { $regex: new RegExp(escapedParts.join('|'), 'i') };
 
     let ownershipQuery = {};
@@ -298,19 +297,19 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     let baseQuery = { ...ownershipQuery };
     let query = { ...teamDateQuery, ...ownershipQuery };
-    const nameRegex = activeNameRegex; 
+    const nameRegex = activeNameRegex;
 
     const bypassEodCheck = dbUser?.bypassEodCheck || false;
     let isEodMissed = false;
-    
+
     if (req.user.role !== 'Admin') {
       const Report = require('./models/Report');
       const nowForIST = new Date();
       const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
       const todayStr = istTime.toISOString().split('T')[0];
-      
+
       const lastSod = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: { $lt: todayStr } }).sort({ date: -1 }).lean();
-      
+
       if (lastSod) {
         const lastEod = await Report.findOne({ userEmail: req.user.email, type: 'EOD', date: lastSod.date }).lean();
         if (!lastEod) {
@@ -322,7 +321,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     // Non-admin: Isolated data view
     // Removed redundant query re-definitions
 
-    
+
     const completedStatuses = ['Settled', 'settled', 'Settlement', 'settlement', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed', 'NA', 'na', 'Na', 'nA', 'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'];
     const nowForIST = new Date();
     const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
@@ -339,7 +338,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const twoDaysFromNow = new Date();
     twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
     const dueSoonDate = twoDaysFromNow.toISOString().split('T')[0];
-    
+
     const tomorrowObj = new Date();
     tomorrowObj.setDate(nowForIST.getDate() + 1);
     const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
@@ -394,40 +393,44 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         {
           $facet: {
             basic: [
-              { $group: { 
-                _id: null, 
-                totalCases: { $sum: 1 },
-                totalAmountPaid: { $sum: { $ifNull: ['$totalAmtPaid', 0] } },
-                openCases: { $sum: { $cond: [{ $and: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, 1, 0] } },
-                openCasesAmount: { $sum: { $cond: [{ $and: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
-                settledCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement']] }, 1, 0] } },
-                settledAmount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement']] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
-                closedCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed']] }, 1, 0] } },
-                closedAmount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed']] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
-                criticalPriority: { $sum: { $cond: [{ $eq: ["$priority", "Critical"] }, 1, 0] } },
-                criticalPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "Critical"] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
-                highPriority: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } },
-                highPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
-                mediumPriority: { $sum: { $cond: [{ $eq: ["$priority", "Medium"] }, 1, 0] } },
-                mediumPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "Medium"] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
-                lowPriority: { $sum: { $cond: [{ $eq: ["$priority", "Low"] }, 1, 0] } },
-                lowPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "Low"] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
-                linkedByCount: { $sum: { $cond: [{ $and: [{ $gt: ["$linkedBy", null] }, { $ne: ["$linkedBy", ""] }] }, 1, 0] } },
-                createdToday: { $sum: { $cond: [{ $gte: ["$createdAt", startOfToday] }, 1, 0] } },
-                liveEscalations: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $gte: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
-                noUpdate48Hrs: { $sum: { $cond: [{ $and: [{ $lt: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
-                slaBreached: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $lt: ["$nextActionDate", today] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
-                totalCriticalCases: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } },
-                closedCriticalCases: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution', 'settled', 'settlement', 'closed', 'closure', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']] }] }, 1, 0] } }
-              }}
+              {
+                $group: {
+                  _id: null,
+                  totalCases: { $sum: 1 },
+                  totalAmountPaid: { $sum: { $ifNull: ['$totalAmtPaid', 0] } },
+                  openCases: { $sum: { $cond: [{ $and: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, 1, 0] } },
+                  openCasesAmount: { $sum: { $cond: [{ $and: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
+                  settledCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement']] }, 1, 0] } },
+                  settledAmount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement']] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
+                  closedCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed']] }, 1, 0] } },
+                  closedAmount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed']] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
+                  criticalPriority: { $sum: { $cond: [{ $eq: ["$priority", "Critical"] }, 1, 0] } },
+                  criticalPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "Critical"] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
+                  highPriority: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } },
+                  highPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
+                  mediumPriority: { $sum: { $cond: [{ $eq: ["$priority", "Medium"] }, 1, 0] } },
+                  mediumPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "Medium"] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
+                  lowPriority: { $sum: { $cond: [{ $eq: ["$priority", "Low"] }, 1, 0] } },
+                  lowPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "Low"] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
+                  linkedByCount: { $sum: { $cond: [{ $and: [{ $gt: ["$linkedBy", null] }, { $ne: ["$linkedBy", ""] }] }, 1, 0] } },
+                  createdToday: { $sum: { $cond: [{ $gte: ["$createdAt", startOfToday] }, 1, 0] } },
+                  liveEscalations: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $gte: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
+                  noUpdate48Hrs: { $sum: { $cond: [{ $and: [{ $lt: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
+                  slaBreached: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $lt: ["$nextActionDate", today] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
+                  totalCriticalCases: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } },
+                  closedCriticalCases: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution', 'settled', 'settlement', 'closed', 'closure', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']] }] }, 1, 0] } }
+                }
+              }
             ],
             unassigned: [
-              { $match: {
-                $and: [
-                  { $or: [{ initiatedBy: { $regex: /^\s*$/ } }, { initiatedBy: { $exists: false } }, { initiatedBy: null }] },
-                  { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] }
-                ]
-              }},
+              {
+                $match: {
+                  $and: [
+                    { $or: [{ initiatedBy: { $regex: /^\s*$/ } }, { initiatedBy: { $exists: false } }, { initiatedBy: null }] },
+                    { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] }
+                  ]
+                }
+              },
               { $count: "count" }
             ],
             caseTypeWise: [
@@ -452,11 +455,13 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
             ],
             trendData: [
               { $match: { createdAt: { $gte: sevenDaysAgo } } },
-              { $group: {
-                _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-                newCases: { $sum: 1 },
-                highPriority: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } }
-              }},
+              {
+                $group: {
+                  _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                  newCases: { $sum: 1 },
+                  highPriority: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } }
+                }
+              },
               { $sort: { _id: 1 } }
             ],
             overdueActions: [
@@ -480,13 +485,15 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
             ],
             threatTrends: [
               { $match: { createdAt: { $gte: thirtyDaysAgo } } },
-              { $group: {
-                _id: {
-                  date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-                  type: "$typeOfComplaint"
-                },
-                count: { $sum: 1 }
-              }},
+              {
+                $group: {
+                  _id: {
+                    date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                    type: "$typeOfComplaint"
+                  },
+                  count: { $sum: 1 }
+                }
+              },
               { $sort: { "_id.date": 1 } }
             ]
           }
@@ -630,7 +637,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     const facet = caseMetricsFacet[0] || {};
     const b = facet.basic?.[0] || {};
-    
+
     const totalCases = b.totalCases || 0;
     const totalAmountPaid = b.totalAmountPaid || 0;
     const openCases = b.openCases || 0;
@@ -670,8 +677,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const yesterdayEodFilled = yesterdayEod ? 1 : 0;
 
     const perfDateRange = perfStartDate && perfEndDate ? {
-      $gte: new Date(`${perfStartDate}T00:00:00`), 
-      $lte: new Date(`${perfEndDate}T23:59:59.999`) 
+      $gte: new Date(`${perfStartDate}T00:00:00`),
+      $lte: new Date(`${perfEndDate}T23:59:59.999`)
     } : null;
 
     const statusRegex = /Settled|Settlement|Closed|Closure|Resolution|Resolved|Done|Complete/i;
@@ -695,7 +702,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         ...ownershipQuery,
         currentStatus: { $not: { $regex: /Settled|Closed|Closure|Resolution|Resolved|Done|Complete|NA/i } },
         $or: [
-          { nextActionDate: { $lt: dateStrIST } }, 
+          { nextActionDate: { $lt: dateStrIST } },
           { nextActionDate: { $lt: new Date().toISOString().split('T')[0] } }
         ]
       }),
@@ -763,15 +770,15 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       slaBreached: b.slaBreached || 0
     };
 
-    const provisions = { 
-      today: { count: 0, amount: 0 }, 
-      thisWeek: { count: 0, amount: 0 }, 
-      thisMonth: { count: 0, amount: 0 }, 
-      next6Months: { count: 0, amount: 0 } 
+    const provisions = {
+      today: { count: 0, amount: 0 },
+      thisWeek: { count: 0, amount: 0 },
+      thisMonth: { count: 0, amount: 0 },
+      next6Months: { count: 0, amount: 0 }
     };
 
     const nowForRefunds = new Date();
-    
+
     // Today Boundaries
     const startOfTodayForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth(), nowForRefunds.getDate(), 0, 0, 0, 0);
     const endOfTodayForRefunds = new Date(nowForRefunds.getFullYear(), nowForRefunds.getMonth(), nowForRefunds.getDate(), 23, 59, 59, 999);
@@ -782,7 +789,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const diffVal = startOfThisWeekForRefunds.getDate() - dayVal + (dayVal === 0 ? -6 : 1);
     startOfThisWeekForRefunds.setDate(diffVal);
     startOfThisWeekForRefunds.setHours(0, 0, 0, 0);
-    
+
     const endOfThisWeekForRefunds = new Date(startOfThisWeekForRefunds);
     endOfThisWeekForRefunds.setDate(endOfThisWeekForRefunds.getDate() + 6);
     endOfThisWeekForRefunds.setHours(23, 59, 59, 999);
@@ -806,15 +813,15 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     allRefunds.forEach(r => {
       if (r.status === 'Rejected') return;
 
-      const installments = r.installments && r.installments.length > 0 
-        ? r.installments 
+      const installments = r.installments && r.installments.length > 0
+        ? r.installments
         : [{ status: r.status, dueDate: r.paymentDate || r.timestamp, amount: r.amount, paymentDate: r.paymentDate, transactionId: r.transactionId }];
 
       installments.forEach(inst => {
         if (inst.status === 'Paid') return; // Skip already paid installments, only show pending!
-        
+
         const amt = Number(inst.amount) || 0;
-        
+
         let refDate = null;
         if (inst.dueDate) {
           refDate = new Date(inst.dueDate);
@@ -899,13 +906,13 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       // ── Team Performance (Admin Only) ──
       const casePipeline = [];
       if (Object.keys(teamDateQuery).length > 0) {
-        casePipeline.push({ 
-          $match: { 
+        casePipeline.push({
+          $match: {
             $or: [
               teamDateQuery,
               { updatedAt: teamDateQuery.createdAt }
-            ] 
-          } 
+            ]
+          }
         });
       }
       casePipeline.push({
@@ -925,19 +932,19 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
           total: { $sum: 1 },
           pending: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, 1, 0] } },
           settled: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']] }, 1, 0] } },
-          overdue: { 
-            $sum: { 
+          overdue: {
+            $sum: {
               $cond: [
-                { 
+                {
                   $and: [
                     { $ne: ["$nextActionDate", null] },
                     { $ne: ["$nextActionDate", ""] },
-                    { $lt: ["$nextActionDate", today] }, 
+                    { $lt: ["$nextActionDate", today] },
                     { $not: [{ $in: ["$currentStatus", completedStatuses] }] }
-                  ] 
+                  ]
                 }, 1, 0
-              ] 
-            } 
+              ]
+            }
           }
         }
       });
@@ -959,7 +966,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#6366f1'];
       teamPerformance = allNonAdmins.map(u => {
         const uName = (u.fullName || u.name || '').trim();
-        
+
         // Sum up stats if there are multiple groups for the same user (e.g. diff casing)
         const matchingStats = caseCounts.filter(c => c._id && c._id.trim().toLowerCase() === uName.toLowerCase());
         const stats = matchingStats.reduce((acc, curr) => {
@@ -1010,7 +1017,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       const d = new Date();
       let dateStr = '';
       let reportQuery = {};
-      
+
       if (teamFilter === '7days') {
         d.setDate(d.getDate() - 7);
         dateStr = d.toISOString().split('T')[0];
@@ -1033,7 +1040,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         dateStr = d.toISOString().split('T')[0];
         reportQuery = { date: { $gte: dateStr } };
       }
-      
+
       const reportsForDuration = await require('./models/Report').find(reportQuery).lean();
 
       const parseDuration = (durationStr) => {
@@ -1072,7 +1079,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
       teamPerformance = teamPerformance.map(staff => {
         const staffReports = reportsForDuration.filter(r => (r.userName === staff.name || r.userEmail === staff.email));
-        
+
         // Group by date
         const groups = {};
         staffReports.forEach(r => {
@@ -1088,7 +1095,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         Object.values(groups).forEach(group => {
           const checkInTime = group.sod?.checkInTime || group.eod?.checkInTime || '';
           const checkOutTime = group.eod?.checkOutTime || group.sod?.checkOutTime || '';
-          
+
           let durationStr = group.eod?.workDuration;
           if (!durationStr || durationStr === 'Calculating...') {
             if (checkInTime && checkOutTime) {
@@ -1134,12 +1141,12 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
       // ── Active Users Tracking (Based on SOD/EOD) ──
       const todayStr = new Date().toISOString().split('T')[0];
-      
+
       const todayReports = await Report.find({ date: todayStr }).lean();
-      
+
       const todaySodMap = {};
       const todayEodMap = {};
-      
+
       todayReports.forEach(r => {
         const email = (r.userEmail || '').toLowerCase();
         if (r.type === 'SOD') {
@@ -1308,7 +1315,7 @@ app.get('/api/debug/migrate', async (req, res) => {
     const db = require('mongoose').connection.db;
     const cases = await db.collection('cases').find({}).toArray();
     let updatedCount = 0;
-    
+
     const cleanNum = (val) => {
       if (!val) return 0;
       if (typeof val === 'number') return val;
@@ -1323,7 +1330,7 @@ app.get('/api/debug/migrate', async (req, res) => {
       if (typeof c.refundedAmount === 'string') updates.refundedAmount = cleanNum(c.refundedAmount);
       if (typeof c.totalMouValue === 'string') updates.totalMouValue = cleanNum(c.totalMouValue);
       if (typeof c.amtInDispute === 'string') updates.amtInDispute = cleanNum(c.amtInDispute);
-      
+
       if (Object.keys(updates).length > 0) {
         await db.collection('cases').updateOne({ _id: c._id }, { $set: updates });
         updatedCount++;
