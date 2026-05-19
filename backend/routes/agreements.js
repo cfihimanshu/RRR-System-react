@@ -1,124 +1,47 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
-const { google } = require('googleapis');
-const path = require('path');
-const fs = require('fs');
-
-// Path to your service account key file
-const KEYFILE_PATH = path.join(__dirname, '../google-credentials.json');
 
 router.post('/generate', verifyToken, async (req, res) => {
   try {
     const data = req.body;
-    const templateId = data.templateId || '1Xlkl7KkF0YgYM1ZDu-FusPi_nY4IT5Hr68SbCOPB3bA';
+    const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
 
-    console.log(`[AGREEMENT] Generating using Google Docs API. Template: ${templateId}`);
-
-    // Check if credentials file exists
-    if (!fs.existsSync(KEYFILE_PATH)) {
-      return res.status(500).json({ 
-        error: 'Google credentials file missing. Please place "google-credentials.json" in the backend folder.' 
+    if (!appsScriptUrl) {
+      return res.status(500).json({
+        error: 'Google Apps Script URL is not configured in backend .env'
       });
     }
 
-    // Initialize Google Auth
-    const auth = new google.auth.GoogleAuth({
-      keyFile: KEYFILE_PATH,
-      scopes: [
-        'https://www.googleapis.com/auth/documents',
-        'https://www.googleapis.com/auth/drive'
-      ],
-    });
-
-    const docs = google.docs({ version: 'v1', auth });
-    const drive = google.drive({ version: 'v3', auth });
-
-    // 0. Cleanup ALL files in service account drive to free up quota
-    try {
-      console.log('[AGREEMENT] Cleaning up service account drive...');
-      
-      // Empty trash first to free up space from previous deletes
-      try {
-        await drive.files.emptyTrash();
-        console.log('[AGREEMENT] Trash emptied.');
-      } catch (e) {
-        console.warn(`[AGREEMENT] Empty trash failed: ${e.message}`);
-      }
-
-      const listResponse = await drive.files.list({
-        spaces: 'drive',
-        fields: 'files(id, name)',
-      });
-      const files = listResponse.data.files;
-      if (files && files.length > 0) {
-        console.log(`[AGREEMENT] Found ${files.length} files to delete.`);
-        for (const file of files) {
-          await drive.files.delete({ fileId: file.id });
-          console.log(`[AGREEMENT] Deleted ${file.name}`);
-        }
-      }
-    } catch (cleanupError) {
-      console.error(`[AGREEMENT] Cleanup failed: ${cleanupError.message}`);
-      // Continue anyway
-    }
-
-    // 1. Make a copy of the template document
-    console.log('[AGREEMENT] Creating a copy of the template...');
-    const copyResponse = await drive.files.copy({
-      fileId: templateId,
-      requestBody: {
-        name: `Temp_Agreement_${Date.now()}`,
-      },
-    });
-    const copyId = copyResponse.data.id;
-    console.log(`[AGREEMENT] Copy created with ID: ${copyId}`);
-
-    // 2. Replace text in the copy
-    console.log('[AGREEMENT] Replacing text in the copy...');
+    console.log(`[AGREEMENT] Calling Google Apps Script Web App for PDF generation...`);
     
-    // Prepare requests for batchUpdate
-    const requests = [
-      { replaceAllText: { containsText: { text: '{{Date}}', matchCase: true }, replaceText: data.Date || '_________________' } },
-      { replaceAllText: { containsText: { text: '{{FirstPartyCompany}}', matchCase: true }, replaceText: data.FirstPartyCompany || 'Startupflora' } },
-      { replaceAllText: { containsText: { text: '{{ClientName}}', matchCase: true }, replaceText: data.ClientName || '_________________' } },
-      { replaceAllText: { containsText: { text: '{{Address}}', matchCase: true }, replaceText: data.Address || '_________________' } },
-      { replaceAllText: { containsText: { text: '{{Pincode}}', matchCase: true }, replaceText: data.Pincode || '_______' } },
-      { replaceAllText: { containsText: { text: '{{Amount}}', matchCase: true }, replaceText: data.Amount || '0' } },
-      { replaceAllText: { containsText: { text: '{{AmountInWords}}', matchCase: true }, replaceText: data.AmountInWords || 'Zero only' } },
-      { replaceAllText: { containsText: { text: '{{One (1)}}', matchCase: true }, replaceText: `${data.InstallmentCountWords || 'One'} (${data.InstallmentCountNumber || '1'})` } },
-      { replaceAllText: { containsText: { text: '{{InstallmentDetails}}', matchCase: true }, replaceText: data.InstallmentDetails || '' } },
-      { replaceAllText: { containsText: { text: '{{FirstPartyName}}', matchCase: true }, replaceText: data.FirstPartyName || 'Authorized Signatory' } },
-      { replaceAllText: { containsText: { text: '{{SecondCompany}}', matchCase: true }, replaceText: data.SecondCompany || '_________________' } },
-      { replaceAllText: { containsText: { text: '{{SecondPartyName}}', matchCase: true }, replaceText: data.SecondPartyName || data.ClientName || '_________________' } }
-    ];
-
-    await docs.documents.batchUpdate({
-      documentId: copyId,
-      requestBody: {
-        requests: requests,
+    const response = await fetch(appsScriptUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify(data),
     });
-    console.log('[AGREEMENT] Text replaced successfully.');
 
-    // 3. Export the copy as PDF
-    console.log('[AGREEMENT] Exporting copy as PDF...');
-    const pdfResponse = await drive.files.export({
-      fileId: copyId,
-      mimeType: 'application/pdf',
-    }, { responseType: 'arraybuffer' });
+    if (!response.ok) {
+      throw new Error(`Google Apps Script responded with status: ${response.status}`);
+    }
 
-    const buffer = Buffer.from(pdfResponse.data);
-    console.log('[AGREEMENT] PDF exported successfully.');
+    const result = await response.json();
+    
+    if (result.error) {
+      console.error(`[AGREEMENT] Apps Script Error: ${result.error}`);
+      return res.status(500).json({ error: result.error });
+    }
 
-    // 4. Delete the temporary copy
-    console.log('[AGREEMENT] Deleting temporary copy...');
-    await drive.files.delete({
-      fileId: copyId,
-    });
-    console.log('[AGREEMENT] Temporary copy deleted.');
+    if (!result.pdf) {
+      console.error(`[AGREEMENT] PDF data missing from Apps Script response`);
+      return res.status(500).json({ error: 'PDF data missing from Apps Script response' });
+    }
 
-    // Send the PDF back to client
+    const buffer = Buffer.from(result.pdf, 'base64');
+    console.log('[AGREEMENT] PDF generated successfully via Apps Script.');
+
     res.set({
       'Content-Disposition': 'attachment; filename="Agreement.pdf"',
       'Content-Type': 'application/pdf',
@@ -127,7 +50,7 @@ router.post('/generate', verifyToken, async (req, res) => {
     res.send(buffer);
 
   } catch (error) {
-    console.error(`[AGREEMENT] Error: ${error.message}`);
+    console.error(`[AGREEMENT] Route Error: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });

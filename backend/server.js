@@ -217,6 +217,14 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const Timeline = require('./models/Timeline');
     const Report = require('./models/Report');
 
+    const timings = {};
+    const track = async (name, promiseOrFn) => {
+      const start = Date.now();
+      const resVal = typeof promiseOrFn === 'function' ? await promiseOrFn() : await promiseOrFn;
+      timings[name] = Date.now() - start;
+      return resVal;
+    };
+
     const { teamFilter, userFilter, startDate, endDate, perfStartDate, perfEndDate } = req.query;
     let teamDateQuery = {};
     let commDateQuery = {};
@@ -246,7 +254,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     }
 
     // Ownership filter logic
-    const dbUser = await User.findById(req.user.id).lean();
+    const dbUser = await track('fetchUserDb', () => User.findById(req.user.id).lean());
     let userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
     let userEmail = (dbUser?.email || req.user.email || '').trim();
     let userId = req.user.id;
@@ -364,7 +372,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     let myCaseIds = [];
     if (req.user.role !== 'Admin') {
-      myCaseIds = await Case.distinct('caseId', query);
+      myCaseIds = await track('myCaseIdsDistinct', () => Case.distinct('caseId', query));
     }
     const timelineQuery = req.user.role !== 'Admin' ? { caseId: { $in: myCaseIds } } : {};
 
@@ -387,8 +395,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       todayEod,
       lastTimeline,
       perfCaseIds
-    ] = await Promise.all([
-      Case.aggregate([
+    ] = await track('mainPromiseAll', () => Promise.all([
+      track('caseMetricsFacet', () => Case.aggregate([
         { $match: query },
         {
           $facet: {
@@ -498,8 +506,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
             ]
           }
         }
-      ]),
-      Timeline.aggregate([
+      ])),
+      track('timelineMetrics', () => Timeline.aggregate([
         { $match: timelineMatch },
         {
           $facet: {
@@ -521,8 +529,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
             ]
           }
         }
-      ]),
-      (async () => {
+      ])),
+      track('refundMetrics', async () => {
         const [refundsPaid, allRefunds, pendingApprovalsResult] = await Promise.all([
           Refund.find({ ...((req.user.role !== 'Admin' && req.user.role !== 'Accountant') ? { requestedBy: req.user.email } : {}), status: 'Paid' }).lean(),
           Refund.find(refundQuery).lean(),
@@ -532,8 +540,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
           ])
         ]);
         return { refundsPaid, allRefunds, pendingApprovalsResult };
-      })(),
-      (async () => {
+      }),
+      track('taskMetrics', async () => {
         const sodReport = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean();
         const sodTasksCount = sodReport ? (sodReport.myTasksToday?.length || 0) : 0;
 
@@ -627,13 +635,13 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
           totalTasksToday: (tc.totalTasksTodayCount?.[0]?.count || 0) + sodTasksCount,
           completedTasksToday: tc.completedTasksToday?.[0]?.count || 0
         };
-      })(),
-      Report.findOne({ userEmail: req.user.email, type: 'EOD', date: yesterdayStr }).lean(),
-      Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean(),
-      Report.findOne({ userEmail: req.user.email, type: 'EOD', date: dateStrIST }).lean(),
-      Timeline.findOne({ source: nameRegex, createdAt: { $gte: startOfToday } }).sort({ createdAt: -1 }).lean(),
-      Case.distinct('caseId', ownershipQuery)
-    ]);
+      }),
+      track('yesterdayEod', () => Report.findOne({ userEmail: req.user.email, type: 'EOD', date: yesterdayStr }).lean()),
+      track('todaySod', () => Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean()),
+      track('todayEod', () => Report.findOne({ userEmail: req.user.email, type: 'EOD', date: dateStrIST }).lean()),
+      track('lastTimeline', () => Timeline.findOne({ source: nameRegex, createdAt: { $gte: startOfToday } }).sort({ createdAt: -1 }).lean()),
+      track('perfCaseIds', () => Case.distinct('caseId', ownershipQuery))
+    ]));
 
     const facet = caseMetricsFacet[0] || {};
     const b = facet.basic?.[0] || {};
@@ -697,30 +705,30 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       overdueCases: 0
     };
 
-    const [overdueCasesCount, totalCommsCount, casesResolvedCount, naCasesCount] = await Promise.all([
-      Case.countDocuments({
+    const [overdueCasesCount, totalCommsCount, casesResolvedCount, naCasesCount] = await track('myPerformancePromiseAll', () => Promise.all([
+      track('overdueCasesCount', () => Case.countDocuments({
         ...ownershipQuery,
         currentStatus: { $not: { $regex: /Settled|Closed|Closure|Resolution|Resolved|Done|Complete|NA/i } },
         $or: [
           { nextActionDate: { $lt: dateStrIST } },
           { nextActionDate: { $lt: new Date().toISOString().split('T')[0] } }
         ]
-      }),
-      Communication.countDocuments({
+      })),
+      track('totalCommsCount', () => Communication.countDocuments({
         loggedBy: activeNameRegex,
         ...(perfDateRange ? { createdAt: perfDateRange } : {})
-      }),
-      Case.countDocuments({
+      })),
+      track('casesResolvedCount', () => Case.countDocuments({
         ...ownershipQuery,
         currentStatus: { $in: ['Settled', 'settled', 'Settlement', 'settlement'] },
         ...(perfDateRange ? { updatedAt: perfDateRange } : {})
-      }),
-      Case.countDocuments({
+      })),
+      track('naCasesCount', () => Case.countDocuments({
         ...ownershipQuery,
         typeOfComplaint: { $regex: /NA Non Agreement/i },
         ...(perfDateRange ? { updatedAt: perfDateRange } : {})
-      })
-    ]);
+      }))
+    ]));
 
     myPerformance.overdueCases = overdueCasesCount;
     myPerformance.totalCommunications = totalCommsCount;
@@ -1189,6 +1197,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
       res.set('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=45');
       res.json({
+        _timings: timings,
         myPerformance,
         totalCriticalCases,
         closedCriticalCases,
@@ -1251,6 +1260,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       // Non-Admin response
       res.set('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=45');
       res.json({
+        _timings: timings,
         myPerformance,
         totalCriticalCases,
         closedCriticalCases,

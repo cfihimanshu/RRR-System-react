@@ -97,7 +97,7 @@ const AgreementGenerationTab = () => {
       return;
     }
 
-    const loadingToast = toast.loading('Fetching Template from Google Docs & Generating PDF...');
+    const loadingToast = toast.loading('Generating Agreement PDF...');
     try {
       // Helper to convert number to words (for small counts)
       const numberToWords = (n) => {
@@ -348,13 +348,13 @@ const AgreementGenerationTab = () => {
           <div className="bg-bg-card border-b border-border p-6 flex flex-col md:flex-row items-start md:items-center justify-between sticky top-0 z-10 gap-6">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-accent rounded-full" />
-              <h3 className="text-lg font-black text-text-primary tracking-tight uppercase">High-Fidelity PDF Preview</h3>
+              <h3 className="text-lg font-black text-text-primary tracking-tight uppercase">Agreement Preview</h3>
             </div>
             <button
               onClick={handleDownloadPDF}
               className="w-full md:w-auto bg-red hover:bg-red-600 text-white font-black py-3.5 px-10 rounded-2xl shadow-xl shadow-red-900/20 transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-widest active:scale-95"
             >
-              <Download size={18} /> EXECUTE & DOWNLOAD
+              <Download size={18} /> DOWNLOAD
             </button>
           </div>
 
