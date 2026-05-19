@@ -1179,6 +1179,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         };
       });
 
+      res.set('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=45');
       res.json({
         myPerformance,
         totalCriticalCases,
@@ -1240,6 +1241,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       });
     } else {
       // Non-Admin response
+      res.set('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=45');
       res.json({
         myPerformance,
         totalCriticalCases,
