@@ -236,6 +236,7 @@ const CaseMasterTab = () => {
     priority: ['All Priority'],
     assignee: ['All Assignees'],
     typeOfComplaint: ['All Types'],
+    amountSort: '',
     date: null,
     state: ['All States'],
     refundStatus: ['All Refunds'],
@@ -266,6 +267,7 @@ const CaseMasterTab = () => {
         if (parsed.city === undefined) parsed.city = '';
         if (parsed.lastPaymentStart === undefined) parsed.lastPaymentStart = '';
         if (parsed.lastPaymentEnd === undefined) parsed.lastPaymentEnd = '';
+        if (parsed.amountSort === undefined) parsed.amountSort = '';
         if (!parsed.customFilters) parsed.customFilters = {
           companyName: '',
           clientName: '',
@@ -275,13 +277,14 @@ const CaseMasterTab = () => {
         };
         if (parsed.customFilters.anyDetail === undefined) parsed.customFilters.anyDetail = '';
         return parsed;
-      } catch (e) {}
+      } catch (e) { }
     }
     return {
       status: ['All Status'],
       priority: ['All Priority'],
       assignee: ['All Assignees'],
       typeOfComplaint: ['All Types'],
+      amountSort: '',
       date: null,
       state: ['All States'],
       refundStatus: ['All Refunds'],
@@ -486,14 +489,14 @@ const CaseMasterTab = () => {
   const fetchCases = async (hasDemand = false, pageNum = 1) => {
     try {
       if (pageNum === 1) setCases([]); // Reset for new search/filter
-      
+
       const limit = 1000;
-      const url = hasDemand 
-        ? `/cases?hasDemand=true&page=${pageNum}&limit=${limit}` 
+      const url = hasDemand
+        ? `/cases?hasDemand=true&page=${pageNum}&limit=${limit}`
         : `/cases?page=${pageNum}&limit=${limit}`;
-      
+
       const res = await api.get(url);
-      
+
       if (res.data && res.data.cases) {
         if (pageNum === 1) {
           setCases(res.data.cases);
@@ -778,7 +781,7 @@ const CaseMasterTab = () => {
 
     const matchType = appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.typeOfComplaint.length === 0 || appliedFilters.typeOfComplaint.includes(c.typeOfComplaint);
 
-    const matchSourceOfComplaint = !appliedFilters.sourceOfComplaint || 
+    const matchSourceOfComplaint = !appliedFilters.sourceOfComplaint ||
       (appliedFilters.sourceOfComplaint.toLowerCase() === 'unknown'
         ? (!c.sourceOfComplaint || c.sourceOfComplaint.toLowerCase().trim() === '' || c.sourceOfComplaint.toLowerCase() === 'unknown')
         : c.sourceOfComplaint?.toLowerCase().includes(appliedFilters.sourceOfComplaint.toLowerCase()));
@@ -860,6 +863,20 @@ const CaseMasterTab = () => {
     return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchState && matchType && matchSourceOfComplaint && matchServiceMode && matchServiceName && matchCity && matchLastPayment && matchLinkedOnly && matchRefund && matchCustom;
   });
 
+  if (appliedFilters.amountSort === 'asc') {
+    filteredCases.sort((a, b) => {
+      const valA = parseFloat(String(a.totalAmtPaid || '').replace(/[^\d.-]/g, '')) || 0;
+      const valB = parseFloat(String(b.totalAmtPaid || '').replace(/[^\d.-]/g, '')) || 0;
+      return valA - valB;
+    });
+  } else if (appliedFilters.amountSort === 'desc') {
+    filteredCases.sort((a, b) => {
+      const valA = parseFloat(String(a.totalAmtPaid || '').replace(/[^\d.-]/g, '')) || 0;
+      const valB = parseFloat(String(b.totalAmtPaid || '').replace(/[^\d.-]/g, '')) || 0;
+      return valB - valA;
+    });
+  }
+
   const hasActiveFilters = !!(
     searchTerm ||
     !appliedFilters.status.includes('All Status') ||
@@ -876,6 +893,7 @@ const CaseMasterTab = () => {
     appliedFilters.lastPaymentStart ||
     appliedFilters.lastPaymentEnd ||
     appliedFilters.linkedOnly ||
+    appliedFilters.amountSort ||
     (appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v))
   );
 
@@ -890,6 +908,7 @@ const CaseMasterTab = () => {
       priority: ['All Priority'],
       assignee: ['All Assignees'],
       typeOfComplaint: ['All Types'],
+      amountSort: '',
       date: null,
       state: ['All States'],
       refundStatus: ['All Refunds'],
@@ -1071,7 +1090,7 @@ const CaseMasterTab = () => {
 
   const handleFormChange = (e) => {
     let { name, value } = e.target;
-    
+
     // Numbers only restriction for specific fields
     if (name === 'clientMobile' || name === 'totalAmtPaid' || name === 'totalMouValue' || name === 'amtInDispute') {
       value = value.replace(/\D/g, ''); // Remove all non-digits
@@ -1160,7 +1179,7 @@ const CaseMasterTab = () => {
       const updatedCase = res.data;
       if (updatedCase) {
         setViewCase(updatedCase);
-        
+
         // Sync the editable form data with fresh data
         setFormData({
           companyName: updatedCase.companyName || '',
@@ -1737,9 +1756,9 @@ const CaseMasterTab = () => {
               >
                 <Filter size={16} />
                 Filters
-                {(!appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date || (appliedFilters.state && !appliedFilters.state.includes('All States')) || (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds')) || appliedFilters.sourceOfComplaint || appliedFilters.serviceMode || appliedFilters.serviceName || appliedFilters.city || appliedFilters.lastPaymentStart || appliedFilters.lastPaymentEnd || (appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v))) && (
+                {(!appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date || (appliedFilters.state && !appliedFilters.state.includes('All States')) || (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds')) || appliedFilters.sourceOfComplaint || appliedFilters.serviceMode || appliedFilters.serviceName || appliedFilters.city || appliedFilters.lastPaymentStart || appliedFilters.lastPaymentEnd || appliedFilters.amountSort || (appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v))) && (
                   <span className="bg-white text-accent rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">
-                    {[!appliedFilters.status.includes('All Status'), !appliedFilters.priority.includes('All Priority'), !appliedFilters.assignee.includes('All Assignees'), !appliedFilters.typeOfComplaint.includes('All Types'), !!appliedFilters.date, appliedFilters.state && !appliedFilters.state.includes('All States'), appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds'), !!appliedFilters.sourceOfComplaint, !!appliedFilters.serviceMode, !!appliedFilters.serviceName, !!appliedFilters.city, !!appliedFilters.lastPaymentStart, !!appliedFilters.lastPaymentEnd, appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v)].filter(Boolean).length}
+                    {[!appliedFilters.status.includes('All Status'), !appliedFilters.priority.includes('All Priority'), !appliedFilters.assignee.includes('All Assignees'), !appliedFilters.typeOfComplaint.includes('All Types'), !!appliedFilters.date, appliedFilters.state && !appliedFilters.state.includes('All States'), appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds'), !!appliedFilters.sourceOfComplaint, !!appliedFilters.serviceMode, !!appliedFilters.serviceName, !!appliedFilters.city, !!appliedFilters.lastPaymentStart, !!appliedFilters.lastPaymentEnd, !!appliedFilters.amountSort, appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v)].filter(Boolean).length}
                   </span>
                 )}
               </button>
@@ -1747,11 +1766,11 @@ const CaseMasterTab = () => {
               {isFilterOpen && (
                 <>
                   <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm md:bg-black/40 md:backdrop-blur-none" onClick={() => setIsFilterOpen(false)}></div>
-                  <div className="fixed md:absolute top-24 md:top-full left-4 right-4 md:left-auto md:right-0 mt-3 md:w-[450px] bg-bg-card rounded-2xl shadow-2xl border-2 border-border z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="flex flex-1 min-h-[300px] md:min-h-[350px]">
+                  <div className="fixed md:absolute top-24 md:top-full left-4 right-4 md:left-auto md:right-0 mt-3 md:w-[450px] h-[500px] bg-bg-card rounded-2xl shadow-2xl border-2 border-border z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex flex-1 min-h-0 overflow-hidden">
                       {/* Left Sidebar */}
-                      <div className="w-[100px] md:w-1/3 bg-bg-secondary border-r border-border py-4">
-                        {['Status', 'Priority', 'Assignees', 'Type', 'Date', 'State', 'Refund', 'Source', 'Service', 'City', 'Last Payment', 'Custom'].map((type) => (
+                      <div className="w-[100px] md:w-1/3 bg-bg-secondary border-r border-border py-4 overflow-y-auto h-full">
+                        {['Status', 'Priority', 'Assignees', 'Type', 'Amount', 'Date', 'State', 'Refund', 'Source', 'Service', 'City', 'Last Payment', 'Custom'].map((type) => (
                           <button
                             key={type}
                             onClick={() => setActiveFilterType(type)}
@@ -1767,7 +1786,7 @@ const CaseMasterTab = () => {
                       </div>
 
                       {/* Right Content */}
-                      <div className="w-2/3 p-6 overflow-y-auto max-h-[400px] bg-bg-card">
+                      <div className="w-2/3 p-6 overflow-y-auto h-full bg-bg-card">
                         {activeFilterType === 'Status' && (
                           <div className="space-y-3">
                             {['All Status', 'Unassigned', 'Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure', 'Stucked'].map((s) => {
@@ -1917,6 +1936,36 @@ const CaseMasterTab = () => {
                                 </label>
                               );
                             })}
+                          </div>
+                        )}
+
+                        {activeFilterType === 'Amount' && (
+                          <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <label className="block text-[11px] font-black text-text-muted uppercase tracking-[0.1em] mb-2 font-mono">Sort Cases By Total Amount Paid</label>
+                            <div className="space-y-3">
+                              {[
+                                { label: 'Ascending (Low to High)', value: 'asc' },
+                                { label: 'Descending (High to Low)', value: 'desc' }
+                              ].map((option) => {
+                                const isChecked = (tempFilters.amountSort || '') === option.value;
+                                return (
+                                  <label key={option.value} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                    <input
+                                      type="radio"
+                                      name="amountSort"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        setTempFilters(prev => ({ ...prev, amountSort: option.value }));
+                                      }}
+                                      className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded-full"
+                                    />
+                                    <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>
+                                      {option.label}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
 
@@ -2243,27 +2292,27 @@ const CaseMasterTab = () => {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Case Count Display */}
+          <div className="flex items-center gap-3 mb-6 px-1">
+            <div className="flex items-center gap-2 bg-accent/10 text-accent px-4 py-2.5 rounded-2xl border border-accent/20 shadow-sm animate-in fade-in slide-in-from-left-2 duration-300">
+              <Inbox size={14} className="opacity-70" />
+              <span className="text-[10px] font-black uppercase tracking-[0.15em]">Total Cases:</span>
+              <span className="text-sm font-black tabular-nums">
+                {hasActiveFilters ? filteredCases.length : totalCount}
+              </span>
             </div>
 
-            {/* Case Count Display */}
-            <div className="flex items-center gap-3 mb-6 px-1">
-              <div className="flex items-center gap-2 bg-accent/10 text-accent px-4 py-2.5 rounded-2xl border border-accent/20 shadow-sm animate-in fade-in slide-in-from-left-2 duration-300">
-                <Inbox size={14} className="opacity-70" />
-                <span className="text-[10px] font-black uppercase tracking-[0.15em]">Total Cases:</span>
-                <span className="text-sm font-black tabular-nums">
-                  {hasActiveFilters ? filteredCases.length : totalCount}
-                </span>
+            {searchTerm && (
+              <div className="flex items-center gap-2 bg-text-primary/5 text-text-muted px-4 py-2.5 rounded-2xl border border-border animate-in fade-in slide-in-from-left-4 duration-500">
+                <Search size={14} className="opacity-50" />
+                <span className="text-[10px] font-bold uppercase tracking-widest italic">Filtering for "{searchTerm}"</span>
               </div>
-              
-              {searchTerm && (
-                <div className="flex items-center gap-2 bg-text-primary/5 text-text-muted px-4 py-2.5 rounded-2xl border border-border animate-in fade-in slide-in-from-left-4 duration-500">
-                  <Search size={14} className="opacity-50" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest italic">Filtering for "{searchTerm}"</span>
-                </div>
-              )}
-            </div>
-          </>
-        )}
+            )}
+          </div>
+        </>
+      )}
 
       {viewCase ? (
         <div className="animate-in fade-in duration-300 pb-20">
@@ -3887,7 +3936,7 @@ const CaseMasterTab = () => {
               </tbody>
             </table>
           </div>
-          
+
           {page < totalPages && (
             <div className="p-8 flex justify-center bg-bg-secondary border-t border-border">
               <button
@@ -4000,11 +4049,10 @@ const CaseRow = memo(({
       </td>
       <td className="px-3 py-5 text-center">
         {refundStatus ? (
-          <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
-            refundStatus === 'Paid' 
-              ? 'bg-green-soft text-green border-green-soft' 
+          <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${refundStatus === 'Paid'
+              ? 'bg-green-soft text-green border-green-soft'
               : 'bg-yellow-soft text-yellow border-yellow-soft'
-          }`}>
+            }`}>
             {refundStatus}
           </span>
         ) : (
