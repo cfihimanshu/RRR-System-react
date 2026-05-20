@@ -95,26 +95,30 @@ const connectToDatabase = async () => {
     });
     console.log('MongoDB Connected');
 
-    // Force index verification/creation on startup
-    const Case = require('./models/Case');
-    const Timeline = require('./models/Timeline');
-    const Task = require('./models/Task');
-    const Refund = require('./models/Refund');
-    const Report = require('./models/Report');
-    const User = require('./models/User');
+    // Force index verification/creation on startup (only locally, not on Vercel serverless to prevent DB overloading)
+    if (!process.env.VERCEL) {
+      const Case = require('./models/Case');
+      const Timeline = require('./models/Timeline');
+      const Task = require('./models/Task');
+      const Refund = require('./models/Refund');
+      const Report = require('./models/Report');
+      const User = require('./models/User');
 
-    Promise.all([
-      Case.createIndexes(),
-      Timeline.createIndexes(),
-      Task.createIndexes(),
-      Refund.createIndexes(),
-      Report.createIndexes(),
-      User.createIndexes()
-    ]).then(() => {
-      console.log('✓ All database indexes verified/built successfully');
-    }).catch(err => {
-      console.error('✗ Error building database indexes:', err);
-    });
+      Promise.all([
+        Case.createIndexes(),
+        Timeline.createIndexes(),
+        Task.createIndexes(),
+        Refund.createIndexes(),
+        Report.createIndexes(),
+        User.createIndexes()
+      ]).then(() => {
+        console.log('✓ All database indexes verified/built successfully');
+      }).catch(err => {
+        console.error('✗ Error building database indexes:', err);
+      });
+    } else {
+      console.log('✓ Running on Vercel: skipping automatic index verification to prevent serverless database flooding');
+    }
   } catch (err) {
     console.error('DATABASE CONNECTION ERROR:', err);
     throw err; // Throw instead of exiting

@@ -5,7 +5,7 @@ const caseSchema = new mongoose.Schema({
   createdDate: String,
   companyName: String,
   caseTitle: String,
-  priority: { type: String, enum: ["Critical","High","Medium","Low"] },
+  priority: { type: String, enum: ["Critical", "High", "Medium", "Low"] },
   sourceOfComplaint: String,
   typeOfComplaint: String,
   brandName: String,
