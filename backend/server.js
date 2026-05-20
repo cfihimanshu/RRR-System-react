@@ -210,9 +210,18 @@ app.get('/api/admin/migrate-fir-types', require('./middleware/auth').verifyToken
     res.status(500).json({ error: err.message });
   }
 });
+const statsCache = new Map();
+const CACHE_DURATION = 60000; // 1 minute in milliseconds
 
 app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async (req, res) => {
   try {
+    const cacheKey = `${req.user.id}_${req.query.teamFilter || ''}_${req.query.userFilter || ''}_${req.query.startDate || ''}_${req.query.endDate || ''}_${req.query.perfStartDate || ''}_${req.query.perfEndDate || ''}`;
+    const cachedItem = statsCache.get(cacheKey);
+    if (cachedItem && (Date.now() - cachedItem.timestamp < CACHE_DURATION)) {
+      res.set('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=45');
+      return res.json(cachedItem.data);
+    }
+
     const Case = require('./models/Case');
     const User = require('./models/User');
     const Task = require('./models/Task');
@@ -1214,7 +1223,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       });
 
       res.set('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=45');
-      res.json({
+      const responseData = {
         _timings: timings,
         myPerformance,
         totalCriticalCases,
@@ -1273,11 +1282,13 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         todaySod,
         todayEod,
         lastTimeline
-      });
+      };
+      statsCache.set(cacheKey, { timestamp: Date.now(), data: responseData });
+      res.json(responseData);
     } else {
       // Non-Admin response
       res.set('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=45');
-      res.json({
+      const responseData = {
         _timings: timings,
         myPerformance,
         totalCriticalCases,
@@ -1330,7 +1341,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         myPerformance,
         teamPerformance,
         missingSodUsers
-      });
+      };
+      statsCache.set(cacheKey, { timestamp: Date.now(), data: responseData });
+      res.json(responseData);
     }
   } catch (error) {
     console.error('Dashboard Stats Error:', error);
