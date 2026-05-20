@@ -708,7 +708,16 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const [overdueCasesCount, totalCommsCount, casesResolvedCount, naCasesCount] = await track('myPerformancePromiseAll', () => Promise.all([
       track('overdueCasesCount', () => Case.countDocuments({
         ...ownershipQuery,
-        currentStatus: { $not: { $regex: /Settled|Closed|Closure|Resolution|Resolved|Done|Complete|NA/i } },
+        currentStatus: { 
+          $nin: [
+            'Settled', 'settled', 'Settlement', 'settlement', 
+            'Closure', 'closure', 'Resolution', 'resolution', 
+            'Resolved', 'resolved', 'Done', 'done', 'Complete', 
+            'complete', 'Completed', 'completed', 'Closed', 'closed', 
+            'NA', 'na', 'Na', 'nA', 'NA Non Agreement', 'na non agreement', 
+            'Non Agreement', 'non agreement'
+          ] 
+        },
         $or: [
           { nextActionDate: { $lt: dateStrIST } },
           { nextActionDate: { $lt: new Date().toISOString().split('T')[0] } }
@@ -725,7 +734,12 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       })),
       track('naCasesCount', () => Case.countDocuments({
         ...ownershipQuery,
-        typeOfComplaint: { $regex: /NA Non Agreement/i },
+        typeOfComplaint: { 
+          $in: [
+            'NA Non Agreement', 'na non agreement', 'NA NON AGREEMENT', 
+            'Non Agreement', 'non agreement', 'NON AGREEMENT'
+          ] 
+        },
         ...(perfDateRange ? { updatedAt: perfDateRange } : {})
       }))
     ]));

@@ -75,4 +75,10 @@ caseSchema.index({ clientMobile: 1 });
 caseSchema.index({ typeOfComplaint: 1 });
 caseSchema.index({ sourceOfComplaint: 1 });
 
+// Compound indexes for dashboard performance optimizations
+caseSchema.index({ assignedTo: 1, currentStatus: 1 });
+caseSchema.index({ assignedTo: 1, currentStatus: 1, nextActionDate: 1 });
+caseSchema.index({ currentStatus: 1, nextActionDate: 1 });
+caseSchema.index({ typeOfComplaint: 1, updatedAt: -1 });
+
 module.exports = mongoose.model('Case', caseSchema);

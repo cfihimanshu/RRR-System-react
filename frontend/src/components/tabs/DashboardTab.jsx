@@ -2191,9 +2191,9 @@ const DashboardTab = () => {
                 </tbody>
               </table>
             </div>
-            <div className="mt-4 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master')}>
+            {/* <div className="mt-4 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master')}>
               View Full Staff Report <ArrowRight size={12} />
-            </div>
+            </div> */}
           </div>
 
           {/* Box 2: Time Bound Actions */}
@@ -3027,10 +3027,10 @@ const DashboardTab = () => {
                                                       <div className="flex items-center justify-between">
                                                         <span className="text-[10px] font-black text-text-primary uppercase">Installment #{index + 1}</span>
                                                         <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${inst.status === 'Paid'
-                                                                                                                     ? 'bg-green-soft text-green border-green-soft'
-                                                           : inst.status === 'Due'
-                                                           ? 'bg-red-soft text-red border-red-soft'
-                                                          : 'bg-yellow-soft text-yellow border-yellow-soft'
+                                                          ? 'bg-green-soft text-green border-green-soft'
+                                                          : inst.status === 'Due'
+                                                            ? 'bg-red-soft text-red border-red-soft'
+                                                            : 'bg-yellow-soft text-yellow border-yellow-soft'
                                                           }`}>
                                                           {inst.status || 'Pending'}
                                                         </span>
