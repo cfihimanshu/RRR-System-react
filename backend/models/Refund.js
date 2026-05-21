@@ -23,6 +23,7 @@ const refundSchema = new mongoose.Schema({
   paymentDate: String,
   paymentProof: String,
   paidBy: String,
+  documentLink: String,
   installments: [{
     amount: String,
     dueDate: String,

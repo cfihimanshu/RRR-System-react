@@ -243,6 +243,7 @@ const AdminPanelTab = () => {
                     <option value="Reviewer">Reviewer</option>
                     <option value="Accountant">Accountant</option>
                     <option value="Staff">Staff</option>
+                    <option value="Legal">Legal</option>
                   </select>
                 </div>
                 <div className="flex justify-end">
@@ -626,10 +627,10 @@ const AdminPanelTab = () => {
                                 </td>
                                 <td className="px-6 py-4">
                                   <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${isPaid
-                                                                        ? 'bg-green-soft text-green'
+                                    ? 'bg-green-soft text-green'
                                     : inst.status === 'Due'
-                                    ? 'bg-red-soft text-red'
-                                    : 'bg-yellow-soft text-yellow'
+                                      ? 'bg-red-soft text-red'
+                                      : 'bg-yellow-soft text-yellow'
                                     }`}>
                                     {isPaid ? 'Paid' : inst.status || 'Pending'}
                                   </span>
@@ -719,6 +720,20 @@ const AdminPanelTab = () => {
                   "{refundToRender.summary}"
                 </p>
               </div>
+
+              {refundToRender.documentLink && (
+                <div className="bg-bg-input p-6 rounded-[2.5rem] border border-border shadow-inner mt-4">
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3 ml-2">Supporting Document / Proof</p>
+                  <a
+                    href={refundToRender.documentLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-5 py-3 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm"
+                  >
+                    <Eye size={14} /> View Supporting Document
+                  </a>
+                </div>
+              )}
 
 
             </div>

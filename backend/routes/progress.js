@@ -3,6 +3,8 @@ const router = express.Router();
 const Progress = require('../models/Progress');
 const Case = require('../models/Case');
 const Timeline = require('../models/Timeline');
+const User = require('../models/User');
+const { createNotification } = require('../utils/notificationHelper');
 const { verifyToken } = require('../middleware/auth');
 
 // Get progress logs for a case
@@ -198,6 +200,26 @@ router.post('/', verifyToken, async (req, res) => {
       }
     });
     await timelineEvent.save();
+
+    // Trigger Notification if case was forwarded
+    if (escalateTo) {
+      try {
+        const assignee = await User.findOne({
+          fullName: { $regex: new RegExp(`^\\s*${escalateTo.trim()}\\s*$`, 'i') }
+        });
+        if (assignee && assignee.email) {
+          createNotification(
+            assignee.email, 
+            'Case Forwarded', 
+            `Case ${caseId} has been forwarded to you during a Progress Update by ${req.user.fullName || 'System'}.`, 
+            'Assignment', 
+            `/case-master?search=${caseId}`
+          );
+        }
+      } catch (err) {
+        console.error('Failed to notify assignee on progress update:', err);
+      }
+    }
 
     const savedLog = progressDoc.updates[progressDoc.updates.length - 1];
     res.status(201).json(savedLog);

@@ -22,7 +22,8 @@ import {
   CheckSquare,
   BarChart,
   ClipboardList,
-  IndianRupee
+  IndianRupee,
+  Scale
 } from 'lucide-react';
 
 import { TAB_ACCESS } from '../config/tabAccess';
@@ -40,6 +41,7 @@ const tabsConfig = [
   { id: 'internal-search', label: 'Records', path: '/internal-search', icon: Search },
   { id: 'reviewer-panel', label: 'Reviewer Dashboard', path: '/reviewer-panel', icon: ClipboardEdit },
   { id: 'accountant-dashboard', label: 'Accountant', path: '/accountant-dashboard', icon: CircleDollarSign },
+  { id: 'legal-dashboard', label: 'Legal Dashboard', path: '/legal-dashboard', icon: Scale },
   { id: 'agreement-gen', label: 'Agreement Generation', path: '/agreement-gen', icon: FileText },
   { id: 'my-task', label: 'My Tasks', path: '/my-task', icon: CheckSquare },
   // { id: 'sod-eod-reports', label: 'Reports', path: '/sod-eod-reports', icon: ClipboardList },
@@ -54,8 +56,14 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
   useEffect(() => {
     const fetchCount = async () => {
       try {
-        const res = await api.get('/cases');
-        setCaseCount(res.data.total !== undefined ? res.data.total : (Array.isArray(res.data) ? res.data.length : 0));
+        if (user?.role === 'Reviewer') {
+          const res = await api.get('/refunds?status=Pending Review');
+          const uniqueCaseIds = new Set((res.data || []).map(r => r.caseId));
+          setCaseCount(uniqueCaseIds.size);
+        } else {
+          const res = await api.get('/cases');
+          setCaseCount(res.data.total !== undefined ? res.data.total : (Array.isArray(res.data) ? res.data.length : 0));
+        }
       } catch (err) {
         console.error("Failed to fetch cases count", err);
       }

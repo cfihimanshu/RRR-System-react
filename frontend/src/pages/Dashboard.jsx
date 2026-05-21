@@ -27,6 +27,7 @@ import MyTaskTab from '../components/tabs/MyTaskTab';
 import SodEodReportTab from '../components/tabs/SodEodReportTab';
 import WorkReportTab from '../components/tabs/WorkReportTab';
 import RefundRequestTab from '../components/tabs/RefundRequestTab';
+import LegalDashboardTab from '../components/tabs/LegalDashboardTab';
 
 const ProtectedRoute = ({ children, allowedRoles, id }) => {
   const { user } = useContext(AuthContext);
@@ -81,6 +82,8 @@ const Dashboard = () => {
             <Route path="/" element={
               user?.role === 'Reviewer' 
                 ? <Navigate to="/reviewer-panel" replace /> 
+                : user?.role === 'Legal'
+                ? <Navigate to="/legal-dashboard" replace />
                 : <DashboardTab />
             } />
             
@@ -147,6 +150,10 @@ const Dashboard = () => {
 
             <Route path="/refund-request" element={
               <ProtectedRoute id="refund-request"><RefundRequestTab /></ProtectedRoute>
+            } />
+
+            <Route path="/legal-dashboard" element={
+              <ProtectedRoute id="legal-dashboard"><LegalDashboardTab /></ProtectedRoute>
             } />
 
             {/* Catch-all for unauthorized or non-existent URLs */}

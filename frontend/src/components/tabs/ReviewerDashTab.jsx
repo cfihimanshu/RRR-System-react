@@ -168,24 +168,24 @@ const ReviewerDashTab = () => {
           <div className="p-6 flex flex-col gap-8">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Protocol ID</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Case ID</p>
                 <p className="font-black text-accent text-sm tracking-tighter uppercase">{selectedRefund.caseId}</p>
                 {selectedRefund.companyName && (
                   <p className="text-[10px] text-text-muted font-bold tracking-normal normal-case mt-1">{selectedRefund.companyName}</p>
                 )}
               </div>
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Payment Volume</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Payment Amount</p>
                 <p className="font-black text-green text-sm tracking-tight">₹{Number(selectedRefund.amount).toLocaleString('en-IN')}</p>
               </div>
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Assign To</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Refund Requested By</p>
                 <p className="text-text-primary font-black uppercase text-[10px] tracking-widest break-all">
                   {selectedRefund.requestedByName || selectedRefund.requestedBy}
                 </p>
               </div>
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Lifecycle Stage</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Status</p>
                 <p className="font-black text-orange-400 uppercase text-[10px] tracking-widest">{selectedRefund.status}</p>
               </div>
             </div>
@@ -196,27 +196,27 @@ const ReviewerDashTab = () => {
               </div>
               <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-sm">
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Target Institution</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Bank Name</p>
                   <p className="font-black text-text-primary uppercase tracking-tight">{selectedRefund.bankName}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Identified Holder</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Account Holder</p>
                   <p className="font-black text-text-primary uppercase tracking-tight">{selectedRefund.accHolder}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Ledger Number</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Account Number</p>
                   <p className="font-mono font-black text-accent select-all">{selectedRefund.accNum}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Routing Code (IFSC)</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">IFSC Code</p>
                   <p className="font-mono font-black text-accent select-all">{selectedRefund.ifsc}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Categorization</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Account Type</p>
                   <p className="text-text-secondary font-bold uppercase text-[10px]">{selectedRefund.accType}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Operational Branch</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Branch Name</p>
                   <p className="text-text-secondary font-bold uppercase text-[10px]">{selectedRefund.branch}</p>
                 </div>
               </div>
@@ -231,7 +231,7 @@ const ReviewerDashTab = () => {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-bg-input text-text-muted text-[9px] font-black uppercase tracking-widest border-b border-border">
-                        <th className="px-6 py-4">Serial</th>
+                        <th className="px-6 py-4">S.No</th>
                         <th className="px-6 py-4">Expected Date</th>
                         <th className="px-6 py-4">Disbursement Amount</th>
                         <th className="px-6 py-4">Status</th>
@@ -244,13 +244,12 @@ const ReviewerDashTab = () => {
                           <td className="px-6 py-4 font-bold">{inst.dueDate}</td>
                           <td className="px-6 py-4 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
                           <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${
-                              inst.status === 'Paid'
+                            <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${inst.status === 'Paid'
                                 ? 'bg-green-soft text-green'
                                 : inst.status === 'Due'
-                                ? 'bg-red-soft text-red'
-                                : 'bg-yellow-soft text-yellow'
-                            }`}>
+                                  ? 'bg-red-soft text-red'
+                                  : 'bg-yellow-soft text-yellow'
+                              }`}>
                               {inst.status || 'Pending'}
                             </span>
                           </td>
@@ -267,11 +266,25 @@ const ReviewerDashTab = () => {
             )}
 
             <div className="bg-bg-input p-6 rounded-2xl border border-border shadow-inner">
-              <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3 ml-2">Justification Narrative</p>
+              <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3 ml-2">Narrative</p>
               <p className="text-sm text-text-secondary leading-relaxed italic border-l-4 border-accent pl-5">
                 "{selectedRefund.summary}"
               </p>
             </div>
+
+            {selectedRefund.documentLink && (
+              <div className="bg-bg-input p-6 rounded-2xl border border-border shadow-inner">
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3 ml-2">Supporting Document / Proof</p>
+                <a
+                  href={selectedRefund.documentLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-3 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm"
+                >
+                  <Eye size={14} /> View Supporting Document
+                </a>
+              </div>
+            )}
 
             {/* <div className="flex gap-4 justify-end mt-4">
               <button

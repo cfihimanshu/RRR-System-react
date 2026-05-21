@@ -79,7 +79,8 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       branch, 
       accType, 
       requestedByName, 
-      installments 
+      installments,
+      documentLink
     } = req.body;
 
     const doc = new Refund({
@@ -93,6 +94,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       branch,
       accType,
       requestedBy: req.user.email,
+      documentLink,
       requestedByName: requestedByName || req.user.fullName || "",
       installments: Array.isArray(installments) ? installments.map(inst => ({
         amount: String(inst.amount),
@@ -236,8 +238,19 @@ router.put('/:id', verifyToken, async (req, res) => {
           createNotification('Accountant', 'New Payment Task', `Admin approved a refund for ₹${doc.amount} on case ${doc.caseId}. Please process payment.`, 'Refund', `/case-master?search=${doc.caseId}`);
         }
       } else if (doc.status === 'Paid' || doc.status === 'Rejected') {
-        sendEmail(doc.requestedBy, `Refund Request Update: ${doc.caseId}`, `Your refund request for ₹${doc.amount} has been ${doc.status}. ${doc.remark ? `\nRemark: ${doc.remark}` : ''}`).catch(e => console.error('Refund Requester Alert Error:', e));
-        createNotification(doc.requestedBy, `Refund ${doc.status}`, `Your refund request for ₹${doc.amount} on case ${doc.caseId} has been ${doc.status}.`, 'Refund', `/case-master?search=${doc.caseId}`);
+        let emailBody = `Your refund request for ₹${doc.amount} has been ${doc.status}.`;
+        if (doc.status === 'Rejected' && doc.reviewerRemark) {
+          emailBody += `\nReason for Rejection: ${doc.reviewerRemark}`;
+        } else if (doc.remark) {
+          emailBody += `\nRemark: ${doc.remark}`;
+        }
+        sendEmail(doc.requestedBy, `Refund Request Update: ${doc.caseId}`, emailBody).catch(e => console.error('Refund Requester Alert Error:', e));
+
+        let notifBody = `Your refund request for ₹${doc.amount} on case ${doc.caseId} has been ${doc.status}.`;
+        if (doc.status === 'Rejected' && doc.reviewerRemark) {
+          notifBody += ` Reason: ${doc.reviewerRemark}`;
+        }
+        createNotification(doc.requestedBy, `Refund ${doc.status}`, notifBody, 'Refund', `/case-master?search=${doc.caseId}`);
       }
     } catch (e) { console.error('Refund Update Notification Error:', e); }
     

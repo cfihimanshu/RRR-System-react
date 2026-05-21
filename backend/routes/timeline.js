@@ -62,8 +62,8 @@ router.get('/', verifyToken, async (req, res) => {
     }
 
     // Role and Identity filtering
-    const isAdmin = req.user.role === 'Admin';
-    if (!isAdmin) {
+    const isAdminOrReviewerOrAccountant = ['Admin', 'Reviewer', 'Accountant'].includes(req.user.role);
+    if (!isAdminOrReviewerOrAccountant) {
       const User = require('../models/User');
       const dbUser = await User.findById(req.user.id);
       const myIds = [...new Set([req.user.fullName, req.user.email, dbUser?.fullName, dbUser?.email])].filter(Boolean);

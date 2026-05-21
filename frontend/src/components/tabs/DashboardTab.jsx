@@ -99,7 +99,7 @@ const DashboardTab = () => {
       setVisibleActivitiesCount(prev => prev + 15);
     }
   };
-  const [teamFilter, setTeamFilter] = useState('');
+  const [teamFilter, setTeamFilter] = useState('7days');
   const [userFilter, setUserFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -714,10 +714,10 @@ const DashboardTab = () => {
     }
   };
 
-  if (!stats) return <div className="section active bg-[#dee1e6] h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div></div>;
+  if (!stats) return <div className="section active bg-bg-primary h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div></div>;
 
   return (
-    <div className="section active w-full pb-10 px-4 bg-[#dee1e6] overflow-x-hidden max-w-full">
+    <div className="section active w-full pb-10 px-4 bg-bg-primary overflow-x-hidden max-w-full">
       <div className="section-header flex flex-col lg:flex-row justify-between items-start lg:items-center mb-10 w-full gap-6 pt-4">
         <div className="flex-1 text-left">
         </div>
@@ -1383,58 +1383,78 @@ const DashboardTab = () => {
                 </div>
               </div>
 
-              {/* MY PERFORMANCE */}
-              <div className="xl:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 flex flex-col justify-between">
-                <div>
-                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2 mb-4">
-                    <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Performance</div>
-                    <div className="flex flex-wrap gap-1">
-                      {['7 Days', '1 Month', '3 Months'].map((label, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            setActivePeriod(label);
-                            const end = new Date();
-                            const start = new Date();
-                            if (label === '7 Days') start.setDate(end.getDate() - 7);
-                            else if (label === '1 Month') start.setMonth(end.getMonth() - 1);
-                            else if (label === '3 Months') start.setMonth(end.getMonth() - 3);
-                            setPerfStartDate(start.toISOString().split('T')[0]);
-                            setPerfEndDate(end.toISOString().split('T')[0]);
-                          }}
-                          className={`px-2 py-1 text-[8px] font-black uppercase rounded ${activePeriod === label ? 'bg-blue-600 text-white' : 'bg-bg-secondary text-text-muted hover:bg-bg-secondary/50 transition-colors'}`}
-                        >
-                          {label}
-                        </button>
-                      ))}
+              {/* MY PERFORMANCE & REFUND STATS */}
+              <div className="xl:col-span-4 flex flex-col gap-6">
+                {/* MY PERFORMANCE */}
+                <div className="bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 flex flex-col justify-between flex-1">
+                  <div>
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2 mb-4">
+                      <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Performance</div>
+                      <div className="flex flex-wrap gap-1">
+                        {['7 Days', '1 Month', '3 Months'].map((label, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setActivePeriod(label);
+                              const end = new Date();
+                              const start = new Date();
+                              if (label === '7 Days') start.setDate(end.getDate() - 7);
+                              else if (label === '1 Month') start.setMonth(end.getMonth() - 1);
+                              else if (label === '3 Months') start.setMonth(end.getMonth() - 3);
+                              setPerfStartDate(start.toISOString().split('T')[0]);
+                              setPerfEndDate(end.toISOString().split('T')[0]);
+                            }}
+                            className={`px-2 py-1 text-[8px] font-black uppercase rounded ${activePeriod === label ? 'bg-blue-600 text-white' : 'bg-bg-secondary text-text-muted hover:bg-bg-secondary/50 transition-colors'}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Client Communication</div>
-                      <div className="text-xl font-black text-green">{stats?.myPerformance?.totalCommunications || 0}</div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-[9px] font-black text-text-muted uppercase mb-1">Client Communication</div>
+                        <div className="text-xl font-black text-green">{stats?.myPerformance?.totalCommunications || 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-black text-text-muted uppercase mb-1">Cases Settled</div>
+                        <div className="text-xl font-black text-green">{stats?.myPerformance?.casesResolved || 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-black text-text-muted uppercase mb-1">NA Cases</div>
+                        <div className="text-xl font-black text-red">{stats?.myPerformance?.naCases || 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-black text-text-muted uppercase mb-1">Overdue Cases</div>
+                        <div className="text-xl font-black text-red">{stats?.myPerformance?.overdueCases || 0}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Cases Settled</div>
-                      <div className="text-xl font-black text-green">{stats?.myPerformance?.casesResolved || 0}</div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">NA Cases</div>
-                      <div className="text-xl font-black text-red">{stats?.myPerformance?.naCases || 0}</div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Overdue Cases</div>
-                      <div className="text-xl font-black text-red">{stats?.myPerformance?.overdueCases || 0}</div>
-                    </div>
-
-
                   </div>
                 </div>
-                {/* <div className="mt-4 text-right">
-                  <a href="#" className="text-[9px] font-black text-blue uppercase tracking-widest hover:underline flex items-center justify-end gap-1">
-                    View Full Performance Report <ArrowRight size={10} />
-                  </a>
-                </div> */}
+
+                {/* MY REFUND STATS */}
+                <div className="bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Refund Requests</div>
+                    <div className="p-1.5 bg-green-soft rounded-lg text-green">
+                      <IndianRupee size={14} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="bg-bg-secondary p-3 rounded-xl border border-border/30 cursor-pointer hover:bg-bg-secondary/70 transition-all" onClick={() => navigate('/refund-request', { state: { filter: 'All' } })}>
+                      <div className="text-[8px] font-black text-text-muted uppercase mb-1">Total Filled</div>
+                      <div className="text-lg font-black text-text-primary mt-1">{myRefunds.length}</div>
+                    </div>
+                    <div className="bg-green-soft/30 p-3 rounded-xl border border-green-soft/40 cursor-pointer hover:bg-green-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { filter: 'Paid' } })}>
+                      <div className="text-[8px] font-black text-green uppercase mb-1">Approved</div>
+                      <div className="text-lg font-black text-green mt-1">{myRefunds.filter(r => r.status === 'Paid').length}</div>
+                    </div>
+                    <div className="bg-red-soft/30 p-3 rounded-xl border border-red-soft/40 cursor-pointer hover:bg-red-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { filter: 'Rejected' } })}>
+                      <div className="text-[8px] font-black text-red uppercase mb-1">Rejected</div>
+                      <div className="text-lg font-black text-red mt-1">{myRefunds.filter(r => r.status === 'Rejected').length}</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             {/* Top Urgent Cases Section */}

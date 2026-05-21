@@ -242,28 +242,37 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     let teamDateQuery = {};
     let commDateQuery = {};
 
+    let activeTeamFilter = teamFilter;
+    if (!activeTeamFilter && !startDate && !endDate) {
+      activeTeamFilter = '7days';
+    }
+
     if (startDate && endDate) {
       const start = new Date(startDate);
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
       teamDateQuery = { createdAt: { $gte: start, $lte: end } };
-    } else if (teamFilter === '7days') {
+      commDateQuery = { createdAt: { $gte: start, $lte: end } };
+    } else if (activeTeamFilter === '7days') {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
       d.setDate(d.getDate() - 7);
       teamDateQuery = { createdAt: { $gte: d } };
-    } else if (teamFilter === '1month') {
+      commDateQuery = { createdAt: { $gte: d } };
+    } else if (activeTeamFilter === '1month') {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
       d.setMonth(d.getMonth() - 1);
       teamDateQuery = { createdAt: { $gte: d } };
-    } else if (teamFilter === '3months') {
+      commDateQuery = { createdAt: { $gte: d } };
+    } else if (activeTeamFilter === '3months') {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
       d.setDate(1);
       const end = new Date(d);
       d.setMonth(d.getMonth() - 3);
       teamDateQuery = { createdAt: { $gte: d, $lt: end } };
+      commDateQuery = { createdAt: { $gte: d, $lt: end } };
     }
 
     // Ownership filter logic
@@ -966,7 +975,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
           _id: "$calculatedUser",
           total: { $sum: 1 },
           pending: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, 1, 0] } },
-          settled: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']] }, 1, 0] } },
+          settled: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']] }, 1, 0] } },
           overdue: {
             $sum: {
               $cond: [

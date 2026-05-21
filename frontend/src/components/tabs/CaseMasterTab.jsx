@@ -129,6 +129,7 @@ const CaseMasterTab = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
+  const [autoOpenCaseId, setAutoOpenCaseId] = useState(null);
   const [selectedCases, setSelectedCases] = useState([]);
   const [bulkAssignUser, setBulkAssignUser] = useState('');
   const [importing, setImporting] = useState(false);
@@ -529,8 +530,8 @@ const CaseMasterTab = () => {
   const fetchOpsUsers = async () => {
     try {
       const res = await api.get('/auth/users');
-      // Filter for Operations users and remove duplicates by fullName
-      const filtered = res.data.filter(u => u.role === 'Operations' || u.role === 'Admin');
+      // Filter for Operations, Admin, and Legal users and remove duplicates by fullName
+      const filtered = res.data.filter(u => u.role === 'Operations' || u.role === 'Admin' || u.role === 'Legal');
 
       const uniqueUsers = [];
       const seenNames = new Set();
@@ -607,6 +608,7 @@ const CaseMasterTab = () => {
     }
     if (location.state?.searchId) {
       setSearchTerm(location.state.searchId);
+      setAutoOpenCaseId(location.state.searchId);
     }
     if (location.state?.typeFilter) {
       const tf = location.state.typeFilter;
@@ -652,6 +654,16 @@ const CaseMasterTab = () => {
       }
     }
   }, [location.search, cases]);
+
+  useEffect(() => {
+    if (autoOpenCaseId && cases.length > 0) {
+      const foundCase = cases.find(c => c.caseId === autoOpenCaseId);
+      if (foundCase) {
+        handleViewCase(foundCase);
+        setAutoOpenCaseId(null);
+      }
+    }
+  }, [cases, autoOpenCaseId]);
 
   const handleImportCSV = async (e) => {
     const file = e.target.files[0];
@@ -726,6 +738,16 @@ const CaseMasterTab = () => {
   };
 
   const filteredCases = cases.filter(c => {
+    // Reviewer filter: only show cases that are in "Pending Review" status in refunds
+    if (user?.role === 'Reviewer') {
+      const pendingCaseIds = refundsList
+        .filter(r => r.status === 'Pending Review')
+        .map(r => r.caseId);
+      if (!pendingCaseIds.includes(c.caseId)) {
+        return false;
+      }
+    }
+
     const matchSearch = (c.caseId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (c.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (c.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
@@ -1403,7 +1425,6 @@ const CaseMasterTab = () => {
   const handleProgressSubmit = async (e) => {
     e.preventDefault();
     if (!progressFormData.summary) return toast.error('Update summary is required');
-    if (!progressFormData.attachment) return toast.error('Document upload is required');
 
     if (progressFormData.stage === 'Closure') {
       if (!progressFormData.refundedAmount) return toast.error('Refunded Amount is required');
@@ -1422,20 +1443,29 @@ const CaseMasterTab = () => {
         updatedBy: user?.fullName || user?.email,
         checklist // Include current checklist state
       });
-      // Update case status in DB
-      await api.put(`/cases/${viewCase.caseId}`, {
+      const caseUpdatePayload = {
         currentStatus: progressFormData.stage,
         progressPercentage: progressFormData.percentage
-      });
+      };
+
+      if (progressFormData.escalateTo) {
+        caseUpdatePayload.assignedTo = progressFormData.escalateTo;
+      }
+
+      // Update case status in DB
+      await api.put(`/cases/${viewCase.caseId}`, caseUpdatePayload);
 
       toast.success('Progress updated', { id: loadingToast });
 
-      // Update local viewCase to reflect new status/percentage
+      // Update local viewCase to reflect new status/percentage/assignee
       const updatedCase = {
         ...viewCase,
         currentStatus: progressFormData.stage,
         progressPercentage: progressFormData.percentage
       };
+      if (progressFormData.escalateTo) {
+        updatedCase.assignedTo = progressFormData.escalateTo;
+      }
       setViewCase(updatedCase);
 
       // If progress stage is Closure, mark closureReady so the Resolve button can be shown
@@ -2300,7 +2330,7 @@ const CaseMasterTab = () => {
               <Inbox size={14} className="opacity-70" />
               <span className="text-[10px] font-black uppercase tracking-[0.15em]">Total Cases:</span>
               <span className="text-sm font-black tabular-nums">
-                {hasActiveFilters ? filteredCases.length : totalCount}
+                {user?.role === 'Reviewer' || hasActiveFilters ? filteredCases.length : totalCount}
               </span>
             </div>
 
@@ -2399,8 +2429,8 @@ const CaseMasterTab = () => {
                   {['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'].map((step, idx) => {
                     const steps = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
 
-                    // Use the stage from progressFormData for consistency across all tabs
-                    const displayStatus = progressFormData.stage;
+                    // Use the status from viewCase as primary, fallback to progressFormData.stage for consistency
+                    const displayStatus = viewCase?.currentStatus || progressFormData.stage;
 
                     let currentIdx = steps.indexOf(displayStatus);
                     if (currentIdx === -1) {
@@ -3600,7 +3630,7 @@ const CaseMasterTab = () => {
                   <div className="space-y-1">
                     <FileUpload
                       onUploadSuccess={(url) => setProgressFormData(prev => ({ ...prev, attachment: url }))}
-                      label="Upload Document *"
+                      label="Upload Document"
                     />
                     {progressFormData.attachment && (
                       <div className="flex items-center gap-2 px-4 py-2 bg-blue-soft rounded-lg mt-1">
@@ -3648,16 +3678,16 @@ const CaseMasterTab = () => {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1">ESCALATE TO</label>
+                      <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1">FORWARDED TO</label>
                       <select
                         value={progressFormData.escalateTo}
                         onChange={(e) => setProgressFormData({ ...progressFormData, escalateTo: e.target.value })}
                         className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent uppercase tracking-widest"
                       >
-                        <option value="">— No escalation —</option>
-                        <option>Manager</option>
-                        <option>Team Lead</option>
-                        <option>Director</option>
+                        <option value="">-- NO ESCALATION --</option>
+                        {opsUsers.map(u => (
+                          <option key={`escalate-${u._id}`} value={u.fullName}>{u.fullName}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -3703,7 +3733,12 @@ const CaseMasterTab = () => {
                                 Next Action: {log.nextAction}
                               </div>
                             )}
-                            <div className="text-[9px] font-black text-accent uppercase tracking-widest opacity-80">Updated by: {log.updatedBy === user?.email ? 'You' : log.updatedBy?.split('@')[0] || 'System'}</div>
+                            {log.escalateTo && (
+                              <div className="text-[10px] font-black text-orange-600 uppercase tracking-widest mt-1">
+                                Forwarded To: {log.escalateTo}
+                              </div>
+                            )}
+                            <div className="text-[9px] font-black text-accent uppercase tracking-widest opacity-80 mt-1">Updated by: {log.updatedBy === user?.email ? 'You' : log.updatedBy?.split('@')[0] || 'System'}</div>
                             {log.attachment && (
                               <div className="mt-1">
                                 <a
@@ -3952,7 +3987,7 @@ const CaseMasterTab = () => {
                 ) : (
                   <>
                     <ChevronDown size={16} />
-                    Load More Cases ({cases.length} of {totalCount})
+                    Load More Cases ({cases.length} of {user?.role === 'Reviewer' ? filteredCases.length : totalCount})
                   </>
                 )}
               </button>
@@ -4050,8 +4085,8 @@ const CaseRow = memo(({
       <td className="px-3 py-5 text-center">
         {refundStatus ? (
           <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${refundStatus === 'Paid'
-              ? 'bg-green-soft text-green border-green-soft'
-              : 'bg-yellow-soft text-yellow border-yellow-soft'
+            ? 'bg-green-soft text-green border-green-soft'
+            : 'bg-yellow-soft text-yellow border-yellow-soft'
             }`}>
             {refundStatus}
           </span>

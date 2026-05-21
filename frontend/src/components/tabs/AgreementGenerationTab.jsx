@@ -1,9 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { FileText, List, Plus, RefreshCw, Trash2, Download, Eye } from 'lucide-react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
+import { FileText, List, Plus, RefreshCw, Trash2, Download, Eye, ClipboardList, IndianRupee } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
+import { AuthContext } from '../../context/AuthContext';
 
 const AgreementGenerationTab = () => {
+  const { user } = useContext(AuthContext);
   const [formData, setFormData] = useState({
     templateId: '1Xlkl7KkF0YgYM1ZDu-FusPi_nY4IT5Hr68SbCOPB3bA', // Default ID
     date: '',
@@ -21,6 +23,36 @@ const AgreementGenerationTab = () => {
   const [installments, setInstallments] = useState([]);
   const [generatedPdfBlob, setGeneratedPdfBlob] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
+  const [myAgreements, setMyAgreements] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const fetchMyAgreements = async () => {
+    setLoadingHistory(true);
+    try {
+      const res = await api.get('/agreements');
+      setMyAgreements(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch agreements:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMyAgreements();
+  }, []);
+
+  const handleDeleteAgreement = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this agreement record?')) return;
+    try {
+      await api.delete(`/agreements/${id}`);
+      toast.success('Agreement record deleted');
+      setMyAgreements(prev => prev.filter(ag => ag._id !== id));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete agreement');
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -97,6 +129,7 @@ const AgreementGenerationTab = () => {
       return;
     }
 
+    setIsGenerating(true);
     const loadingToast = toast.loading('Generating Agreement PDF...');
     try {
       // Helper to convert number to words (for small counts)
@@ -162,6 +195,9 @@ const AgreementGenerationTab = () => {
 
       toast.success('PDF Generated Successfully!', { id: loadingToast });
 
+      // Refresh history
+      fetchMyAgreements();
+
       setTimeout(() => {
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
       }, 500);
@@ -180,6 +216,8 @@ const AgreementGenerationTab = () => {
       } else {
         toast.error('Failed to generate PDF.', { id: loadingToast });
       }
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -196,11 +234,9 @@ const AgreementGenerationTab = () => {
       link.href = url;
       link.download = `${formData.clientName ? formData.clientName.replace(/\s+/g, '_') : 'Settlement'}_Agreement.pdf`;
 
-      // Append to body, click, and remove
       document.body.appendChild(link);
       link.click();
 
-      // Cleanup after a small delay to ensure click is registered
       setTimeout(() => {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
@@ -218,6 +254,20 @@ const AgreementGenerationTab = () => {
 
   return (
     <div className="section active w-full min-h-full bg-bg-primary pb-32 px-6">
+
+      {/* Full-screen loading overlay */}
+      {isGenerating && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}>
+          <div className="bg-bg-card border-2 border-border rounded-2xl px-10 py-10 flex flex-col items-center gap-5 shadow-2xl">
+            <svg className="animate-spin text-blue" width={48} height={48} viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+            <div className="text-[13px] font-black text-text-primary uppercase tracking-[0.2em]">Generating Agreement PDF</div>
+            <div className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Please wait, this may take a few seconds...</div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 pt-6">
         <div>
@@ -332,10 +382,33 @@ const AgreementGenerationTab = () => {
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-10 border-t border-border mt-10">
-            <button type="submit" className="bg-blue hover:bg-blue-600 text-white font-black py-4 px-10 rounded-xl shadow-xl shadow-blue-900/20 transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em] active:scale-95">
-              <Eye size={18} /> Generate
+            <button
+              type="submit"
+              disabled={isGenerating}
+              className={`relative overflow-hidden font-black py-4 px-10 rounded-xl shadow-xl shadow-blue-900/20 transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em] active:scale-95 ${
+                isGenerating
+                  ? 'bg-blue/70 text-white cursor-not-allowed'
+                  : 'bg-blue hover:bg-blue-600 text-white'
+              }`}
+            >
+              {isGenerating ? (
+                <>
+                  <svg className="animate-spin" width={18} height={18} viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  Generating...
+                </>
+              ) : (
+                <><Eye size={18} /> Generate</>
+              )}
             </button>
-            <button type="button" onClick={handleClear} className="bg-bg-card hover:bg-bg-card-hover text-text-secondary font-black py-4 px-10 border-2 border-border rounded-xl transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em] active:scale-95">
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={isGenerating}
+              className="bg-bg-card hover:bg-bg-card-hover text-text-secondary font-black py-4 px-10 border-2 border-border rounded-xl transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <RefreshCw size={18} /> Clear Form
             </button>
           </div>
@@ -344,7 +417,7 @@ const AgreementGenerationTab = () => {
 
       {/* --- LIVE PDF NATIVE VIEWER SECTION --- */}
       {pdfUrl && (
-        <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border overflow-hidden flex flex-col mt-10 mb-20">
+        <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border overflow-hidden flex flex-col mt-10 mb-10">
           <div className="bg-bg-card border-b border-border p-6 flex flex-col md:flex-row items-start md:items-center justify-between sticky top-0 z-10 gap-6">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-accent rounded-full" />
@@ -359,13 +432,103 @@ const AgreementGenerationTab = () => {
           </div>
 
           <div className="bg-bg-input w-full h-[1000px] p-6 lg:p-12">
-            {/* The PDF is rendered directly using Chrome's native PDF engine! Flawless MS Word reproduction. */}
             <div className="w-full h-full rounded-[2rem] overflow-hidden border-8 border-border shadow-2xl bg-white">
               <iframe src={pdfUrl} className="w-full h-full border-0" title="Agreement PDF Preview" />
             </div>
           </div>
         </div>
       )}
+
+      {/* --- MY GENERATED AGREEMENTS HISTORY --- */}
+      <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-10 shadow-sm mb-20">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="p-3 bg-blue-soft rounded-2xl border border-blue-soft/30 text-blue">
+            <ClipboardList size={22} />
+          </div>
+          <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">My Generated Agreements</h3>
+        </div>
+
+        {loadingHistory ? (
+          <div className="py-10 text-center text-[10px] font-black text-text-muted uppercase tracking-widest animate-pulse">
+            Loading History...
+          </div>
+        ) : myAgreements.length === 0 ? (
+          <div className="py-12 text-center bg-bg-input/30 border-2 border-dashed border-border rounded-2xl text-[10px] font-black text-text-muted uppercase tracking-widest opacity-60">
+            No agreements generated yet.
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="inline-block min-w-full align-middle">
+              <table className="min-w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b-2 border-border text-[9px] font-black text-text-muted uppercase tracking-[0.2em]">
+                    <th className="px-4 py-4 whitespace-nowrap">#</th>
+                    <th className="px-4 py-4 whitespace-nowrap">Client Name</th>
+                    <th className="px-4 py-4 whitespace-nowrap">First Party</th>
+                    <th className="px-4 py-4 whitespace-nowrap">Second Company</th>
+                    <th className="px-4 py-4 whitespace-nowrap">Settlement Amount</th>
+                    <th className="px-4 py-4 whitespace-nowrap">Installments</th>
+                    <th className="px-4 py-4 whitespace-nowrap">Agreement Date</th>
+                    <th className="px-4 py-4 whitespace-nowrap">Generated At</th>
+                    <th className="px-4 py-4 whitespace-nowrap">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {myAgreements.map((ag, idx) => (
+                    <tr key={ag._id} className="hover:bg-bg-secondary/30 transition-colors">
+                      <td className="px-4 py-4 align-middle">
+                        <div className="w-7 h-7 rounded-lg bg-blue-soft flex items-center justify-center text-[10px] font-black text-blue">{idx + 1}</div>
+                      </td>
+                      <td className="px-4 py-4 align-middle">
+                        <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{ag.clientName || '—'}</div>
+                      </td>
+                      <td className="px-4 py-4 align-middle">
+                        <div className="text-[10px] font-bold text-text-secondary uppercase">{ag.firstPartyCompany || '—'}</div>
+                      </td>
+                      <td className="px-4 py-4 align-middle">
+                        <div className="text-[10px] font-bold text-text-secondary uppercase">{ag.secondCompany || '—'}</div>
+                      </td>
+                      <td className="px-4 py-4 align-middle">
+                        <div className="text-sm font-black text-text-primary">
+                          ₹{Number(ag.settlementAmount || 0).toLocaleString('en-IN')}
+                        </div>
+                        {ag.amountInWords && (
+                          <div className="text-[8px] font-bold text-text-muted italic mt-0.5">{ag.amountInWords}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 align-middle">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${ag.installments?.length > 0 ? 'bg-yellow-soft text-yellow border-yellow-soft' : 'bg-bg-input text-text-muted border-border'}`}>
+                          {ag.installments?.length > 0 ? `${ag.installments.length} installment${ag.installments.length > 1 ? 's' : ''}` : 'Single Payment'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 align-middle">
+                        <div className="text-[10px] font-bold text-text-secondary">{ag.date || '—'}</div>
+                      </td>
+                      <td className="px-4 py-4 align-middle">
+                        <div className="text-[10px] font-bold text-text-secondary">
+                          {ag.createdAt ? new Date(ag.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        </div>
+                        <div className="text-[8px] font-bold text-text-muted mt-0.5">
+                          {ag.createdAt ? new Date(ag.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 align-middle">
+                        <button
+                          onClick={() => handleDeleteAgreement(ag._id)}
+                          className="p-2 rounded-xl text-text-muted hover:text-red hover:bg-red-soft/30 border border-transparent hover:border-red-soft/50 transition-all active:scale-95"
+                          title="Delete Agreement Record"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
 
     </div>
   );
