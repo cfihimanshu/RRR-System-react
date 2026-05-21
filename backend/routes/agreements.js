@@ -43,7 +43,10 @@ router.post('/generate', verifyToken, async (req, res) => {
 
     // Save agreement record in DB
     try {
+      const mongoose = require('mongoose');
+      const agreementId = new mongoose.Types.ObjectId();
       await Agreement.create({
+        _id: agreementId,
         generatedBy: req.user.email,
         generatedByName: req.user.fullName || req.user.name || '',
         clientName: data.ClientName || '',
@@ -53,6 +56,13 @@ router.post('/generate', verifyToken, async (req, res) => {
         amountInWords: data.AmountInWords || '',
         date: data.Date || '',
         installments: data.Installments || [],
+        address: data.Address || '',
+        pincode: data.Pincode || '',
+        firstPartySignatory: data.FirstPartyName || '',
+        secondPartySignatory: data.SecondPartyName || '',
+        templateId: data.templateId || '',
+        pdfBase64: result.pdf || '',
+        pdfUrl: `/api/agreements/download/${agreementId}`
       });
     } catch (saveErr) {
       console.error('[AGREEMENT] Failed to save agreement record:', saveErr.message);
@@ -104,6 +114,52 @@ router.delete('/:id', verifyToken, async (req, res) => {
     res.json({ success: true, message: 'Agreement deleted' });
   } catch (error) {
     console.error('[AGREEMENT] DELETE Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/agreements/download/:id - Stream stored PDF
+router.get('/download/:id', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const queryToken = req.query.token;
+    const token = (authHeader ? authHeader.split(' ').pop() : null) || queryToken;
+
+    if (!token) {
+      return res.status(403).json({ error: 'No token provided' });
+    }
+
+    const jwt = require('jsonwebtoken');
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (jwtErr) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    const agreement = await Agreement.findById(req.params.id);
+    if (!agreement) {
+      return res.status(404).json({ error: 'Agreement not found' });
+    }
+
+    const isAdmin = ['Admin', 'Reviewer'].includes(decoded.role);
+    if (!isAdmin && agreement.generatedBy !== decoded.email) {
+      return res.status(403).json({ error: 'Not authorized to view this agreement' });
+    }
+
+    if (!agreement.pdfBase64) {
+      return res.status(404).json({ error: 'PDF data not found for this agreement' });
+    }
+
+    const buffer = Buffer.from(agreement.pdfBase64, 'base64');
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${agreement.clientName.replace(/\s+/g, '_')}_Agreement.pdf"`,
+      'Content-Length': buffer.length
+    });
+    res.send(buffer);
+  } catch (error) {
+    console.error('[AGREEMENT] Download Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

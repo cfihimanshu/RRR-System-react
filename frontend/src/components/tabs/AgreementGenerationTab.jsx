@@ -249,6 +249,13 @@ const AgreementGenerationTab = () => {
     }
   };
 
+  const openAgreement = (ag) => {
+    if (!ag || !ag._id) return;
+    const token = localStorage.getItem('rrr_token');
+    const url = `${api.defaults.baseURL}/agreements/download/${ag._id}?token=${token}`;
+    window.open(url, '_blank');
+  };
+
   const inputClass = "w-full bg-bg-input border-2 border-border rounded-xl px-5 py-4 text-xs text-text-primary focus:border-accent focus:ring-4 focus:ring-accent-soft outline-none transition-all font-black placeholder:text-text-muted/40 shadow-sm";
   const labelClass = "block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-2 ml-1";
 
@@ -475,7 +482,7 @@ const AgreementGenerationTab = () => {
                 </thead>
                 <tbody className="divide-y divide-border/50">
                   {myAgreements.map((ag, idx) => (
-                    <tr key={ag._id} className="hover:bg-bg-secondary/30 transition-colors">
+                    <tr key={ag._id} className="hover:bg-bg-secondary/30 transition-colors cursor-pointer" onClick={() => openAgreement(ag)}>
                       <td className="px-4 py-4 align-middle">
                         <div className="w-7 h-7 rounded-lg bg-blue-soft flex items-center justify-center text-[10px] font-black text-blue">{idx + 1}</div>
                       </td>
@@ -514,7 +521,7 @@ const AgreementGenerationTab = () => {
                       </td>
                       <td className="px-4 py-4 align-middle">
                         <button
-                          onClick={() => handleDeleteAgreement(ag._id)}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteAgreement(ag._id); }}
                           className="p-2 rounded-xl text-text-muted hover:text-red hover:bg-red-soft/30 border border-transparent hover:border-red-soft/50 transition-all active:scale-95"
                           title="Delete Agreement Record"
                         >

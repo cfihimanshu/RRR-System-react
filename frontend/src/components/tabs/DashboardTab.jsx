@@ -99,7 +99,7 @@ const DashboardTab = () => {
       setVisibleActivitiesCount(prev => prev + 15);
     }
   };
-  const [teamFilter, setTeamFilter] = useState('7days');
+  const [teamFilter, setTeamFilter] = useState('all');
   const [userFilter, setUserFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -2173,13 +2173,14 @@ const DashboardTab = () => {
               <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">Staff Performance Analysis</div>
               <div className="flex gap-2">
                 {[
+                  { label: 'All Time', value: 'all' },
                   { label: 'Last 7 Days', value: '7days' },
                   { label: 'Last 1 Month', value: '1month' },
                   { label: 'Last 3 Months', value: '3months' }
                 ].map((item) => (
                   <button
                     key={item.value}
-                    className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${teamFilter === item.value || (teamFilter === '' && item.value === '7days') ? 'bg-blue-600 text-white shadow-sm' : 'bg-bg-secondary text-text-muted hover:bg-bg-input'}`}
+                    className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${teamFilter === item.value ? 'bg-blue-600 text-white shadow-sm' : 'bg-bg-secondary text-text-muted hover:bg-bg-input'}`}
                     onClick={() => setTeamFilter(item.value)}
                   >
                     {item.label}

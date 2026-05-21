@@ -6,10 +6,17 @@ const AgreementSchema = new mongoose.Schema({
   clientName: { type: String, required: true },
   firstPartyCompany: { type: String, default: '' },
   secondCompany: { type: String, default: '' },
+  address: { type: String, default: '' },
+  pincode: { type: String, default: '' },
+  firstPartySignatory: { type: String, default: '' },
+  secondPartySignatory: { type: String, default: '' },
+  templateId: { type: String, default: '' },
   settlementAmount: { type: Number, default: 0 },
   amountInWords: { type: String, default: '' },
   date: { type: String, default: '' },
   installments: { type: Array, default: [] },
+  pdfBase64: { type: String, default: '' },
+  pdfUrl: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 });
 
