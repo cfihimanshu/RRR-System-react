@@ -26,7 +26,8 @@ router.post('/login', async (req, res) => {
       email: user.email, 
       role: user.role, 
       fullName: tokenName,
-      canAccessRecords: user.canAccessRecords 
+      canAccessRecords: user.canAccessRecords,
+      passwordVersion: user.passwordVersion || 0
     }, process.env.JWT_SECRET, { expiresIn: '6h' });
 
     await AuditLog.create({
@@ -248,6 +249,7 @@ router.post('/change-password', verifyToken, async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
+    user.passwordVersion = (user.passwordVersion || 0) + 1;
     await user.save();
 
     await AuditLog.create({
@@ -278,6 +280,7 @@ router.post('/forgot-password', async (req, res) => {
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
     
     user.password = hashedPassword;
+    user.passwordVersion = (user.passwordVersion || 0) + 1;
     await user.save();
 
     // Send the temporary password via email

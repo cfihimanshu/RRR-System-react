@@ -9,7 +9,8 @@ const userSchema = new mongoose.Schema({
   schemaVersion: { type: Number, default: 2 },
   bypassEodCheck: { type: Boolean, default: false },
   sodAccessGrantedAt: { type: String, default: "" },
-  lastSeen: { type: Date, default: Date.now }
+  lastSeen: { type: Date, default: Date.now },
+  passwordVersion: { type: Number, default: 0 }
 });
 
 module.exports = mongoose.model('User', userSchema);

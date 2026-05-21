@@ -55,8 +55,23 @@ const Dashboard = () => {
       api.get('/auth/me').catch(err => console.error('Heartbeat failed:', err));
     }, 5 * 60 * 1000); // 5 minutes
 
-    return () => clearInterval(heartbeatInterval);
-  }, []);
+    // Instant session validation when user returns to this tab/window
+    const handleFocus = () => {
+      api.get('/auth/me').catch(err => {
+        if (err.response?.status === 401) {
+          logout();
+          window.location.href = '/login';
+        }
+      });
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [logout]);
 
   return (
     <div className="app-container h-screen flex flex-col overflow-hidden">
