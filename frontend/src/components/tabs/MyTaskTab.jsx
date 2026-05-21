@@ -219,7 +219,7 @@ const MyTaskTab = () => {
 
   const fetchCases = async () => {
     try {
-      const res = await api.get('/cases');
+      const res = await api.get('/cases/summary');
       console.log('Fetched cases for task dropdown:', res.data.length);
       setCases(res.data);
     } catch (err) {

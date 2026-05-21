@@ -14,51 +14,59 @@ router.get('/', verifyToken, async (req, res) => {
   try {
     let query = req.query.caseId ? { caseId: req.query.caseId } : {};
     if (req.query.status) query.status = req.query.status;
-    
-    // Privacy Logic: Only Admins, Reviewers, and Accountants see all.
-    // Others only see their own requested refunds.
+
     if (!['Admin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
       query.requestedBy = req.user.email;
     }
 
-    const docs = await Refund.find(query).sort({ timestamp: -1 });
-    
-    // Auto-update any installments whose due date has passed and are not paid
     const nowForIST = new Date();
     const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
     const todayStr = istTime.toISOString().split('T')[0];
 
-    for (let doc of docs) {
-      let changed = false;
-      if (doc.installments && doc.installments.length > 0) {
-        doc.installments.forEach(inst => {
-          if (inst.status !== 'Paid' && inst.dueDate && inst.dueDate < todayStr) {
-            if (inst.status !== 'Due') {
-              inst.status = 'Due';
-              changed = true;
-            }
+    // Bulk-mark overdue installments (one query instead of N saves per request)
+    await Refund.updateMany(
+      {
+        ...query,
+        installments: {
+          $elemMatch: {
+            status: { $nin: ['Paid', 'Due'] },
+            dueDate: { $lt: todayStr, $exists: true, $ne: '' }
           }
-        });
+        }
+      },
+      { $set: { 'installments.$[inst].status': 'Due' } },
+      {
+        arrayFilters: [
+          {
+            'inst.status': { $nin: ['Paid', 'Due'] },
+            'inst.dueDate': { $lt: todayStr, $exists: true, $ne: '' }
+          }
+        ]
       }
-      if (changed) {
-        await doc.save();
-      }
-    }
-    
-    // Fetch and map company names from matching Case documents
-    const caseIds = docs.map(d => d.caseId).filter(Boolean);
-    const matchingCases = await Case.find({ caseId: { $in: caseIds } }, 'caseId companyName');
+    );
+
+    const limit = Math.min(parseInt(req.query.limit, 10) || 500, 1000);
+    const docs = await Refund.find(query)
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .select('reqId caseId amount requestedBy requestedByName summary status installments timestamp paymentDate transactionId reviewerRemark')
+      .lean();
+
+    const caseIds = [...new Set(docs.map(d => d.caseId).filter(Boolean))];
+    const matchingCases = caseIds.length
+      ? await Case.find({ caseId: { $in: caseIds } }, 'caseId companyName').lean()
+      : [];
     const caseMap = {};
     matchingCases.forEach(c => {
       caseMap[c.caseId] = c.companyName;
     });
 
-    const populatedDocs = docs.map(doc => {
-      const docObj = doc.toObject();
-      docObj.companyName = caseMap[doc.caseId] || '';
-      return docObj;
-    });
+    const populatedDocs = docs.map(doc => ({
+      ...doc,
+      companyName: caseMap[doc.caseId] || ''
+    }));
 
+    res.set('Cache-Control', 'private, max-age=30');
     res.json(populatedDocs);
   } catch (error) {
     res.status(500).json({ error: error.message });

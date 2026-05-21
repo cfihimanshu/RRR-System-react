@@ -42,7 +42,7 @@ const CaseStudyTab = ({ caseData = null }) => {
 
   const fetchCases = () => {
     setFetchingCases(true);
-    api.get('/cases')
+    api.get('/cases/summary')
       .then(res => setCases(res.data))
       .catch(console.error)
       .finally(() => setFetchingCases(false));

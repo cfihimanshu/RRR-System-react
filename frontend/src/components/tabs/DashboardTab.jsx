@@ -171,8 +171,8 @@ const DashboardTab = () => {
 
   const fetchUserCases = async () => {
     try {
-      const res = await api.get('/cases?limit=100'); // Limit for dashboard preview
-      setUserCases(res.data.cases || (Array.isArray(res.data) ? res.data : []));
+      const res = await api.get('/cases/summary?limit=100'); // Limit for dashboard preview
+      setUserCases(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
     }
@@ -180,11 +180,9 @@ const DashboardTab = () => {
 
   const fetchMyTodayTasks = async () => {
     try {
-      const res = await api.get('/tasks');
+      const res = await api.get('/tasks?status_nin=Completed,Done&limit=100');
       const taskList = res.data.tasks || (Array.isArray(res.data) ? res.data : []);
-      // Fetch ALL pending tasks (To Do or In Progress) for the user
-      const pending = taskList.filter(t => t.status !== 'Completed' && t.status !== 'Done');
-      setMyTodayTasks(pending);
+      setMyTodayTasks(taskList);
     } catch (err) {
       console.error(err);
     }
@@ -219,16 +217,26 @@ const DashboardTab = () => {
   const [hasSodToday, setHasSodToday] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const checkSodStatus = async () => {
+  const getTodayDateStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const fetchTodayReports = async () => {
+    const today = getTodayDateStr();
+    const res = await api.get(`/reports?light=true&date=${today}&limit=20`);
+    const reportList = res.data.reports || (Array.isArray(res.data) ? res.data : []);
+    setMyReports(reportList);
+    return reportList;
+  };
+
+  const checkSodStatus = async (reportList) => {
     if (user?.role === 'Admin') return;
     try {
-      const d = new Date();
-      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const res = await api.get('/reports?limit=100');
-      const reportList = res.data.reports || (Array.isArray(res.data) ? res.data : []);
+      const today = getTodayDateStr();
+      const list = reportList || await fetchTodayReports();
 
-      // Filter reports: must be SOD, today's date, and current user's email
-      const todaysSod = reportList.find(r =>
+      const todaysSod = list.find(r =>
         r.type === 'SOD' &&
         r.date === today &&
         r.userEmail?.trim().toLowerCase() === user?.email?.trim().toLowerCase()
@@ -236,7 +244,6 @@ const DashboardTab = () => {
 
       setHasSodToday(!!todaysSod);
 
-      // Auto-open SOD modal only if not filled today and user is NOT Admin
       if (!todaysSod && user?.role !== 'Admin') {
         setTimeout(() => {
           openReportModal('SOD');
@@ -251,8 +258,8 @@ const DashboardTab = () => {
   const fetchActivities = async () => {
     try {
       const [tlRes, reportsRes] = await Promise.allSettled([
-        api.get('/timeline'),
-        api.get('/reports')
+        api.get('/timeline?feed=true&limit=30'),
+        api.get('/reports?light=true&limit=20')
       ]);
 
       const tlDataRaw = tlRes.status === 'fulfilled' ? tlRes.value.data : [];
@@ -318,10 +325,25 @@ const DashboardTab = () => {
   };
 
   useEffect(() => {
-    if (user?.email) {
-      checkSodStatus();
-      fetchActivities();
-    }
+    if (!user?.email) return;
+    let cancelled = false;
+
+    const loadSecondary = async () => {
+      try {
+        const todayReports = await fetchTodayReports();
+        if (cancelled) return;
+        await checkSodStatus(todayReports);
+        if (cancelled) return;
+        fetchActivities();
+        fetchMyRefunds();
+        fetchUserCases();
+      } catch (err) {
+        console.error('Dashboard secondary load error:', err);
+      }
+    };
+
+    loadSecondary();
+    return () => { cancelled = true; };
   }, [user?.email]);
 
   const openReportModal = async (type) => {
@@ -441,11 +463,7 @@ const DashboardTab = () => {
 
   const fetchMyReports = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const res = await api.get('/reports?limit=100');
-      const reportList = res.data.reports || (Array.isArray(res.data) ? res.data : []);
-      const todayReports = reportList.filter(r => r.date === today);
-      setMyReports(todayReports);
+      await fetchTodayReports();
     } catch (err) {
       console.error(err);
     }
@@ -456,10 +474,10 @@ const DashboardTab = () => {
     try {
       const [refundsRes, casesRes] = await Promise.all([
         api.get('/refunds'),
-        api.get('/cases?limit=1000')
+        api.get('/cases/summary?limit=1000')
       ]);
       setAllRefundsList(refundsRes.data || []);
-      const allCases = casesRes.data.cases || (Array.isArray(casesRes.data) ? casesRes.data : []);
+      const allCases = Array.isArray(casesRes.data) ? casesRes.data : [];
       setAllCasesList(allCases);
       const completedStatuses = ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution', 'Resolved', 'Done', 'Complete', 'Completed', 'closed', 'settled'];
       const activeCases = allCases.filter(c => !completedStatuses.includes(c.currentStatus || c.status));
@@ -574,12 +592,8 @@ const DashboardTab = () => {
 
   useEffect(() => {
     fetchStats(teamFilter);
-    fetchMyRefunds();
-    fetchMyReports();
-    fetchUserCases();
     fetchMyTodayTasks();
 
-    // Auto-refresh stats every 2 minutes to prevent database load and queue stacking
     const statsInterval = setInterval(() => {
       fetchStats(teamFilter);
     }, 120000);

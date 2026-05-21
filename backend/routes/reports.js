@@ -13,10 +13,31 @@ router.get('/', verifyToken, async (req, res) => {
     if (req.user.role !== 'Admin') {
       matchQuery.userEmail = req.user.email;
     }
+    if (req.query.date) {
+      matchQuery.date = req.query.date;
+    }
+    if (req.query.type) {
+      matchQuery.type = req.query.type;
+    }
 
     const page = parseInt(req.query.page) || 1;
-    const limitNum = parseInt(req.query.limit) || 50;
+    const limitNum = Math.min(parseInt(req.query.limit) || 50, 200);
     const skipNum = (page - 1) * limitNum;
+
+    // Fast path for dashboard / SOD checks — skip expensive timeline+task lookups
+    if (req.query.light === 'true') {
+      const [reports, total] = await Promise.all([
+        Report.find(matchQuery)
+          .sort({ createdAt: -1 })
+          .skip(skipNum)
+          .limit(limitNum)
+          .select('type userName userEmail date checkInTime checkOutTime workDuration completionStatus createdAt myTasksToday sodCaseIds sodTaskIds')
+          .lean(),
+        Report.countDocuments(matchQuery)
+      ]);
+      res.set('Cache-Control', 'private, max-age=30');
+      return res.json({ reports, total, page, pages: Math.ceil(total / limitNum) });
+    }
 
     const reports = await Report.aggregate([
       { $match: matchQuery },

@@ -41,7 +41,7 @@ const RefundRequestTab = () => {
 
   const fetchUserCases = async () => {
     try {
-      const res = await api.get('/cases');
+      const res = await api.get('/cases/summary');
       // For Staff, filter by initiatedBy
       if (user?.role === 'Staff') {
         setUserCases(res.data.filter(c => c.initiatedBy === user.email));

@@ -21,7 +21,7 @@ const TimelineTab = () => {
 
   useEffect(() => {
     setFetchingCases(true);
-    api.get('/cases').then(res => setCases(res.data)).catch(console.error).finally(() => setFetchingCases(false));
+    api.get('/cases/summary').then(res => setCases(res.data)).catch(console.error).finally(() => setFetchingCases(false));
     
     if (user?.role === 'Admin') {
       api.get('/auth/users').then(res => setUsers(res.data)).catch(console.error);

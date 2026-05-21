@@ -83,19 +83,42 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+const globalWithMongoose = global;
+if (!globalWithMongoose._mongooseCache) {
+  globalWithMongoose._mongooseCache = { conn: null, promise: null, indexesBuilt: false };
+}
+const mongooseCache = globalWithMongoose._mongooseCache;
+
 const connectToDatabase = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI, {
+  if (mongooseCache.conn && mongoose.connection.readyState === 1) {
+    return mongooseCache.conn;
+  }
+
+  if (!mongooseCache.promise) {
+    mongooseCache.promise = mongoose.connect(process.env.MONGO_URI, {
       serverSelectionTimeoutMS: 10000,
       bufferTimeoutMS: 30000,
       connectTimeoutMS: 15000,
       socketTimeoutMS: 45000,
-      maxPoolSize: process.env.VERCEL ? 1 : 10,
+      maxPoolSize: process.env.VERCEL ? 5 : 10,
+      minPoolSize: process.env.VERCEL ? 1 : 0,
       retryWrites: true,
+    }).then((m) => {
+      console.log('MongoDB Connected');
+      return m;
+    }).catch((err) => {
+      mongooseCache.promise = null;
+      console.error('DATABASE CONNECTION ERROR:', err);
+      throw err;
     });
-    console.log('MongoDB Connected');
+  }
 
-    // Force index verification/creation on startup (only locally, not on Vercel serverless to prevent DB overloading)
+  mongooseCache.conn = await mongooseCache.promise;
+
+  if (!mongooseCache.indexesBuilt) {
+    mongooseCache.indexesBuilt = true;
+
+    // Index build only locally — skip on Vercel to avoid serverless DB flooding
     if (!process.env.VERCEL) {
       const Case = require('./models/Case');
       const Timeline = require('./models/Timeline');
@@ -103,6 +126,7 @@ const connectToDatabase = async () => {
       const Refund = require('./models/Refund');
       const Report = require('./models/Report');
       const User = require('./models/User');
+      const Communication = require('./models/Communication');
 
       Promise.all([
         Case.createIndexes(),
@@ -110,19 +134,20 @@ const connectToDatabase = async () => {
         Task.createIndexes(),
         Refund.createIndexes(),
         Report.createIndexes(),
-        User.createIndexes()
+        User.createIndexes(),
+        Communication.createIndexes()
       ]).then(() => {
         console.log('✓ All database indexes verified/built successfully');
       }).catch(err => {
         console.error('✗ Error building database indexes:', err);
+        mongooseCache.indexesBuilt = false;
       });
     } else {
       console.log('✓ Running on Vercel: skipping automatic index verification to prevent serverless database flooding');
     }
-  } catch (err) {
-    console.error('DATABASE CONNECTION ERROR:', err);
-    throw err; // Throw instead of exiting
   }
+
+  return mongooseCache.conn;
 };
 
 mongoose.connection.on('disconnected', () => {
@@ -213,6 +238,13 @@ app.get('/api/admin/migrate-fir-types', require('./middleware/auth').verifyToken
 const statsCache = new Map();
 const CACHE_DURATION = 60000; // 1 minute in milliseconds
 
+function buildAnchoredRegex(text) {
+  const safe = String(text || '').trim();
+  if (!safe) return null;
+  const escaped = safe.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+  return new RegExp(`^\\s*${escaped}`, 'i');
+}
+
 app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async (req, res) => {
   try {
     const cacheKey = `${req.user.id}_${req.query.teamFilter || ''}_${req.query.userFilter || ''}_${req.query.startDate || ''}_${req.query.endDate || ''}_${req.query.perfStartDate || ''}_${req.query.perfEndDate || ''}`;
@@ -281,18 +313,16 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     let userEmail = (dbUser?.email || req.user.email || '').trim();
     let userId = req.user.id;
 
-    // Ultra-flexible regex: match any part of name, email, or ID
-    // We filter out very short common words but keep significant ones
     const firstName = userName.split(/\s+/)[0];
-    const parts = [userName, userEmail, userId];
+    const searchValues = [userName, userEmail, userId];
     if (firstName && firstName.length >= 3) {
-      parts.push(firstName);
+      searchValues.push(firstName);
     }
-    const filteredParts = parts.filter(p => p && p.trim().length > 0);
-    const uniqueParts = [...new Set(filteredParts.map(p => p.toLowerCase()))];
-    const escapedParts = uniqueParts.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-
-    const myNameRegex = { $regex: new RegExp(escapedParts.join('|'), 'i') };
+    const uniqueSearchValues = [...new Set(searchValues.filter(Boolean).map(v => v.trim()))];
+    const regexParts = uniqueSearchValues
+      .map(v => buildAnchoredRegex(v))
+      .filter(Boolean);
+    const myNameRegex = regexParts.length === 0 ? null : new RegExp(regexParts.map(r => r.source).join('|'), 'i');
 
     let ownershipQuery = {};
     let activeNameRegex = myNameRegex;
@@ -399,8 +429,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const timelineQuery = req.user.role !== 'Admin' ? { caseId: { $in: myCaseIds } } : {};
 
     let timelineMatch = { ...timelineQuery };
-    if (req.user.role !== 'Admin' || userFilter) {
-      timelineMatch.source = nameRegex;
+    if (req.user.role === 'Admin' && userFilter) {
+      timelineMatch.source = activeNameRegex;
     }
 
     const yesterday = new Date(istTime);
@@ -553,15 +583,24 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         }
       ])),
       track('refundMetrics', async () => {
-        const [refundsPaid, allRefunds, pendingApprovalsResult] = await Promise.all([
-          Refund.find({ ...((req.user.role !== 'Admin' && req.user.role !== 'Accountant') ? { requestedBy: req.user.email } : {}), status: 'Paid' }).lean(),
-          Refund.find(refundQuery).lean(),
+        const paidFilter = {
+          ...((req.user.role !== 'Admin' && req.user.role !== 'Accountant') ? { requestedBy: req.user.email } : {}),
+          status: 'Paid'
+        };
+        const [paidSumResult, allRefunds, pendingApprovalsResult] = await Promise.all([
+          Refund.aggregate([
+            { $match: paidFilter },
+            { $group: { _id: null, total: { $sum: { $convert: { input: { $ifNull: ['$amount', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
+          ]),
+          Refund.find(refundQuery)
+            .select('caseId amount status installments timestamp paymentDate')
+            .lean(),
           Refund.aggregate([
             { $match: { status: 'Pending Admin Approval' } },
             { $group: { _id: null, total: { $sum: { $convert: { input: { $ifNull: ['$amount', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
           ])
         ]);
-        return { refundsPaid, allRefunds, pendingApprovalsResult };
+        return { paidSumResult, allRefunds, pendingApprovalsResult };
       }),
       track('taskMetrics', async () => {
         const sodReport = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean();
@@ -694,8 +733,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const totalCommunications = timelineMetrics[0]?.totalComms?.[0]?.count || 0;
     const progressUpdatesToday = timelineMetrics[0]?.progressToday?.[0]?.count || 0;
 
-    const { refundsPaid, allRefunds, pendingApprovalsResult } = refundMetrics;
-    const totalRefundAmount = refundsPaid.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const { paidSumResult, allRefunds, pendingApprovalsResult } = refundMetrics;
+    const totalRefundAmount = paidSumResult.length > 0 ? (paidSumResult[0].total || 0) : 0;
     const pendingApprovals = pendingApprovalsResult.length > 0 ? pendingApprovalsResult[0].total : 0;
 
     const { pendingTasksCount, dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday, totalTasksToday, completedTasksToday } = taskMetrics;
@@ -905,27 +944,42 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     provisions.thisMonth.count = caseSets.thisMonth.size;
     provisions.next6Months.count = caseSets.next6Months.size;
 
-    // Collection Potential and Total Demand/Saved
+    // Collection Potential and Total Demand/Saved (aggregated — avoids loading all comm rows)
     let commQuery = {};
-    if (req.user.role !== 'Admin') commQuery = { caseId: { $in: myCaseIds } };
-    const commsForSum = await Communication.find(commQuery).select('caseId refundDemanded demandAmount amountSaved').lean();
-    const caseMetrics = {};
-    let collectionPotential = 0;
-    commsForSum.forEach(c => {
-      const caseId = c.caseId || 'unlinked';
-      if (!caseMetrics[caseId]) caseMetrics[caseId] = { demand: 0, saved: 0 };
-      const demandVal = Number(c.refundDemanded) || Number(c.demandAmount) || 0;
-      const savedVal = Number(c.amountSaved) || 0;
-      if (demandVal > caseMetrics[caseId].demand) caseMetrics[caseId].demand = demandVal;
-      if (savedVal > caseMetrics[caseId].saved) caseMetrics[caseId].saved = savedVal;
-    });
-    const totalDemandAmount = Object.values(caseMetrics).reduce((sum, m) => sum + m.demand, 0);
-    const totalAmountSaved = Object.values(caseMetrics).reduce((sum, m) => sum + m.saved, 0);
+    if (req.user.role !== 'Admin' && myCaseIds.length > 0) {
+      commQuery = { caseId: { $in: myCaseIds } };
+    } else if (req.user.role !== 'Admin') {
+      commQuery = { caseId: { $in: [] } };
+    }
+    const commAgg = await track('commMetricsAgg', () => Communication.aggregate([
+      { $match: commQuery },
+      {
+        $group: {
+          _id: { $ifNull: ['$caseId', 'unlinked'] },
+          maxDemand: {
+            $max: {
+              $max: [
+                { $ifNull: ['$demandAmount', 0] },
+                { $convert: { input: { $ifNull: ['$refundDemanded', '0'] }, to: 'double', onError: 0, onNull: 0 } }
+              ]
+            }
+          },
+          maxSaved: { $max: { $ifNull: ['$amountSaved', 0] } },
+          sumDemand: {
+            $sum: {
+              $max: [
+                { $ifNull: ['$demandAmount', 0] },
+                { $convert: { input: { $ifNull: ['$refundDemanded', '0'] }, to: 'double', onError: 0, onNull: 0 } }
+              ]
+            }
+          }
+        }
+      }
+    ]));
+    const totalDemandAmount = commAgg.reduce((sum, row) => sum + (row.maxDemand || 0), 0);
+    const totalAmountSaved = commAgg.reduce((sum, row) => sum + (row.maxSaved || 0), 0);
     const amountAtRisk = totalDemandAmount;
-
-    collectionPotential = commsForSum.reduce((sum, c) => {
-      return sum + (Number(c.demandAmount) || Number(c.refundDemanded) || 0);
-    }, 0);
+    const collectionPotential = commAgg.reduce((sum, row) => sum + (row.sumDemand || 0), 0);
 
     let teamPerformance = [];
     let missingSodUsers = [];
@@ -936,13 +990,13 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       const Report = require('./models/Report');
       const reportsToday = await Report.find({
         createdAt: { $gte: startOfToday }
-      }).lean();
+      }).select('userEmail userName type date checkInTime createdAt').lean();
 
       const fortyEightHrsAgo = new Date();
       fortyEightHrsAgo.setHours(fortyEightHrsAgo.getHours() - 48);
       const reportsLast48Hrs = await Report.find({
         createdAt: { $gte: fortyEightHrsAgo }
-      }).lean();
+      }).select('userEmail userName type date createdAt').lean();
 
       // Simple compliance calculation: percentage of active users who submitted SOD today
       const allNonAdmins = await User.find({ role: { $ne: 'Admin' } }).lean();
@@ -1033,8 +1087,13 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       // Batch fetch SOD and EOD reports for all users
       const allEmails = allNonAdmins.map(u => u.email);
       const [lastSods, lastEods] = await Promise.all([
-        Report.find({ userEmail: { $in: allEmails }, type: 'SOD', date: { $lt: dateStrIST } }).sort({ date: -1 }).lean(),
-        Report.find({ userEmail: { $in: allEmails }, type: 'EOD' }).lean()
+        Report.find({ userEmail: { $in: allEmails }, type: 'SOD', date: { $lt: dateStrIST } })
+          .sort({ date: -1 })
+          .select('userEmail date')
+          .lean(),
+        Report.find({ userEmail: { $in: allEmails }, type: 'EOD' })
+          .select('userEmail date')
+          .lean()
       ]);
 
       const sodMap = {};
@@ -1085,7 +1144,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         reportQuery = { date: { $gte: dateStr } };
       }
 
-      const reportsForDuration = await require('./models/Report').find(reportQuery).lean();
+      const reportsForDuration = await Report.find(reportQuery)
+        .select('userName userEmail type date checkInTime checkOutTime workDuration createdAt')
+        .lean();
 
       const parseDuration = (durationStr) => {
         if (!durationStr) return 0;
@@ -1186,7 +1247,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       // ── Active Users Tracking (Based on SOD/EOD) ──
       const todayStr = new Date().toISOString().split('T')[0];
 
-      const todayReports = await Report.find({ date: todayStr }).lean();
+      const todayReports = await Report.find({ date: todayStr })
+        .select('userEmail type checkInTime checkOutTime createdAt')
+        .lean();
 
       const todaySodMap = {};
       const todayEodMap = {};

@@ -30,7 +30,7 @@ const HistoryTab = () => {
   };
 
   useEffect(() => {
-    api.get('/cases').then(res => setCases(res.data));
+    api.get('/cases/summary').then(res => setCases(res.data)).catch(console.error);
     fetchHistory();
   }, []);
 

@@ -119,6 +119,80 @@ async function createDocumentIfNotExists({ caseId, docType, fileLink, sourceForm
   return document;
 }
 
+const escapeRegex = (text) => String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const buildNameRegex = (text) => {
+  const safe = escapeRegex(text).trim();
+  if (!safe) return null;
+  return new RegExp(`^(${safe})`, 'i');
+};
+
+async function buildCaseQuery(req) {
+  let query = {};
+
+  if (req.user.role !== 'Admin') {
+    const User = require('../models/User');
+    const dbUser = await User.findById(req.user.id).lean();
+    const userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
+    const userEmail = (dbUser?.email || req.user.email || '').trim();
+    const nameRegex = buildNameRegex(userName);
+    const emailRegex = buildNameRegex(userEmail);
+    const ownerRegex = nameRegex || emailRegex ? [nameRegex, emailRegex].filter(Boolean) : null;
+
+    if (ownerRegex) {
+      query = {
+        $or: [
+          { assignedTo: { $in: ownerRegex } },
+          {
+            $and: [
+              {
+                $or: [
+                  { assignedTo: { $regex: /^\s*$/ } },
+                  { assignedTo: { $exists: false } },
+                  { assignedTo: null }
+                ]
+              },
+              { initiatedBy: { $in: ownerRegex } }
+            ]
+          }
+        ]
+      };
+    }
+  } else if (req.query.userFilter) {
+    const filterRegex = buildNameRegex(req.query.userFilter);
+    if (filterRegex) {
+      query = {
+        $or: [
+          { assignedTo: filterRegex },
+          {
+            $and: [
+              {
+                $or: [
+                  { assignedTo: { $regex: /^\s*$/ } },
+                  { assignedTo: { $exists: false } },
+                  { assignedTo: null }
+                ]
+              },
+              { initiatedBy: filterRegex }
+            ]
+          }
+        ]
+      };
+    }
+  }
+
+  if (req.query.hasDemand === 'true') {
+    const commsWithDemand = await Communication.find({
+      $or: [
+        { demandAmount: { $gt: 0 } },
+        { refundDemanded: { $regex: /[1-9]/ } }
+      ]
+    }).distinct('caseId');
+    query.caseId = { $in: commsWithDemand };
+  }
+
+  return query;
+}
+
 // --- BULK ADMIN ROUTES (Must be before standard routes to avoid overlap) ---
 router.delete('/bulk/delete-all', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
@@ -160,47 +234,60 @@ router.post('/bulk/sync-ids', verifyToken, roleGuard(['Admin']), async (req, res
 });
 
 // --- STANDARD ROUTES ---
-router.get('/', verifyToken, async (req, res) => {
+router.get('/count', verifyToken, async (req, res) => {
   try {
-    let query = {};
+    const query = await buildCaseQuery(req);
+    const total = Object.keys(query).length === 0
+      ? await Case.estimatedDocumentCount()
+      : await Case.countDocuments(query);
+    res.json({ total });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-    // Logic: Admin, Reviewer, and Accountant see all. Others see only their assigned or unassigned-initiated cases.
-    if (!['Admin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
-      const User = require('../models/User');
-      const dbUser = await User.findById(req.user.id).lean();
-      const userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
-      const esc = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Use partial match to match "Divya" even if user is "Divya Operations"
-      const nameRegex = { $regex: new RegExp(`${esc}`, 'i') };
-
-      query = {
+router.get('/summary', verifyToken, async (req, res) => {
+  try {
+    let query = await buildCaseQuery(req);
+    if (req.query.search) {
+      const search = escapeRegex(req.query.search);
+      const searchRegex = new RegExp(search, 'i');
+      const searchQuery = {
         $or: [
-          { assignedTo: nameRegex },
-          {
-            $and: [
-              { $or: [{ assignedTo: { $regex: /^\s*$/ } }, { assignedTo: { $exists: false } }, { assignedTo: null }] },
-              { initiatedBy: nameRegex }
-            ]
-          }
+          { caseId: searchRegex },
+          { companyName: searchRegex },
+          { clientName: searchRegex }
         ]
       };
+      query = Object.keys(query).length === 0 ? searchQuery : { $and: [query, searchQuery] };
     }
 
-    if (req.query.hasDemand === 'true') {
-      const commsWithDemand = await Communication.find({
-        $or: [
-          { demandAmount: { $gt: 0 } },
-          { refundDemanded: { $regex: /[1-9]/ } } // Any string containing a non-zero digit
-        ]
-      }).distinct('caseId');
-      query.caseId = { $in: commsWithDemand };
-    }
+    const limit = Math.min(parseInt(req.query.limit) || 1000, 2000);
+    const cases = await Case.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .select('caseId companyName clientName initiatedBy assignedTo currentStatus importDocumentLink firFileLink typeOfComplaint createdAt')
+      .lean();
+
+    res.set('Cache-Control', 'private, max-age=30');
+    res.json(cases);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const query = await buildCaseQuery(req);
 
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 1000; // Default large but capped
+    const limit = parseInt(req.query.limit) || 1000;
     const skip = (page - 1) * limit;
 
-    const total = await Case.countDocuments(query);
+    const total = Object.keys(query).length === 0
+      ? await Case.estimatedDocumentCount()
+      : await Case.countDocuments(query);
+
     const cases = await Case.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)

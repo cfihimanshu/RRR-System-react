@@ -61,8 +61,8 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
           const uniqueCaseIds = new Set((res.data || []).map(r => r.caseId));
           setCaseCount(uniqueCaseIds.size);
         } else {
-          const res = await api.get('/cases');
-          setCaseCount(res.data.total !== undefined ? res.data.total : (Array.isArray(res.data) ? res.data.length : 0));
+          const res = await api.get('/cases/count');
+          setCaseCount(res.data.total ?? 0);
         }
       } catch (err) {
         console.error("Failed to fetch cases count", err);

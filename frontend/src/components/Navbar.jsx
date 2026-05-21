@@ -17,7 +17,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed, onLogoutClick, onC
 
   const fetchNotifications = async (isInitial = false) => {
     try {
-      const res = await api.get('/notifications');
+      const res = await api.get('/notifications?limit=30');
       const newNotifications = res.data;
 
       // Check for new unread notifications to show toast

@@ -1,33 +1,39 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, AlertTriangle, X, Key, ShieldCheck } from 'lucide-react';
+import { LogOut, X, Key, ShieldCheck } from 'lucide-react';
 import { TAB_ACCESS } from '../config/tabAccess';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 
-// Import tabs
-import DashboardTab from '../components/tabs/DashboardTab';
-import NewCaseTab from '../components/tabs/NewCaseTab';
-import CaseMasterTab from '../components/tabs/CaseMasterTab';
-import HistoryTab from '../components/tabs/HistoryTab';
-import ActionLogTab from '../components/tabs/ActionLogTab';
-import CommLogTab from '../components/tabs/CommLogTab';
-import TimelineTab from '../components/tabs/TimelineTab';
-import DocIndexTab from '../components/tabs/DocIndexTab';
-import CaseStudyTab from '../components/tabs/CaseStudyTab';
-import AdminPanelTab from '../components/tabs/AdminPanelTab';
-import DataSearchTab from '../components/tabs/DataSearchTab';
-import ReviewerDashTab from '../components/tabs/ReviewerDashTab';
-import AccountantDashTab from '../components/tabs/AccountantDashTab';
-import AgreementGenerationTab from '../components/tabs/AgreementGenerationTab';
-import MyTaskTab from '../components/tabs/MyTaskTab';
-import SodEodReportTab from '../components/tabs/SodEodReportTab';
-import WorkReportTab from '../components/tabs/WorkReportTab';
-import RefundRequestTab from '../components/tabs/RefundRequestTab';
-import LegalDashboardTab from '../components/tabs/LegalDashboardTab';
+// Lazy-loaded tabs — only the active route is fetched (no .jsx filenames in prod build)
+const DashboardTab = React.lazy(() => import('../components/tabs/DashboardTab'));
+const NewCaseTab = React.lazy(() => import('../components/tabs/NewCaseTab'));
+const CaseMasterTab = React.lazy(() => import('../components/tabs/CaseMasterTab'));
+const HistoryTab = React.lazy(() => import('../components/tabs/HistoryTab'));
+const ActionLogTab = React.lazy(() => import('../components/tabs/ActionLogTab'));
+const CommLogTab = React.lazy(() => import('../components/tabs/CommLogTab'));
+const TimelineTab = React.lazy(() => import('../components/tabs/TimelineTab'));
+const DocIndexTab = React.lazy(() => import('../components/tabs/DocIndexTab'));
+const CaseStudyTab = React.lazy(() => import('../components/tabs/CaseStudyTab'));
+const AdminPanelTab = React.lazy(() => import('../components/tabs/AdminPanelTab'));
+const DataSearchTab = React.lazy(() => import('../components/tabs/DataSearchTab'));
+const ReviewerDashTab = React.lazy(() => import('../components/tabs/ReviewerDashTab'));
+const AccountantDashTab = React.lazy(() => import('../components/tabs/AccountantDashTab'));
+const AgreementGenerationTab = React.lazy(() => import('../components/tabs/AgreementGenerationTab'));
+const MyTaskTab = React.lazy(() => import('../components/tabs/MyTaskTab'));
+const SodEodReportTab = React.lazy(() => import('../components/tabs/SodEodReportTab'));
+const WorkReportTab = React.lazy(() => import('../components/tabs/WorkReportTab'));
+const RefundRequestTab = React.lazy(() => import('../components/tabs/RefundRequestTab'));
+const LegalDashboardTab = React.lazy(() => import('../components/tabs/LegalDashboardTab'));
+
+const TabLoader = () => (
+  <div className="flex-1 flex items-center justify-center min-h-[200px]">
+    <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-700 rounded-full animate-spin" />
+  </div>
+);
 
 const ProtectedRoute = ({ children, allowedRoles, id }) => {
   const { user } = useContext(AuthContext);
@@ -93,6 +99,7 @@ const Dashboard = () => {
         />
         <div className={`flex-1 overflow-auto transition-all duration-300 ease-in-out`}>
           <div className="main h-full p-0 flex flex-col">
+          <Suspense fallback={<TabLoader />}>
           <Routes>
             <Route path="/" element={
               user?.role === 'Reviewer' 
@@ -174,6 +181,7 @@ const Dashboard = () => {
             {/* Catch-all for unauthorized or non-existent URLs */}
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
+          </Suspense>
         </div>
       </div>
 

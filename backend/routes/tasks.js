@@ -34,20 +34,32 @@ router.get('/', verifyToken, async (req, res) => {
       query.updatedAt = { $gte: start, $lte: end };
     }
 
+    if (req.query.status_ne) {
+      query.status = { $ne: req.query.status_ne };
+    }
+
+    if (req.query.status_nin) {
+      const values = String(req.query.status_nin).split(',').map(v => v.trim()).filter(Boolean);
+      if (values.length) query.status = { $nin: values };
+    }
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 1000;
     const skip = (page - 1) * limit;
 
     const total = await Task.countDocuments(query);
-    
+
     const rawTasks = await Task.find(query)
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limit)
+      .select('taskId title priority assignee dueDate caseId details status reminderDateTime source createdBy createdAt updatedAt')
       .lean();
 
     const caseIds = [...new Set(rawTasks.map(t => t.caseId).filter(Boolean))];
-    const cases = await Case.find({ caseId: { $in: caseIds } }, 'caseId companyName').lean();
+    const cases = caseIds.length
+      ? await Case.find({ caseId: { $in: caseIds } }, 'caseId companyName').lean()
+      : [];
     const caseMap = {};
     cases.forEach(c => {
       caseMap[c.caseId] = c.companyName;
@@ -58,6 +70,7 @@ router.get('/', verifyToken, async (req, res) => {
       companyName: caseMap[t.caseId] || ''
     }));
 
+    res.set('Cache-Control', 'private, max-age=30');
     res.json({
       tasks,
       total,
