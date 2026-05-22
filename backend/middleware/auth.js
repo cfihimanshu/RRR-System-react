@@ -21,6 +21,10 @@ const verifyToken = async (req, res, next) => {
     }
 
     req.user = decoded;
+    if (req.user && (req.user.role === 'Super Admin' || req.user.role === 'SuperAdmin')) {
+      req.user.role = 'Admin';
+      req.user.isSuperAdmin = true;
+    }
     
     // Update lastSeen asynchronously
     User.findByIdAndUpdate(decoded.id, { lastSeen: new Date() }).exec().catch(err => console.error('Failed to update lastSeen:', err));

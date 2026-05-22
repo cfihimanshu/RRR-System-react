@@ -110,7 +110,7 @@ const DataSearchTab = () => {
           )}
         </div>
 
-        {view === 'data-search' && user?.role === 'Admin' && (
+        {view === 'data-search' && ['Admin', 'Super Admin'].includes(user?.role) && (
           <div className="relative w-full md:w-auto">
             <input
               type="file"

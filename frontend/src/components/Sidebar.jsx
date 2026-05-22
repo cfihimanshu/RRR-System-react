@@ -73,6 +73,9 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
 
   const visibleTabs = tabsConfig.filter(tab => {
     if (!user) return false;
+    if (user?.role === 'Super Admin' && ['reviewer-panel', 'accountant-dashboard'].includes(tab.id)) {
+      return false;
+    }
     // Show Records module if user has explicit permission OR role-based access
     if (tab.id === 'internal-search' && user.canAccessRecords) return true;
     return TAB_ACCESS[tab.id]?.includes(user?.role);

@@ -7,7 +7,9 @@ const auditLogSchema = new mongoose.Schema({
   role: String,
   category: String,
   description: String,
-  caseId: String
+  caseId: String,
+  ipAddress: String,
+  userAgent: String
 });
 
 auditLogSchema.index({ timestamp: -1 });

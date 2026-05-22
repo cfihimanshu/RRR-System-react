@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 
 // Lazy-loaded tabs — only the active route is fetched (no .jsx filenames in prod build)
 const DashboardTab = React.lazy(() => import('../components/tabs/DashboardTab'));
+const SuperAdminDashTab = React.lazy(() => import('../components/tabs/SuperAdminDashTab'));
 const NewCaseTab = React.lazy(() => import('../components/tabs/NewCaseTab'));
 const CaseMasterTab = React.lazy(() => import('../components/tabs/CaseMasterTab'));
 const HistoryTab = React.lazy(() => import('../components/tabs/HistoryTab'));
@@ -106,6 +107,8 @@ const Dashboard = () => {
                 ? <Navigate to="/reviewer-panel" replace /> 
                 : user?.role === 'Legal'
                 ? <Navigate to="/legal-dashboard" replace />
+                : user?.role === 'Super Admin'
+                ? <SuperAdminDashTab />
                 : <DashboardTab />
             } />
             

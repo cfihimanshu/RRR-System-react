@@ -15,7 +15,7 @@ router.get('/', verifyToken, async (req, res) => {
     let query = req.query.caseId ? { caseId: req.query.caseId } : {};
     if (req.query.status) query.status = req.query.status;
 
-    if (!['Admin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
+    if (!['Admin', 'Reviewer', 'Accountant', 'Operations'].includes(req.user.role) && !req.query.caseId) {
       query.requestedBy = req.user.email;
     }
 
@@ -49,7 +49,7 @@ router.get('/', verifyToken, async (req, res) => {
     const docs = await Refund.find(query)
       .sort({ timestamp: -1 })
       .limit(limit)
-      .select('reqId caseId amount requestedBy requestedByName summary status installments timestamp paymentDate transactionId reviewerRemark')
+      .select('reqId caseId amount requestedBy requestedByName summary status installments timestamp paymentDate transactionId reviewerRemark bankName accHolder accNum ifsc accType branch documentLink')
       .lean();
 
     const caseIds = [...new Set(docs.map(d => d.caseId).filter(Boolean))];

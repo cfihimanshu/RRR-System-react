@@ -434,7 +434,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
     await newCase.save();
 
     const uploader = req.user.fullName || req.user.email || 'System';
-    if (req.body.typeOfComplaint === 'FIR' && req.body.firFileLink) {
+    if (['FIR', 'Criminal Complaint/FIR'].includes(req.body.typeOfComplaint) && req.body.firFileLink) {
       await createDocumentIfNotExists({
         caseId,
         docType: 'FIR Document',
@@ -443,7 +443,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
         uploadedBy: uploader
       });
     }
-    if (['Legal Notice', 'Cyber Complaint', 'Consumer Complaint'].includes(req.body.typeOfComplaint) && req.body.importDocumentLink) {
+    if (['Legal Notice', 'Cyber Complaint', '1930 Cyber Complaint', 'Consumer Complaint'].includes(req.body.typeOfComplaint) && req.body.importDocumentLink) {
       await createDocumentIfNotExists({
         caseId,
         docType: req.body.typeOfComplaint,
@@ -675,7 +675,7 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
     const firFileLink = req.body.firFileLink ?? existingCase.firFileLink;
     const importDocumentLink = req.body.importDocumentLink ?? existingCase.importDocumentLink;
 
-    if (updatedType === 'FIR' && firFileLink) {
+    if (['FIR', 'Criminal Complaint/FIR'].includes(updatedType) && firFileLink) {
       await createDocumentIfNotExists({
         caseId,
         docType: 'FIR Document',
@@ -684,10 +684,10 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
         uploadedBy: uploader
       });
     }
-    if (updatedType === 'Legal Notice' && importDocumentLink) {
+    if (['Legal Notice', 'Cyber Complaint', '1930 Cyber Complaint', 'Consumer Complaint'].includes(updatedType) && importDocumentLink) {
       await createDocumentIfNotExists({
         caseId,
-        docType: 'Legal Notice',
+        docType: updatedType,
         fileLink: importDocumentLink,
         sourceForm: 'Case Update',
         uploadedBy: uploader

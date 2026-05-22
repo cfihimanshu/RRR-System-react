@@ -30,7 +30,13 @@ import {
   Paperclip,
   Activity,
   List,
-  Plus
+  Plus,
+  ListOrdered,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Indent
 } from 'lucide-react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -118,6 +124,52 @@ const normalizeStatus = (status, assignedTo, initiatedBy) => {
   return normalized;
 };
 
+
+const filterableFields = [
+  { label: 'Case ID', key: 'caseId' },
+  { label: 'Company Name', key: 'companyName' },
+  { label: 'Case Title', key: 'caseTitle' },
+  { label: 'Priority', key: 'priority' },
+  { label: 'Source of Complaint', key: 'sourceOfComplaint' },
+  { label: 'Type of Complaint', key: 'typeOfComplaint' },
+  { label: 'Brand Name', key: 'brandName' },
+  { label: 'Engagement Note', key: 'engagementNote' },
+  { label: 'Client Name', key: 'clientName' },
+  { label: 'Client Mobile', key: 'clientMobile' },
+  { label: 'Client Email', key: 'clientEmail' },
+  { label: 'State', key: 'state' },
+  { label: 'City', key: 'city' },
+  { label: 'Pincode', key: 'pincode' },
+  { label: 'Total Amount Paid', key: 'totalAmtPaid' },
+  { label: 'MOU Signed', key: 'mouSigned' },
+  { label: 'Total MOU Value', key: 'totalMouValue' },
+  { label: 'Amount in Dispute', key: 'amtInDispute' },
+  { label: 'Date of Last Payment', key: 'dateOfLastPayment' },
+  { label: 'SM Risk', key: 'smRisk' },
+  { label: 'Consumer Complaint Filed', key: 'consumerComplaintFiled' },
+  { label: 'Police Threat', key: 'policeThreat' },
+  { label: 'Case Summary', key: 'caseSummary' },
+  { label: 'Client Allegation', key: 'clientAllegation' },
+  { label: 'Initiated By', key: 'initiatedBy' },
+  { label: 'Accountable', key: 'accountable' },
+  { label: 'Legal Officer', key: 'legalOfficer' },
+  { label: 'Accounts', key: 'accounts' },
+  { label: 'FIR Number', key: 'firNumber' },
+  { label: 'Grievance Number', key: 'grievanceNumber' },
+  { label: 'Assigned To', key: 'assignedTo' },
+  { label: 'Lien Marked On', key: 'lienMarkedOn' },
+  { label: 'Lien Bank', key: 'lienBank' },
+  { label: 'Refund Status', key: 'refundStatus' },
+  { label: 'Key Pending Issue', key: 'keyPendingIssue' },
+  { label: 'Recommended Next Steps', key: 'recommendedNextSteps' },
+  { label: 'Service Name', key: 'serviceName' },
+  { label: 'BDA', key: 'bda' },
+  { label: 'Work Status', key: 'workStatus' },
+  { label: 'Account 1 Number', key: 'bankAccountDetails.acc1No' },
+  { label: 'Account 1 IFSC', key: 'bankAccountDetails.acc1Ifsc' },
+  { label: 'Account 2 Number', key: 'bankAccountDetails.acc2No' },
+  { label: 'Account 2 IFSC', key: 'bankAccountDetails.acc2Ifsc' }
+];
 
 // Modernized Case Master with Integrated Detail View
 const CaseMasterTab = () => {
@@ -252,7 +304,9 @@ const CaseMasterTab = () => {
       clientName: '',
       clientEmail: '',
       clientMobile: '',
-      anyDetail: ''
+      anyDetail: '',
+      selectedField: '',
+      selectedValue: ''
     }
   });
   const [appliedFilters, setAppliedFilters] = useState(() => {
@@ -274,9 +328,13 @@ const CaseMasterTab = () => {
           clientName: '',
           clientEmail: '',
           clientMobile: '',
-          anyDetail: ''
+          anyDetail: '',
+          selectedField: '',
+          selectedValue: ''
         };
         if (parsed.customFilters.anyDetail === undefined) parsed.customFilters.anyDetail = '';
+        if (parsed.customFilters.selectedField === undefined) parsed.customFilters.selectedField = '';
+        if (parsed.customFilters.selectedValue === undefined) parsed.customFilters.selectedValue = '';
         return parsed;
       } catch (e) { }
     }
@@ -301,7 +359,9 @@ const CaseMasterTab = () => {
         clientName: '',
         clientEmail: '',
         clientMobile: '',
-        anyDetail: ''
+        anyDetail: '',
+        selectedField: '',
+        selectedValue: ''
       }
     };
   });
@@ -357,6 +417,74 @@ const CaseMasterTab = () => {
     });
     return Array.from(unique).sort((a, b) => a.localeCompare(b));
   }, [cases]);
+
+  const getCustomFilterSuggestions = (inputVal) => {
+    if (!inputVal || inputVal.trim() === '') return [];
+    const query = inputVal.toLowerCase().trim();
+    
+    const suggestions = [];
+    const seen = new Set();
+
+    // Match only when query is a substring of the field label or key
+    filterableFields.forEach(field => {
+      if (field.label.toLowerCase().includes(query) || field.key.toLowerCase().includes(query)) {
+        const vals = new Set();
+        cases.forEach(c => {
+          const serviceKeys = ['serviceName', 'bda', 'workStatus'];
+          if (serviceKeys.includes(field.key)) {
+            if (c[field.key]) {
+              vals.add(c[field.key].toString().trim());
+            }
+            if (c.servicesSold && Array.isArray(c.servicesSold)) {
+              c.servicesSold.forEach(s => {
+                if (s[field.key]) {
+                  vals.add(s[field.key].toString().trim());
+                }
+              });
+            }
+          } else if (field.key.includes('.')) {
+            const [parent, child] = field.key.split('.');
+            const val = c[parent]?.[child];
+            if (val !== undefined && val !== null) {
+              vals.add(val.toString().trim());
+            }
+          } else {
+            let val = c[field.key];
+            if (val !== undefined && val !== null) {
+              let valStr = '';
+              if (field.key === 'dateOfLastPayment' || field.key === 'lienMarkedOn' || field.key === 'createdDate') {
+                try {
+                  const d = new Date(val);
+                  if (!isNaN(d.getTime())) {
+                    valStr = d.toISOString().split('T')[0];
+                  }
+                } catch (e) {}
+              }
+              if (!valStr) {
+                valStr = val.toString().trim();
+              }
+              if (valStr !== '') {
+                vals.add(valStr);
+              }
+            }
+          }
+        });
+        Array.from(vals).forEach(val => {
+          const key = `${field.key}::${val}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            suggestions.push({
+              fieldKey: field.key,
+              fieldLabel: field.label,
+              value: val
+            });
+          }
+        });
+      }
+    });
+
+    return suggestions.slice(0, 30);
+  };
 
   useEffect(() => {
     const fetchLinkedCases = async () => {
@@ -531,7 +659,11 @@ const CaseMasterTab = () => {
     try {
       const res = await api.get('/auth/users');
       // Filter for Operations, Admin, and Legal users and remove duplicates by fullName
-      const filtered = res.data.filter(u => u.role === 'Operations' || u.role === 'Admin' || u.role === 'Legal');
+      const filtered = res.data.filter(u => 
+        (u.role === 'Operations' || u.role === 'Admin' || u.role === 'Legal') &&
+        u.fullName &&
+        !['User', 'Staff', 'Admin', 'Admin User', 'Test User', 'Reviewer'].includes(u.fullName.trim())
+      );
 
       const uniqueUsers = [];
       const seenNames = new Set();
@@ -629,6 +761,12 @@ const CaseMasterTab = () => {
       const sf = location.state.sourceFilter;
       setAppliedFilters(prev => ({ ...prev, sourceOfComplaint: sf }));
       setTempFilters(prev => ({ ...prev, sourceOfComplaint: sf }));
+    }
+    if (location.state?.refundStatusFilter) {
+      const rf = location.state.refundStatusFilter;
+      const rfArray = Array.isArray(rf) ? rf : [rf];
+      setAppliedFilters(prev => ({ ...prev, refundStatus: rfArray }));
+      setTempFilters(prev => ({ ...prev, refundStatus: rfArray }));
     }
 
     // Clear state after applying so it doesn't persist on refresh
@@ -853,7 +991,36 @@ const CaseMasterTab = () => {
       if (customFilters.clientMobile && !c.clientMobile?.toLowerCase().includes(customFilters.clientMobile.toLowerCase())) {
         matchCustom = false;
       }
-      if (customFilters.anyDetail) {
+      if (customFilters.selectedField && customFilters.selectedValue) {
+        const fieldKey = customFilters.selectedField;
+        const serviceKeys = ['serviceName', 'bda', 'workStatus'];
+        if (serviceKeys.includes(fieldKey)) {
+          const targetVal = customFilters.selectedValue.toLowerCase();
+          const topMatch = c[fieldKey]?.toLowerCase().includes(targetVal);
+          const arrayMatch = c.servicesSold?.some(s => s[fieldKey]?.toLowerCase().includes(targetVal));
+          if (!topMatch && !arrayMatch) {
+            matchCustom = false;
+          }
+        } else {
+          let cVal = c[fieldKey];
+          if (fieldKey.includes('.')) {
+            const [parent, child] = fieldKey.split('.');
+            cVal = c[parent]?.[child];
+          }
+          if (fieldKey === 'dateOfLastPayment' || fieldKey === 'lienMarkedOn' || fieldKey === 'createdDate') {
+            try {
+              const d = new Date(cVal);
+              if (!isNaN(d.getTime())) {
+                cVal = d.toISOString().split('T')[0];
+              }
+            } catch (e) {}
+          }
+          const valStr = cVal?.toString().toLowerCase() || '';
+          if (!valStr.includes(customFilters.selectedValue.toLowerCase())) {
+            matchCustom = false;
+          }
+        }
+      } else if (customFilters.anyDetail) {
         const searchValue = customFilters.anyDetail.toLowerCase();
         const anyFields = [
           c.caseId,
@@ -945,7 +1112,9 @@ const CaseMasterTab = () => {
         clientName: '',
         clientEmail: '',
         clientMobile: '',
-        anyDetail: ''
+        anyDetail: '',
+        selectedField: '',
+        selectedValue: ''
       }
     };
     setTempFilters(reset);
@@ -1109,6 +1278,76 @@ const CaseMasterTab = () => {
       amtInDispute: dispute || ''
     }));
   }, [services, viewCase]);
+
+  const handleFormat = (fieldName, type) => {
+    const textarea = document.getElementsByName(fieldName)[0];
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end);
+    const beforeText = text.substring(0, start);
+    const afterText = text.substring(end);
+
+    let replacement = '';
+    const lineWidth = 80;
+
+    if (type === 'bullets') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => `• ${line.replace(/^[•\-]\s*/, '')}`).join('\n');
+    } else if (type === 'numbers') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map((line, idx) => `${idx + 1}. ${line.replace(/^\d+\.\s*/, '')}`).join('\n');
+    } else if (type === 'alphabets') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map((line, idx) => {
+        const letter = String.fromCharCode(65 + (idx % 26));
+        return `${letter}. ${line.replace(/^[A-Z]\.\s*/, '')}`;
+      }).join('\n');
+    } else if (type === 'align-center') {
+      const lines = selectedText ? selectedText.split('\n') : ['Center text here'];
+      replacement = lines.map(line => {
+        const trimmed = line.trim();
+        const padding = Math.max(0, Math.floor((lineWidth - trimmed.length) / 2));
+        return ' '.repeat(padding) + trimmed;
+      }).join('\n');
+    } else if (type === 'align-right') {
+      const lines = selectedText ? selectedText.split('\n') : ['Right align text here'];
+      replacement = lines.map(line => {
+        const trimmed = line.trim();
+        const padding = Math.max(0, lineWidth - trimmed.length);
+        return ' '.repeat(padding) + trimmed;
+      }).join('\n');
+    } else if (type === 'align-left') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => line.trimStart()).join('\n');
+    } else if (type === 'align-justify') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => {
+        const words = line.trim().split(/\s+/);
+        if (words.length <= 1) return line.trim();
+        const totalSpaces = lineWidth - words.reduce((a, w) => a + w.length, 0);
+        const gaps = words.length - 1;
+        const spacePerGap = Math.floor(totalSpaces / gaps);
+        const extra = totalSpaces % gaps;
+        return words.map((w, i) => i < gaps ? w + ' '.repeat(spacePerGap + (i < extra ? 1 : 0)) : w).join('');
+      }).join('\n');
+    } else if (type === 'spacing-double') {
+      replacement = selectedText ? selectedText.replace(/\n/g, '\n\n') : '\n\n';
+    } else if (type === 'indent') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => `    ${line}`).join('\n');
+    }
+
+    const newValue = beforeText + replacement + afterText;
+    setFormData(prev => ({ ...prev, [fieldName]: newValue }));
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start, start + replacement.length);
+    }, 0);
+  };
 
   const handleFormChange = (e) => {
     let { name, value } = e.target;
@@ -2235,34 +2474,77 @@ const CaseMasterTab = () => {
                           </div>
                         )}
 
-                        {activeFilterType === 'Custom' && (
-                          <div className="space-y-3">
-                            <label className="block text-sm font-bold text-text-secondary mb-2">Any Case Detail</label>
-                            <input
-                              type="text"
-                              placeholder="Type any case detail to filter instantly"
-                              value={tempFilters.customFilters?.anyDetail || ''}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setTempFilters(prev => ({
-                                  ...prev,
-                                  customFilters: {
-                                    ...prev.customFilters,
-                                    anyDetail: value
-                                  }
-                                }));
-                                setAppliedFilters(prev => ({
-                                  ...prev,
-                                  customFilters: {
-                                    ...prev.customFilters,
-                                    anyDetail: value
-                                  }
-                                }));
-                              }}
-                              className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-all"
-                            />
-                          </div>
-                        )}
+                        {activeFilterType === 'Custom' && (() => {
+                          const suggestions = getCustomFilterSuggestions(tempFilters.customFilters?.anyDetail || '');
+                          const showSuggestions = tempFilters.customFilters?.anyDetail && tempFilters.customFilters?.anyDetail !== tempFilters.customFilters?.selectedValue;
+                          
+                          return (
+                            <div className="space-y-3 relative">
+                              <label className="block text-sm font-bold text-text-secondary mb-2">Any Case Detail</label>
+                              <input
+                                type="text"
+                                placeholder="Type any case detail to filter instantly"
+                                value={tempFilters.customFilters?.anyDetail || ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setTempFilters(prev => ({
+                                    ...prev,
+                                    customFilters: {
+                                      ...prev.customFilters,
+                                      anyDetail: value,
+                                      selectedField: '',
+                                      selectedValue: ''
+                                    }
+                                  }));
+                                  setAppliedFilters(prev => ({
+                                    ...prev,
+                                    customFilters: {
+                                      ...prev.customFilters,
+                                      anyDetail: value,
+                                      selectedField: '',
+                                      selectedValue: ''
+                                    }
+                                  }));
+                                }}
+                                className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-all"
+                              />
+                              
+                              {showSuggestions && suggestions.length > 0 && (
+                                <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-bg-card border-2 border-border rounded-xl shadow-lg z-50 divide-y divide-border/40 scrollbar-thin">
+                                  {suggestions.map((s, idx) => (
+                                    <div
+                                      key={idx}
+                                      onClick={() => {
+                                        setTempFilters(prev => ({
+                                          ...prev,
+                                          customFilters: {
+                                            ...prev.customFilters,
+                                            anyDetail: s.value,
+                                            selectedField: s.fieldKey,
+                                            selectedValue: s.value
+                                          }
+                                        }));
+                                        setAppliedFilters(prev => ({
+                                          ...prev,
+                                          customFilters: {
+                                            ...prev.customFilters,
+                                            anyDetail: s.value,
+                                            selectedField: s.fieldKey,
+                                            selectedValue: s.value
+                                          }
+                                        }));
+                                      }}
+                                      className="p-3 text-xs text-text-primary hover:bg-bg-input hover:text-accent font-bold cursor-pointer transition-colors flex justify-between items-center"
+                                    >
+                                      <span>{s.value}</span>
+                                      <span className="text-[9px] text-text-muted bg-bg-secondary px-2 py-0.5 rounded uppercase tracking-wider">{s.fieldLabel}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                       </div>
                     </div>
@@ -2595,7 +2877,7 @@ const CaseMasterTab = () => {
                     </div>
 
                     {/* Conditional Complaint Fields Integrated into Grid */}
-                    {formData.typeOfComplaint === 'Cyber Complaint' && (
+                    {(formData.typeOfComplaint === 'Cyber Complaint' || formData.typeOfComplaint === '1930 Cyber Complaint') && (
                       <div className="lg:col-span-2">
                         <label className={labelClass}>Acknowledgment Numbers</label>
                         <div className="space-y-3">
@@ -2621,7 +2903,7 @@ const CaseMasterTab = () => {
                       </div>
                     )}
 
-                    {formData.typeOfComplaint === 'FIR' && (
+                    {(formData.typeOfComplaint === 'FIR' || formData.typeOfComplaint === 'Criminal Complaint/FIR') && (
                       <>
                         <div>
                           <label className={labelClass}>FIR Number</label>
@@ -2641,9 +2923,9 @@ const CaseMasterTab = () => {
                       </div>
                     )}
 
-                    {formData.typeOfComplaint === 'Legal Notice' && (
+                    {['Legal Notice', '1930 Cyber Complaint', 'Consumer Complaint'].includes(formData.typeOfComplaint) && (
                       <div className="lg:col-span-2">
-                        <label className={labelClass}>Legal Notice Upload</label>
+                        <label className={labelClass}>Import Document ({formData.typeOfComplaint} Proof)</label>
                         <FileUpload onUploadSuccess={(url) => setFormData(prev => ({ ...prev, importDocumentLink: url }))} label="Upload" disabled={!isEditing} compact={true} />
                       </div>
                     )}
@@ -2870,8 +3152,94 @@ const CaseMasterTab = () => {
                   <h3 className={sectionTitleClass}><FileText size={18} className="text-text-muted" /> Case Narrative</h3>
                   <div className="grid grid-cols-1 gap-6 mb-8">
                     <div>
-                      <label className={`${labelClass} after:content-['*'] after:text-red`}>Case Summary</label>
-                      <textarea className={`${inputClass} min-h-[100px]`} name="caseSummary" value={formData.caseSummary || ''} onChange={handleFormChange} placeholder="Brief overview of the case..." required disabled={!isEditing}></textarea>
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
+                        <label className={`${labelClass} after:content-['*'] after:text-red !mb-0`}>Case Summary</label>
+
+                        {/* Text Formatting Toolbar – visible only when editing */}
+                        {isEditing && (
+                          <div className="flex flex-wrap gap-1 bg-bg-input border border-border p-1 rounded-xl items-center shadow-sm w-fit">
+                            <button
+                              type="button"
+                              title="Bullet List (• )"
+                              onClick={() => handleFormat('caseSummary', 'bullets')}
+                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                            >
+                              <List size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Numbered List (1. 2. 3.)"
+                              onClick={() => handleFormat('caseSummary', 'numbers')}
+                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                            >
+                              <ListOrdered size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Alphabet List (A. B. C.)"
+                              onClick={() => handleFormat('caseSummary', 'alphabets')}
+                              className="px-1.5 py-0.5 text-[9px] font-black hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all border border-border/40"
+                            >
+                              ABC
+                            </button>
+
+                            <span className="w-px h-3.5 bg-border mx-1"></span>
+
+                            <button
+                              type="button"
+                              title="Align Left"
+                              onClick={() => handleFormat('caseSummary', 'align-left')}
+                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                            >
+                              <AlignLeft size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Align Center"
+                              onClick={() => handleFormat('caseSummary', 'align-center')}
+                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                            >
+                              <AlignCenter size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Align Right"
+                              onClick={() => handleFormat('caseSummary', 'align-right')}
+                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                            >
+                              <AlignRight size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Justify"
+                              onClick={() => handleFormat('caseSummary', 'align-justify')}
+                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                            >
+                              <AlignJustify size={14} />
+                            </button>
+
+                            <span className="w-px h-3.5 bg-border mx-1"></span>
+
+                            <button
+                              type="button"
+                              title="Add Indent (4 spaces)"
+                              onClick={() => handleFormat('caseSummary', 'indent')}
+                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                            >
+                              <Indent size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Double Line Spacing"
+                              onClick={() => handleFormat('caseSummary', 'spacing-double')}
+                              className="px-1.5 py-0.5 text-[8px] font-black hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all border border-border/40 uppercase tracking-wider"
+                            >
+                              Spacing
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <textarea className={`${inputClass} min-h-[120px]`} name="caseSummary" value={formData.caseSummary || ''} onChange={handleFormChange} placeholder="Brief overview of the case..." required disabled={!isEditing}></textarea>
                     </div>
                     <div>
                       <label className={labelClass}>Client's Main Allegation</label>

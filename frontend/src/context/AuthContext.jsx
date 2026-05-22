@@ -6,7 +6,8 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('rrr_token') || null);
   const [user, setUser] = useState(() => {
-    const role = localStorage.getItem('rrr_user_role');
+    let role = localStorage.getItem('rrr_user_role');
+    if (role === 'SuperAdmin') role = 'Super Admin';
     const email = localStorage.getItem('rrr_user_email');
     const fullName = localStorage.getItem('rrr_user_fullName');
     const canAccessRecords = localStorage.getItem('rrr_user_canAccessRecords') === 'true';
@@ -33,8 +34,10 @@ export const AuthProvider = ({ children }) => {
           }
 
           const res = await api.get('/auth/me');
+          let role = res.data.role;
+          if (role === 'SuperAdmin') role = 'Super Admin';
           setUser({
-            role: res.data.role,
+            role: role,
             email: res.data.email,
             fullName: res.data.fullName || res.data.name || '',
             canAccessRecords: res.data.canAccessRecords
@@ -52,7 +55,8 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
-    const { token: newToken, role, email: userEmail, fullName, canAccessRecords } = res.data;
+    let { token: newToken, role, email: userEmail, fullName, canAccessRecords } = res.data;
+    if (role === 'SuperAdmin') role = 'Super Admin';
     localStorage.setItem('rrr_token', newToken);
     localStorage.setItem('rrr_user_role', role);
     localStorage.setItem('rrr_user_email', userEmail);

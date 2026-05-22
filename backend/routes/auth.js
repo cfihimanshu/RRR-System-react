@@ -10,6 +10,49 @@ const { roleGuard } = require('../middleware/roleGuard');
 
 const router = express.Router();
 
+const getDeviceDetails = (userAgentString) => {
+  if (!userAgentString) return 'Unknown Device';
+  let os = 'Unknown OS';
+  let browser = 'Unknown Browser';
+
+  if (/windows/i.test(userAgentString)) os = 'Windows';
+  else if (/macintosh|mac os x/i.test(userAgentString)) os = 'Mac OS';
+  else if (/android/i.test(userAgentString)) os = 'Android';
+  else if (/iphone|ipad|ipod/i.test(userAgentString)) os = 'iOS';
+  else if (/linux/i.test(userAgentString)) os = 'Linux';
+
+  if (/chrome|crios/i.test(userAgentString) && !/edge|edg/i.test(userAgentString) && !/opr/i.test(userAgentString)) browser = 'Chrome';
+  else if (/safari/i.test(userAgentString) && !/chrome|crios/i.test(userAgentString)) browser = 'Safari';
+  else if (/firefox|fxios/i.test(userAgentString)) browser = 'Firefox';
+  else if (/edge|edg/i.test(userAgentString)) browser = 'Edge';
+  else if (/opr/i.test(userAgentString)) browser = 'Opera';
+  
+  return `${browser} on ${os}`;
+};
+
+const logAuthAudit = async (req, userEmail, userRole, category, descriptionBase) => {
+  try {
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    const ipAddress = rawIp.split(',')[0].trim();
+    const userAgentRaw = req.headers['user-agent'] || '';
+    const deviceDetails = getDeviceDetails(userAgentRaw);
+    
+    await AuditLog.create({
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      user: userEmail,
+      role: userRole,
+      category: category,
+      description: `${descriptionBase} | Device: ${deviceDetails} | IP: ${ipAddress}`,
+      caseId: '',
+      ipAddress: ipAddress,
+      userAgent: deviceDetails
+    });
+  } catch (err) {
+    console.error('Audit Log creation failed:', err);
+  }
+};
+
 router.post('/login', async (req, res) => {
 
   try {
@@ -30,15 +73,7 @@ router.post('/login', async (req, res) => {
       passwordVersion: user.passwordVersion || 0
     }, process.env.JWT_SECRET, { expiresIn: '6h' });
 
-    await AuditLog.create({
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      user: user.email,
-      role: user.role,
-      category: 'Login',
-      description: 'User logged in',
-      caseId: ''
-    });
+    await logAuthAudit(req, user.email, user.role, 'Login', 'User logged in');
 
     // Ensure we send back a name even for older users
     const displayName = user.fullName || user.name || "";
@@ -69,15 +104,7 @@ router.get('/me', verifyToken, async (req, res) => {
 // Logout route to track audit log
 router.post('/logout', verifyToken, async (req, res) => {
   try {
-    await AuditLog.create({
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      user: req.user.email,
-      role: req.user.role,
-      category: 'Logout',
-      description: 'User logged out',
-      caseId: ''
-    });
+    await logAuthAudit(req, req.user.email, req.user.role, 'Logout', 'User logged out');
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -152,15 +179,7 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
       console.error('Failed to prepare emails:', mailErr);
     }
 
-    await AuditLog.create({
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      user: req.user.email,
-      role: req.user.role,
-      category: 'User Management',
-      description: `Created user ${email} (${finalName}) with role ${role}`,
-      caseId: ''
-    });
+    await logAuthAudit(req, req.user.email, req.user.role, 'User Management', `Created user ${email} (${finalName}) with role ${role}`);
 
     res.status(201).json({ message: 'User created successfully' });
   } catch (error) {
@@ -182,8 +201,7 @@ router.get('/users', verifyToken, roleGuard(['Admin', 'Operations']), async (req
 router.put('/users/:id/role', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { role } = req.body;
-    if (!['Admin', 'Operations', 'Staff', 'Reviewer', 'Accountant'].includes(role)) {
+    if (!['Admin', 'Operations', 'Staff', 'Reviewer', 'Accountant', 'Legal', 'Super Admin', 'SuperAdmin'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role selected' });
     }
 
@@ -193,15 +211,7 @@ router.put('/users/:id/role', verifyToken, roleGuard(['Admin']), async (req, res
     userToUpdate.role = role;
     await userToUpdate.save();
 
-    await AuditLog.create({
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      user: req.user.email,
-      role: req.user.role,
-      category: 'User Management',
-      description: `Updated role for ${userToUpdate.email} to ${role}`,
-      caseId: ''
-    });
+    await logAuthAudit(req, req.user.email, req.user.role, 'User Management', `Updated role for ${userToUpdate.email} to ${role}`);
 
     res.json({ message: 'User role updated successfully' });
   } catch (error) {
@@ -221,15 +231,7 @@ router.put('/users/:id/records-access', verifyToken, roleGuard(['Admin']), async
     userToUpdate.canAccessRecords = canAccessRecords;
     await userToUpdate.save();
 
-    await AuditLog.create({
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      user: req.user.email,
-      role: req.user.role,
-      category: 'User Management',
-      description: `Updated Records access for ${userToUpdate.email} to ${canAccessRecords}`,
-      caseId: ''
-    });
+    await logAuthAudit(req, req.user.email, req.user.role, 'User Management', `Updated Records access for ${userToUpdate.email} to ${canAccessRecords}`);
 
     res.json({ message: `Records access ${canAccessRecords ? 'enabled' : 'disabled'} successfully` });
   } catch (error) {
@@ -252,15 +254,7 @@ router.post('/change-password', verifyToken, async (req, res) => {
     user.passwordVersion = (user.passwordVersion || 0) + 1;
     await user.save();
 
-    await AuditLog.create({
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      user: user.email,
-      role: user.role,
-      category: 'Security',
-      description: 'User changed their password',
-      caseId: ''
-    });
+    await logAuthAudit(req, user.email, user.role, 'Security', 'User changed their password');
 
     res.json({ message: 'Password updated successfully' });
   } catch (error) {
@@ -307,15 +301,7 @@ router.post('/forgot-password', async (req, res) => {
       return res.status(500).json({ error: 'Failed to send reset email. Please contact Admin.' });
     }
 
-    await AuditLog.create({
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      user: email,
-      role: user.role,
-      category: 'Security',
-      description: 'User requested password reset (Temporary password sent)',
-      caseId: ''
-    });
+    await logAuthAudit(req, email, user.role, 'Security', 'User requested password reset (Temporary password sent)');
 
     res.json({ message: 'Temporary password sent to your email.' });
   } catch (error) {

@@ -22,7 +22,14 @@ import {
   Mail,
   Plus,
   X,
-  ChevronDown
+  ChevronDown,
+  List,
+  ListOrdered,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Indent
 } from 'lucide-react';
 
 const initialService = {
@@ -292,6 +299,76 @@ const NewCaseTab = () => {
       }));
     }
   }, [services]);
+
+  const handleFormat = (fieldName, type) => {
+    const textarea = document.getElementsByName(fieldName)[0];
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end);
+    const beforeText = text.substring(0, start);
+    const afterText = text.substring(end);
+
+    let replacement = '';
+    const lineWidth = 80;
+
+    if (type === 'bullets') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => `• ${line.replace(/^[•\-]\s*/, '')}`).join('\n');
+    } else if (type === 'numbers') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map((line, idx) => `${idx + 1}. ${line.replace(/^\d+\.\s*/, '')}`).join('\n');
+    } else if (type === 'alphabets') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map((line, idx) => {
+        const letter = String.fromCharCode(65 + (idx % 26));
+        return `${letter}. ${line.replace(/^[A-Z]\.\s*/, '')}`;
+      }).join('\n');
+    } else if (type === 'align-center') {
+      const lines = selectedText ? selectedText.split('\n') : ['Center text here'];
+      replacement = lines.map(line => {
+        const trimmed = line.trim();
+        const padding = Math.max(0, Math.floor((lineWidth - trimmed.length) / 2));
+        return ' '.repeat(padding) + trimmed;
+      }).join('\n');
+    } else if (type === 'align-right') {
+      const lines = selectedText ? selectedText.split('\n') : ['Right align text here'];
+      replacement = lines.map(line => {
+        const trimmed = line.trim();
+        const padding = Math.max(0, lineWidth - trimmed.length);
+        return ' '.repeat(padding) + trimmed;
+      }).join('\n');
+    } else if (type === 'align-left') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => line.trimStart()).join('\n');
+    } else if (type === 'align-justify') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => {
+        const words = line.trim().split(/\s+/);
+        if (words.length <= 1) return line.trim();
+        const totalSpaces = lineWidth - words.reduce((a, w) => a + w.length, 0);
+        const gaps = words.length - 1;
+        const spacePerGap = Math.floor(totalSpaces / gaps);
+        const extra = totalSpaces % gaps;
+        return words.map((w, i) => i < gaps ? w + ' '.repeat(spacePerGap + (i < extra ? 1 : 0)) : w).join('');
+      }).join('\n');
+    } else if (type === 'spacing-double') {
+      replacement = selectedText ? selectedText.replace(/\n/g, '\n\n') : '\n\n';
+    } else if (type === 'indent') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => `    ${line}`).join('\n');
+    }
+
+    const newValue = beforeText + replacement + afterText;
+    setFormData(prev => ({ ...prev, [fieldName]: newValue }));
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start, start + replacement.length);
+    }, 0);
+  };
 
   const handleChange = (e) => {
     let { name, value } = e.target;
@@ -894,8 +971,92 @@ const NewCaseTab = () => {
             <h3 className={sectionTitleClass}><FileText size={18} className="text-text-muted" /> Case Narrative</h3>
             <div className="grid grid-cols-1 gap-6 mb-8">
               <div>
-                <label className={`${labelClass} after:content-['*'] after:text-red`}>Case Summary</label>
-                <textarea className={`${inputClass} min-h-[100px]`} name="caseSummary" value={formData.caseSummary || ''} onChange={handleChange} placeholder="Brief overview of the case..." required></textarea>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
+                  <label className={`${labelClass} after:content-['*'] after:text-red !mb-0`}>Case Summary</label>
+                  
+                  {/* Text Formatting Toolbar */}
+                  <div className="flex flex-wrap gap-1 bg-bg-input border border-border p-1 rounded-xl items-center shadow-sm w-fit">
+                    <button
+                      type="button"
+                      title="Bullet List"
+                      onClick={() => handleFormat('caseSummary', 'bullets')}
+                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                    >
+                      <List size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Numbered List"
+                      onClick={() => handleFormat('caseSummary', 'numbers')}
+                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                    >
+                      <ListOrdered size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Alphabet List"
+                      onClick={() => handleFormat('caseSummary', 'alphabets')}
+                      className="px-1.5 py-0.5 text-[9px] font-black hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all font-mono border border-border/40"
+                    >
+                      ABC
+                    </button>
+
+                    <span className="w-px h-3.5 bg-border mx-1"></span>
+
+                    <button
+                      type="button"
+                      title="Align Left"
+                      onClick={() => handleFormat('caseSummary', 'align-left')}
+                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                    >
+                      <AlignLeft size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Align Center"
+                      onClick={() => handleFormat('caseSummary', 'align-center')}
+                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                    >
+                      <AlignCenter size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Align Right"
+                      onClick={() => handleFormat('caseSummary', 'align-right')}
+                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                    >
+                      <AlignRight size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Justify"
+                      onClick={() => handleFormat('caseSummary', 'align-justify')}
+                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                    >
+                      <AlignJustify size={14} />
+                    </button>
+
+                    <span className="w-px h-3.5 bg-border mx-1"></span>
+
+                    <button
+                      type="button"
+                      title="Add Indent"
+                      onClick={() => handleFormat('caseSummary', 'indent')}
+                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
+                    >
+                      <Indent size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Double Line Spacing"
+                      onClick={() => handleFormat('caseSummary', 'spacing-double')}
+                      className="px-1.5 py-0.5 text-[8px] font-black hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all font-mono border border-border/40 uppercase tracking-wider"
+                    >
+                      Spacing
+                    </button>
+                  </div>
+                </div>
+                <textarea className={`${inputClass} min-h-[120px]`} name="caseSummary" value={formData.caseSummary || ''} onChange={handleChange} placeholder="Brief overview of the case..." required></textarea>
               </div>
               <div>
                 <label className={labelClass}>Client's Main Allegation</label>

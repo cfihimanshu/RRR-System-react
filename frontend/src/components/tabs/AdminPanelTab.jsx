@@ -14,6 +14,10 @@ const AdminPanelTab = () => {
   const [selectedRefund, setSelectedRefund] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [missedEodUsers, setMissedEodUsers] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [logPage, setLogPage] = useState(1);
+  const [totalLogPages, setTotalLogPages] = useState(1);
+  const [totalLogsCount, setTotalLogsCount] = useState(0);
   const { user } = useContext(AuthContext);
 
   const fetchPendingRefunds = async () => {
@@ -53,6 +57,18 @@ const AdminPanelTab = () => {
     }
   };
 
+  const fetchAuditLogs = async (page = 1) => {
+    try {
+      const res = await api.get(`/auditLogs?page=${page}&limit=20`);
+      setAuditLogs(res.data.logs || []);
+      setTotalLogPages(res.data.pages || 1);
+      setTotalLogsCount(res.data.total || 0);
+      setLogPage(res.data.page || 1);
+    } catch (err) {
+      console.error('Failed to fetch audit logs', err);
+    }
+  };
+
   const handleGrantSodAccess = async (email) => {
     try {
       await api.post(`/users/${email}/grant-sod-access`);
@@ -68,6 +84,7 @@ const AdminPanelTab = () => {
     fetchAllRefunds();
     fetchUsers();
     fetchMissedEodUsers();
+    fetchAuditLogs(1);
 
     if (window.location.hash === '#refund-actions') {
       setTimeout(() => {
@@ -238,6 +255,7 @@ const AdminPanelTab = () => {
                     onChange={e => setFormData({ ...formData, role: e.target.value })}
                     required
                   >
+                    <option value="Super Admin">Super Admin</option>
                     <option value="Admin">Admin</option>
                     <option value="Operations">Operations</option>
                     <option value="Reviewer">Reviewer</option>
@@ -304,6 +322,7 @@ const AdminPanelTab = () => {
                             value={roleUpdates[u._id] || u.role}
                             onChange={e => handleChangeUserRole(u._id, e.target.value)}
                           >
+                            <option value="Super Admin">Super Admin</option>
                             <option value="Admin">Admin</option>
                             <option value="Operations">Operations</option>
                             <option value="Reviewer">Reviewer</option>
@@ -516,6 +535,109 @@ const AdminPanelTab = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* SECTION 4: System Access & Audit Ledger */}
+      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-full overflow-hidden mt-10">
+        <div className="p-6 border-b border-border flex items-center justify-between bg-bg-card">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-orange-soft rounded-2xl flex items-center justify-center text-accent">
+              <span className="font-black text-lg">🛡️</span>
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">System Access & Audit Ledger</h2>
+              <p className="text-[10px] text-text-muted uppercase tracking-[0.2em] mt-0.5">Real-time device & IP geolocation access monitoring</p>
+            </div>
+          </div>
+          <button
+            onClick={() => fetchAuditLogs(logPage)}
+            className="bg-accent hover:bg-accent-hover text-white text-[10px] font-black py-2.5 px-6 rounded-2xl shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2"
+          >
+            <span>Refresh Logs</span> 🔄
+          </button>
+        </div>
+
+        <div className="table-wrap overflow-x-auto scrollbar-thin">
+          <table className="w-full text-left border-collapse min-w-[1100px]">
+            <thead>
+              <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
+                <th className="px-6 py-5 w-[15%]">Timestamp</th>
+                <th className="px-6 py-5 w-[15%]">User Account</th>
+                <th className="px-6 py-5 w-[10%]">Role</th>
+                <th className="px-6 py-5 w-[12%]">Category</th>
+                <th className="px-6 py-5 w-[28%]">Audit Details</th>
+                <th className="px-6 py-5 w-[10%]">Source IP</th>
+                <th className="px-6 py-5 w-[10%]">Client Device</th>
+              </tr>
+            </thead>
+            <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
+              {auditLogs.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="px-6 py-12 text-center text-text-muted italic">No activity logs recorded.</td>
+                </tr>
+              ) : (
+                auditLogs.map(log => (
+                  <tr key={log._id || log.id} className="hover:bg-bg-input/30 transition-all">
+                    <td className="px-6 py-5 font-bold text-text-muted">
+                      {log.timestamp ? new Date(log.timestamp).toLocaleString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                      }) : '—'}
+                    </td>
+                    <td className="px-6 py-5 font-black text-text-primary uppercase tracking-tight">{log.user}</td>
+                    <td className="px-6 py-5 font-bold text-text-muted italic">{log.role || 'System'}</td>
+                    <td className="px-6 py-5">
+                      <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${log.category === 'Login' ? 'bg-green-soft text-green' :
+                        log.category === 'Security' ? 'bg-red-soft text-red' :
+                          log.category === 'User Management' ? 'bg-blue-soft text-blue' :
+                            'bg-bg-input text-text-muted border-border'
+                        }`}>
+                        {log.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="line-clamp-2 max-w-sm" title={log.description}>{log.description || '—'}</div>
+                    </td>
+                    <td className="px-6 py-5 font-mono text-accent font-black">
+                      {log.ipAddress === '::1' || log.ipAddress === '127.0.0.1' ? 'Local PC (127.0.0.1)' : (log.ipAddress || 'Intranet')}
+                    </td>
+                    <td className="px-6 py-5 font-bold text-text-primary uppercase tracking-tighter">
+                      {log.userAgent || 'API client'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination controls */}
+        {totalLogPages > 1 && (
+          <div className="px-6 py-5 bg-bg-card border-t border-border flex justify-between items-center">
+            <span className="text-[10px] text-text-muted font-black uppercase tracking-widest">
+              Showing Page {logPage} of {totalLogPages} ({totalLogsCount} total logs)
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => fetchAuditLogs(logPage - 1)}
+                disabled={logPage === 1}
+                className="bg-bg-input hover:bg-bg-card-hover disabled:opacity-40 text-text-primary text-[10px] font-black py-2 px-4 rounded-xl border border-border uppercase tracking-widest transition-all"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => fetchAuditLogs(logPage + 1)}
+                disabled={logPage === totalLogPages}
+                className="bg-bg-input hover:bg-bg-card-hover disabled:opacity-40 text-text-primary text-[10px] font-black py-2 px-4 rounded-xl border border-border uppercase tracking-widest transition-all"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Detail View Modal for Admin */}
