@@ -81,10 +81,13 @@ const CaseStudyTab = ({ caseData = null }) => {
 
       let foundCase = caseData;
       if (!foundCase) {
-        foundCase = cases.find(c => c.caseId === targetId);
+        const fullCaseRes = await api.get(`/cases/${targetId}`);
+        foundCase = fullCaseRes.data;
+      } else {
+        foundCase = { ...foundCase };
       }
 
-      if (foundCase) foundCase.caseStudyGeneratedAt = now;
+      foundCase.caseStudyGeneratedAt = now;
 
       const [tlRes, actRes, commRes, docRes, progRes, refundRes] = await Promise.all([
         api.get(`/timeline?caseId=${targetId}`),
@@ -122,7 +125,7 @@ const CaseStudyTab = ({ caseData = null }) => {
       setProgressLogs(progRes.data.logs || []);
       setRefunds(refundRes.data || []);
 
-      setGeneratedCase({ ...foundCase, caseStudyGeneratedAt: now });
+      setGeneratedCase(foundCase);
       if (!caseData) setShowMobilePreview(true);
       toast.success('Case study compiled successfully');
     } catch (err) {
@@ -140,7 +143,7 @@ const CaseStudyTab = ({ caseData = null }) => {
     setLoading(true);
     try {
       const [caseRes, tlRes, actRes, commRes, docRes, progRes, refundRes] = await Promise.all([
-        caseData ? Promise.resolve({ data: caseData }) : api.get(`/cases?caseId=${caseId}`),
+        caseData ? Promise.resolve({ data: caseData }) : api.get(`/cases/${caseId}`),
         api.get(`/timeline?caseId=${caseId}`),
         api.get(`/actions?caseId=${caseId}`),
         api.get(`/communications?caseId=${caseId}`),
@@ -149,7 +152,7 @@ const CaseStudyTab = ({ caseData = null }) => {
         api.get(`/refunds?caseId=${caseId}`)
       ]);
 
-      const foundCase = caseData || (Array.isArray(caseRes.data) ? caseRes.data.find(c => c.caseId === caseId) : caseRes.data);
+      const foundCase = caseData || caseRes.data;
 
       setTimeline(tlRes.data);
       setActions(actRes.data);
@@ -247,6 +250,26 @@ const CaseStudyTab = ({ caseData = null }) => {
 
   const generatedCases = cases.filter(c => c.caseStudyGeneratedAt).sort((a, b) => new Date(b.caseStudyGeneratedAt) - new Date(a.caseStudyGeneratedAt));
 
+  const getWorkStatusStyle = (status) => {
+    const s = String(status || '').toLowerCase().trim();
+    if (s.includes('completed') || s.includes('converted')) {
+      return 'bg-green-100 text-green-700 border border-green-200';
+    }
+    if (s.includes('q/a not approved') || s.includes('rejected') || s.includes('not approved')) {
+      return 'bg-red-100 text-red-700 border border-red-200';
+    }
+    if (s.includes('hold')) {
+      return 'bg-amber-100 text-amber-700 border border-amber-200';
+    }
+    if (s.includes('progress')) {
+      return 'bg-blue-100 text-blue-700 border border-blue-200';
+    }
+    if (s.includes('submitted')) {
+      return 'bg-purple-100 text-purple-700 border border-purple-200';
+    }
+    return 'bg-gray-100 text-gray-700 border border-gray-200';
+  };
+
   const ReportContent = ({ data, timeline, actions, comms, docs, progressLogs = [], refunds = [], isMobile = false }) => {
     const totalPaid = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
     const totalMou = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
@@ -298,7 +321,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                   <tr>
                     <td className={labelClass}>Service Status</td>
                     <td className={valueClass}>
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${s.workStatus === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                      <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase ${getWorkStatusStyle(s.workStatus)}`}>
                         {s.workStatus}
                       </span>
                     </td>
@@ -321,6 +344,14 @@ const CaseStudyTab = ({ caseData = null }) => {
               {totalPaid > 0 && <tr><td className={labelClass}>Total Amount Paid by Client</td><td className={`${valueClass} font-black text-gray-950`}>Rs. {totalPaid.toLocaleString('en-IN')}/-</td></tr>}
 
               {totalMou > 0 && <tr><td className={labelClass}>Total MOU Amount</td><td className={valueClass}>Rs. {totalMou.toLocaleString('en-IN')}/-</td></tr>}
+              {data?.amtInDispute !== undefined && data?.amtInDispute !== null && data?.amtInDispute !== '' && (
+                <tr>
+                  <td className={labelClass}>Amount In Dispute</td>
+                  <td className={`${valueClass} text-red-600 font-bold`}>
+                    Rs. {isNaN(Number(data.amtInDispute)) ? data.amtInDispute : Number(data.amtInDispute).toLocaleString('en-IN')}/-
+                  </td>
+                </tr>
+              )}
               {data?.refundStatus && <tr><td className={labelClass}>Refund Status</td><td className={`${valueClass} text-[#1e3a8a] font-black uppercase tracking-widest`}>{data.refundStatus}</td></tr>}
               {data?.lienMarkedOn && <tr><td className={labelClass}>Lien Marked On</td><td className={valueClass}>{data.lienMarkedOn}</td></tr>}
               {data?.lienBank && <tr><td className={labelClass}>Bank</td><td className={valueClass}>{data.lienBank}</td></tr>}
@@ -438,18 +469,14 @@ const CaseStudyTab = ({ caseData = null }) => {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 space-y-4">
               {data?.caseSummary && (
                 <div>
-                  <div className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-1">Case Summary:</div>
-                  <div className="text-[11px] text-gray-600 leading-relaxed italic">{data.caseSummary}</div>
+                  <div className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-2">Case Summary:</div>
+                  <div className="text-[11px] text-gray-700 leading-relaxed whitespace-pre-wrap">{data.caseSummary}</div>
                 </div>
               )}
               {data?.clientAllegation && (
                 <div>
-                  <div className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-1">Primary Allegation:</div>
-                  <ul className="text-[11px] text-gray-900 font-bold border-l-2 border-red-200 pl-4 list-disc list-inside space-y-1">
-                    {data.clientAllegation.split('\n').filter(line => line.trim() !== '').map((line, idx) => (
-                      <li key={idx}>{line.trim()}</li>
-                    ))}
-                  </ul>
+                  <div className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-2">Primary Allegation:</div>
+                  <div className="text-[11px] text-gray-900 font-bold border-l-2 border-red-200 pl-4 leading-relaxed whitespace-pre-wrap">{data.clientAllegation}</div>
                 </div>
               )}
             </div>

@@ -362,7 +362,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const bypassEodCheck = dbUser?.bypassEodCheck || false;
     let isEodMissed = false;
 
-    if (req.user.role !== 'Admin') {
+    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
       const Report = require('./models/Report');
       const nowForIST = new Date();
       const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
@@ -593,7 +593,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
             { $group: { _id: null, total: { $sum: { $convert: { input: { $ifNull: ['$amount', '0'] }, to: 'double', onError: 0, onNull: 0 } } } } }
           ]),
           Refund.find(refundQuery)
-            .select('caseId amount status installments timestamp paymentDate')
+            .select('caseId amount status installments timestamp paymentDate requests')
             .lean(),
           Refund.aggregate([
             { $match: { status: 'Pending Admin Approval' } },
@@ -734,8 +734,33 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const progressUpdatesToday = timelineMetrics[0]?.progressToday?.[0]?.count || 0;
 
     const { paidSumResult, allRefunds, pendingApprovalsResult } = refundMetrics;
-    const totalRefundAmount = paidSumResult.length > 0 ? (paidSumResult[0].total || 0) : 0;
-    const pendingApprovals = pendingApprovalsResult.length > 0 ? pendingApprovalsResult[0].total : 0;
+    let totalRefundAmount = 0;
+    let pendingApprovals = 0;
+
+    allRefunds.forEach(r => {
+      const itemsToProcess = (r.requests && r.requests.length > 0) ? r.requests : [r];
+
+      itemsToProcess.forEach(item => {
+        if (item.status === 'Pending Admin Approval') {
+          pendingApprovals += Number(item.amount) || 0;
+        }
+
+        if (item.status === 'Rejected') return;
+
+        const instList = item.installments || [];
+        const allInstPaid = instList.length > 0 && instList.every(inst => inst.status === 'Paid');
+        const isFullyPaid = item.status === 'Paid' || allInstPaid;
+
+        if (isFullyPaid) {
+          totalRefundAmount += Number(item.amount) || 0;
+        } else if (instList.length > 0) {
+          const paidInstSum = instList
+            .filter(inst => inst.status === 'Paid')
+            .reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0);
+          totalRefundAmount += paidInstSum;
+        }
+      });
+    });
 
     const { pendingTasksCount, dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday, totalTasksToday, completedTasksToday } = taskMetrics;
     const timeBoundActions = { dueToday, dueWithin24h, dueWithin48h, overdue, actionTakenToday, totalTasksToday, completedTasksToday };

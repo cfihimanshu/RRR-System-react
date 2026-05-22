@@ -25,16 +25,31 @@ router.post('/generate', verifyToken, async (req, res) => {
 
 
     // Prepare dynamic sections for Services
-    const serviceSections = caseData.servicesSold?.map((s, i) => `
-      <table key="${i}">
-        <tr><td class="label-cell">Service Engaged</td><td class="value-cell bold">${s.serviceName}</td></tr>
-        <tr><td class="label-cell">Service Status</td><td class="value-cell"><span class="badge ${s.workStatus === 'Completed' ? 'badge-green' : 'badge-orange'}">${s.workStatus}</span></td></tr>
-        <tr><td class="label-cell">MOU Signed</td><td class="value-cell">${caseData.mouSigned || 'No'}</td></tr>
-        <tr><td class="label-cell">MOU Signed Amount</td><td class="value-cell">${s.signedMouAmount ? `Rs. ${Number(s.signedMouAmount).toLocaleString('en-IN')}/-` : 'NA'}</td></tr>
-        <tr><td class="label-cell">Business Development Associate</td><td class="value-cell">${s.bda || '-'}</td></tr>
-        <tr><td class="label-cell">Amount Paid</td><td class="value-cell bold">Rs. ${Number(s.serviceAmount || 0).toLocaleString('en-IN')}/-</td></tr>
-      </table>
-    `).join('') || '<p>No services recorded</p>';
+    const serviceSections = caseData.servicesSold?.map((s, i) => {
+      const statusStr = String(s.workStatus || '').toLowerCase().trim();
+      let badgeStyle = 'background: #ffedd5; color: #9a3412;'; // Orange (default)
+      if (statusStr.includes('completed') || statusStr.includes('converted')) {
+        badgeStyle = 'background: #dcfce7; color: #166534;'; // Green
+      } else if (statusStr.includes('q/a not approved') || statusStr.includes('rejected')) {
+        badgeStyle = 'background: #fee2e2; color: #991b1b;'; // Red
+      } else if (statusStr.includes('progress')) {
+        badgeStyle = 'background: #dbeafe; color: #1e40af;'; // Blue
+      } else if (statusStr.includes('submitted')) {
+        badgeStyle = 'background: #f3e8ff; color: #6b21a8;'; // Purple
+      } else if (statusStr.includes('hold')) {
+        badgeStyle = 'background: #fef3c7; color: #92400e;'; // Amber
+      }
+      return `
+        <table key="${i}">
+          <tr><td class="label-cell">Service Engaged</td><td class="value-cell bold">${s.serviceName || '—'}</td></tr>
+          <tr><td class="label-cell">Service Status</td><td class="value-cell"><span class="badge" style="${badgeStyle}">${s.workStatus || 'Not Initiated'}</span></td></tr>
+          <tr><td class="label-cell">MOU Signed</td><td class="value-cell">${caseData.mouSigned || 'No'}</td></tr>
+          <tr><td class="label-cell">MOU Signed Amount</td><td class="value-cell">${s.signedMouAmount ? `Rs. ${Number(s.signedMouAmount).toLocaleString('en-IN')}/-` : 'NA'}</td></tr>
+          <tr><td class="label-cell">Business Development Associate</td><td class="value-cell">${s.bda || '-'}</td></tr>
+          <tr><td class="label-cell">Amount Paid</td><td class="value-cell bold">Rs. ${Number(s.serviceAmount || 0).toLocaleString('en-IN')}/-</td></tr>
+        </table>
+      `;
+    }).join('') || '<p>No services recorded</p>';
 
     const timelineItems = timeline.map(t => `
       <div class="timeline-item">
@@ -60,6 +75,7 @@ router.post('/generate', verifyToken, async (req, res) => {
       '{{totalPaid}}': totalPaid.toLocaleString('en-IN'),
       // '{{breakdown}}': breakdown,
       '{{totalMouText}}': totalMou > 0 ? `Rs. ${totalMou.toLocaleString('en-IN')}/-` : 'NA (No MOU signed)',
+      '{{amtInDispute}}': caseData.amtInDispute !== undefined && caseData.amtInDispute !== null ? Number(caseData.amtInDispute).toLocaleString('en-IN') : '0',
       '{{refundStatus}}': caseData.refundStatus || 'Analysis Pending',
       '{{lienDetails}}': caseData.lienMarkedOn || 'No Active Lien Recorded',
       '{{lienBank}}': caseData.lienBank || 'N/A',

@@ -190,10 +190,47 @@ const CaseMasterTab = () => {
   const [timelineLogs, setTimelineLogs] = useState([]);
   const [expandedRows, setExpandedRows] = useState({});
   const [refundsList, setRefundsList] = useState([]);
+  const [openColFilter, setOpenColFilter] = useState(null);    // which col dropdown is open
+  const [colFilterSearch, setColFilterSearch] = useState('');  // search text in dropdown
+  const [colSortConfig, setColSortConfig] = useState({ key: null, direction: null }); // { key, direction }
+  const [tempColFilters, setTempColFilters] = useState([]);    // temp selection list for open dropdown
 
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
+
+  const handleOpenColFilter = (colKey, uniqueVals) => {
+    if (openColFilter === colKey) {
+      setOpenColFilter(null);
+      setTempColFilters([]);
+    } else {
+      setOpenColFilter(colKey);
+      setColFilterSearch('');
+      if (columnFilters[colKey] && columnFilters[colKey].length > 0) {
+        setTempColFilters(columnFilters[colKey]);
+      } else {
+        setTempColFilters(uniqueVals);
+      }
+    }
+  };
+
+  const handleToggleTempFilter = (val) => {
+    setTempColFilters(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
+
+  // Close column-filter dropdown when user clicks outside
+  useEffect(() => {
+    if (!openColFilter) return;
+    const close = () => {
+      setOpenColFilter(null);
+      setTempColFilters([]);
+    };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [openColFilter]);
+
   const [caseComms, setCaseComms] = useState([]);
   const [caseDocs, setCaseDocs] = useState([]);
   const [commFormData, setCommFormData] = useState({
@@ -283,7 +320,9 @@ const CaseMasterTab = () => {
   const [availableStates, setAvailableStates] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilterType, setActiveFilterType] = useState('Status');
+  const [columnFilters, setColumnFilters] = useState({});       // { colKey: [val1, val2] }
   const [expandedCustomFields, setExpandedCustomFields] = useState({});
+
   const [tempFilters, setTempFilters] = useState({
     status: ['All Status'],
     priority: ['All Priority'],
@@ -421,7 +460,7 @@ const CaseMasterTab = () => {
   const getCustomFilterSuggestions = (inputVal) => {
     if (!inputVal || inputVal.trim() === '') return [];
     const query = inputVal.toLowerCase().trim();
-    
+
     const suggestions = [];
     const seen = new Set();
 
@@ -458,7 +497,7 @@ const CaseMasterTab = () => {
                   if (!isNaN(d.getTime())) {
                     valStr = d.toISOString().split('T')[0];
                   }
-                } catch (e) {}
+                } catch (e) { }
               }
               if (!valStr) {
                 valStr = val.toString().trim();
@@ -659,7 +698,7 @@ const CaseMasterTab = () => {
     try {
       const res = await api.get('/auth/users');
       // Filter for Operations, Admin, and Legal users and remove duplicates by fullName
-      const filtered = res.data.filter(u => 
+      const filtered = res.data.filter(u =>
         (u.role === 'Operations' || u.role === 'Admin' || u.role === 'Legal') &&
         u.fullName &&
         !['User', 'Staff', 'Admin', 'Admin User', 'Test User', 'Reviewer'].includes(u.fullName.trim())
@@ -833,14 +872,14 @@ const CaseMasterTab = () => {
   const handleExportExcel = () => {
     if (filteredCases.length === 0) return toast.error('No data to export');
 
-    const headers = ['Case ID', 'Created', 'Company', 'Client', 'Type of Complaint', 'Amount Paid', 'Priority', 'Status', 'Assigned To'];
+    const headers = ['Case ID', 'Created', 'Company', 'Client', 'Type of Complaint', 'Amount Received', 'Priority', 'Status', 'Assigned To'];
     const data = filteredCases.map(c => ({
       'Case ID': c.caseId,
       'Created': c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '',
       'Company': c.companyName,
       'Client': c.clientName,
       'Type of Complaint': c.typeOfComplaint || '-',
-      'Amount Paid': c.totalAmtPaid || '0',
+      'Amount Received': c.totalAmtPaid || '0',
       'Priority': c.priority,
       'Status': c.currentStatus || c.status || 'Active',
       'Assigned To': c.assignedTo || c.initiatedBy || ''
@@ -1013,7 +1052,7 @@ const CaseMasterTab = () => {
               if (!isNaN(d.getTime())) {
                 cVal = d.toISOString().split('T')[0];
               }
-            } catch (e) {}
+            } catch (e) { }
           }
           const valStr = cVal?.toString().toLowerCase() || '';
           if (!valStr.includes(customFilters.selectedValue.toLowerCase())) {
@@ -1049,10 +1088,90 @@ const CaseMasterTab = () => {
       }
     }
 
-    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchState && matchType && matchSourceOfComplaint && matchServiceMode && matchServiceName && matchCity && matchLastPayment && matchLinkedOnly && matchRefund && matchCustom;
+    // ── Column-level inline filters ──
+    let matchColumnFilters = true;
+    for (const [colKey, selectedVals] of Object.entries(columnFilters)) {
+      if (!selectedVals || selectedVals.length === 0) continue;
+      let cellVal = '';
+      if (colKey === 'createdDate') {
+        cellVal = c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '—';
+      } else if (colKey === 'lastUpdateDate') {
+        cellVal = c.lastUpdateDate ? format(new Date(c.lastUpdateDate), 'dd/MM/yyyy') : '—';
+      } else if (colKey === 'totalAmtPaid') {
+        cellVal = c.totalAmtPaid ? Number(c.totalAmtPaid).toLocaleString('en-IN') : '0';
+      } else if (colKey === 'status') {
+        cellVal = normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy);
+      } else if (colKey === 'assignedTo') {
+        cellVal = c.assignedTo || c.initiatedBy || '—';
+      } else if (colKey === 'refund') {
+        const cRef = refundsList.find(r => r.caseId === c.caseId);
+        if (cRef) {
+          const isPaid = cRef.transactionId && (cRef.installments || []).length <= 1;
+          cellVal = (cRef.status === 'Paid' || isPaid) ? 'Paid' : 'Pending';
+        } else { cellVal = 'No Refund'; }
+      } else if (colKey === 'typeOfComplaint') {
+        cellVal = c.typeOfComplaint || '—';
+      } else if (colKey === 'priority') {
+        cellVal = c.priority || '—';
+      } else if (colKey === 'company') {
+        cellVal = c.companyName || '—';
+      } else if (colKey === 'client') {
+        cellVal = c.clientName || '—';
+      } else {
+        cellVal = c[colKey] ? String(c[colKey]) : '—';
+      }
+      if (!selectedVals.includes(cellVal)) { matchColumnFilters = false; break; }
+    }
+
+    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchState && matchType && matchSourceOfComplaint && matchServiceMode && matchServiceName && matchCity && matchLastPayment && matchLinkedOnly && matchRefund && matchCustom && matchColumnFilters;
   });
 
-  if (appliedFilters.amountSort === 'asc') {
+  if (colSortConfig.key && colSortConfig.direction) {
+    const { key, direction } = colSortConfig;
+    const isAsc = direction === 'asc';
+
+    const getSortVal = (c) => {
+      if (key === 'company') return c.companyName || '';
+      if (key === 'client') return c.clientName || '';
+      if (key === 'typeOfComplaint') return c.typeOfComplaint || '';
+      if (key === 'priority') {
+        const weights = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
+        return weights[c.priority] || 0;
+      }
+      if (key === 'status') {
+        return normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy) || '';
+      }
+      if (key === 'refund') {
+        const r = refundsList.find(x => x.caseId === c.caseId);
+        if (!r) return 0;
+        const paid = r.transactionId && (r.installments || []).length <= 1;
+        const refStatus = (r.status === 'Paid' || paid) ? 'Paid' : 'Pending';
+        const weights = { 'Paid': 2, 'Pending': 1, 'No Refund': 0 };
+        return weights[refStatus] || 0;
+      }
+      if (key === 'assignedTo') return c.assignedTo || c.initiatedBy || '';
+      if (key === 'createdDate') return c.createdDate ? new Date(c.createdDate).getTime() : 0;
+      if (key === 'lastUpdateDate') return c.lastUpdateDate ? new Date(c.lastUpdateDate).getTime() : 0;
+      if (key === 'totalAmtPaid') return parseFloat(String(c.totalAmtPaid || '').replace(/[^\d.-]/g, '')) || 0;
+      return c[key] || '';
+    };
+
+    filteredCases.sort((a, b) => {
+      const valA = getSortVal(a);
+      const valB = getSortVal(b);
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return isAsc ? valA - valB : valB - valA;
+      }
+
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+
+      if (strA < strB) return isAsc ? -1 : 1;
+      if (strA > strB) return isAsc ? 1 : -1;
+      return 0;
+    });
+  } else if (appliedFilters.amountSort === 'asc') {
     filteredCases.sort((a, b) => {
       const valA = parseFloat(String(a.totalAmtPaid || '').replace(/[^\d.-]/g, '')) || 0;
       const valB = parseFloat(String(b.totalAmtPaid || '').replace(/[^\d.-]/g, '')) || 0;
@@ -1083,6 +1202,8 @@ const CaseMasterTab = () => {
     appliedFilters.lastPaymentEnd ||
     appliedFilters.linkedOnly ||
     appliedFilters.amountSort ||
+    colSortConfig.key ||
+    Object.keys(columnFilters).length > 0 ||
     (appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v))
   );
 
@@ -1119,6 +1240,8 @@ const CaseMasterTab = () => {
     };
     setTempFilters(reset);
     setAppliedFilters(reset);
+    setColumnFilters({});
+    setColSortConfig({ key: null, direction: null });
     setIsFilterOpen(false);
   };
 
@@ -1338,7 +1461,15 @@ const CaseMasterTab = () => {
     } else if (type === 'indent') {
       const lines = selectedText ? selectedText.split('\n') : [''];
       replacement = lines.map(line => `    ${line}`).join('\n');
+    } else if (type === 'paragraph') {
+      // Remove all list prefixes and extra leading spaces — plain paragraph text
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => line.replace(/^[\s•\-\d]+[.\s]*/, '').trimStart()).join('\n');
+    } else if (type === 'bold') {
+      // Wrap selected text in ** for bold indication
+      replacement = selectedText ? `**${selectedText}**` : '**bold text**';
     }
+
 
     const newValue = beforeText + replacement + afterText;
     setFormData(prev => ({ ...prev, [fieldName]: newValue }));
@@ -2477,7 +2608,7 @@ const CaseMasterTab = () => {
                         {activeFilterType === 'Custom' && (() => {
                           const suggestions = getCustomFilterSuggestions(tempFilters.customFilters?.anyDetail || '');
                           const showSuggestions = tempFilters.customFilters?.anyDetail && tempFilters.customFilters?.anyDetail !== tempFilters.customFilters?.selectedValue;
-                          
+
                           return (
                             <div className="space-y-3 relative">
                               <label className="block text-sm font-bold text-text-secondary mb-2">Any Case Detail</label>
@@ -2508,7 +2639,7 @@ const CaseMasterTab = () => {
                                 }}
                                 className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-all"
                               />
-                              
+
                               {showSuggestions && suggestions.length > 0 && (
                                 <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-bg-card border-2 border-border rounded-xl shadow-lg z-50 divide-y divide-border/40 scrollbar-thin">
                                   {suggestions.map((s, idx) => (
@@ -2992,9 +3123,10 @@ const CaseMasterTab = () => {
                           <select className={inputClass} value={svc.workStatus} onChange={e => handleServiceChange(idx, 'workStatus', e.target.value)} disabled={!isEditing}>
                             <option value="Not Initiated">Not Initiated</option>
                             <option value="In Progress">In Progress</option>
-                            <option value="Completed">Completed</option>
+                            <option value="Submitted">Submitted</option>
                             <option value="On Hold">On Hold</option>
                             <option value="Converted">Converted</option>
+                            <option value="Q/A not approved">Q/A not approved</option>
                           </select>
                         </div>
                         <div>
@@ -3151,99 +3283,107 @@ const CaseMasterTab = () => {
                 <div className={cardClass}>
                   <h3 className={sectionTitleClass}><FileText size={18} className="text-text-muted" /> Case Narrative</h3>
                   <div className="grid grid-cols-1 gap-6 mb-8">
+                    {/* Case Summary */}
                     <div>
-                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
-                        <label className={`${labelClass} after:content-['*'] after:text-red !mb-0`}>Case Summary</label>
-
-                        {/* Text Formatting Toolbar – visible only when editing */}
-                        {isEditing && (
-                          <div className="flex flex-wrap gap-1 bg-bg-input border border-border p-1 rounded-xl items-center shadow-sm w-fit">
-                            <button
-                              type="button"
-                              title="Bullet List (• )"
-                              onClick={() => handleFormat('caseSummary', 'bullets')}
-                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                            >
-                              <List size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              title="Numbered List (1. 2. 3.)"
-                              onClick={() => handleFormat('caseSummary', 'numbers')}
-                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                            >
-                              <ListOrdered size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              title="Alphabet List (A. B. C.)"
-                              onClick={() => handleFormat('caseSummary', 'alphabets')}
-                              className="px-1.5 py-0.5 text-[9px] font-black hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all border border-border/40"
-                            >
-                              ABC
-                            </button>
-
-                            <span className="w-px h-3.5 bg-border mx-1"></span>
-
-                            <button
-                              type="button"
-                              title="Align Left"
-                              onClick={() => handleFormat('caseSummary', 'align-left')}
-                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                            >
-                              <AlignLeft size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              title="Align Center"
-                              onClick={() => handleFormat('caseSummary', 'align-center')}
-                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                            >
-                              <AlignCenter size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              title="Align Right"
-                              onClick={() => handleFormat('caseSummary', 'align-right')}
-                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                            >
-                              <AlignRight size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              title="Justify"
-                              onClick={() => handleFormat('caseSummary', 'align-justify')}
-                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                            >
-                              <AlignJustify size={14} />
-                            </button>
-
-                            <span className="w-px h-3.5 bg-border mx-1"></span>
-
-                            <button
-                              type="button"
-                              title="Add Indent (4 spaces)"
-                              onClick={() => handleFormat('caseSummary', 'indent')}
-                              className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                            >
-                              <Indent size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              title="Double Line Spacing"
-                              onClick={() => handleFormat('caseSummary', 'spacing-double')}
-                              className="px-1.5 py-0.5 text-[8px] font-black hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all border border-border/40 uppercase tracking-wider"
-                            >
-                              Spacing
-                            </button>
-                          </div>
-                        )}
+                      <label className={`${labelClass} after:content-['*'] after:text-red`}>Case Summary</label>
+                      {/* Formatting Toolbar – always visible, clickable only when editing */}
+                      <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
+                        <button
+                          type="button"
+                          title="Paragraph"
+                          onClick={() => isEditing && handleFormat('caseSummary', 'paragraph')}
+                          className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${isEditing ? 'text-accent hover:text-accent cursor-pointer' : 'text-text-muted cursor-default'}`}
+                        >
+                          <span className="text-[12px]">¶</span> Paragraph
+                        </button>
+                        <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                        <button
+                          type="button"
+                          title="Bullet List"
+                          onClick={() => isEditing && handleFormat('caseSummary', 'bullets')}
+                          className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${isEditing ? 'text-text-secondary hover:text-accent cursor-pointer' : 'text-text-muted cursor-default'}`}
+                        >
+                          <span className="text-[11px]">≡</span> Bullet List
+                        </button>
+                        <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                        <button
+                          type="button"
+                          title="Number List"
+                          onClick={() => isEditing && handleFormat('caseSummary', 'numbers')}
+                          className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${isEditing ? 'text-text-secondary hover:text-accent cursor-pointer' : 'text-text-muted cursor-default'}`}
+                        >
+                          <span className="text-[11px]">≡</span> Number List
+                        </button>
+                        <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                        <button
+                          type="button"
+                          title="Bold"
+                          onClick={() => isEditing && handleFormat('caseSummary', 'bold')}
+                          className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${isEditing ? 'text-text-secondary hover:text-accent cursor-pointer' : 'text-text-muted cursor-default'}`}
+                        >
+                          <span className="font-black text-[12px]">B</span> Bold
+                        </button>
                       </div>
-                      <textarea className={`${inputClass} min-h-[120px]`} name="caseSummary" value={formData.caseSummary || ''} onChange={handleFormChange} placeholder="Brief overview of the case..." required disabled={!isEditing}></textarea>
+                      <textarea
+                        className={`${inputClass} min-h-[120px] !rounded-t-none !border-t-0`}
+                        name="caseSummary"
+                        value={formData.caseSummary || ''}
+                        onChange={handleFormChange}
+                        placeholder="Brief overview of the case..."
+                        required
+                        disabled={!isEditing}
+                      ></textarea>
                     </div>
+
+                    {/* Client's Main Allegation */}
                     <div>
                       <label className={labelClass}>Client's Main Allegation</label>
-                      <textarea className={`${inputClass} min-h-[100px]`} name="clientAllegation" value={formData.clientAllegation || ''} onChange={handleFormChange} placeholder="What the client claims..." disabled={!isEditing}></textarea>
+                      {/* Formatting Toolbar */}
+                      <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
+                        <button
+                          type="button"
+                          title="Paragraph"
+                          onClick={() => isEditing && handleFormat('clientAllegation', 'paragraph')}
+                          className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${isEditing ? 'text-accent hover:text-accent cursor-pointer' : 'text-text-muted cursor-default'}`}
+                        >
+                          <span className="text-[12px]">¶</span> Paragraph
+                        </button>
+                        <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                        <button
+                          type="button"
+                          title="Bullet List"
+                          onClick={() => isEditing && handleFormat('clientAllegation', 'bullets')}
+                          className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${isEditing ? 'text-text-secondary hover:text-accent cursor-pointer' : 'text-text-muted cursor-default'}`}
+                        >
+                          <span className="text-[11px]">≡</span> Bullet List
+                        </button>
+                        <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                        <button
+                          type="button"
+                          title="Number List"
+                          onClick={() => isEditing && handleFormat('clientAllegation', 'numbers')}
+                          className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${isEditing ? 'text-text-secondary hover:text-accent cursor-pointer' : 'text-text-muted cursor-default'}`}
+                        >
+                          <span className="text-[11px]">≡</span> Number List
+                        </button>
+                        <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                        <button
+                          type="button"
+                          title="Bold"
+                          onClick={() => isEditing && handleFormat('clientAllegation', 'bold')}
+                          className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${isEditing ? 'text-text-secondary hover:text-accent cursor-pointer' : 'text-text-muted cursor-default'}`}
+                        >
+                          <span className="font-black text-[12px]">B</span> Bold
+                        </button>
+                      </div>
+                      <textarea
+                        className={`${inputClass} min-h-[100px] !rounded-t-none !border-t-0`}
+                        name="clientAllegation"
+                        value={formData.clientAllegation || ''}
+                        onChange={handleFormChange}
+                        placeholder="What the client claims..."
+                        disabled={!isEditing}
+                      ></textarea>
                     </div>
                   </div>
 
@@ -4268,7 +4408,7 @@ const CaseMasterTab = () => {
         </div>
       ) : (
         <div className="bg-bg-card rounded-2xl shadow-sm border-2 border-border overflow-hidden flex-1 flex flex-col">
-          <div className="table-wrap overflow-x-auto scrollbar-thin">
+          <div className="table-wrap overflow-x-auto scrollbar-thin min-h-[450px]">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-bg-secondary text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
@@ -4282,17 +4422,204 @@ const CaseMasterTab = () => {
                       />
                     </th>
                   )}
+                  {/* Static non-filterable columns */}
                   <th className="px-2 py-3 w-[7%]">Case ID</th>
-                  <th className="px-2 py-3 w-[8%]">Created</th>
-                  <th className="px-2 py-3 w-[10%]">Company</th>
-                  <th className="px-2 py-3 w-[10%]">Client</th>
-                  <th className="px-2 py-3 w-[10%]">Type of Complaint</th>
-                  <th className="px-2 py-3 w-[7%]">Amount Paid</th>
-                  <th className="px-2 py-3 w-[5%]">Priority</th>
-                  <th className="px-2 py-3 w-[5%]">Status</th>
-                  <th className="px-2 py-3 w-[7%] text-center">Refund</th>
-                  <th className="px-2 py-3 w-[10%]">Assigned To</th>
-                  <th className="px-2 py-4 w-[8%]">Last Update</th>
+                  {/* Filterable columns */}
+                  {[
+                    { label: 'Created',           key: 'createdDate',      width: 'w-[8%]',  getVal: c => c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '—' },
+                    { label: 'Company',           key: 'company',          width: 'w-[10%]', getVal: c => c.companyName || '—' },
+                    { label: 'Client',             key: 'client',           width: 'w-[10%]', getVal: c => c.clientName  || '—' },
+                    { label: 'Type of Complaint',  key: 'typeOfComplaint',  width: 'w-[10%]', getVal: c => c.typeOfComplaint || '—' },
+                    { label: 'Amount Received',    key: 'totalAmtPaid',     width: 'w-[7%]',  getVal: c => c.totalAmtPaid ? Number(c.totalAmtPaid).toLocaleString('en-IN') : '0' },
+                    { label: 'Priority',           key: 'priority',         width: 'w-[5%]',  getVal: c => c.priority || '—' },
+                    { label: 'Status',             key: 'status',           width: 'w-[5%]',  getVal: c => normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy) },
+                    { label: 'Refund',             key: 'refund',           width: 'w-[7%]',  center: true, getVal: c => { const r = refundsList.find(x => x.caseId === c.caseId); if (!r) return 'No Refund'; const paid = r.transactionId && (r.installments||[]).length<=1; return (r.status==='Paid'||paid)?'Paid':'Pending'; } },
+                    { label: 'Assigned To',        key: 'assignedTo',       width: 'w-[10%]', getVal: c => c.assignedTo || c.initiatedBy || '—' },
+                    { label: 'Last Update',        key: 'lastUpdateDate',   width: 'w-[8%]',  getVal: c => c.lastUpdateDate ? format(new Date(c.lastUpdateDate), 'dd/MM/yyyy') : '—' },
+                  ].map(col => {
+                    const activeVals = columnFilters[col.key] || [];
+                    const isActive   = col.key && activeVals.length > 0;
+                    const isSorted   = colSortConfig.key === col.key;
+                    
+                    const uniqueVals = col.key && col.getVal
+                      ? [...new Set(cases.map(col.getVal).filter(v => v && v !== '—'))].sort()
+                      : [];
+                    const shownVals = (colFilterSearch && openColFilter === col.key)
+                      ? uniqueVals.filter(v => v.toLowerCase().includes(colFilterSearch.toLowerCase()))
+                      : uniqueVals;
+
+                    return (
+                      <th key={col.label} className={`px-2 py-3 ${col.width} ${col.center ? 'text-center' : ''} relative`}>
+                        <div className={`flex items-center gap-1 ${col.center ? 'justify-center' : ''} group`}>
+                          <span className="select-none">{col.label}</span>
+                          {col.key && (
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); handleOpenColFilter(col.key, uniqueVals); }}
+                              className={`p-0.5 rounded transition-all ${isActive || isSorted ? 'text-accent bg-accent/15 scale-110 font-bold' : 'text-text-muted hover:text-accent'}`}
+                              title={`Sort & Filter by ${col.label}`}
+                            >
+                              <Filter size={9} strokeWidth={3} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Excel/Google Sheets style filter panel */}
+                        {col.key && openColFilter === col.key && (
+                          <div
+                            className="absolute top-full left-0 mt-2 z-[9999] bg-bg-card border-2 border-border rounded-2xl shadow-2xl w-[260px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 text-left font-sans text-xs"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {/* Sorting Actions */}
+                            <div className="p-2 border-b border-border bg-bg-secondary/30 flex flex-col gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setColSortConfig({ key: col.key, direction: 'asc' });
+                                  setOpenColFilter(null);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center transition-all ${colSortConfig.key === col.key && colSortConfig.direction === 'asc' ? 'bg-accent/10 text-accent font-black' : 'text-text-secondary hover:bg-bg-input'}`}
+                              >
+                                <span className="uppercase tracking-wider text-[9px]">
+                                  ↑ Sort {col.label === 'Created' || col.label === 'Last Update' ? 'Oldest to Newest' : col.label === 'Amount Received' ? 'Smallest to Largest' : 'A to Z'}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setColSortConfig({ key: col.key, direction: 'desc' });
+                                  setOpenColFilter(null);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center transition-all ${colSortConfig.key === col.key && colSortConfig.direction === 'desc' ? 'bg-accent/10 text-accent font-black' : 'text-text-secondary hover:bg-bg-input'}`}
+                              >
+                                <span className="uppercase tracking-wider text-[9px]">
+                                  ↓ Sort {col.label === 'Created' || col.label === 'Last Update' ? 'Newest to Oldest' : col.label === 'Amount Received' ? 'Largest to Smallest' : 'Z to A'}
+                                </span>
+                              </button>
+                              {isSorted && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setColSortConfig({ key: null, direction: null });
+                                    setOpenColFilter(null);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 rounded-xl text-[9px] font-black text-red uppercase tracking-wider hover:bg-red-soft/30 transition-all text-center mt-0.5"
+                                >
+                                  ✕ Clear Sorting
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Search box & Selection Actions */}
+                            <div className="p-2.5 border-b border-border flex flex-col gap-2">
+                              <input
+                                autoFocus
+                                type="text"
+                                placeholder="Search values..."
+                                value={colFilterSearch}
+                                onChange={e => setColFilterSearch(e.target.value)}
+                                className="w-full bg-bg-input border border-border rounded-xl px-3 py-1.5 text-[10px] font-bold outline-none focus:border-accent text-text-primary placeholder:text-text-muted"
+                              />
+                              <div className="flex items-center justify-between px-1 text-[9px] font-black uppercase tracking-wider text-accent">
+                                <button
+                                  type="button"
+                                  onClick={() => setTempColFilters(uniqueVals)}
+                                  className="hover:underline"
+                                >
+                                  Select All
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTempColFilters([])}
+                                  className="hover:underline text-text-muted"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Checkbox list */}
+                            <div className="max-h-[180px] overflow-y-auto scrollbar-thin py-1 border-b border-border">
+                              {/* (Select All) Checkbox Option */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (tempColFilters.length === uniqueVals.length) {
+                                    setTempColFilters([]);
+                                  } else {
+                                    setTempColFilters(uniqueVals);
+                                  }
+                                }}
+                                className="w-full text-left px-3.5 py-1.5 text-[10px] font-bold transition-all flex items-center gap-2 text-text-primary hover:bg-bg-input"
+                              >
+                                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${tempColFilters.length === uniqueVals.length ? 'bg-accent border-accent text-white' : 'border-border'}`}>
+                                  {tempColFilters.length === uniqueVals.length && <Check size={8} strokeWidth={4} />}
+                                </span>
+                                <span className="uppercase tracking-wider text-[9px] font-black">(Select All)</span>
+                              </button>
+
+                              {shownVals.length === 0 ? (
+                                <div className="px-3.5 py-3 text-[9px] text-text-muted font-bold uppercase tracking-widest text-center">No values found</div>
+                              ) : (
+                                shownVals.map(val => {
+                                  const isChecked = tempColFilters.includes(val);
+                                  return (
+                                    <button
+                                      key={val}
+                                      type="button"
+                                      onClick={() => handleToggleTempFilter(val)}
+                                      className={`w-full text-left px-3.5 py-1.5 text-[10px] font-bold transition-all flex items-center gap-2 ${isChecked ? 'text-text-primary' : 'text-text-muted hover:bg-bg-input'}`}
+                                    >
+                                      <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${isChecked ? 'bg-accent border-accent text-white' : 'border-border'}`}>
+                                        {isChecked && <Check size={8} strokeWidth={4} />}
+                                      </span>
+                                      <span className="truncate text-[9px] uppercase tracking-wider">{val}</span>
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            {/* Footer Buttons */}
+                            <div className="p-2 bg-bg-secondary/30 flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenColFilter(null);
+                                  setTempColFilters([]);
+                                }}
+                                className="px-3 py-1.5 border border-border text-[9px] font-black uppercase tracking-widest text-text-secondary hover:bg-bg-input rounded-xl transition-all"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (tempColFilters.length === uniqueVals.length || tempColFilters.length === 0) {
+                                    setColumnFilters(prev => {
+                                      const n = { ...prev };
+                                      delete n[col.key];
+                                      return n;
+                                    });
+                                  } else {
+                                    setColumnFilters(prev => ({
+                                      ...prev,
+                                      [col.key]: tempColFilters
+                                    }));
+                                  }
+                                  setOpenColFilter(null);
+                                  setTempColFilters([]);
+                                }}
+                                className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-[9px] font-black uppercase tracking-widest rounded-xl shadow-sm transition-all"
+                              >
+                                OK
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })}
                   <th className="px-2 py-4 w-[15%] text-center">Actions</th>
                 </tr>
               </thead>

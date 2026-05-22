@@ -231,7 +231,7 @@ const DashboardTab = () => {
   };
 
   const checkSodStatus = async (reportList) => {
-    if (user?.role === 'Admin') return;
+    if (['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user?.role)) return;
     try {
       const today = getTodayDateStr();
       const list = reportList || await fetchTodayReports();
@@ -244,7 +244,7 @@ const DashboardTab = () => {
 
       setHasSodToday(!!todaysSod);
 
-      if (!todaysSod && user?.role !== 'Admin') {
+      if (!todaysSod && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user?.role)) {
         setTimeout(() => {
           openReportModal('SOD');
         }, 800);
@@ -737,12 +737,12 @@ const DashboardTab = () => {
         </div>
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full lg:w-auto">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
-            {!hasSodToday && user?.role !== 'Admin' && (
+            {!hasSodToday && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user?.role) && (
               <div className="flex items-center justify-center gap-2 px-6 py-3 bg-red text-white border-none rounded-2xl text-[11px] font-black uppercase tracking-widest animate-bounce shadow-xl shadow-red-900/40">
                 <AlertTriangle size={16} /> Pending SOD Submission
               </div>
             )}
-            {user?.role !== 'Admin' && (
+            {!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user?.role) && (
               <div className="grid grid-cols-2 sm:flex items-center gap-3 w-full sm:w-auto">
                 <button
                   onClick={() => openReportModal('SOD')}
@@ -2056,19 +2056,26 @@ const DashboardTab = () => {
 
           {/* 4 Small Cards (Right) */}
           <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {/* Amount At Risk */}
+            {/* Amount Paid */}
             <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
               <div className="flex justify-between items-start">
                 <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
                   <IndianRupee size={16} />
                 </div>
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Amount At Risk</div>
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Amount Paid</div>
               </div>
               <div className="mt-2">
-                <div className="text-lg font-black text-text-primary">₹ {Number(stats?.amountAtRisk || 0).toLocaleString('en-IN')}</div>
-
+                <div className="text-lg font-black text-text-primary">₹ {Number(stats?.totalRefundAmount || 0).toLocaleString('en-IN')}</div>
               </div>
-              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master')}>
+              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => {
+                setReportPeriodFilter('All');
+                setReportStatusFilter('All');
+                setIsRefundReportModalOpen(true);
+                setExpandedRefundIds({});
+                setReportStartDate('');
+                setReportEndDate('');
+                fetchRefundReportData();
+              }}>
                 View Details <ArrowRight size={12} />
               </div>
             </div>

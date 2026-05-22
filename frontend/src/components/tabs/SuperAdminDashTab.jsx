@@ -23,6 +23,114 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const getPermissionsForRole = (roleName) => {
+  const r = String(roleName || '').toLowerCase().replace(/\s+/g, '');
+  if (r === 'superadmin' || r === 'superadmin') {
+    return {
+      create: 'Cases, Users',
+      view: 'Dashboard, My Cases, My Tasks, Work Report, Admin Panel, System Access & Audit Ledger',
+      search: 'Search & Filters on all Cases',
+      edit: 'Cases, User Roles, Records Access',
+      delete: 'Cases',
+      hasCreate: true,
+      hasView: true,
+      hasSearch: true,
+      hasEdit: true,
+      hasDelete: true
+    };
+  } else if (r === 'admin') {
+    return {
+      create: 'Cases, Users',
+      view: 'Dashboard, My Cases, My Tasks, Work Report, Admin Panel, System Access & Audit Ledger',
+      search: 'Search & Filters on all Cases',
+      edit: 'Cases, User Roles, Records Access',
+      delete: 'Cases',
+      hasCreate: true,
+      hasView: true,
+      hasSearch: true,
+      hasEdit: true,
+      hasDelete: true
+    };
+  } else if (r === 'operations') {
+    return {
+      create: 'Cases, Tasks, Documents, Communications',
+      view: 'Dashboard, My Cases, My Tasks, Work Report',
+      search: 'Search & Filters on all Cases',
+      edit: 'Cases, Tasks',
+      delete: 'No Access',
+      hasCreate: true,
+      hasView: true,
+      hasSearch: true,
+      hasEdit: true,
+      hasDelete: false
+    };
+  } else if (r === 'staff') {
+    return {
+      create: 'Cases, Tasks, Documents, Communications',
+      view: 'My Cases (Assigned), My Tasks, Work Report',
+      search: 'Search within Assigned Cases',
+      edit: 'Assigned Cases, Tasks',
+      delete: 'No Access',
+      hasCreate: true,
+      hasView: true,
+      hasSearch: true,
+      hasEdit: true,
+      hasDelete: false
+    };
+  } else if (r === 'reviewer') {
+    return {
+      create: 'Refund Remarks',
+      view: 'Reviewer Dashboard, My Cases, Work Report',
+      search: 'Search Cases & Refunds',
+      edit: 'Refund Status (QA Approve/Reject)',
+      delete: 'No Access',
+      hasCreate: true,
+      hasView: true,
+      hasSearch: true,
+      hasEdit: true,
+      hasDelete: false
+    };
+  } else if (r === 'accountant') {
+    return {
+      create: 'Refund Payment Details',
+      view: 'Accountant Dashboard, My Cases',
+      search: 'Search Cases by ID/Amount',
+      edit: 'Refund Status (Paid/Pending)',
+      delete: 'No Access',
+      hasCreate: true,
+      hasView: true,
+      hasSearch: true,
+      hasEdit: true,
+      hasDelete: false
+    };
+  } else if (r === 'legal') {
+    return {
+      create: 'Legal Notices, Case Notes',
+      view: 'Legal Dashboard, My Cases',
+      search: 'Search Assigned Cases',
+      edit: 'Legal Notice Status',
+      delete: 'No Access',
+      hasCreate: true,
+      hasView: true,
+      hasSearch: true,
+      hasEdit: true,
+      hasDelete: false
+    };
+  }
+  return {
+    create: 'No Access',
+    view: 'Assigned Cases Only',
+    search: 'Assigned Cases Only',
+    edit: 'No Access',
+    delete: 'No Access',
+    hasCreate: false,
+    hasView: true,
+    hasSearch: true,
+    hasEdit: false,
+    hasDelete: false
+  };
+};
+
 const SuperAdminDashTab = () => {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -48,6 +156,8 @@ const SuperAdminDashTab = () => {
   const [refunds, setRefunds] = useState([]);
   const [viewAllRefunds, setViewAllRefunds] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [viewAllUsers, setViewAllUsers] = useState(false);
 
   const fetchSuperAdminStats = async (isSilent = false) => {
     try {
@@ -61,6 +171,14 @@ const SuperAdminDashTab = () => {
       const refundsRes = await api.get('/refunds');
       const refundData = Array.isArray(refundsRes.data) ? refundsRes.data : [];
       setRefunds(refundData);
+
+      // 3. Fetch system users for Access Details
+      try {
+        const usersRes = await api.get('/auth/users');
+        setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
+      } catch (userErr) {
+        console.error('Error fetching users for access details:', userErr);
+      }
 
       // Update case counts and types
       setStats({
@@ -202,7 +320,7 @@ const SuperAdminDashTab = () => {
       {/* Dynamic Case Summaries Grid (6 Columns) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         {/* Total Cases */}
-        <div 
+        <div
           onClick={() => navigate('/case-master')}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-accent hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
@@ -218,7 +336,7 @@ const SuperAdminDashTab = () => {
         </div>
 
         {/* Active Cases */}
-        <div 
+        <div
           onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-blue-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
@@ -234,7 +352,7 @@ const SuperAdminDashTab = () => {
         </div>
 
         {/* Settled Cases */}
-        <div 
+        <div
           onClick={() => navigate('/case-master', { state: { statusFilter: 'Settlement' } })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-green-600/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
@@ -250,7 +368,7 @@ const SuperAdminDashTab = () => {
         </div>
 
         {/* Closed Cases */}
-        <div 
+        <div
           onClick={() => navigate('/case-master', { state: { statusFilter: 'Closure' } })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-purple-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
@@ -266,7 +384,7 @@ const SuperAdminDashTab = () => {
         </div>
 
         {/* High Risk Cases */}
-        <div 
+        <div
           onClick={() => navigate('/case-master', { state: { priorityFilter: ['High', 'Critical'] } })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-red-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
@@ -282,7 +400,7 @@ const SuperAdminDashTab = () => {
         </div>
 
         {/* Refund Cases */}
-        <div 
+        <div
           onClick={() => navigate('/case-master', { state: { refundStatusFilter: ['Paid', 'Pending'] } })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-yellow-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
@@ -336,17 +454,17 @@ const SuperAdminDashTab = () => {
             </div>
           </div>
 
-          {/* Refund Actions Details Table (Replaces Operator Access Console) */}
+          {/* Access Details Table (Replaces Refund Actions Details Table) */}
           <div className="bg-bg-card border-2 border-border rounded-[2rem] p-6 shadow-sm">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em] flex items-center gap-2">
-                <ClipboardList size={18} className="text-accent" /> Refund Actions Details
+                <ShieldCheck size={18} className="text-accent" /> Access Details
               </h3>
             </div>
 
-            {refunds.length === 0 ? (
+            {users.length === 0 ? (
               <div className="py-12 text-center bg-bg-input/30 border-2 border-dashed border-border rounded-2xl text-[10px] font-black text-text-muted uppercase tracking-widest opacity-60">
-                No refund requests found.
+                No users found.
               </div>
             ) : (
               <div className="overflow-x-auto -mx-4 sm:mx-0">
@@ -354,53 +472,117 @@ const SuperAdminDashTab = () => {
                   <table className="min-w-full border-collapse text-left">
                     <thead>
                       <tr className="border-b-2 border-border text-[9px] font-black text-text-muted uppercase tracking-[0.2em]">
-                        <th className="px-4 py-4 whitespace-nowrap">Case Details</th>
-                        <th className="px-4 py-4 whitespace-nowrap">Amount</th>
-                        <th className="px-4 py-4 whitespace-nowrap">Status</th>
-                        <th className="px-4 py-4 whitespace-nowrap w-8"></th>
+                        <th className="px-4 py-4 whitespace-nowrap w-[15%] max-w-[150px]">User Name / Email</th>
+                        <th className="px-4 py-4 whitespace-nowrap w-[8%]">Role</th>
+                        <th className="px-4 py-4 whitespace-nowrap w-[15%]">Create</th>
+                        <th className="px-4 py-4 whitespace-nowrap w-[15%]">View</th>
+                        <th className="px-4 py-4 whitespace-nowrap w-[15%]">Search</th>
+                        <th className="px-4 py-4 whitespace-nowrap w-[16%]">Edit</th>
+                        <th className="px-4 py-4 whitespace-nowrap w-[16%]">Delete</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
-                      {displayedRefunds.map((r) => (
-                        <tr
-                          key={r._id}
-                          className="hover:bg-bg-secondary/40 transition-colors cursor-pointer group"
-                          onClick={() => setSelectedRefund(r)}
-                        >
-                          <td className="px-4 py-4 align-middle">
-                            <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{r.caseId}</div>
-                            <div className="text-[9px] font-bold text-accent uppercase tracking-widest mt-0.5">{r.companyName || 'N/A'}</div>
-                          </td>
-                          <td className="px-4 py-4 align-middle">
-                            <div className="text-sm font-black text-text-primary tracking-tight">₹{Number(r.amount || 0).toLocaleString('en-IN')}</div>
-                          </td>
-                          <td className="px-4 py-4 align-middle">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border-2 ${r.status === 'Paid'
-                              ? 'bg-green-soft text-green border-green-soft'
-                              : r.status === 'Rejected'
-                                ? 'bg-red-soft text-red border-red-soft'
-                                : 'bg-yellow-soft text-yellow border-yellow-soft'
-                              }`}>
-                              {r.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 align-middle text-right">
-                            <ChevronRight size={14} className="text-text-muted group-hover:text-accent transition-colors" />
-                          </td>
-                        </tr>
-                      ))}
+                      {(viewAllUsers ? users : users.slice(0, 5)).map((u) => {
+                        const perms = getPermissionsForRole(u.role);
+                        return (
+                          <tr
+                            key={u._id}
+                            className="hover:bg-bg-secondary/40 transition-colors"
+                          >
+                            <td className="px-4 py-4 align-middle w-[15%] max-w-[150px] break-all">
+                              <div className="text-[11px] font-black text-text-primary tracking-tight">{u.fullName || 'User'}</div>
+                              <div className="text-[9px] font-bold text-accent tracking-wide mt-0.5">{u.email}</div>
+                            </td>
+                            <td className="px-4 py-4 align-middle w-[8%]">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-bg-input text-text-primary border border-border">
+                                {u.role || 'Staff'}
+                              </span>
+                            </td>
+                            {/* Create Access */}
+                            <td className="px-4 py-4 align-middle w-[15%]">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${perms.hasCreate ? 'bg-green' : 'bg-red'}`} />
+                                  <span className={`text-[9px] font-black uppercase tracking-wider ${perms.hasCreate ? 'text-green' : 'text-red'}`}>
+                                    {perms.hasCreate ? 'Allowed' : 'Blocked'}
+                                  </span>
+                                </div>
+                                <span className="text-[9.5px] font-semibold text-text-secondary leading-snug">
+                                  {perms.create}
+                                </span>
+                              </div>
+                            </td>
+                            {/* View Access */}
+                            <td className="px-4 py-4 align-middle w-[15%]">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${perms.hasView ? 'bg-green' : 'bg-red'}`} />
+                                  <span className={`text-[9px] font-black uppercase tracking-wider ${perms.hasView ? 'text-green' : 'text-red'}`}>
+                                    {perms.hasView ? 'Allowed' : 'Blocked'}
+                                  </span>
+                                </div>
+                                <span className="text-[9.5px] font-semibold text-text-secondary leading-snug">
+                                  {perms.view}
+                                </span>
+                              </div>
+                            </td>
+                            {/* Search Access */}
+                            <td className="px-4 py-4 align-middle w-[15%]">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${perms.hasSearch ? 'bg-green' : 'bg-red'}`} />
+                                  <span className={`text-[9px] font-black uppercase tracking-wider ${perms.hasSearch ? 'text-green' : 'text-red'}`}>
+                                    {perms.hasSearch ? 'Allowed' : 'Blocked'}
+                                  </span>
+                                </div>
+                                <span className="text-[9.5px] font-semibold text-text-secondary leading-snug">
+                                  {perms.search}
+                                </span>
+                              </div>
+                            </td>
+                            {/* Edit Access */}
+                            <td className="px-4 py-4 align-middle w-[16%]">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${perms.hasEdit ? 'bg-green' : 'bg-red'}`} />
+                                  <span className={`text-[9px] font-black uppercase tracking-wider ${perms.hasEdit ? 'text-green' : 'text-red'}`}>
+                                    {perms.hasEdit ? 'Allowed' : 'Blocked'}
+                                  </span>
+                                </div>
+                                <span className="text-[9.5px] font-semibold text-text-secondary leading-snug">
+                                  {perms.edit}
+                                </span>
+                              </div>
+                            </td>
+                            {/* Delete Access */}
+                            <td className="px-4 py-4 align-middle w-[16%]">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${perms.hasDelete ? 'bg-green' : 'bg-red'}`} />
+                                  <span className={`text-[9px] font-black uppercase tracking-wider ${perms.hasDelete ? 'text-green' : 'text-red'}`}>
+                                    {perms.hasDelete ? 'Allowed' : 'Blocked'}
+                                  </span>
+                                </div>
+                                <span className="text-[9.5px] font-semibold text-text-secondary leading-snug">
+                                  {perms.delete}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
 
-            {refunds.length > 3 && (
+            {users.length > 5 && (
               <button
-                onClick={() => setViewAllRefunds(!viewAllRefunds)}
+                onClick={() => setViewAllUsers(!viewAllUsers)}
                 className="mt-6 w-full text-center py-3 bg-bg-input hover:bg-accent-soft border border-border hover:border-accent text-[10px] font-black uppercase tracking-widest text-text-primary rounded-xl transition-all"
               >
-                {viewAllRefunds ? 'Show Less' : `View All (${refunds.length})`}
+                {viewAllUsers ? 'Show Less' : `View All (${users.length})`}
               </button>
             )}
           </div>

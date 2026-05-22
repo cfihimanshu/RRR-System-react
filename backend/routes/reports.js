@@ -10,7 +10,7 @@ const User = require('../models/User');
 router.get('/', verifyToken, async (req, res) => {
   try {
     let matchQuery = {};
-    if (req.user.role !== 'Admin') {
+    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
       matchQuery.userEmail = req.user.email;
     }
     if (req.query.date) {
@@ -145,7 +145,7 @@ router.post('/', verifyToken, async (req, res) => {
       userName: req.user.fullName
     };
 
-    if (reportData.type === 'SOD' && req.user.role !== 'Admin') {
+    if (reportData.type === 'SOD' && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
       const User = require('../models/User');
       const user = await User.findById(req.user.id).lean();
       if (!user?.bypassEodCheck) {

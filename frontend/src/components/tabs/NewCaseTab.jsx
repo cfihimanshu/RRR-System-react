@@ -359,7 +359,13 @@ const NewCaseTab = () => {
     } else if (type === 'indent') {
       const lines = selectedText ? selectedText.split('\n') : [''];
       replacement = lines.map(line => `    ${line}`).join('\n');
+    } else if (type === 'paragraph') {
+      const lines = selectedText ? selectedText.split('\n') : [''];
+      replacement = lines.map(line => line.replace(/^[\s•\-\d]+[.\s]*/, '').trimStart()).join('\n');
+    } else if (type === 'bold') {
+      replacement = selectedText ? `**${selectedText}**` : '**bold text**';
     }
+
 
     const newValue = beforeText + replacement + afterText;
     setFormData(prev => ({ ...prev, [fieldName]: newValue }));
@@ -372,7 +378,7 @@ const NewCaseTab = () => {
 
   const handleChange = (e) => {
     let { name, value } = e.target;
-    
+
     // Numbers only restriction for specific fields
     if (name === 'clientMobile' || name === 'totalAmtPaid' || name === 'totalMouValue' || name === 'amtInDispute') {
       value = value.replace(/\D/g, ''); // Remove all non-digits
@@ -662,7 +668,7 @@ const NewCaseTab = () => {
                 />
               </div>
             )}
-            
+
             {formData.typeOfComplaint === '1930 Cyber Complaint' && (
               <div>
                 <label className={labelClass}>Acknowledgment Numbers</label>
@@ -777,9 +783,10 @@ const NewCaseTab = () => {
                     <select className={inputClass} value={svc.workStatus} onChange={e => handleServiceChange(idx, 'workStatus', e.target.value)}>
                       <option value="Not Initiated">Not Initiated</option>
                       <option value="In Progress">In Progress</option>
-                      <option value="Completed">Completed</option>
+                      <option value="Submitted">Submitted</option>
                       <option value="On Hold">On Hold</option>
                       <option value="Converted">Converted</option>
+                      <option value="Q/A not approved">Q/A not approved</option>
                     </select>
                   </div>
                   <div>
@@ -971,97 +978,103 @@ const NewCaseTab = () => {
             <h3 className={sectionTitleClass}><FileText size={18} className="text-text-muted" /> Case Narrative</h3>
             <div className="grid grid-cols-1 gap-6 mb-8">
               <div>
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
-                  <label className={`${labelClass} after:content-['*'] after:text-red !mb-0`}>Case Summary</label>
-                  
-                  {/* Text Formatting Toolbar */}
-                  <div className="flex flex-wrap gap-1 bg-bg-input border border-border p-1 rounded-xl items-center shadow-sm w-fit">
-                    <button
-                      type="button"
-                      title="Bullet List"
-                      onClick={() => handleFormat('caseSummary', 'bullets')}
-                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                    >
-                      <List size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Numbered List"
-                      onClick={() => handleFormat('caseSummary', 'numbers')}
-                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                    >
-                      <ListOrdered size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Alphabet List"
-                      onClick={() => handleFormat('caseSummary', 'alphabets')}
-                      className="px-1.5 py-0.5 text-[9px] font-black hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all font-mono border border-border/40"
-                    >
-                      ABC
-                    </button>
-
-                    <span className="w-px h-3.5 bg-border mx-1"></span>
-
-                    <button
-                      type="button"
-                      title="Align Left"
-                      onClick={() => handleFormat('caseSummary', 'align-left')}
-                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                    >
-                      <AlignLeft size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Align Center"
-                      onClick={() => handleFormat('caseSummary', 'align-center')}
-                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                    >
-                      <AlignCenter size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Align Right"
-                      onClick={() => handleFormat('caseSummary', 'align-right')}
-                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                    >
-                      <AlignRight size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Justify"
-                      onClick={() => handleFormat('caseSummary', 'align-justify')}
-                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                    >
-                      <AlignJustify size={14} />
-                    </button>
-
-                    <span className="w-px h-3.5 bg-border mx-1"></span>
-
-                    <button
-                      type="button"
-                      title="Add Indent"
-                      onClick={() => handleFormat('caseSummary', 'indent')}
-                      className="p-1 hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all"
-                    >
-                      <Indent size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Double Line Spacing"
-                      onClick={() => handleFormat('caseSummary', 'spacing-double')}
-                      className="px-1.5 py-0.5 text-[8px] font-black hover:bg-accent/10 hover:text-accent rounded-lg text-text-muted transition-all font-mono border border-border/40 uppercase tracking-wider"
-                    >
-                      Spacing
-                    </button>
-                  </div>
+                <label className={`${labelClass} after:content-['*'] after:text-red`}>Case Summary</label>
+                {/* Formatting Toolbar – always visible */}
+                <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
+                  <button
+                    type="button"
+                    title="Paragraph"
+                    onClick={() => handleFormat('caseSummary', 'paragraph')}
+                    className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-accent hover:text-accent cursor-pointer"
+                  >
+                    <span className="text-[12px]">¶</span> Paragraph
+                  </button>
+                  <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                  <button
+                    type="button"
+                    title="Bullet List"
+                    onClick={() => handleFormat('caseSummary', 'bullets')}
+                    className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                  >
+                    <span className="text-[11px]">≡</span> Bullet List
+                  </button>
+                  <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                  <button
+                    type="button"
+                    title="Number List"
+                    onClick={() => handleFormat('caseSummary', 'numbers')}
+                    className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                  >
+                    <span className="text-[11px]">≡</span> Number List
+                  </button>
+                  <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                  <button
+                    type="button"
+                    title="Bold"
+                    onClick={() => handleFormat('caseSummary', 'bold')}
+                    className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                  >
+                    <span className="font-black text-[12px]">B</span> Bold
+                  </button>
                 </div>
-                <textarea className={`${inputClass} min-h-[120px]`} name="caseSummary" value={formData.caseSummary || ''} onChange={handleChange} placeholder="Brief overview of the case..." required></textarea>
+                <textarea
+                  className={`${inputClass} min-h-[120px] !rounded-t-none !border-t-0`}
+                  name="caseSummary"
+                  value={formData.caseSummary || ''}
+                  onChange={handleChange}
+                  placeholder="Brief overview of the case..."
+                  required
+                ></textarea>
               </div>
               <div>
                 <label className={labelClass}>Client's Main Allegation</label>
-                <textarea className={`${inputClass} min-h-[100px]`} name="clientAllegation" value={formData.clientAllegation || ''} onChange={handleChange} placeholder="What the client claims..."></textarea>
+                {/* Formatting Toolbar */}
+                <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
+                  <button
+                    type="button"
+                    title="Paragraph"
+                    onClick={() => handleFormat('clientAllegation', 'paragraph')}
+                    className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-accent hover:text-accent cursor-pointer"
+                  >
+                    <span className="text-[12px]">¶</span> Paragraph
+                  </button>
+                  <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                  <button
+                    type="button"
+                    title="Bullet List"
+                    onClick={() => handleFormat('clientAllegation', 'bullets')}
+                    className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                  >
+                    <span className="text-[11px]">≡</span> Bullet List
+                  </button>
+                  <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                  <button
+                    type="button"
+                    title="Number List"
+                    onClick={() => handleFormat('clientAllegation', 'numbers')}
+                    className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                  >
+                    <span className="text-[11px]">≡</span> Number List
+                  </button>
+                  <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                  <button
+                    type="button"
+                    title="Bold"
+                    onClick={() => handleFormat('clientAllegation', 'bold')}
+                    className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                  >
+                    <span className="font-black text-[12px]">B</span> Bold
+                  </button>
+                </div>
+                <textarea
+                  className={`${inputClass} min-h-[100px] !rounded-t-none !border-t-0`}
+                  name="clientAllegation"
+                  value={formData.clientAllegation || ''}
+                  onChange={handleChange}
+                  placeholder="What the client claims..."
+                ></textarea>
               </div>
+
             </div>
 
             <div className="bg-bg-secondary border-2 border-border rounded-2xl p-4 sm:p-8">
