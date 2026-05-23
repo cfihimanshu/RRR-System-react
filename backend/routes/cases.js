@@ -622,6 +622,7 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
 
     const isAssigning = req.body.assignedTo && req.body.assignedTo !== existingCase.assignedTo;
     const isInitiating = req.body.initiatedBy && req.body.initiatedBy !== existingCase.initiatedBy;
+    const hasAssignee = (req.body.assignedTo && req.body.assignedTo.trim() !== '') || (existingCase.assignedTo && existingCase.assignedTo.trim() !== '');
 
     // Only auto-upgrade to "Assigned" if there is an assignee/initiator AND we are not explicitly requesting a further advanced stage.
     const requestedStatus = req.body.currentStatus;
