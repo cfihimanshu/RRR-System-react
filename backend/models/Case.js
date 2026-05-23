@@ -41,6 +41,7 @@ const caseSchema = new mongoose.Schema({
   currentStatus: { type: String, default: "New" },
   lastUpdateDate: String,
   nextActionDate: String,
+  dueDate: String,
   cyberAckNumbers: String,
   firNumber: String,
   firFileLink: String,

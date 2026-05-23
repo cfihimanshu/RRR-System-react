@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
 import Modal from '../shared/Modal';
@@ -120,12 +120,10 @@ const MyTaskTab = () => {
   const fetchUsers = async () => {
     try {
       const res = await api.get('/users');
-      let opsUsers = res.data.filter(u =>
-        (u.role === 'Operations' || u.role === 'Staff' || u.role === 'Admin' || u.role === 'Accountant') &&
-        u.fullName &&
-        u.email !== user?.email && // Exclude the logged-in user from the general list
-        !['User', 'Staff', 'Admin', 'Admin User', 'Test User', 'Reviewer'].includes(u.fullName.trim())
-      );
+      let opsUsers = res.data.filter(u => u.fullName && u.fullName.trim() !== '');
+
+      // Exclude logged in user email from general list to avoid duplicates
+      opsUsers = opsUsers.filter(u => u.email !== user?.email);
 
       // Ensure current user is always in the list for assignment
       if (user?.fullName && !opsUsers.some(u => u.fullName === user.fullName)) {
@@ -252,6 +250,13 @@ const MyTaskTab = () => {
     const id = e.dataTransfer.getData('taskId');
     updateTaskStatus(id, status);
   };
+
+  const filterUsersList = useMemo(() => {
+    const dbUsers = users.map(u => u.fullName).filter(Boolean);
+    const taskAssignees = tasks.map(t => t.assignee).filter(Boolean);
+    const combined = Array.from(new Set([...dbUsers, ...taskAssignees]));
+    return combined.sort((a, b) => a.localeCompare(b));
+  }, [users, tasks]);
 
   const location = useLocation();
   const [taskFilter, setTaskFilter] = useState(location.state?.taskFilter || '');
@@ -399,8 +404,8 @@ const MyTaskTab = () => {
               onChange={(e) => setSelectedUser(e.target.value)}
             >
               <option value="All Users">All Users</option>
-              {users.map(u => (
-                <option key={u._id} value={u.fullName}>{u.fullName}</option>
+              {filterUsersList.map(name => (
+                <option key={name} value={name}>{name}</option>
               ))}
             </select>
           )}

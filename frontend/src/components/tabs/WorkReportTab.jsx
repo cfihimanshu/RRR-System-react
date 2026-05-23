@@ -17,7 +17,9 @@ import {
   Calendar,
   Filter,
   RefreshCw,
-  ChevronDown
+  ChevronDown,
+  MapPin,
+  Camera
 } from 'lucide-react';
 
 const WorkReportTab = () => {
@@ -480,37 +482,113 @@ const WorkReportTab = () => {
                       <tr className="bg-bg-input/30">
                         <td colSpan="10" className="px-8 py-6">
                           <div className="animate-in slide-in-from-top-2 duration-300">
-                            {/* Report Details */}
-                            <div className="mb-6 p-4 bg-bg-card rounded-2xl border border-border">
-                              <div className="flex items-center gap-2 mb-3">
-                                <ClipboardList size={16} className="text-accent" />
-                                <h3 className="text-xs font-black text-text-primary uppercase tracking-wider">
-                                  {report.type === 'SOD'
-                                    ? 'Planned Tasks (SOD)'
-                                    : report.type === 'EOD'
-                                      ? 'Work Summary (EOD)'
-                                      : 'SOD + EOD Details'}
-                                </h3>
-                              </div>
-                              {report.type === 'SOD+EOD' ? (
-                                <div className="space-y-4">
-                                  <div>
-                                    <h4 className="text-[11px] font-black uppercase text-text-secondary mb-2">Planned Tasks</h4>
-                                    <p className="text-[12px] font-bold text-text-secondary whitespace-pre-wrap leading-relaxed">
-                                      {report.plannedTasks || 'No tasks listed'}
-                                    </p>
+                            {/* Report Details & GPS Verification Grid */}
+                            <div className={`grid grid-cols-1 ${report.sod?.selfieUrl || report.eod?.selfieUrl ? 'lg:grid-cols-3' : ''} gap-6 mb-6`}>
+                              <div className={`${report.sod?.selfieUrl || report.eod?.selfieUrl ? 'lg:col-span-2' : ''} p-5 bg-bg-card rounded-2xl border border-border flex flex-col justify-between`}>
+                                <div>
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <ClipboardList size={16} className="text-accent" />
+                                    <h3 className="text-xs font-black text-text-primary uppercase tracking-wider">
+                                      {report.type === 'SOD'
+                                        ? 'Planned Tasks (SOD)'
+                                        : report.type === 'EOD'
+                                          ? 'Work Summary (EOD)'
+                                          : 'SOD + EOD Details'}
+                                    </h3>
                                   </div>
-                                  <div>
-                                    <h4 className="text-[11px] font-black uppercase text-text-secondary mb-2">Work Summary</h4>
-                                    <p className="text-[12px] font-bold text-text-secondary whitespace-pre-wrap leading-relaxed">
-                                      {report.workSummary || 'No summary listed'}
+                                  {report.type === 'SOD+EOD' ? (
+                                    <div className="space-y-4">
+                                      <div>
+                                        <h4 className="text-[10px] font-black uppercase text-text-secondary mb-1">Planned Tasks</h4>
+                                        <p className="text-[12px] font-bold text-text-secondary whitespace-pre-wrap leading-relaxed italic">
+                                          "{report.plannedTasks || 'No tasks listed'}"
+                                        </p>
+                                      </div>
+                                      <div className="border-t border-border/50 pt-3">
+                                        <h4 className="text-[10px] font-black uppercase text-text-secondary mb-1">Work Summary</h4>
+                                        <p className="text-[12px] font-bold text-text-secondary whitespace-pre-wrap leading-relaxed italic">
+                                          "{report.workSummary || 'No summary listed'}"
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-[12px] font-bold text-text-secondary whitespace-pre-wrap leading-relaxed italic">
+                                      "{report.type === 'SOD' ? (report.plannedTasks || 'No tasks listed') : (report.workSummary || 'No summary listed')}"
                                     </p>
-                                  </div>
+                                  )}
                                 </div>
-                              ) : (
-                                <p className="text-[12px] font-bold text-text-secondary whitespace-pre-wrap leading-relaxed">
-                                  {report.type === 'SOD' ? (report.plannedTasks || 'No tasks listed') : (report.workSummary || 'No summary listed')}
-                                </p>
+                              </div>
+
+                              {(report.sod?.selfieUrl || report.eod?.selfieUrl) && (
+                                <div className="p-5 bg-bg-card rounded-2xl border border-border flex flex-col justify-between gap-4 overflow-y-auto max-h-[350px] scrollbar-thin">
+                                  {report.sod?.selfieUrl && (
+                                    <div className="flex flex-col sm:flex-row lg:flex-col justify-between gap-4 border-b border-border/50 pb-4 last:border-0 last:pb-0">
+                                      <div className="space-y-3">
+                                        <div className="flex items-center gap-1.5 text-[10px] font-black text-text-muted uppercase tracking-widest">
+                                          <MapPin size={12} className="text-accent" /> SOD Location lock
+                                        </div>
+                                        <div className="p-3 bg-bg-input rounded-xl border border-border/50">
+                                          <div className="text-[8px] font-black text-text-muted uppercase">Coordinates</div>
+                                          <div className="font-mono text-[10px] font-bold text-text-primary mt-0.5">
+                                            {report.sod.latitude?.toFixed(6)}°, {report.sod.longitude?.toFixed(6)}°
+                                          </div>
+                                          {report.sod.latitude && report.sod.longitude && (
+                                            <a
+                                              href={`https://www.google.com/maps?q=${report.sod.latitude},${report.sod.longitude}`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="mt-2 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-accent hover:text-accent-hover hover:underline"
+                                            >
+                                              <MapPin size={8} /> Track on Map →
+                                            </a>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col items-center justify-center">
+                                        <div className="flex items-center gap-1.5 text-[10px] font-black text-text-muted uppercase tracking-widest self-start mb-2 lg:mb-1">
+                                          <Camera size={12} className="text-accent" /> SOD Selfie Proof
+                                        </div>
+                                        <div className="w-32 h-24 rounded-lg overflow-hidden border border-border shadow bg-black transition-all">
+                                          <img src={report.sod.selfieUrl} alt="SOD GPS Selfie" className="w-full h-full object-cover" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {report.eod?.selfieUrl && (
+                                    <div className="flex flex-col sm:flex-row lg:flex-col justify-between gap-4 pt-2">
+                                      <div className="space-y-3">
+                                        <div className="flex items-center gap-1.5 text-[10px] font-black text-text-muted uppercase tracking-widest">
+                                          <MapPin size={12} className="text-purple" /> EOD Location lock
+                                        </div>
+                                        <div className="p-3 bg-bg-input rounded-xl border border-border/50">
+                                          <div className="text-[8px] font-black text-text-muted uppercase">Coordinates</div>
+                                          <div className="font-mono text-[10px] font-bold text-text-primary mt-0.5">
+                                            {report.eod.latitude?.toFixed(6)}°, {report.eod.longitude?.toFixed(6)}°
+                                          </div>
+                                          {report.eod.latitude && report.eod.longitude && (
+                                            <a
+                                              href={`https://www.google.com/maps?q=${report.eod.latitude},${report.eod.longitude}`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="mt-2 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-purple hover:text-purple/80 hover:underline"
+                                            >
+                                              <MapPin size={8} /> Track on Map →
+                                            </a>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col items-center justify-center">
+                                        <div className="flex items-center gap-1.5 text-[10px] font-black text-text-muted uppercase tracking-widest self-start mb-2 lg:mb-1">
+                                          <Camera size={12} className="text-purple" /> EOD Selfie Proof
+                                        </div>
+                                        <div className="w-32 h-24 rounded-lg overflow-hidden border border-border shadow bg-black transition-all">
+                                          <img src={report.eod.selfieUrl} alt="EOD GPS Selfie" className="w-full h-full object-cover" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </div>
 

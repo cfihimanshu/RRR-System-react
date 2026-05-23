@@ -57,7 +57,7 @@ const initialFormData = {
   typeOfComplaint: '', brandName: '',
   engagementNote: 'This is a multi-stage consultancy and execution support engagement. ₹0 was formalized under the initial MOU, while the remaining amount was received towards extended scope, third-party facilitation, and stage-wise execution.',
   clientName: '', clientMobile: '', clientEmail: '', state: '', city: '', pincode: '',
-  totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '', dateOfLastPayment: '',
+  totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '', dateOfLastPayment: '', dueDate: '',
   smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
   proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
   initiatedBy: '', accountable: '', legalOfficer: '', accounts: '',
@@ -155,6 +155,7 @@ const NewCaseTab = () => {
           totalMouValue: editCase.totalMouValue || editCase.mouValue || '',
           amtInDispute: editCase.amtInDispute || editCase.disputeAmount || '',
           dateOfLastPayment: formatDateForInput(editCase.dateOfLastPayment || editCase.lastUpdateDate),
+          dueDate: formatDateForInput(editCase.dueDate || ''),
           initiatedBy: editCase.initiatedBy || editCase.initiator || '',
           accountable: editCase.accountable || '',
           legalOfficer: editCase.legalOfficer || '',
@@ -518,7 +519,7 @@ const NewCaseTab = () => {
           companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
           typeOfComplaint: '', brandName: '', engagementNote: '',
           clientName: '', clientMobile: '', clientEmail: '', state: '',
-          totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '', dateOfLastPayment: '',
+          totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '', dateOfLastPayment: '', dueDate: '',
           smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
           proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
           initiatedBy: '', accountable: '', legalOfficer: '', accounts: '',
@@ -919,6 +920,10 @@ const NewCaseTab = () => {
                 <label className={labelClass}>Date of Last Payment</label>
                 <input type="date" className={`${inputClass} h-12`} name="dateOfLastPayment" value={formData.dateOfLastPayment || ''} onChange={handleChange} />
               </div>
+              <div>
+                <label className={labelClass}>Due Date</label>
+                <input type="date" className={`${inputClass} h-12`} name="dueDate" value={formData.dueDate || ''} onChange={handleChange} />
+              </div>
             </div>
           </div>
         )}
@@ -1027,7 +1032,7 @@ const NewCaseTab = () => {
                 ></textarea>
               </div>
               <div>
-                <label className={labelClass}>Client's Main Allegation</label>
+                <label className={labelClass}>Client's Dispute</label>
                 {/* Formatting Toolbar */}
                 <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
                   <button

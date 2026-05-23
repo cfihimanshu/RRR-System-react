@@ -129,7 +129,7 @@ const buildNameRegex = (text) => {
 async function buildCaseQuery(req) {
   let query = {};
 
-  if (req.user.role !== 'Admin') {
+  if (req.user.role !== 'Admin' && req.user.role !== 'Reviewer') {
     const User = require('../models/User');
     const dbUser = await User.findById(req.user.id).lean();
     const userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
@@ -266,7 +266,7 @@ router.get('/summary', verifyToken, async (req, res) => {
     const cases = await Case.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
-      .select('caseId companyName clientName initiatedBy assignedTo currentStatus importDocumentLink firFileLink typeOfComplaint createdAt')
+      .select('caseId companyName clientName initiatedBy assignedTo currentStatus importDocumentLink firFileLink typeOfComplaint createdAt dueDate caseSummary')
       .lean();
 
     res.set('Cache-Control', 'private, max-age=30');
@@ -623,13 +623,11 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
     const isAssigning = req.body.assignedTo && req.body.assignedTo !== existingCase.assignedTo;
     const isInitiating = req.body.initiatedBy && req.body.initiatedBy !== existingCase.initiatedBy;
 
-    // Auto-update status to "Assigned" if it was just "New" or "Case Logged"
-    // Check both REQUEST data and EXISTING case data to see if case has/will have assignee
-    const assigneeToUse = (req.body.assignedTo && req.body.assignedTo.trim()) || (existingCase.assignedTo && existingCase.assignedTo.trim());
-    const initiatorToUse = (req.body.initiatedBy && req.body.initiatedBy.trim()) || (existingCase.initiatedBy && existingCase.initiatedBy.trim());
-    const hasAssignee = !!(assigneeToUse || initiatorToUse);
+    // Only auto-upgrade to "Assigned" if there is an assignee/initiator AND we are not explicitly requesting a further advanced stage.
+    const requestedStatus = req.body.currentStatus;
+    const isNewOrLogged = !requestedStatus || requestedStatus === 'New' || requestedStatus === 'Case Logged';
 
-    if (hasAssignee && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged')) {
+    if (hasAssignee && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged') && isNewOrLogged) {
       req.body.currentStatus = 'Assigned';
       req.body.progressPercentage = 25;
     }

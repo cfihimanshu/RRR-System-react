@@ -113,6 +113,17 @@ router.post('/', verifyToken, async (req, res) => {
     };
 
     let progressDoc = await Progress.findOne({ caseId });
+    if (progressDoc && stage) {
+      const stages = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
+      const currentStage = progressDoc.stage || 'Case Logged';
+      const currentIndex = stages.indexOf(currentStage);
+      const newIndex = stages.indexOf(stage);
+
+      if (newIndex >= 0 && currentIndex >= 0 && newIndex < currentIndex) {
+        return res.status(400).json({ error: `Cannot downgrade case stage from '${currentStage}' to '${stage}'` });
+      }
+    }
+
     if (!progressDoc) {
       progressDoc = new Progress({
         caseId,

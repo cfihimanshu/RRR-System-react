@@ -429,6 +429,7 @@ const CaseMasterTab = () => {
     engagementNote: '',
     clientName: '', clientMobile: '', clientEmail: '', state: '', city: '', pincode: '',
     totalAmtPaid: '', mouSigned: 'No', totalMouValue: '', amtInDispute: '', dateOfLastPayment: '',
+    refundedAmount: '', savedAmount: '', dueDate: '',
     smRisk: 'None', consumerComplaintFiled: 'No', policeThreat: 'None', caseSummary: '', clientAllegation: '',
     importDocumentLink: '',
     proofCallRec: 'No', proofWaChat: 'No', proofVideoCall: 'No', proofFundingEmail: 'No',
@@ -456,6 +457,100 @@ const CaseMasterTab = () => {
     });
     return Array.from(unique).sort((a, b) => a.localeCompare(b));
   }, [cases]);
+
+  const uniqueStatuses = useMemo(() => {
+    const statuses = new Set();
+    cases.forEach((c) => {
+      const s = normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy);
+      if (s && s !== '—') statuses.add(s);
+    });
+    return ['All Status', 'Unassigned', ...Array.from(statuses).sort()];
+  }, [cases]);
+
+  const uniquePriorities = useMemo(() => {
+    const priorities = new Set();
+    cases.forEach((c) => {
+      if (c.priority && c.priority !== '—') priorities.add(c.priority);
+    });
+    return ['All Priority', ...Array.from(priorities).sort()];
+  }, [cases]);
+
+  const allDynamicAssignees = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+
+    // 1. Add all registered users from opsUsers
+    opsUsers.forEach(u => {
+      if (u.fullName) {
+        const name = u.fullName.trim();
+        const lower = name.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          list.push({ _id: u._id || `user-${name}`, fullName: name });
+        }
+      }
+    });
+
+    // 2. Add all unique assignees/initiators from loaded cases
+    cases.forEach(c => {
+      const a = c.assignedTo || c.initiatedBy;
+      if (a && a !== '—') {
+        const name = a.trim();
+        const lower = name.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          list.push({ _id: `case-${name}`, fullName: name });
+        }
+      }
+    });
+
+    // Sort alphabetically by fullName
+    return list.sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }, [cases, opsUsers]);
+
+  const uniqueAssignees = useMemo(() => {
+    let assignees = allDynamicAssignees.map(u => u.fullName);
+
+    // If user role is Operations, only show their own name
+    if (user?.role === 'Operations' && user?.fullName) {
+      assignees = assignees.filter(name => name.toLowerCase() === user.fullName.toLowerCase());
+      if (assignees.length === 0) {
+        assignees = [user.fullName];
+      }
+    }
+
+    return ['All Assignees', ...Array.from(new Set(assignees)).sort()];
+  }, [allDynamicAssignees, user]);
+
+  const uniqueTypes = useMemo(() => {
+    const types = new Set();
+    cases.forEach((c) => {
+      if (c.typeOfComplaint && c.typeOfComplaint !== '—') types.add(c.typeOfComplaint);
+    });
+    return ['All Types', ...Array.from(types).sort()];
+  }, [cases]);
+
+  const uniqueStates = useMemo(() => {
+    const states = new Set();
+    cases.forEach((c) => {
+      if (c.state && c.state !== '—') states.add(c.state);
+    });
+    return ['All States', 'Blank', ...Array.from(states).sort()];
+  }, [cases]);
+
+  const uniqueRefundStatuses = useMemo(() => {
+    const refunds = new Set();
+    cases.forEach((c) => {
+      const r = refundsList.find(x => x.caseId === c.caseId);
+      let refVal = 'No Refund';
+      if (r) {
+        const paid = r.transactionId && (r.installments || []).length <= 1;
+        refVal = (r.status === 'Paid' || paid) ? 'Paid' : 'Pending';
+      }
+      refunds.add(refVal);
+    });
+    return ['All Refunds', ...Array.from(refunds).sort()];
+  }, [cases, refundsList]);
 
   const getCustomFilterSuggestions = (inputVal) => {
     if (!inputVal || inputVal.trim() === '') return [];
@@ -695,14 +790,13 @@ const CaseMasterTab = () => {
   };
 
   const fetchOpsUsers = async () => {
+    if (!user || (user.role !== 'Admin' && user.role !== 'Operations')) {
+      return;
+    }
     try {
       const res = await api.get('/auth/users');
-      // Filter for Operations, Admin, and Legal users and remove duplicates by fullName
-      const filtered = res.data.filter(u =>
-        (u.role === 'Operations' || u.role === 'Admin' || u.role === 'Legal') &&
-        u.fullName &&
-        !['User', 'Staff', 'Admin', 'Admin User', 'Test User', 'Reviewer'].includes(u.fullName.trim())
-      );
+      // Get all active users without hardcoded exclusions
+      const filtered = res.data.filter(u => u.fullName && u.fullName.trim() !== '');
 
       const uniqueUsers = [];
       const seenNames = new Set();
@@ -1302,6 +1396,9 @@ const CaseMasterTab = () => {
         totalMouValue: caseToUse.totalMouValue || caseToUse.mouValue || '',
         amtInDispute: caseToUse.amtInDispute || caseToUse.disputeAmount || '',
         dateOfLastPayment: formatDateForInput(caseToUse.dateOfLastPayment || caseToUse.lastUpdateDate),
+        refundedAmount: caseToUse.refundedAmount || 0,
+        savedAmount: caseToUse.savedAmount || 0,
+        dueDate: formatDateForInput(caseToUse.dueDate || ''),
         initiatedBy: caseToUse.initiatedBy || caseToUse.initiator || '',
         accountable: caseToUse.accountable || '',
         legalOfficer: caseToUse.legalOfficer || '',
@@ -1700,7 +1797,7 @@ const CaseMasterTab = () => {
         setCaseProgressLogs(res.data.logs);
         const latest = res.data.logs[0];
 
-        const stageOrder = ['Case Logged', 'Assigned', 'Agreement', 'Negotiation', 'Resolution'];
+        const stageOrder = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
         let stage = latest.stage || 'Case Logged';
 
         // Auto-upgrade to Assigned if initiatedBy is a real user and we are still at Case Logged
@@ -1709,8 +1806,15 @@ const CaseMasterTab = () => {
           stage = 'Assigned';
         }
 
-        const stageIndex = stageOrder.indexOf(stage);
-        const newPercentage = stageIndex >= 0 ? (stageIndex + 1) * 20 : Math.floor((latest.percentage || 0) / 20) * 20;
+        const stagePercentages = {
+          'Case Logged': 10,
+          'Assigned': 25,
+          'Analysis': 40,
+          'Negotiation': 60,
+          'Settlement': 85,
+          'Closure': 100
+        };
+        const newPercentage = stagePercentages[stage] !== undefined ? stagePercentages[stage] : Math.floor((latest.percentage || 0) / 20) * 20;
 
         setProgressFormData(prev => ({
           ...prev,
@@ -1724,24 +1828,8 @@ const CaseMasterTab = () => {
           setChecklist(buildChecklistForStage(stage));
         }
       } else {
-        // Auto-initialize if empty (Fail-safe)
-        const isAssigned = viewCase?.initiatedBy && viewCase.initiatedBy.toLowerCase() !== 'system' && viewCase.initiatedBy.trim() !== '';
-        const initialStage = (viewCase?.currentStatus === 'Case Logged' && isAssigned) ? 'Assigned' : (viewCase?.currentStatus || 'Case Logged');
-        const initialPercentage = initialStage === 'Assigned' ? 40 : 20;
-
-        const initialLog = {
-          caseId,
-          stage: initialStage,
-          percentage: initialPercentage,
-          summary: `Case Registered: ${viewCase?.typeOfComplaint || 'Inquiry'} setup complete.`,
-          updatedBy: viewCase?.initiatedBy || user?.fullName || user?.email,
-          checklist: buildChecklistForStage(initialStage)
-        };
-        await api.post('/progress', initialLog);
-        // Refresh
-        const refresh = await api.get(`/progress?caseId=${caseId}`);
-        setCaseProgressLogs(refresh.data.logs || []);
-        if (refresh.data.checklist) setChecklist(refresh.data.checklist);
+        setCaseProgressLogs([]);
+        setChecklist(buildChecklistForStage('Case Logged'));
       }
     } catch (err) {
       console.error('Failed to fetch progress data', err);
@@ -2189,7 +2277,7 @@ const CaseMasterTab = () => {
                       <div className="w-2/3 p-6 overflow-y-auto h-full bg-bg-card">
                         {activeFilterType === 'Status' && (
                           <div className="space-y-3">
-                            {['All Status', 'Unassigned', 'Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure', 'Stucked'].map((s) => {
+                            {uniqueStatuses.map((s) => {
                               const isChecked = tempFilters.status.includes(s);
                               return (
                                 <label key={s} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
@@ -2225,7 +2313,7 @@ const CaseMasterTab = () => {
 
                         {activeFilterType === 'Priority' && (
                           <div className="space-y-3">
-                            {['All Priority', 'High', 'Medium', 'Low'].map((p) => {
+                            {uniquePriorities.map((p) => {
                               const isChecked = tempFilters.priority.includes(p);
                               return (
                                 <label key={p} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
@@ -2273,10 +2361,10 @@ const CaseMasterTab = () => {
                               />
                               <span className={`text-sm font-bold ${tempFilters.assignee.includes('All Assignees') ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>All Assignees</span>
                             </label>
-                            {opsUsers.map((u) => {
-                              const isChecked = tempFilters.assignee.includes(u.fullName);
+                            {uniqueAssignees.filter(a => a !== 'All Assignees').map((assigneeName) => {
+                              const isChecked = tempFilters.assignee.includes(assigneeName);
                               return (
-                                <label key={u._id} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                <label key={assigneeName} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
                                   <input
                                     type="checkbox"
                                     name="assignee"
@@ -2286,17 +2374,17 @@ const CaseMasterTab = () => {
                                         let newAssignee;
                                         const filtered = prev.assignee.filter(item => item !== 'All Assignees');
                                         if (isChecked) {
-                                          newAssignee = filtered.filter(item => item !== u.fullName);
+                                          newAssignee = filtered.filter(item => item !== assigneeName);
                                           if (newAssignee.length === 0) newAssignee = ['All Assignees'];
                                         } else {
-                                          newAssignee = [...filtered, u.fullName];
+                                          newAssignee = [...filtered, assigneeName];
                                         }
                                         return { ...prev, assignee: newAssignee };
                                       });
                                     }}
                                     className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
                                   />
-                                  <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{u.fullName}</span>
+                                  <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{assigneeName}</span>
                                 </label>
                               );
                             })}
@@ -2305,7 +2393,7 @@ const CaseMasterTab = () => {
 
                         {activeFilterType === 'Type' && (
                           <div className="space-y-3">
-                            {['All Types', 'Legal Notice', '1930 Cyber Complaint', 'Consumer Complaint', 'Criminal Complaint/FIR', 'Civil Case', 'Social Media', 'General Query', 'NA Non Agreement', 'Demand Pressure', 'Bank Hold'].map((t) => {
+                            {uniqueTypes.map((t) => {
                               const isChecked = tempFilters.typeOfComplaint.includes(t);
                               return (
                                 <label key={t} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
@@ -2539,7 +2627,7 @@ const CaseMasterTab = () => {
                               />
                               <span className={`text-sm font-bold ${tempFilters.state.includes('Blank') ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>Blank</span>
                             </label>
-                            {availableStates.map((st) => {
+                            {uniqueStates.filter(s => s !== 'All States' && s !== 'Blank').map((st) => {
                               const isChecked = tempFilters.state.includes(st);
                               return (
                                 <label key={st} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
@@ -2571,7 +2659,7 @@ const CaseMasterTab = () => {
 
                         {activeFilterType === 'Refund' && (
                           <div className="space-y-3">
-                            {['All Refunds', 'Paid', 'Pending'].map((ref) => {
+                            {uniqueRefundStatuses.map((ref) => {
                               const isChecked = tempFilters.refundStatus?.includes(ref);
                               return (
                                 <label key={ref} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
@@ -2720,7 +2808,7 @@ const CaseMasterTab = () => {
                   }}
                 >
                   <option value="">Bulk Assign Mode...</option>
-                  {opsUsers.map(u => (
+                  {allDynamicAssignees.map(u => (
                     <option key={`bulk-${u._id}`} value={u.fullName}>Assign: {u.fullName}</option>
                   ))}
                 </select>
@@ -2842,12 +2930,17 @@ const CaseMasterTab = () => {
                   {['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'].map((step, idx) => {
                     const steps = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
 
-                    // Use the status from viewCase as primary, fallback to progressFormData.stage for consistency
-                    const displayStatus = viewCase?.currentStatus || progressFormData.stage;
+                    // Determine active stage by choosing the more advanced stage for visual accuracy
+                    const normStatus = normalizeStatus(viewCase?.currentStatus, viewCase?.assignedTo, viewCase?.initiatedBy);
+                    const progressStage = progressFormData.stage || 'Case Logged';
+
+                    const normIdx = steps.indexOf(normStatus);
+                    const progIdx = steps.indexOf(progressStage);
+                    const displayStatus = progIdx >= normIdx ? progressStage : normStatus;
 
                     let currentIdx = steps.indexOf(displayStatus);
                     if (currentIdx === -1) {
-                      if (displayStatus === 'Settlement' || displayStatus === 'Closure' || displayStatus === 'Settled' || viewCase.progressPercentage >= 100) {
+                      if (displayStatus === 'Settlement' || displayStatus === 'Closure' || displayStatus === 'Settled' || viewCase?.progressPercentage >= 100) {
                         currentIdx = steps.length; // All steps completed (mark Closure as completed)
                       } else {
                         currentIdx = 0;
@@ -2875,7 +2968,7 @@ const CaseMasterTab = () => {
             </div>
 
             {/* Quick Info Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
               <div>
                 <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Client</div>
                 <div className="text-sm font-black text-text-primary truncate">{viewCase.clientName}</div>
@@ -2888,7 +2981,7 @@ const CaseMasterTab = () => {
                 <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Email ID</div>
                 <div className="text-xs font-black text-text-primary" title={viewCase.clientEmail || 'Email'}>
                   {viewCase.clientEmail ? viewCase.clientEmail.split(/[/,]/).map((email, index) => (
-                    <div key={index} className="truncate">{email.trim()}</div>
+                    <div key={index} className="break-all whitespace-normal leading-tight text-[10px]">{email.trim()}</div>
                   )) : 'Email'}
                 </div>
               </div>
@@ -2927,6 +3020,14 @@ const CaseMasterTab = () => {
                     ))}
                   </select>
                 </div>
+              </div>
+              <div>
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Refunded Amount</div>
+                <div className="text-sm font-black text-green-600">₹{(viewCase.refundedAmount || 0).toLocaleString('en-IN')}</div>
+              </div>
+              <div>
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Saved Amount</div>
+                <div className="text-sm font-black text-blue">₹{(viewCase.savedAmount || 0).toLocaleString('en-IN')}</div>
               </div>
             </div>
           </div>
@@ -3221,18 +3322,11 @@ const CaseMasterTab = () => {
                 {/* Financial Details */}
                 <div className={cardClass}>
                   <h3 className={sectionTitleClass}><IndianRupee size={18} className="text-yellow" /> Financial Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-6">
                     <div>
                       <label className={labelClass}>Total Amount Paid (₹)</label>
                       <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
                     </div>
-                    {/* <div>
-                      <label className={labelClass}>MOU Signed?</label>
-                      <select className={inputClass} name="mouSigned" value={formData.mouSigned || 'No'} onChange={handleFormChange} disabled={!isEditing}>
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                      </select>
-                    </div> */}
                     <div>
                       <label className={labelClass}>Total MOU Value (₹)</label>
                       <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
@@ -3242,8 +3336,20 @@ const CaseMasterTab = () => {
                       <input type="text" className={`${inputClass} bg-blue-soft font-black text-blue border-blue-soft`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
                     </div>
                     <div>
+                      <label className={labelClass}>Refunded Amount (₹)</label>
+                      <input type="number" className={`${inputClass} font-black text-green-600`} name="refundedAmount" value={formData.refundedAmount || ''} onChange={handleFormChange} placeholder="0" disabled={!isEditing} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Saved Amount (₹)</label>
+                      <input type="number" className={`${inputClass} font-black text-blue`} name="savedAmount" value={formData.savedAmount || ''} onChange={handleFormChange} placeholder="0" disabled={!isEditing} />
+                    </div>
+                    <div>
                       <label className={labelClass}>Date of Last Payment</label>
                       <input type="date" className={`${inputClass} h-12`} name="dateOfLastPayment" value={formData.dateOfLastPayment || ''} onChange={handleFormChange} disabled={!isEditing} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Due Date</label>
+                      <input type="date" className={`${inputClass} h-12`} name="dueDate" value={formData.dueDate || ''} onChange={handleFormChange} disabled={!isEditing} />
                     </div>
                   </div>
                 </div>
@@ -3337,7 +3443,7 @@ const CaseMasterTab = () => {
 
                     {/* Client's Main Allegation */}
                     <div>
-                      <label className={labelClass}>Client's Main Allegation</label>
+                      <label className={labelClass}>Client's Dispute</label>
                       {/* Formatting Toolbar */}
                       <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
                         <button
@@ -4096,12 +4202,19 @@ const CaseMasterTab = () => {
                         setChecklist(updatedChecklist);
                       }}
                     >
-                      <option value="Case Logged">Case Logged</option>
-                      <option value="Assigned">Assigned</option>
-                      <option value="Analysis">Analysis</option>
-                      <option value="Negotiation">Negotiation</option>
-                      <option value="Settlement">Settlement</option>
-                      <option value="Closure">Closure</option>
+                      {['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'].map((opt) => {
+                        const stages = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
+                        const originalStage = caseProgressLogs[0]?.stage || 'Case Logged';
+                        
+                        // Enforce forward-only progression by locking any stages strictly before the case's current stage
+                        const isDisabled = stages.indexOf(opt) < stages.indexOf(originalStage);
+                        
+                        return (
+                          <option key={opt} value={opt} disabled={isDisabled}>
+                            {opt} {isDisabled ? '🔒 (Locked)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                   <div className="space-y-1">
@@ -4193,7 +4306,7 @@ const CaseMasterTab = () => {
                         className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent uppercase tracking-widest"
                       >
                         <option value="">-- NO ESCALATION --</option>
-                        {opsUsers.map(u => (
+                        {allDynamicAssignees.map(u => (
                           <option key={`escalate-${u._id}`} value={u.fullName}>{u.fullName}</option>
                         ))}
                       </select>
@@ -4244,6 +4357,16 @@ const CaseMasterTab = () => {
                             {log.escalateTo && (
                               <div className="text-[10px] font-black text-orange-600 uppercase tracking-widest mt-1">
                                 Forwarded To: {log.escalateTo}
+                              </div>
+                            )}
+                            {(log.refundedAmount !== undefined && log.refundedAmount !== null && log.refundedAmount !== '' && Number(log.refundedAmount) !== 0) && (
+                              <div className="text-[10px] font-black text-green-600 uppercase tracking-widest mt-1">
+                                Refunded Amount: ₹{Number(log.refundedAmount).toLocaleString('en-IN')}
+                              </div>
+                            )}
+                            {(log.savedAmount !== undefined && log.savedAmount !== null && log.savedAmount !== '' && Number(log.savedAmount) !== 0) && (
+                              <div className="text-[10px] font-black text-blue uppercase tracking-widest mt-1">
+                                Saved Amount: ₹{Number(log.savedAmount).toLocaleString('en-IN')}
                               </div>
                             )}
                             <div className="text-[9px] font-black text-accent uppercase tracking-widest opacity-80 mt-1">Updated by: {log.updatedBy === user?.email ? 'You' : log.updatedBy?.split('@')[0] || 'System'}</div>
@@ -4426,24 +4549,33 @@ const CaseMasterTab = () => {
                   <th className="px-2 py-3 w-[7%]">Case ID</th>
                   {/* Filterable columns */}
                   {[
-                    { label: 'Created',           key: 'createdDate',      width: 'w-[8%]',  getVal: c => c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '—' },
-                    { label: 'Company',           key: 'company',          width: 'w-[10%]', getVal: c => c.companyName || '—' },
-                    { label: 'Client',             key: 'client',           width: 'w-[10%]', getVal: c => c.clientName  || '—' },
-                    { label: 'Type of Complaint',  key: 'typeOfComplaint',  width: 'w-[10%]', getVal: c => c.typeOfComplaint || '—' },
-                    { label: 'Amount Received',    key: 'totalAmtPaid',     width: 'w-[7%]',  getVal: c => c.totalAmtPaid ? Number(c.totalAmtPaid).toLocaleString('en-IN') : '0' },
-                    { label: 'Priority',           key: 'priority',         width: 'w-[5%]',  getVal: c => c.priority || '—' },
-                    { label: 'Status',             key: 'status',           width: 'w-[5%]',  getVal: c => normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy) },
-                    { label: 'Refund',             key: 'refund',           width: 'w-[7%]',  center: true, getVal: c => { const r = refundsList.find(x => x.caseId === c.caseId); if (!r) return 'No Refund'; const paid = r.transactionId && (r.installments||[]).length<=1; return (r.status==='Paid'||paid)?'Paid':'Pending'; } },
-                    { label: 'Assigned To',        key: 'assignedTo',       width: 'w-[10%]', getVal: c => c.assignedTo || c.initiatedBy || '—' },
-                    { label: 'Last Update',        key: 'lastUpdateDate',   width: 'w-[8%]',  getVal: c => c.lastUpdateDate ? format(new Date(c.lastUpdateDate), 'dd/MM/yyyy') : '—' },
+                    { label: 'Created', key: 'createdDate', width: 'w-[8%]', getVal: c => c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '—' },
+                    { label: 'Company', key: 'company', width: 'w-[10%]', getVal: c => c.companyName || '—' },
+                    { label: 'Client', key: 'client', width: 'w-[10%]', getVal: c => c.clientName || '—' },
+                    { label: 'Type of Complaint', key: 'typeOfComplaint', width: 'w-[10%]', getVal: c => c.typeOfComplaint || '—' },
+                    { label: 'Amount Received', key: 'totalAmtPaid', width: 'w-[7%]', getVal: c => c.totalAmtPaid ? Number(c.totalAmtPaid).toLocaleString('en-IN') : '0' },
+                    { label: 'Priority', key: 'priority', width: 'w-[5%]', getVal: c => c.priority || '—' },
+                    { label: 'Due Date', key: 'dueDate', width: 'w-[8%]', getVal: c => c.dueDate ? new Date(c.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—' },
+                    { label: 'Status', key: 'status', width: 'w-[5%]', getVal: c => normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy) },
+                    { label: 'Refund', key: 'refund', width: 'w-[7%]', center: true, getVal: c => { const r = refundsList.find(x => x.caseId === c.caseId); if (!r) return 'No Refund'; const paid = r.transactionId && (r.installments || []).length <= 1; return (r.status === 'Paid' || paid) ? 'Paid' : 'Pending'; } },
+                    { label: 'Assigned To', key: 'assignedTo', width: 'w-[10%]', getVal: c => c.assignedTo || c.initiatedBy || '—' },
+                    { label: 'Last Update', key: 'lastUpdateDate', width: 'w-[8%]', getVal: c => c.lastUpdateDate ? format(new Date(c.lastUpdateDate), 'dd/MM/yyyy') : '—' },
                   ].map(col => {
                     const activeVals = columnFilters[col.key] || [];
-                    const isActive   = col.key && activeVals.length > 0;
-                    const isSorted   = colSortConfig.key === col.key;
-                    
-                    const uniqueVals = col.key && col.getVal
+                    const isActive = col.key && activeVals.length > 0;
+                    const isSorted = colSortConfig.key === col.key;
+
+                    let uniqueVals = col.key && col.getVal
                       ? [...new Set(cases.map(col.getVal).filter(v => v && v !== '—'))].sort()
                       : [];
+
+                    if (col.key === 'assignedTo' && user?.role === 'Operations' && user?.fullName) {
+                      uniqueVals = uniqueVals.filter(v => v.toLowerCase() === user.fullName.toLowerCase());
+                      if (uniqueVals.length === 0) {
+                        uniqueVals = [user.fullName];
+                      }
+                    }
+
                     const shownVals = (colFilterSearch && openColFilter === col.key)
                       ? uniqueVals.filter(v => v.toLowerCase().includes(colFilterSearch.toLowerCase()))
                       : uniqueVals;
@@ -4655,6 +4787,7 @@ const CaseMasterTab = () => {
                         assignmentInput={assignmentInputs[c.caseId]}
                         handleAssignmentInputChange={handleAssignmentInputChange}
                         opsUsers={opsUsers}
+                        allDynamicAssignees={allDynamicAssignees}
                         handleAssign={handleAssign}
                         handleDeleteCase={handleDeleteCase}
                         user={user}
@@ -4706,6 +4839,7 @@ const CaseRow = memo(({
   assignmentInput,
   handleAssignmentInputChange,
   opsUsers,
+  allDynamicAssignees,
   handleAssign,
   handleDeleteCase,
   user,
@@ -4755,6 +4889,15 @@ const CaseRow = memo(({
           }`}>
           {c.priority || 'Medium'}
         </span>
+      </td>
+      <td className="px-3 py-5">
+        {c.dueDate ? (
+          <span className="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-orange-soft bg-orange-soft text-orange whitespace-nowrap">
+            {new Date(c.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </span>
+        ) : (
+          <span className="text-text-muted/30 font-bold">—</span>
+        )}
       </td>
       <td className="px-3 py-5 min-w-[120px]">
         {(() => {
@@ -4840,7 +4983,7 @@ const CaseRow = memo(({
                 onChange={(e) => handleAssignmentInputChange(c.caseId, e.target.value)}
               >
                 <option value="">Assign</option>
-                {opsUsers.map(u => (
+                {allDynamicAssignees.map(u => (
                   <option key={u._id} value={u.fullName}>{u.fullName}</option>
                 ))}
               </select>

@@ -31,7 +31,7 @@ router.get('/', verifyToken, async (req, res) => {
           .sort({ createdAt: -1 })
           .skip(skipNum)
           .limit(limitNum)
-          .select('type userName userEmail date checkInTime checkOutTime workDuration completionStatus createdAt myTasksToday sodCaseIds sodTaskIds')
+          .select('type userName userEmail date checkInTime checkOutTime workDuration completionStatus createdAt myTasksToday sodCaseIds sodTaskIds selfieUrl latitude longitude gpsAddress')
           .lean(),
         Report.countDocuments(matchQuery)
       ]);
