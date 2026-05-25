@@ -144,7 +144,7 @@ const AccountantDashTab = () => {
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                 <th className="px-4 py-5">Case ID</th>
                 <th className="px-4 py-5">Bank Details</th>
-                <th className="px-4 py-5">Payout Amount</th>
+                <th className="px-4 py-5">Amount</th>
                 <th className="px-4 py-5">Audit History</th>
                 <th className="px-4 py-5 text-right">Final Execution</th>
               </tr>
@@ -166,7 +166,7 @@ const AccountantDashTab = () => {
                 return (
                   <React.Fragment key={g.caseId}>
                     {/* Parent Case Row */}
-                    <tr 
+                    <tr
                       onClick={() => toggleCaseExpand(g.caseId)}
                       className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none"
                     >

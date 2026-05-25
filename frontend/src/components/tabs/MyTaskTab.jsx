@@ -177,6 +177,7 @@ const MyTaskTab = () => {
     setSelectedTask(task);
     setLinkedCase(null);
     setIsSidePanelOpen(true);
+    setShowSavedNotes(true);
     if (task.caseId && task.caseId !== 'Manual Task') {
       fetchCaseDetails(task.caseId);
     }
@@ -263,9 +264,26 @@ const MyTaskTab = () => {
   };
 
   const filterUsersList = useMemo(() => {
-    const dbUsers = users.map(u => u.fullName).filter(Boolean);
+    const nonAdminDbUsers = users.filter(u => {
+      const roleLower = u.role?.toLowerCase() || '';
+      return roleLower !== 'admin' && roleLower !== 'superadmin' && roleLower !== 'super admin';
+    });
+
+    const dbUsers = nonAdminDbUsers.map(u => u.fullName).filter(Boolean);
     const taskAssignees = tasks.map(t => t.assignee).filter(Boolean);
-    const combined = Array.from(new Set([...dbUsers, ...taskAssignees]));
+
+    // Filter taskAssignees to exclude any name belonging to Admin/Super Admin
+    const filteredAssignees = taskAssignees.filter(name => {
+      const dbUser = users.find(u => u.fullName === name);
+      if (dbUser) {
+        const roleLower = dbUser.role?.toLowerCase() || '';
+        return roleLower !== 'admin' && roleLower !== 'superadmin' && roleLower !== 'super admin';
+      }
+      const nameLower = name.toLowerCase();
+      return nameLower !== 'admin' && nameLower !== 'super admin' && nameLower !== 'superadmin';
+    });
+
+    const combined = Array.from(new Set([...dbUsers, ...filteredAssignees]));
     return combined.sort((a, b) => a.localeCompare(b));
   }, [users, tasks]);
 

@@ -26,6 +26,13 @@ const AdminPanelTab = () => {
     setExpandedCases(prev => ({ ...prev, [caseId]: !prev[caseId] }));
   };
 
+  const [expandedInstallments, setExpandedInstallments] = useState({});
+
+  const toggleInstallmentExpand = (refundId, index) => {
+    const key = `${refundId}_${index}`;
+    setExpandedInstallments(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const groupRefundsByCase = (list) => {
     const groups = {};
     list.forEach(r => {
@@ -290,7 +297,7 @@ const AdminPanelTab = () => {
                     <option value="Legal">Legal</option>
                   </select>
                 </div>
-                
+
                 <div className="pt-4">
                   <button type="submit" className="w-full bg-accent hover:bg-accent-hover text-white font-black py-3.5 rounded-2xl shadow-lg shadow-orange-955/20 transition-all text-xs uppercase tracking-[0.2em] active:scale-95">
                     Create User Account
@@ -481,7 +488,7 @@ const AdminPanelTab = () => {
                   return (
                     <React.Fragment key={g.caseId}>
                       {/* Parent Case Row */}
-                      <tr 
+                      <tr
                         onClick={() => toggleCaseExpand(g.caseId)}
                         className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none"
                       >
@@ -583,7 +590,7 @@ const AdminPanelTab = () => {
                   return (
                     <React.Fragment key={g.caseId}>
                       {/* Parent Case Row */}
-                      <tr 
+                      <tr
                         onClick={() => toggleCaseExpand(`all_${g.caseId}`)}
                         className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none"
                       >
@@ -633,8 +640,8 @@ const AdminPanelTab = () => {
                           <td className="px-4 py-5 text-center">
                             <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${r.status === 'Paid' ? 'bg-green-soft text-green border-green-soft' :
                               r.status === 'Rejected' ? 'bg-red-soft text-red border-red-soft' :
-                              r.status === 'Pending Admin Approval' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
-                                'bg-bg-input text-text-muted border-border'
+                                r.status === 'Pending Admin Approval' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
+                                  'bg-bg-input text-text-muted border-border'
                               }`}>
                               {r.status}
                             </span>
@@ -759,7 +766,7 @@ const AdminPanelTab = () => {
       </div>
 
       {/* Detail View Modal for Admin */}
-      <Modal isOpen={isDetailOpen} onClose={() => setIsDetailOpen(false)} title="Refund Request">
+      <Modal isOpen={isDetailOpen} onClose={() => setIsDetailOpen(false)} title="Refund Request" size="lg">
         {selectedRefund && (() => {
           const refundToRender = allRefunds.find(r => r._id === selectedRefund._id) || pendingRefunds.find(r => r._id === selectedRefund._id) || selectedRefund;
           const totalAmount = Number(refundToRender.amount) || 0;
@@ -783,7 +790,7 @@ const AdminPanelTab = () => {
                   )}
                 </div>
                 <div className="bg-bg-input p-5 rounded-3xl border border-border shadow-sm">
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Payout amount</p>
+                  <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Amount</p>
                   <p className="font-black text-green text-sm tracking-tight">₹{Number(refundToRender.amount).toLocaleString('en-IN')}</p>
                 </div>
                 <div className="bg-bg-input p-5 rounded-3xl border border-border shadow-sm">
@@ -830,129 +837,166 @@ const AdminPanelTab = () => {
                 </div>
               </div>
 
-              {refundToRender.installments && refundToRender.installments.length > 0 && (
-                <div className="bg-bg-secondary rounded-[2rem] border-2 border-border overflow-hidden shadow-sm">
-                  <div className="bg-bg-card px-6 py-4 border-b border-border font-black text-text-muted text-[10px] uppercase tracking-[0.2em]">
-                    Installment Details
-                  </div>
-                  <div className="p-0 overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-bg-input text-text-muted text-[9px] font-black uppercase tracking-widest border-b border-border">
-                          <th className="px-6 py-4">Installment Number</th>
-                          <th className="px-6 py-4">Release Date</th>
-                          <th className="px-6 py-4">Credit Amount</th>
-                          <th className="px-6 py-4">Payment Date</th>
-                          <th className="px-6 py-4">Bank UTR</th>
-                          <th className="px-6 py-4">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-[10px] text-text-secondary divide-y divide-border/50">
-                        {refundToRender.installments && refundToRender.installments.length > 0 ? (
-                          refundToRender.installments.map((inst, i) => {
+
+              {(() => {
+                const finalInstallments = (refundToRender.installments && refundToRender.installments.length > 0)
+                  ? refundToRender.installments
+                  : [{
+                    amount: refundToRender.amount,
+                    dueDate: refundToRender.paymentDate || refundToRender.timestamp,
+                    status: refundToRender.status,
+                    transactionId: refundToRender.transactionId,
+                    paymentDate: refundToRender.paymentDate,
+                    paymentProof: refundToRender.paymentProof,
+                    paidBy: refundToRender.paidBy,
+                    isSingle: true
+                  }];
+
+                return (
+                  <div className="bg-bg-secondary rounded-[2rem] border-2 border-border overflow-hidden shadow-sm">
+                    <div className="bg-bg-card px-6 py-4 border-b border-border font-black text-text-muted text-[10px] uppercase tracking-[0.2em]">
+                      Installment Details
+                    </div>
+                    <div className="p-0 overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-bg-input text-text-muted text-[9px] font-black uppercase tracking-widest border-b border-border">
+                            <th className="px-6 py-4">Installment Number</th>
+                            <th className="px-6 py-4">Release Date</th>
+                            <th className="px-6 py-4">Credit Amount</th>
+                            <th className="px-6 py-4">Payment Date</th>
+                            <th className="px-6 py-4">Bank UTR</th>
+                            <th className="px-6 py-4">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-[10px] text-text-secondary divide-y divide-border/50">
+                          {finalInstallments.map((inst, i) => {
                             const isPaid = inst.status === 'Paid' || refundToRender.status === 'Paid' || isSinglePaidFallback;
                             const payDate = inst.paymentDate || (isPaid ? refundToRender.paymentDate : null);
                             const utr = inst.transactionId || (isPaid ? refundToRender.transactionId : null);
+                            const paidBy = inst.paidBy || (isPaid ? refundToRender.paidBy : null);
+                            const proofUrl = inst.paymentProof || (isPaid ? refundToRender.paymentProof : null);
+
+                            const releaseDateFormatted = inst.isSingle
+                              ? (inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—')
+                              : inst.dueDate;
+
+                            const isExpanded = !!expandedInstallments[`${refundToRender._id}_${i}`];
 
                             return (
-                              <tr key={i} className="hover:bg-bg-input/20 transition-colors">
-                                <td className="px-6 py-4 font-black">Inst. #{i + 1}</td>
-                                <td className="px-6 py-4 font-bold">{inst.dueDate}</td>
-                                <td className="px-6 py-4 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
-                                <td className="px-6 py-4 font-bold text-text-secondary">
-                                  {payDate ? new Date(payDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
-                                </td>
-                                <td className="px-6 py-4 font-mono font-black text-accent select-all">
-                                  {utr || '—'}
-                                </td>
-                                <td className="px-6 py-4">
-                                  <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${isPaid
-                                    ? 'bg-green-soft text-green'
-                                    : inst.status === 'Due'
-                                      ? 'bg-red-soft text-red'
-                                      : 'bg-yellow-soft text-yellow'
-                                    }`}>
-                                    {isPaid ? 'Paid' : inst.status || 'Pending'}
-                                  </span>
-                                </td>
-                              </tr>
+                              <React.Fragment key={i}>
+                                <tr
+                                  className="hover:bg-bg-input/20 transition-colors cursor-pointer select-none"
+                                  onClick={() => toggleInstallmentExpand(refundToRender._id, i)}
+                                >
+                                  <td className="px-6 py-4 font-black">
+                                    {inst.isSingle ? 'Single Payout' : `Inst. #${i + 1}`} {isPaid ? (isExpanded ? '▼' : '▶') : ''}
+                                  </td>
+                                  <td className="px-6 py-4 font-bold">{releaseDateFormatted}</td>
+                                  <td className="px-6 py-4 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
+                                  <td className="px-6 py-4 font-bold text-text-secondary">
+                                    {payDate ? new Date(payDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                                  </td>
+                                  <td className="px-6 py-4 font-mono font-black text-accent select-all">
+                                    {utr || '—'}
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${isPaid
+                                      ? 'bg-green-soft text-green'
+                                      : inst.status === 'Due'
+                                        ? 'bg-red-soft text-red'
+                                        : 'bg-yellow-soft text-yellow'
+                                      }`}>
+                                      {isPaid ? 'Paid' : inst.status || 'Pending'}
+                                    </span>
+                                  </td>
+                                </tr>
+                                {isExpanded && isPaid && (
+                                  <tr className="bg-bg-secondary/40">
+                                    <td colSpan="6" className="px-6 py-4">
+                                      <div className="bg-bg-card border-2 border-border/80 rounded-2xl p-6 space-y-4 animate-in slide-in-from-top-3 duration-150 shadow-sm text-left">
+                                        <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                                          <div className="flex items-center gap-2 text-[10px] font-black text-green uppercase tracking-widest">
+                                            <span>✅ Payment Receipt Details</span>
+                                          </div>
+                                          <span className="text-[8px] text-text-muted font-bold uppercase tracking-wider">
+                                            {inst.isSingle ? 'Single Payout' : `Installment #${i + 1}`}
+                                          </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-[10px]">
+                                          <div>
+                                            <div className="text-[8px] text-text-muted uppercase font-black mb-1">Payment Date</div>
+                                            <div className="font-black text-text-primary uppercase tracking-tight">
+                                              {payDate ? new Date(payDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <div className="text-[8px] text-text-muted uppercase font-black mb-1">Transaction UTR</div>
+                                            <div className="font-mono font-black text-accent select-all tracking-wider uppercase break-all">
+                                              {utr || '—'}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <div className="text-[8px] text-text-muted uppercase font-black mb-1">Paid By</div>
+                                            <div className="text-text-primary font-black uppercase tracking-wider break-all text-[9px]">
+                                              {paidBy || '—'}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <div className="text-[8px] text-text-muted uppercase font-black mb-1.5">Verification Document</div>
+                                            {proofUrl ? (
+                                              <a
+                                                href={proofUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 hover:bg-accent text-accent hover:text-white border border-accent/20 hover:border-accent rounded-lg text-[8px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95"
+                                              >
+                                                📄 View Proof
+                                              </a>
+                                            ) : (
+                                              <span className="text-text-muted font-bold italic">No proof uploaded</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
                             );
-                          })
-                        ) : (
-                          <tr>
-                            <td colSpan="6" className="px-6 py-8 text-center text-[10px] font-black text-text-muted uppercase tracking-widest italic">
-                              Single installment payment structure
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
 
-                  {/* financial details ledger card */}
-                  <div className="bg-bg-input px-8 py-5 border-t border-border flex flex-wrap justify-between items-center gap-6">
-                    <div className="flex gap-8">
-                      <div>
-                        <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Total Payout</p>
-                        <p className="text-sm font-black text-text-primary">₹{Number(totalAmount).toLocaleString('en-IN')}</p>
+                    {/* financial details ledger card */}
+                    <div className="bg-bg-input px-8 py-5 border-t border-border flex flex-wrap justify-between items-center gap-6">
+                      <div className="flex gap-8">
+                        <div>
+                          <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Total Payout</p>
+                          <p className="text-sm font-black text-text-primary">₹{Number(totalAmount).toLocaleString('en-IN')}</p>
+                        </div>
+                        <div className="border-l border-border/80 pl-6">
+                          <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Disbursed (Paid)</p>
+                          <p className="text-sm font-black text-green">₹{Number(paidAmount).toLocaleString('en-IN')}</p>
+                        </div>
+                        <div className="border-l border-border/80 pl-6">
+                          <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Remaining (Left)</p>
+                          <p className={`text-sm font-black ${leftAmount > 0 ? 'text-accent' : 'text-text-muted'}`}>
+                            ₹{Number(leftAmount).toLocaleString('en-IN')}
+                          </p>
+                        </div>
                       </div>
-                      <div className="border-l border-border/80 pl-6">
-                        <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Disbursed (Paid)</p>
-                        <p className="text-sm font-black text-green">₹{Number(paidAmount).toLocaleString('en-IN')}</p>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${leftAmount === 0 ? 'bg-green' : 'bg-accent'}`}></span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-text-secondary">
+                          {leftAmount === 0 ? 'Fully Settled' : 'Partially Settled'}
+                        </span>
                       </div>
-                      <div className="border-l border-border/80 pl-6">
-                        <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Remaining (Left)</p>
-                        <p className={`text-sm font-black ${leftAmount > 0 ? 'text-accent' : 'text-text-muted'}`}>
-                          ₹{Number(leftAmount).toLocaleString('en-IN')}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${leftAmount === 0 ? 'bg-green' : 'bg-accent'}`}></span>
-                      <span className="text-[9px] font-black uppercase tracking-widest text-text-secondary">
-                        {leftAmount === 0 ? 'Fully Settled' : 'Partially Settled'}
-                      </span>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {(refundToRender.status === 'Paid' || isSinglePaidFallback || refundToRender.transactionId || refundToRender.paymentDate || refundToRender.paymentProof) && (
-                <div className="bg-bg-secondary rounded-[2rem] border-2 border-border overflow-hidden shadow-sm animate-in fade-in duration-300">
-                  <div className="bg-green-soft px-6 py-4 border-b border-border font-black text-green text-[10px] uppercase tracking-[0.2em] flex items-center gap-2">
-                    <span>✅ Payment Receipt</span>
-                  </div>
-                  <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-sm">
-                    <div>
-                      <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Date</p>
-                      <p className="font-black text-text-primary uppercase tracking-tight">
-                        {refundToRender.paymentDate ? new Date(refundToRender.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Transaction UTR</p>
-                      <p className="font-mono font-black text-accent select-all tracking-wider uppercase break-all">{refundToRender.transactionId || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Paid By</p>
-                      <p className="text-text-primary font-black uppercase text-[10px] tracking-wider break-all">{refundToRender.paidBy || '—'}</p>
-                    </div>
-                    {refundToRender.paymentProof && (
-                      <div className="md:col-span-2 lg:col-span-3 border-t border-border/50 pt-6">
-                        <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3">Verification Document</p>
-                        <a
-                          href={refundToRender.paymentProof}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 px-6 py-3 bg-bg-input hover:bg-bg-card-hover border-2 border-border rounded-xl text-[10px] font-black uppercase tracking-widest text-text-secondary transition-all"
-                        >
-                          📄 View Uploaded Screenshot / Proof
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="bg-bg-input p-6 rounded-[2.5rem] border border-border shadow-inner">
                 <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3 ml-2">Summary</p>

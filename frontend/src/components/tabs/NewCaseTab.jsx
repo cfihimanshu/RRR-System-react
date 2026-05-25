@@ -484,6 +484,10 @@ const NewCaseTab = () => {
     e.preventDefault();
 
     // Validations
+    if (errors.companyName) {
+      return toast.error(errors.companyName, { icon: '⚠️' });
+    }
+
     if (formData.clientEmail) {
       const emails = formData.clientEmail.split(',').map(e => e.trim());
       const invalid = emails.some(e => e && !e.includes('@'));
@@ -545,6 +549,10 @@ const NewCaseTab = () => {
 
     if (currentStep === 1) {
       if (!formData.companyName) missingFields.push('Company Name');
+      if (errors.companyName) {
+        toast.error(errors.companyName, { icon: '⚠️' });
+        return;
+      }
       if (!formData.priority) missingFields.push('Priority');
       if (!formData.typeOfComplaint) missingFields.push('Type of Complaint');
       if (!formData.brandName) missingFields.push('Brand Name');
