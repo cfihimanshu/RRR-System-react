@@ -5,6 +5,25 @@ import toast from 'react-hot-toast';
 import { Mail, Lock, LogIn, ShieldCheck, Key, X, Send } from 'lucide-react';
 import api from '../api/axios';
 
+const SplitText = ({ text, className }) => {
+  return (
+    <span className={className}>
+      {text.split("").map((char, index) => (
+        <span
+          key={index}
+          className="animate-char-in"
+          style={{
+            animationDelay: `${index * 0.04}s`,
+            whiteSpace: char === ' ' ? 'pre' : 'normal'
+          }}
+        >
+          {char}
+        </span>
+      ))}
+    </span>
+  );
+};
+
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,11 +44,11 @@ const Login = () => {
       toast.error(err.response?.data?.error || 'Login failed', { id: loadingToast });
     }
   };
- 
+
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if (!forgotEmail) return toast.error("Please enter your email");
-    
+
     setForgotLoading(true);
     const loadingToast = toast.loading('Sending reset email...');
     try {
@@ -56,13 +75,17 @@ const Login = () => {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-accent-soft rounded-2xl border-2 border-accent/20 mb-4 shadow-[0_0_20px_rgba(249,115,22,0.1)]">
             <ShieldCheck size={32} className="text-accent" />
           </div>
-          <h1 className="text-3xl font-black text-text-primary uppercase tracking-[0.2em] mb-1">RRR Engine</h1>
+          <h1 className="text-3xl font-black text-text-primary uppercase tracking-[0.2em] mb-1">
+            <SplitText text="RRR Engine" />
+          </h1>
         </div>
 
         {/* Login Card */}
         <div className="bg-bg-card border-2 border-border rounded-3xl p-10 shadow-2xl animate-in fade-in zoom-in-95 duration-500">
           <div className="mb-8">
-            <h2 className="text-xl font-black text-text-primary uppercase tracking-widest mb-1">Log In </h2>
+            <h2 className="text-xl font-black text-text-primary uppercase tracking-widest mb-1">
+              <SplitText text="Log In" />
+            </h2>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -108,7 +131,7 @@ const Login = () => {
             </button>
 
             <div className="text-center pt-4">
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowForgotModal(true)}
                 className="text-[10px] font-black text-text-muted hover:text-accent uppercase tracking-widest transition-colors flex items-center justify-center gap-2 mx-auto"
@@ -128,15 +151,15 @@ const Login = () => {
               <div className="w-20 h-20 bg-amber-50 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner border border-amber-100">
                 <Key size={32} className="text-amber-500" />
               </div>
-              
+
               <h3 className="text-xl font-black text-slate-900 text-center mb-2 uppercase tracking-tight">Forgot Password</h3>
               <p className="text-xs text-slate-500 text-center font-medium mb-8 leading-relaxed">Enter your email and we'll send you a temporary password to log in.</p>
-              
+
               <form onSubmit={handleForgotPassword} className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     required
                     className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-amber-500/50 focus:bg-white outline-none transition-all text-sm font-bold"
                     placeholder="your@email.com"
@@ -145,7 +168,7 @@ const Login = () => {
                   />
                 </div>
 
-                <button 
+                <button
                   type="submit"
                   disabled={forgotLoading}
                   className="w-full py-4.5 rounded-2xl bg-amber-600 text-white font-black text-xs uppercase tracking-[0.2em] hover:bg-amber-700 shadow-xl shadow-amber-900/20 transition-all active:scale-95 flex items-center justify-center gap-3"
@@ -158,8 +181,8 @@ const Login = () => {
                 </button>
               </form>
             </div>
-            
-            <button 
+
+            <button
               onClick={() => setShowForgotModal(false)}
               className="absolute top-6 right-6 p-2 text-slate-300 hover:text-slate-500 transition-colors"
             >

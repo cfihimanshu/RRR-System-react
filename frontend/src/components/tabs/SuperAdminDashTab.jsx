@@ -22,6 +22,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import TabLoader from '../shared/TabLoader';
 
 const getPermissionsForRole = (roleName) => {
   const r = String(roleName || '').toLowerCase().replace(/\s+/g, '');
@@ -279,11 +280,8 @@ const SuperAdminDashTab = () => {
 
   if (loading) {
     return (
-      <div className="section active bg-bg-primary h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div>
-          <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">Loading ...</span>
-        </div>
+      <div className="section active bg-bg-primary h-screen flex items-center justify-center w-full">
+        <TabLoader minHeight="300px" text="Loading Super Admin Panel" />
       </div>
     );
   }

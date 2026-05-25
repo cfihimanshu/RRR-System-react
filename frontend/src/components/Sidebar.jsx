@@ -89,7 +89,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
           print:hidden flex-shrink-0 flex flex-col
           bg-[var(--bg-secondary)] border-r border-[var(--border)]
           transition-all duration-300 ease-in-out
-          h-full overflow-hidden
+          h-full overflow-visible
           md:translate-x-0
           fixed md:relative top-[56px] md:top-0 left-0 z-[90]
           ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
@@ -99,12 +99,12 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
         {/* Collapse Toggle Button */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="hidden md:flex items-center justify-center absolute -right-3 top-6 z-10 w-6 h-6 rounded-full bg-[var(--bg-card)] border-2 border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-all duration-200 shadow-lg"
+          className="hidden md:flex items-center justify-center absolute -right-3.5 top-6 z-[100] w-7 h-7 rounded-full bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:scale-110 active:scale-95 transition-all duration-200 shadow-md cursor-pointer"
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {isCollapsed
-            ? <ChevronRight size={12} strokeWidth={3} />
-            : <ChevronLeft size={12} strokeWidth={3} />
+            ? <ChevronRight size={14} strokeWidth={3.5} />
+            : <ChevronLeft size={14} strokeWidth={3.5} />
           }
         </button>
 

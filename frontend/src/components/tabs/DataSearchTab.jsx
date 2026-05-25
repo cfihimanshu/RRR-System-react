@@ -204,7 +204,7 @@ const DataSearchTab = () => {
                   ) : (
                     results.map(r => (
                       <tr key={r._id} className="hover:bg-bg-input/70 transition-all group border-b border-border/50 last:border-0">
-                        <td className="px-6 py-4 text-text-muted whitespace-nowrap font-black uppercase tracking-tighter opacity-60">{r.date || '—'}</td>
+                        <td className="px-6 py-4 text-text-secondary whitespace-nowrap font-black uppercase tracking-tighter">{r.date || '—'}</td>
                         <td className="px-6 py-4">
                           <div className="font-black text-text-primary leading-tight text-sm tracking-tight group-hover:text-accent transition-all capitalize">{r.companyName || '—'}</div>
                         </td>
@@ -213,7 +213,7 @@ const DataSearchTab = () => {
                           <span className="font-mono text-text-primary font-black whitespace-nowrap bg-bg-input px-3 py-1.5 rounded-lg border border-border shadow-inner text-[12px]">{r.contact || '—'}</span>
                         </td>
                         <td className="px-6 py-4 text-black font-black break-all group-hover:underline cursor-pointer tracking-tight text-[12px] opacity-80">{r.emailId || '—'}</td>
-                        <td className="px-6 py-4 leading-tight italic text-text-muted font-medium text-[11px] font-bold">"{r.service || '—'}"</td>
+                        <td className="px-6 py-4 leading-tight italic text-text-secondary font-medium text-[11px] font-bold">"{r.service || '—'}"</td>
                         <td className="px-6 py-4">
                           <span className="font-black text-text-primary leading-tight uppercase text-[10px] tracking-widest bg-bg-input px-3 py-1 rounded-lg inline-block min-w-[140px] text-center truncate" title={r.bde}>{r.bde || '—'}</span>
                         </td>
@@ -230,7 +230,7 @@ const DataSearchTab = () => {
                             {r.mouStatus || '—'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-text-muted text-[9px] font-medium leading-relaxed italic max-w-[250px] truncate opacity-70" title={r.remarks}>"{r.remarks || '—'}"</td>
+                        <td className="px-6 py-4 text-text-secondary text-[10px] font-medium leading-relaxed italic max-w-[250px] truncate" title={r.remarks}>"{r.remarks || '—'}"</td>
                         <td className="px-6 py-4 text-center font-black text-accent text-sm tracking-tight bg-accent-soft/10">₹{r.mouSignedAmount || '0'}</td>
                       </tr>
                     ))

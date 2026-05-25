@@ -76,9 +76,12 @@ const initScheduler = () => {
       const adminsList = await User.find({ role: 'Admin' });
       const adminEmailsStr = adminsList.map(a => a.email).join(',');
 
-      // Find all cases that are active/incomplete and have a due date
+      // Find all cases that are active/incomplete and have a due date OR a next action date
       const activeCases = await Case.find({
-        dueDate: { $exists: true, $ne: '' },
+        $or: [
+          { dueDate: { $exists: true, $ne: '' } },
+          { nextActionDate: { $exists: true, $ne: '' } }
+        ],
         currentStatus: { $nin: ['Settled', 'Closed', 'Closure', 'Resolved'] }
       });
 
@@ -86,115 +89,139 @@ const initScheduler = () => {
       const dueTodayCases = [];
 
       for (const caseItem of activeCases) {
-        const dueDateObj = new Date(caseItem.dueDate);
-        if (isNaN(dueDateObj.getTime())) continue;
+        let isCaseDue = false;
+        let isCaseOverdue = false;
+        let isActionDue = false;
+        let isActionOverdue = false;
 
-        dueDateObj.setHours(0, 0, 0, 0);
+        if (caseItem.dueDate && caseItem.dueDate.trim() !== '') {
+          const dueDateObj = new Date(caseItem.dueDate);
+          if (!isNaN(dueDateObj.getTime())) {
+            dueDateObj.setHours(0, 0, 0, 0);
+            if (dueDateObj < today) {
+              isCaseOverdue = true;
+              overdueCases.push(caseItem);
+            } else if (dueDateObj.getTime() === today.getTime()) {
+              isCaseDue = true;
+              dueTodayCases.push(caseItem);
+            }
+          }
+        }
 
-        if (dueDateObj < today) {
-          overdueCases.push(caseItem);
+        if (caseItem.nextActionDate && caseItem.nextActionDate.trim() !== '') {
+          const actionDateObj = new Date(caseItem.nextActionDate);
+          if (!isNaN(actionDateObj.getTime())) {
+            actionDateObj.setHours(0, 0, 0, 0);
+            if (actionDateObj < today) {
+              isActionOverdue = true;
+            } else if (actionDateObj.getTime() === today.getTime()) {
+              isActionDue = true;
+            }
+          }
+        }
+
+        const isAnyOverdue = isCaseOverdue || isActionOverdue;
+        const isAnyDue = isCaseDue || isActionDue;
+
+        if (isAnyOverdue || isAnyDue) {
+          // Find Assignee user in DB to send them an email
+          let assignee = null;
+          if (caseItem.assignedTo && caseItem.assignedTo.trim() !== '') {
+            try {
+              assignee = await User.findOne({
+                fullName: { $regex: new RegExp(`^\\s*${caseItem.assignedTo.trim()}\\s*$`, 'i') }
+              });
+            } catch (err) {
+              console.error('Error finding assignee user:', err);
+            }
+          }
+
+          // Build notification message and title
+          let title = '';
+          let message = '';
+          let type = 'Warning';
+          let emailSubject = '';
+          let emailHtml = '';
+
+          // Determine date description
+          let dateDesc = '';
+          if (isCaseOverdue) {
+            dateDesc = `Due Date (${caseItem.dueDate}) has passed`;
+            title = `🚨 Overdue Case Action Required: ${caseItem.caseId}`;
+            type = 'Critical';
+          } else if (isActionOverdue) {
+            dateDesc = `Next Action Date (${caseItem.nextActionDate}) has passed`;
+            title = `🚨 Case Action Overdue: ${caseItem.caseId}`;
+            type = 'Critical';
+          } else if (isCaseDue) {
+            dateDesc = `Due Date (${caseItem.dueDate}) is Today`;
+            title = `⚠️ Case Due Today: ${caseItem.caseId}`;
+          } else if (isActionDue) {
+            dateDesc = `Next Action Date (${caseItem.nextActionDate}) is Today`;
+            title = `⚠️ Case Action Due Today: ${caseItem.caseId}`;
+          }
+
+          message = `Case ${caseItem.caseId} (${caseItem.companyName || 'N/A'}) has pending action: ${dateDesc}. Assigned to: ${caseItem.assignedTo || 'Unassigned'}. Current Status: ${caseItem.currentStatus}.`;
+
+          emailSubject = isAnyOverdue 
+            ? `🚨 URGENT: Case ${caseItem.caseId} requires attention (${dateDesc})`
+            : `⚠️ REMINDER: Case ${caseItem.caseId} has due action today (${dateDesc})`;
+
+          emailHtml = `
+            <div style="font-family: sans-serif; border: 2px solid ${isAnyOverdue ? '#ea580c' : '#f97316'}; border-radius: 10px; padding: 25px; max-width: 600px; color: #333; line-height: 1.6;">
+              <h3 style="color: ${isAnyOverdue ? '#ea580c' : '#f97316'}; margin-top: 0; font-size: 18px; text-transform: uppercase;">
+                ${isAnyOverdue ? '🚨 Overdue Case Notification' : '⚠️ Case Due Date Reminder'}
+              </h3>
+              <p>Hello,</p>
+              <p>This is an automated system alert that Case <strong>${caseItem.caseId}</strong> requires immediate attention.</p>
+              
+              <div style="background: #fff7ed; border-left: 4px solid ${isAnyOverdue ? '#ea580c' : '#f97316'}; padding: 18px; border-radius: 8px; margin: 20px 0; font-size: 14px;">
+                <strong>Case ID:</strong> ${caseItem.caseId}<br>
+                <strong>Client Name:</strong> ${caseItem.clientName || '—'}<br>
+                <strong>Company:</strong> ${caseItem.companyName || '—'}<br>
+                <strong>Assignee:</strong> ${caseItem.assignedTo || 'Unassigned'}<br>
+                <strong>Current Status:</strong> ${caseItem.currentStatus || '—'}<br>
+                ${caseItem.dueDate ? `<strong>Due Date:</strong> ${caseItem.dueDate}<br>` : ''}
+                ${caseItem.nextActionDate ? `<strong>Next Action Date:</strong> ${caseItem.nextActionDate}<br>` : ''}
+                <strong style="color: ${isAnyOverdue ? '#dc2626' : '#d97706'}; text-transform: uppercase;">Alert Reason:</strong> ${dateDesc}
+              </div>
+              
+              <p>Please log in to your dashboard to review and execute the required next steps.</p>
+              <div style="margin-top: 25px;">
+                <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseItem.caseId}" 
+                   style="display: inline-block; background: ${isAnyOverdue ? '#ea580c' : '#f97316'}; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">
+                  View & Update Case
+                </a>
+              </div>
+            </div>
+          `;
+
+          // Notify in-app: Both the Assignee and Admin
+          const recipients = ['Admin'];
+          if (assignee && assignee.email) {
+            recipients.push(assignee.email);
+          }
+          try {
+            await createNotification(recipients, title, message, type, `/case-master?search=${caseItem.caseId}`);
+          } catch (notifErr) {
+            console.error('Error creating notifications:', notifErr);
+          }
+
+          // Notify via email: Both the Assignee and Admin
+          const emailRecipientsList = [...adminsList.map(a => a.email)];
+          if (assignee && assignee.email) {
+            emailRecipientsList.push(assignee.email);
+          }
+          const uniqueEmailString = [...new Set(emailRecipientsList)].join(',');
           
-          // Notify Assignee
-          if (caseItem.assignedTo && caseItem.assignedTo.trim() !== '') {
+          if (uniqueEmailString) {
             try {
-              const assignee = await User.findOne({
-                fullName: { $regex: new RegExp(`^\\s*${caseItem.assignedTo.trim()}\\s*$`, 'i') }
-              });
-              if (assignee && assignee.email) {
-                // 1. In-app notification for Assignee
-                await createNotification(
-                  assignee.email, 
-                  `🚨 Overdue Case Action Required: ${caseItem.caseId}`, 
-                  `Your assigned case ${caseItem.caseId} (${caseItem.companyName}) is overdue (Due Date: ${caseItem.dueDate}). Current Status: ${caseItem.currentStatus}. Please resolve immediately.`, 
-                  'Critical', 
-                  `/case-master?search=${caseItem.caseId}`
-                );
-
-                // 2. Email notification for Assignee
-                const subject = `🚨 URGENT ACTION REQUIRED: Case ${caseItem.caseId} is Overdue!`;
-                const html = `
-                  <div style="font-family: sans-serif; border: 2px solid #ea580c; border-radius: 10px; padding: 20px; max-width: 600px; color: #333;">
-                    <h3 style="color: #ea580c; margin-top: 0; font-size: 18px; text-transform: uppercase;">🚨 Overdue Case Notification</h3>
-                    <p>Hello <strong>${assignee.fullName}</strong>,</p>
-                    <p>This is an automated alert that your assigned case is currently <strong>overdue</strong> and has not been marked resolved/closed.</p>
-                    <div style="background: #fff7ed; border-left: 4px solid #ea580c; padding: 16px; border-radius: 8px; margin: 20px 0; font-size: 14px; line-height: 1.5;">
-                      <strong>Case ID:</strong> ${caseItem.caseId}<br>
-                      <strong>Client:</strong> ${caseItem.clientName || '—'}<br>
-                      <strong>Company:</strong> ${caseItem.companyName || '—'}<br>
-                      <strong>Current Status:</strong> ${caseItem.currentStatus}<br>
-                      <strong>Due Date:</strong> <span style="color: #ea580c; font-weight: 900;">${caseItem.dueDate}</span>
-                    </div>
-                    <p>Please log in to update the case progress as soon as possible.</p>
-                    <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseItem.caseId}" style="display: inline-block; background: #ea580c; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: bold;">Update Case on Dashboard</a></p>
-                  </div>
-                `;
-                await sendEmail(assignee.email, subject, '', html);
-              }
-            } catch (err) {
-              console.error(`Error notifying assignee for case ${caseItem.caseId}:`, err);
+              await sendEmail(uniqueEmailString, emailSubject, '', emailHtml);
+              console.log(`Alert email sent for case ${caseItem.caseId} to: ${uniqueEmailString}`);
+            } catch (mailErr) {
+              console.error(`Failed to send email alert for case ${caseItem.caseId}:`, mailErr);
             }
           }
-
-          // In-app notification for Admin
-          await createNotification(
-            'Admin', 
-            `🚨 Case Overdue: ${caseItem.caseId}`, 
-            `Case ${caseItem.caseId} (${caseItem.companyName}) assigned to ${caseItem.assignedTo || 'Unassigned'} was due on ${caseItem.dueDate} but remains unresolved (${caseItem.currentStatus}).`, 
-            'Critical', 
-            `/case-master?search=${caseItem.caseId}`
-          );
-        } else if (dueDateObj.getTime() === today.getTime()) {
-          dueTodayCases.push(caseItem);
-
-          // Notify Assignee
-          if (caseItem.assignedTo && caseItem.assignedTo.trim() !== '') {
-            try {
-              const assignee = await User.findOne({
-                fullName: { $regex: new RegExp(`^\\s*${caseItem.assignedTo.trim()}\\s*$`, 'i') }
-              });
-              if (assignee && assignee.email) {
-                // 1. In-app notification for Assignee
-                await createNotification(
-                  assignee.email, 
-                  `⚠️ Case Due Today: ${caseItem.caseId}`, 
-                  `Your assigned case ${caseItem.caseId} (${caseItem.companyName}) is due today! Current Status: ${caseItem.currentStatus}.`, 
-                  'Warning', 
-                  `/case-master?search=${caseItem.caseId}`
-                );
-
-                // 2. Email notification for Assignee
-                const subject = `⚠️ ATTENTION REQUIRED: Case ${caseItem.caseId} is Due Today!`;
-                const html = `
-                  <div style="font-family: sans-serif; border: 2px solid #f97316; border-radius: 10px; padding: 20px; max-width: 600px; color: #333;">
-                    <h3 style="color: #f97316; margin-top: 0; font-size: 18px; text-transform: uppercase;">⚠️ Case Due TodayReminders</h3>
-                    <p>Hello <strong>${assignee.fullName}</strong>,</p>
-                    <p>This is an automated reminder that your assigned case is <strong>due today</strong>.</p>
-                    <div style="background: #fff7ed; border-left: 4px solid #f97316; padding: 16px; border-radius: 8px; margin: 20px 0; font-size: 14px; line-height: 1.5;">
-                      <strong>Case ID:</strong> ${caseItem.caseId}<br>
-                      <strong>Client:</strong> ${caseItem.clientName || '—'}<br>
-                      <strong>Company:</strong> ${caseItem.companyName || '—'}<br>
-                      <strong>Current Status:</strong> ${caseItem.currentStatus}<br>
-                      <strong>Due Date:</strong> <span style="color: #f97316; font-weight: 900;">${caseItem.dueDate}</span>
-                    </div>
-                    <p>Please ensure that all required next steps are executed.</p>
-                    <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseItem.caseId}" style="display: inline-block; background: #f97316; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: bold;">View on Dashboard</a></p>
-                  </div>
-                `;
-                await sendEmail(assignee.email, subject, '', html);
-              }
-            } catch (err) {
-              console.error(`Error notifying assignee for case ${caseItem.caseId}:`, err);
-            }
-          }
-
-          // In-app notification for Admin
-          await createNotification(
-            'Admin', 
-            `⚠️ Case Due Today: ${caseItem.caseId}`, 
-            `Case ${caseItem.caseId} assigned to ${caseItem.assignedTo || 'Unassigned'} is due today. Current Status: ${caseItem.currentStatus}.`, 
-            'Warning', 
-            `/case-master?search=${caseItem.caseId}`
-          );
         }
       }
 

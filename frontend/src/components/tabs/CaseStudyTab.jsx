@@ -3,6 +3,7 @@ import html2pdf from 'html2pdf.js';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import SearchableCaseSelect from '../shared/SearchableCaseSelect';
+import TabLoader from '../shared/TabLoader';
 import {
   FileText,
   RefreshCcw,
@@ -614,10 +615,7 @@ const CaseStudyTab = ({ caseData = null }) => {
     return (
       <div className="pb-10">
         {loading ? (
-          <div className="flex flex-col items-center justify-center min-h-[400px]">
-            <Loader2 size={48} className="animate-spin text-accent" />
-            <span className="mt-4 font-black text-[10px] uppercase tracking-[0.3em] text-text-muted">Compiling Intelligence...</span>
-          </div>
+          <TabLoader minHeight="400px" text="Compiling Intelligence" />
         ) : (
           <>
             {/* Mobile Interface: Action Card */}
@@ -860,10 +858,7 @@ const CaseStudyTab = ({ caseData = null }) => {
             {!generatedCase ? (
               <div className="flex-1 flex flex-col items-center justify-center text-text-muted opacity-10"><FileText size={128} /></div>
             ) : loading ? (
-              <div className="flex-1 flex flex-col items-center justify-center">
-                <Loader2 size={64} className="animate-spin text-accent" />
-                <span className="mt-4 font-black text-[10px] uppercase tracking-[0.3em] text-text-muted">Compiling Intelligence...</span>
-              </div>
+              <TabLoader minHeight="600px" text="Compiling Intelligence" />
             ) : (
               <div className="flex flex-col h-full">
                 <div className="p-6 bg-bg-card border-b border-border flex justify-between items-center shadow-sm z-10">
@@ -903,10 +898,7 @@ const CaseStudyTab = ({ caseData = null }) => {
             </div>
             <div className="flex-1 overflow-y-auto bg-bg-input p-6">
               {loading ? (
-                <div className="flex flex-col items-center justify-center h-full">
-                  <Loader2 size={48} className="animate-spin text-accent" />
-                  <span className="mt-4 font-black text-[10px] uppercase tracking-[0.3em] text-text-muted">Assembling Data...</span>
-                </div>
+                <TabLoader minHeight="400px" text="Assembling Data" />
               ) : (
                 <div className="shadow-xl rounded-[2rem] overflow-hidden border-4 border-border">
                   <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} isMobile={true} />

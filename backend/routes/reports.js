@@ -145,6 +145,16 @@ router.post('/', verifyToken, async (req, res) => {
       userName: req.user.fullName
     };
 
+    // Validation: Require GPS Selfie and Coordinates for SOD/EOD for non-exempt roles
+    if ((reportData.type === 'SOD' || reportData.type === 'EOD') && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
+      if (!reportData.selfieUrl) {
+        return res.status(400).json({ error: 'GPS Selfie is required for SOD/EOD submission!' });
+      }
+      if (!reportData.latitude || !reportData.longitude) {
+        return res.status(400).json({ error: 'GPS coordinates are required for SOD/EOD submission!' });
+      }
+    }
+
     if (reportData.type === 'SOD' && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
       const User = require('../models/User');
       const user = await User.findById(req.user.id).lean();

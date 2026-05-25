@@ -5,6 +5,7 @@ import SearchableCaseSelect from '../shared/SearchableCaseSelect';
 import SearchableSelect from '../shared/SearchableSelect';
 import { AuthContext } from '../../context/AuthContext';
 import { Loader2, Clock, Filter, History, Inbox, CircleDot, User as UserIcon } from 'lucide-react';
+import TabLoader from '../shared/TabLoader';
 
 const TimelineTab = () => {
   const { user } = useContext(AuthContext);
@@ -83,9 +84,8 @@ const TimelineTab = () => {
         {/* Timeline List */}
         <div className="relative border-l-2 border-border ml-6 pb-20 min-h-[400px]">
           {loading ? (
-            <div className="ml-12 py-24 flex flex-col items-center gap-4">
-              <Loader2 size={48} className="animate-spin text-accent" />
-              <span className="font-black text-[10px] uppercase tracking-[0.3em] text-text-muted">Synchronizing Ledger...</span>
+            <div className="ml-12">
+              <TabLoader minHeight="300px" text="Synchronizing Ledger" />
             </div>
           ) : timeline.length === 0 ? (
             <div className="ml-12 py-12 text-[10px] text-text-muted font-black uppercase tracking-widest italic opacity-30">Archive context empty for this identifier.</div>

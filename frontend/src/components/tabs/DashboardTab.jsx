@@ -2,6 +2,7 @@ import React, { useEffect, useState, useContext } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../api/axios';
 import { Badge } from '../shared/Badge';
+import TabLoader from '../shared/TabLoader';
 import { AuthContext } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import SearchableCaseSelect from '../shared/SearchableCaseSelect';
@@ -880,7 +881,11 @@ const DashboardTab = () => {
     }
   };
 
-  if (!stats) return <div className="section active bg-bg-primary h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div></div>;
+  if (!stats) return (
+    <div className="section active bg-bg-primary h-screen flex items-center justify-center w-full">
+      <TabLoader minHeight="300px" text="Fetching Dashboard Statistics" />
+    </div>
+  );
 
   return (
     <div className="section active w-full pb-10 px-4 bg-bg-primary overflow-x-hidden max-w-full">
