@@ -31,6 +31,7 @@ const RefundRequestTab = () => {
   const [documentLink, setDocumentLink] = useState('');
   const [myRefunds, setMyRefunds] = useState([]);
   const [selectedRefund, setSelectedRefund] = useState(null);
+  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const { user } = useContext(AuthContext);
 
   const [expandedCases, setExpandedCases] = useState({});
@@ -244,8 +245,8 @@ const RefundRequestTab = () => {
           </div>
           <div className="flex flex-col gap-3">
             <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Type</label>
-            <select name="accType" defaultValue="Savings" required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest">
-              <option value="Savings" className="bg-bg-secondary">Savings Account</option>
+            <select name="accType" defaultValue="Saving" required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest">
+              <option value="Saving" className="bg-bg-secondary">Saving Account</option>
               <option value="Current" className="bg-bg-secondary">Current Account</option>
             </select>
           </div>
@@ -412,7 +413,7 @@ const RefundRequestTab = () => {
                           <tr
                             key={r._id}
                             className="hover:bg-bg-secondary/40 transition-colors cursor-pointer group bg-bg-card border-l-4 border-accent"
-                            onClick={() => setSelectedRefund(r)}
+                             onClick={() => { setSelectedRefund(r); setShowPaymentDetails(false); }}
                           >
                             <td className="px-4 py-4 align-middle pl-8">
                               <div className="text-[10px] font-black text-text-muted">Request #{idx + 1}</div>
@@ -453,7 +454,7 @@ const RefundRequestTab = () => {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setSelectedRefund(null)}
+          onClick={() => { setSelectedRefund(null); setShowPaymentDetails(false); }}
         >
           <div
             className="bg-bg-card border-2 border-border rounded-2xl shadow-2xl w-full max-w-lg relative overflow-hidden"
@@ -469,7 +470,7 @@ const RefundRequestTab = () => {
                 </div>
               </div>
               <button
-                onClick={() => setSelectedRefund(null)}
+                onClick={() => { setSelectedRefund(null); setShowPaymentDetails(false); }}
                 className="p-2 rounded-xl hover:bg-red-soft/30 text-text-muted hover:text-red transition-all"
               >
                 <X size={18} />
@@ -480,9 +481,9 @@ const RefundRequestTab = () => {
             <div className="px-6 py-6 space-y-5">
               {/* Status + Date */}
               <div className="flex items-center justify-between">
-                <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 ${selectedRefund.status === 'Paid'
+                <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 ${selectedRefund.status?.toLowerCase() === 'paid'
                   ? 'bg-green-soft text-green border-green-soft'
-                  : selectedRefund.status === 'Rejected'
+                  : selectedRefund.status?.toLowerCase() === 'rejected'
                     ? 'bg-red-soft text-red border-red-soft'
                     : 'bg-yellow-soft text-yellow border-yellow-soft'
                   }`}>{selectedRefund.status}</span>
@@ -538,6 +539,108 @@ const RefundRequestTab = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Payment Details / Payout Schedule */}
+              {((selectedRefund.status?.toLowerCase() === 'paid') || (selectedRefund.installments && selectedRefund.installments.length > 0) || selectedRefund.transactionId) && (
+                <div className="bg-bg-secondary rounded-xl p-4 space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentDetails(!showPaymentDetails)}
+                    className="w-full flex items-center justify-between text-[9px] font-black text-text-muted uppercase tracking-widest border-b border-border/50 pb-2 outline-none select-none hover:text-text-primary transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <CheckCircle size={12} className="text-green" /> Payment Details & Schedule
+                    </div>
+                    <span className="text-[10px] font-black text-accent">{showPaymentDetails ? '▲' : '▼'}</span>
+                  </button>
+                  
+                  {showPaymentDetails && (
+                    <div className="space-y-3 animate-in fade-in duration-250">
+                      {selectedRefund.installments && selectedRefund.installments.length > 1 ? (
+                        /* Multi-installment list */
+                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                          {selectedRefund.installments.map((inst, i) => {
+                            const isInstPaid = inst.status?.toLowerCase() === 'paid' || selectedRefund.status?.toLowerCase() === 'paid';
+                            const instProof = inst.paymentProof || (isInstPaid ? selectedRefund.paymentProof : '');
+                            const instTxId = inst.transactionId || (isInstPaid ? selectedRefund.transactionId : '');
+                            const instDate = inst.paymentDate || (isInstPaid ? selectedRefund.paymentDate : '');
+
+                            return (
+                              <div key={i} className="bg-bg-card rounded-lg p-2.5 border border-border/50 flex flex-col gap-1.5 text-[10px]">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-black text-accent uppercase">Inst. #{i + 1} (₹{Number(inst.amount).toLocaleString('en-IN')})</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${isInstPaid ? 'bg-green-soft text-green' : inst.status === 'Due' ? 'bg-red-soft text-red' : 'bg-yellow-soft text-yellow'}`}>
+                                    {isInstPaid ? 'Paid' : (inst.status || 'Pending')}
+                                  </span>
+                                </div>
+                                {isInstPaid && (
+                                  <div className="grid grid-cols-2 gap-2 text-[9px] text-text-secondary bg-bg-secondary/40 p-2 rounded-md">
+                                    <div>
+                                      <span className="text-[8px] text-text-muted font-bold block">UTR NO</span>
+                                      <span className="font-mono font-bold">{instTxId || '—'}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[8px] text-text-muted font-bold block">PAYMENT DATE</span>
+                                      <span className="font-bold">{instDate || '—'}</span>
+                                    </div>
+                                    {instProof && (
+                                      <div className="col-span-2 mt-1">
+                                        <a
+                                          href={instProof}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-accent hover:underline"
+                                        >
+                                          <Eye size={10} /> View Proof Document
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        /* Single payout details */
+                        (() => {
+                          const isPaid = selectedRefund.status?.toLowerCase() === 'paid' || (selectedRefund.transactionId && selectedRefund.paymentProof);
+                          const txId = selectedRefund.transactionId || (selectedRefund.installments?.[0]?.transactionId) || '—';
+                          const pDate = selectedRefund.paymentDate || (selectedRefund.installments?.[0]?.paymentDate) || '—';
+                          const proofDoc = selectedRefund.paymentProof || (selectedRefund.installments?.[0]?.paymentProof);
+
+                          return (
+                            <div className="space-y-2.5 text-[10px]">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <div className="text-[8px] text-text-muted uppercase font-black">UTR / Transaction ID</div>
+                                  <div className="font-mono font-bold text-accent select-all mt-0.5">{txId}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[8px] text-text-muted uppercase font-black">Payment Date</div>
+                                  <div className="font-black text-text-primary mt-0.5">{pDate}</div>
+                                </div>
+                              </div>
+                              {proofDoc && (
+                                <div className="pt-1.5">
+                                  <a
+                                    href={proofDoc}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-soft text-green hover:bg-green hover:text-white border border-green-soft rounded-lg text-[9px] font-black uppercase tracking-wider transition-all"
+                                  >
+                                    <Eye size={12} /> View Payment Proof Document
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Summary */}
               {selectedRefund.summary && (

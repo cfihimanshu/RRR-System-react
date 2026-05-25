@@ -2277,7 +2277,7 @@ const DashboardTab = () => {
           <div
             onClick={() => {
               setReportPeriodFilter('All');
-              setReportStatusFilter('All');
+              setReportStatusFilter('Pending');
               setIsRefundReportModalOpen(true);
               setExpandedRefundIds({});
               setReportStartDate('');
@@ -2302,7 +2302,7 @@ const DashboardTab = () => {
                   };
                   const todayStr = getLocalDateString(new Date());
                   setReportPeriodFilter('Today');
-                  setReportStatusFilter('All');
+                  setReportStatusFilter('Pending');
                   setIsRefundReportModalOpen(true);
                   setExpandedRefundIds({});
                   setReportStartDate(todayStr);
@@ -2340,7 +2340,7 @@ const DashboardTab = () => {
                   const endOfWeekStr = getLocalDateString(endOfWeek);
 
                   setReportPeriodFilter('This Week');
-                  setReportStatusFilter('All');
+                  setReportStatusFilter('Pending');
                   setIsRefundReportModalOpen(true);
                   setExpandedRefundIds({});
                   setReportStartDate(startOfWeekStr);
@@ -2373,7 +2373,7 @@ const DashboardTab = () => {
                   const endOfMonthStr = getLocalDateString(endOfMonth);
 
                   setReportPeriodFilter('This Month');
-                  setReportStatusFilter('All');
+                  setReportStatusFilter('Pending');
                   setIsRefundReportModalOpen(true);
                   setExpandedRefundIds({});
                   setReportStartDate(startOfMonthStr);
@@ -2408,7 +2408,7 @@ const DashboardTab = () => {
                   const endOfNext6MonthsStr = getLocalDateString(endOfNext6Months);
 
                   setReportPeriodFilter('Next 6 Months');
-                  setReportStatusFilter('All');
+                  setReportStatusFilter('Pending');
                   setIsRefundReportModalOpen(true);
                   setExpandedRefundIds({});
                   setReportStartDate(startStr);
@@ -2521,9 +2521,9 @@ const DashboardTab = () => {
             View Analytics <ArrowRight size={12} />
           </div> */}
           </div>
-          <div className="h-[320px] w-full">
+          <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats?.threatTrendData || []} margin={{ top: 10, right: 30, left: 10, bottom: 25 }}>
+              <LineChart data={stats?.threatTrendData || []} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                 <XAxis dataKey="date" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
@@ -2531,13 +2531,6 @@ const DashboardTab = () => {
                   contentStyle={{ background: '#1F2937', border: 'none', borderRadius: '8px', color: '#F3F4F6', fontSize: '12px' }}
                   itemStyle={{ color: '#F3F4F6' }}
                   labelStyle={{ color: '#9CA3AF', fontWeight: 'bold' }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  align="center"
-                  iconType="circle"
-                  iconSize={8}
-                  wrapperStyle={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', paddingTop: '15px' }}
                 />
                 {(stats?.threatTrendTypes || []).map((type, index) => {
                   const colors = ['#0066FF', '#094e2bff', '#7C3AED', '#d1593bff', '#0a8585ff', '#915c0eff'];
@@ -2557,6 +2550,18 @@ const DashboardTab = () => {
                 })}
               </LineChart>
             </ResponsiveContainer>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-2.5 justify-center mt-5 px-2 border-t border-border/30 pt-4">
+            {(stats?.threatTrendTypes || []).map((type, index) => {
+              const colors = ['#0066FF', '#094e2bff', '#7C3AED', '#d1593bff', '#0a8585ff', '#915c0eff'];
+              const color = colors[index % colors.length];
+              return (
+                <div key={type} className="flex items-center gap-1.5 text-[9px] font-black uppercase text-text-secondary tracking-wider">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span>{type}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

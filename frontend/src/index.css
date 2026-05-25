@@ -556,6 +556,26 @@ textarea:focus {
   color: var(--red);
 }
 
+.badge-medium {
+  background: var(--yellow-soft);
+  color: var(--yellow);
+}
+
+.badge-low {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.badge-settled {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.badge-submitted {
+  background: var(--purple-soft);
+  color: var(--purple);
+}
+
 /* ── Timeline ── */
 .timeline::before {
   background: var(--border);
