@@ -1042,7 +1042,7 @@ const CaseMasterTab = () => {
           let refundStatusVal = '';
           if (caseRefund) {
             const isSinglePaidFallback = caseRefund.transactionId && (caseRefund.installments || []).length <= 1;
-            refundStatusVal = (caseRefund.status === 'Paid' || isSinglePaidFallback) ? 'Paid' : 'Pending';
+            refundStatusVal = (caseRefund.status?.toLowerCase() === 'paid' || isSinglePaidFallback) ? 'Paid' : 'Pending';
           }
           const isRefundNotPaid = refundStatusVal !== 'Paid';
           return isStatusNotCompleted && isRefundNotPaid;
@@ -4577,7 +4577,7 @@ const CaseMasterTab = () => {
                     { label: 'Priority', key: 'priority', width: 'w-[5%]', getVal: c => c.priority || '—' },
                     { label: 'Due Date', key: 'dueDate', width: 'w-[8%]', getVal: c => c.dueDate ? new Date(c.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—' },
                     { label: 'Status', key: 'status', width: 'w-[5%]', getVal: c => normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy) },
-                    { label: 'Refund', key: 'refund', width: 'w-[7%]', center: true, getVal: c => { const r = refundsList.find(x => x.caseId === c.caseId); if (!r) return 'No Refund'; const paid = r.transactionId && (r.installments || []).length <= 1; return (r.status === 'Paid' || paid) ? 'Paid' : 'Pending'; } },
+                    { label: 'Refund', key: 'refund', width: 'w-[7%]', center: true, getVal: c => { const r = refundsList.find(x => x.caseId === c.caseId); if (!r) return 'No Refund'; const paid = r.transactionId && (r.installments || []).length <= 1; return (r.status?.toLowerCase() === 'paid' || paid) ? 'Paid' : 'Pending'; } },
                     { label: 'Assigned To', key: 'assignedTo', width: 'w-[10%]', getVal: c => c.assignedTo || c.initiatedBy || '—' },
                     { label: 'Last Update', key: 'lastUpdateDate', width: 'w-[8%]', getVal: c => c.lastUpdateDate ? format(new Date(c.lastUpdateDate), 'dd/MM/yyyy') : '—' },
                   ].map(col => {
@@ -4793,7 +4793,7 @@ const CaseMasterTab = () => {
                     let refundStatus = '';
                     if (caseRefund) {
                       const isSinglePaidFallback = caseRefund.transactionId && (caseRefund.installments || []).length <= 1;
-                      refundStatus = (caseRefund.status === 'Paid' || isSinglePaidFallback) ? 'Paid' : 'Pending';
+                      refundStatus = (caseRefund.status?.toLowerCase() === 'paid' || isSinglePaidFallback) ? 'Paid' : 'Pending';
                     }
                     return (
                       <CaseRow
@@ -4925,11 +4925,11 @@ const CaseRow = memo(({
           const isAssigned = (c.assignedTo && c.assignedTo.trim() !== '') || (c.initiatedBy && c.initiatedBy.trim() !== '');
           const pct = (isAssigned && (c.progressPercentage || 0) < 25) ? 25 : (c.progressPercentage || 10);
           const badgeClass =
-            (displayStatus === 'Settled' || displayStatus === 'Closed' || displayStatus === 'Closure') ? 'bg-green-soft text-green border-green-soft' :
+            (displayStatus === 'Settled' || displayStatus === 'Closed' || displayStatus === 'Closure' || displayStatus === 'Settlement') ? 'bg-green-soft text-green border-green-soft' :
               displayStatus === 'Escalated' ? 'bg-red-soft text-red border-red-soft' :
                 displayStatus === 'Assigned' ? 'bg-blue-soft text-blue border-blue-soft' :
                   displayStatus === 'Negotiation' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
-                    displayStatus === 'Resolution' ? 'bg-purple-soft text-purple-400 border-purple-soft' :
+                    (displayStatus === 'Resolution' || displayStatus === 'Submitted') ? 'bg-purple-soft text-purple border-purple-soft' :
                       'bg-accent-soft text-accent border-accent-soft';
           return (
             <div className="flex flex-col gap-1.5">

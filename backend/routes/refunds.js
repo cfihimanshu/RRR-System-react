@@ -378,11 +378,15 @@ router.put('/:id', verifyToken, async (req, res) => {
         let mappedRefundStatus = '';
         const reqList = doc.requests && doc.requests.length > 0 ? doc.requests : [doc];
         
-        const hasPending = reqList.some(r => ['Pending Review', 'Pending Admin Approval', 'Pending Payment', 'Pending'].includes(r.status));
+        const hasPending = reqList.some(r => {
+          const s = r.status?.toLowerCase() || '';
+          return ['pending review', 'pending admin approval', 'pending payment', 'pending'].includes(s);
+        });
         const allPaid = reqList.every(r => {
-          if (r.status === 'Paid') return true;
+          const s = r.status?.toLowerCase() || '';
+          if (s === 'paid') return true;
           if (r.installments && r.installments.length > 0) {
-            return r.installments.every(inst => inst.status === 'Paid');
+            return r.installments.every(inst => inst.status?.toLowerCase() === 'paid');
           }
           return r.transactionId && r.paymentDate;
         });

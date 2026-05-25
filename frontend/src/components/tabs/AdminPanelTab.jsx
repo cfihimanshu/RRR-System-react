@@ -33,6 +33,10 @@ const AdminPanelTab = () => {
     setExpandedInstallments(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const filteredAllRefunds = React.useMemo(() => {
+    return allRefunds.filter(r => ['Pending Admin Approval', 'Pending Payment', 'Paid'].includes(r.status));
+  }, [allRefunds]);
+
   const groupRefundsByCase = (list) => {
     const groups = {};
     list.forEach(r => {
@@ -580,12 +584,12 @@ const AdminPanelTab = () => {
               </tr>
             </thead>
             <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
-              {allRefunds.length === 0 ? (
+              {filteredAllRefunds.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="px-6 py-12 text-center text-text-muted italic">No refund records found in the ledger.</td>
                 </tr>
               ) : (
-                groupRefundsByCase(allRefunds).map(g => {
+                groupRefundsByCase(filteredAllRefunds).map(g => {
                   const isExpanded = !!expandedCases[`all_${g.caseId}`];
                   return (
                     <React.Fragment key={g.caseId}>
