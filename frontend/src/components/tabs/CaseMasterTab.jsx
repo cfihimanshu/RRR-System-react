@@ -3126,6 +3126,7 @@ const CaseMasterTab = () => {
                             <option value="Submitted">Submitted</option>
                             <option value="On Hold">On Hold</option>
                             <option value="Converted">Converted</option>
+                            <option value="Completed">Completed</option>
                             <option value="Q/A not approved">Q/A not approved</option>
                           </select>
                         </div>

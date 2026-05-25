@@ -414,7 +414,7 @@ const AdminPanelTab = () => {
       </div>
 
       {/* SECTION 1: Refund Requests & Approvals */}
-      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border mb-10 max-w-5xl overflow-hidden">
+      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border mb-10 max-w-full overflow-hidden">
         <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
           <div className="w-10 h-10 bg-accent-soft rounded-2xl flex items-center justify-center text-accent">
             <span className="font-black text-lg">💰</span>
@@ -480,7 +480,7 @@ const AdminPanelTab = () => {
 
 
       {/* SECTION 3: Global Refund Audit Trail */}
-      <div id="refund-actions" className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-5xl overflow-hidden mt-10">
+      <div id="refund-actions" className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-full overflow-hidden mt-10">
         <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
           <div className="w-10 h-10 bg-purple-soft rounded-2xl flex items-center justify-center text-purple">
             <span className="font-black text-lg">📋</span>
