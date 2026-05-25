@@ -154,7 +154,7 @@ const NewCaseTab = () => {
           totalAmtPaid: editCase.totalAmtPaid || editCase.amountPaid || '',
           totalMouValue: editCase.totalMouValue || editCase.mouValue || '',
           amtInDispute: editCase.amtInDispute || editCase.disputeAmount || '',
-          dateOfLastPayment: formatDateForInput(editCase.dateOfLastPayment || editCase.lastUpdateDate),
+          dateOfLastPayment: formatDateForInput(editCase.dateOfLastPayment || ''),
           dueDate: formatDateForInput(editCase.dueDate || ''),
           initiatedBy: editCase.initiatedBy || editCase.initiator || '',
           accountable: editCase.accountable || '',
@@ -1155,10 +1155,16 @@ const NewCaseTab = () => {
                     disabled={user?.role?.toLowerCase() === 'staff'}
                   >
                     <option value="">-- Select --</option>
-                    {/* Only show Operations users in Initiated By dropdown for Admin/Ops */}
-                    {user?.role?.toLowerCase() !== 'staff' && userList.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
-                      <option key={u.email} value={u.fullName}>{u.fullName}</option>
-                    ))}
+                    {/* Only show Operations users in dropdown for Admin. For other roles (e.g. Operations), only show their own name. */}
+                    {user?.role?.toLowerCase() !== 'staff' && (
+                      user?.role?.toLowerCase() === 'admin'
+                        ? userList.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
+                            <option key={u.email} value={u.fullName}>{u.fullName}</option>
+                          ))
+                        : (user?.fullName && (
+                            <option value={user.fullName}>{user.fullName}</option>
+                          ))
+                    )}
                   </select>
                 </div>
                 <div>

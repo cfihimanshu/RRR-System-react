@@ -232,6 +232,7 @@ router.post('/', verifyToken, async (req, res) => {
       }
     }
 
+    if (global.clearStatsCache) global.clearStatsCache();
     const savedLog = progressDoc.updates[progressDoc.updates.length - 1];
     res.status(201).json(savedLog);
   } catch (error) {

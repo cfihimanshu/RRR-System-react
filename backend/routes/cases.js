@@ -407,15 +407,15 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
     const caseId = generateCaseId(req.body.brandName, req.body.companyName, allCases);
 
     // Auto-assign to initiator if provided
-    const forbiddenNames = ['staff', 'rajda mansuri', 'system'];
+    const forbiddenNames = ['staff', 'system'];
     let initiatedBy = forbiddenNames.includes(req.body.initiatedBy?.toLowerCase()) ? "" : (req.body.initiatedBy || "");
-    let assignedTo = forbiddenNames.includes(req.body.assignedTo?.toLowerCase()) ? "" : (req.body.assignedTo || initiatedBy || "");
+    let assignedTo = forbiddenNames.includes(req.body.assignedTo?.toLowerCase()) ? "" : (req.body.assignedTo || "");
 
-    // If we have an initiator, the case is no longer 'Unassigned' -> Set to Assigned
+    // If we have an assignee, the case is no longer 'Unassigned' -> Set to Assigned
     let currentStatus = req.body.currentStatus || 'Case Logged';
     let progressPercentage = req.body.progressPercentage || 0;
 
-    const isAssigned = (assignedTo && assignedTo.trim() !== '') || (initiatedBy && initiatedBy.trim() !== '');
+    const isAssigned = assignedTo && assignedTo.trim() !== '';
     if (isAssigned && (currentStatus === 'New' || currentStatus === 'Case Logged')) {
       currentStatus = 'Assigned';
       progressPercentage = 25;
@@ -566,6 +566,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       console.error('Error creating initial progress log:', err);
     }
 
+    if (global.clearStatsCache) global.clearStatsCache();
     res.status(201).json(newCase);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -599,6 +600,7 @@ router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations']), asyn
       caseId: 'Multiple'
     });
 
+    if (global.clearStatsCache) global.clearStatsCache();
     res.json({ message: `Successfully assigned ${caseIds.length} cases.` });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -622,20 +624,15 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
 
     const isAssigning = req.body.assignedTo && req.body.assignedTo !== existingCase.assignedTo;
     const isInitiating = req.body.initiatedBy && req.body.initiatedBy !== existingCase.initiatedBy;
-    const hasAssignee = (req.body.assignedTo && req.body.assignedTo.trim() !== '') || (existingCase.assignedTo && existingCase.assignedTo.trim() !== '');
-
-    // Only auto-upgrade to "Assigned" if there is an assignee/initiator AND we are not explicitly requesting a further advanced stage.
+    // Only auto-upgrade to "Assigned" if there is an assignee AND we are not explicitly requesting a further advanced stage.
     const requestedStatus = req.body.currentStatus;
     const isNewOrLogged = !requestedStatus || requestedStatus === 'New' || requestedStatus === 'Case Logged';
+
+    const hasAssignee = req.body.assignedTo && req.body.assignedTo.trim() !== '';
 
     if (hasAssignee && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged') && isNewOrLogged) {
       req.body.currentStatus = 'Assigned';
       req.body.progressPercentage = 25;
-    }
-
-    // Auto-populate assignedTo if initiatedBy is set but assignedTo is empty
-    if (req.body.initiatedBy && (!req.body.assignedTo || req.body.assignedTo.trim() === '')) {
-      req.body.assignedTo = req.body.initiatedBy;
     }
 
     // Strip immutable/system fields from update payload to prevent MongoDB errors
@@ -887,6 +884,7 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
       }).save();
     }
 
+    if (global.clearStatsCache) global.clearStatsCache();
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -929,6 +927,7 @@ router.delete('/:caseId', verifyToken, roleGuard(['Admin']), async (req, res) =>
       }
     } catch (err) { console.error('Delete Notification Error:', err); }
 
+    if (global.clearStatsCache) global.clearStatsCache();
     res.json({ message: 'Case and associated timeline deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -977,7 +976,7 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
         dateOfLastPayment: getVal(['dateoflastpayment', 'lastpaymentdate', 'paymentdate', 'lastpayment'], true),
         caseSummary: getVal(['summary', 'description', 'caseinfo', 'narrative', 'details']),
         clientAllegation: getVal(['allegation', 'clientallegation', 'claims']),
-        initiatedBy: ['staff', 'rajda mansuri'].includes(getVal(['initiatedby', 'salesperson', 'createdby', 'initiator'])?.toLowerCase()) ? '' : getVal(['initiatedby', 'salesperson', 'createdby', 'initiator']),
+        initiatedBy: ['staff'].includes(getVal(['initiatedby', 'salesperson', 'createdby', 'initiator'])?.toLowerCase()) ? '' : getVal(['initiatedby', 'salesperson', 'createdby', 'initiator']),
         servicesSold: getVal(['services', 'product', 'service', 'servicename']) ? [{
           serviceName: getVal(['services', 'product', 'service', 'servicename']),
           serviceAmount: getVal(['serviceamount', 'price', 'cost']),
@@ -988,7 +987,7 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
         }] : [],
         engagementNote: getVal(['engagementnote', 'notes', 'comments', 'engagement']),
         nextActionDate: getVal(['nextactiondate', 'nextfollowup', 'followup'], true),
-        assignedTo: ['staff', 'rajda mansuri'].includes(getVal(['assignedto', 'owner', 'assignee', 'handler'])?.toLowerCase()) ? '' : getVal(['assignedto', 'owner', 'assignee', 'handler']),
+        assignedTo: ['staff'].includes(getVal(['assignedto', 'owner', 'assignee', 'handler'])?.toLowerCase()) ? '' : getVal(['assignedto', 'owner', 'assignee', 'handler']),
         createdDate: getVal(['createddate', 'date', 'creationdate'], true) || new Date().toISOString()
       });
     });
@@ -1020,11 +1019,8 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
 
       row.caseId = generateCaseId(row.brandName, row.companyName, allCases);
 
-      // Sync assignment and status during import
-      if (row.initiatedBy && (!row.assignedTo || row.assignedTo.trim() === '')) {
-        row.assignedTo = row.initiatedBy;
-      }
-      if ((row.initiatedBy || row.assignedTo) && (!row.currentStatus || row.currentStatus === 'New' || row.currentStatus === 'Case Logged')) {
+      // Sync assignment and status during import (only upgrade if there is an explicit assignedTo)
+      if (row.assignedTo && row.assignedTo.trim() !== '' && (!row.currentStatus || row.currentStatus === 'New' || row.currentStatus === 'Case Logged')) {
         row.currentStatus = 'Assigned';
         row.progressPercentage = 25;
       }
@@ -1057,6 +1053,7 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
       await Timeline.insertMany(timelineEntries);
     }
 
+    if (global.clearStatsCache) global.clearStatsCache();
     res.json({
       message: `Import completed: ${finalCases.length} cases imported, ${skippedCount} duplicates skipped.`,
       imported: finalCases.length,

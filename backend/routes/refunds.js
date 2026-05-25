@@ -298,6 +298,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
       companyName: matchingCase ? matchingCase.companyName : '',
       requests: undefined
     };
+    if (global.clearStatsCache) global.clearStatsCache();
     res.status(201).json(responseObj);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -484,6 +485,7 @@ router.put('/:id', verifyToken, async (req, res) => {
       companyName: matchingCase ? matchingCase.companyName : '',
       requests: undefined
     };
+    if (global.clearStatsCache) global.clearStatsCache();
     res.json(responseObj);
   } catch (error) {
     res.status(500).json({ error: error.message });
