@@ -15,6 +15,12 @@ const reportSchema = new mongoose.Schema({
   sodCaseIds: [String],
   sodTaskIds: [String],
   
+  // GPS & Selfie Fields (SOD verification)
+  selfieUrl: String,
+  latitude: Number,
+  longitude: Number,
+  gpsAddress: String,
+  
   // EOD Fields
   checkOutTime: String,
   workDuration: String,

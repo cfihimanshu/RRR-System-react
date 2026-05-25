@@ -18,7 +18,9 @@ import {
   Smile,
   X,
   History,
-  Download
+  Download,
+  Camera,
+  MapPin
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -281,6 +283,43 @@ const SodEodReportTab = () => {
                   </div>
                   <div className="bg-blue-50 border-2 border-blue-300 rounded-[1.5rem] p-6 text-sm text-blue-800 font-black tracking-tight">
                     {selectedReport.priorityArea}
+                  </div>
+                </div>
+              )}
+
+              {/* GPS & Selfie Verification */}
+              {selectedReport.selfieUrl && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-bg-input rounded-3xl p-6 border-2 border-border shadow-sm">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-text-muted">
+                      <MapPin size={18} className="text-accent" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">GPS Location Verified</span>
+                    </div>
+                    <div className="bg-bg-card p-4 rounded-xl border border-border">
+                      <div className="text-[9px] font-black text-text-muted uppercase mb-1">Coordinates</div>
+                      <div className="font-mono text-[11px] font-bold text-text-primary">
+                        {selectedReport.latitude?.toFixed(6)}°, {selectedReport.longitude?.toFixed(6)}°
+                      </div>
+                      {selectedReport.latitude && selectedReport.longitude && (
+                        <a
+                          href={`https://www.google.com/maps?q=${selectedReport.latitude},${selectedReport.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-accent hover:text-accent-hover transition-all"
+                        >
+                          <MapPin size={10} /> View on Google Maps →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="flex items-center gap-2 text-text-muted self-start mb-3">
+                      <Camera size={18} className="text-accent" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Captured Selfie</span>
+                    </div>
+                    <div className="w-40 h-30 rounded-xl overflow-hidden border border-border shadow-md bg-black">
+                      <img src={selectedReport.selfieUrl} alt="GPS Selfie" className="w-full h-full object-cover" />
+                    </div>
                   </div>
                 </div>
               )}

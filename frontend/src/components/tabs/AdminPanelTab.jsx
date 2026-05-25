@@ -20,6 +20,29 @@ const AdminPanelTab = () => {
   const [totalLogsCount, setTotalLogsCount] = useState(0);
   const { user } = useContext(AuthContext);
 
+  const [expandedCases, setExpandedCases] = useState({});
+
+  const toggleCaseExpand = (caseId) => {
+    setExpandedCases(prev => ({ ...prev, [caseId]: !prev[caseId] }));
+  };
+
+  const groupRefundsByCase = (list) => {
+    const groups = {};
+    list.forEach(r => {
+      if (!groups[r.caseId]) {
+        groups[r.caseId] = {
+          caseId: r.caseId,
+          companyName: r.companyName || '',
+          requests: [],
+          totalAmount: 0
+        };
+      }
+      groups[r.caseId].requests.push(r);
+      groups[r.caseId].totalAmount += Number(r.amount) || 0;
+    });
+    return Object.values(groups);
+  };
+
   const fetchPendingRefunds = async () => {
     try {
       const res = await api.get('/refunds?status=Pending Admin Approval');
@@ -198,21 +221,25 @@ const AdminPanelTab = () => {
           <span>Sync Database</span> 🔄
         </button> */}
       </div>
-      {/* SECTION 2: Create New User */}
+      {/* SECTION 2: Create New User & Change User Role Layout */}
       <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-full my-8 overflow-hidden">
-        <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
-          <div className="w-10 h-10 bg-blue-soft rounded-2xl flex items-center justify-center text-blue">
-            <span className="font-black text-lg">👤</span>
-          </div>
-          <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">Add New User</h2>
-        </div>
-
-        <div className="p-8 grid grid-cols-1 xl:grid-cols-[minmax(320px,1fr)_minmax(430px,1.3fr)] gap-8">
-          <div className="bg-bg-card rounded-[2rem] border-2 border-border p-6">
-            <form className="space-y-8" onSubmit={handleCreateUser}>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+        <div className="p-8 grid grid-cols-1 xl:grid-cols-12 gap-8">
+          {/* Left Form: Add New User */}
+          <div className="xl:col-span-5 bg-bg-card rounded-[2rem] border-2 border-border p-6 flex flex-col justify-between min-h-[480px]">
+            <div>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-blue-soft rounded-2xl flex items-center justify-center text-blue">
+                  <span className="font-black text-lg">👤</span>
+                </div>
                 <div>
-                  <label className={labelClass}> FULL NAME</label>
+                  <h3 className="text-base font-black text-text-primary uppercase tracking-tight">Add New User</h3>
+                  <p className="text-[10px] text-text-muted uppercase tracking-[0.2em] mt-1">Register a new system user account</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateUser} className="space-y-4">
+                <div>
+                  <label className={labelClass}>Full Name</label>
                   <input
                     type="text"
                     className={inputClass}
@@ -222,33 +249,32 @@ const AdminPanelTab = () => {
                     required
                   />
                 </div>
-                <div>
-                  <label className={labelClass}>EMAIL</label>
-                  <input
-                    type="email"
-                    className={inputClass}
-                    placeholder="user@rrr-system.com"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    required
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Email Address</label>
+                    <input
+                      type="email"
+                      className={inputClass}
+                      placeholder="user@rrr-system.com"
+                      value={formData.email}
+                      onChange={e => setFormData({ ...formData, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Secure Password</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="Secure password"
+                      value={formData.password}
+                      onChange={e => setFormData({ ...formData, password: e.target.value })}
+                      required
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className={labelClass}>PASSWORD</label>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    placeholder="Secure password"
-                    value={formData.password}
-                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-120 items-end">
-                <div>
-                  <label className={labelClass}>ROLE</label>
+                  <label className={labelClass}>Assigned System Role</label>
                   <select
                     className={inputClass}
                     value={formData.role}
@@ -264,85 +290,89 @@ const AdminPanelTab = () => {
                     <option value="Legal">Legal</option>
                   </select>
                 </div>
-                <div className="flex justify-end">
-                  <button type="submit" className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 rounded-2xl shadow-xl shadow-orange-900/20 transition-all text-xs uppercase tracking-[0.2em] active:scale-95">
-                    CREATE USER
+                
+                <div className="pt-4">
+                  <button type="submit" className="w-full bg-accent hover:bg-accent-hover text-white font-black py-3.5 rounded-2xl shadow-lg shadow-orange-955/20 transition-all text-xs uppercase tracking-[0.2em] active:scale-95">
+                    Create User Account
                   </button>
                 </div>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
 
-          <div className="bg-bg-card rounded-[2rem] border-2 border-border p-6 overflow-x-auto">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-accent-soft rounded-2xl flex items-center justify-center text-accent">
-                <span className="font-black text-lg">🔧</span>
+          {/* Right Table: Change User Role */}
+          <div className="xl:col-span-7 bg-bg-card rounded-[2rem] border-2 border-border p-6 flex flex-col justify-between min-h-[480px]">
+            <div>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-accent-soft rounded-2xl flex items-center justify-center text-accent">
+                  <span className="font-black text-lg">🔧</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-text-primary uppercase tracking-tight">Change User Role</h3>
+                  <p className="text-[10px] text-text-muted uppercase tracking-[0.2em] mt-1">Select a new role and submit to update a user.</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-black text-text-primary uppercase tracking-tight">Change User Role</h3>
-                <p className="text-[10px] text-text-muted uppercase tracking-[0.2em] mt-1">Select a new role and submit to update a user.</p>
-              </div>
-            </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[600px]">
-                <thead>
-                  <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
-                    <th className="px-4 py-4">User Name</th>
-                    <th className="px-4 py-4">Role</th>
-                    <th className="px-4 py-4 text-center">Records Module</th>
-                    <th className="px-4 py-4">Change Role</th>
-                    <th className="px-4 py-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
-                  {users.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="px-4 py-10 text-center text-text-muted uppercase tracking-[0.2em]">No users available for role change.</td>
+              <div className="overflow-y-auto max-h-[340px] pr-1 scrollbar-thin border border-border/30 rounded-2xl bg-bg-secondary/20">
+                <table className="w-full text-left border-collapse min-w-[550px]">
+                  <thead className="sticky top-0 z-10 bg-bg-card shadow-sm">
+                    <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
+                      <th className="px-4 py-3.5">User Name</th>
+                      <th className="px-4 py-3.5">Role</th>
+                      <th className="px-4 py-3.5 text-center">Records Module</th>
+                      <th className="px-4 py-3.5">Change Role</th>
+                      <th className="px-4 py-3.5 text-right">Action</th>
                     </tr>
-                  ) : (
-                    users.map(u => (
-                      <tr key={u._id} className="hover:bg-bg-input/30 transition-all">
-                        <td className="px-4 py-4 font-black text-text-primary uppercase tracking-tight">{u.fullName}</td>
-                        <td className="px-4 py-4 font-bold text-text-muted italic">{u.role}</td>
-                        <td className="px-4 py-4 text-center">
-                          <button
-                            onClick={() => handleToggleRecordsAccess(u._id, u.canAccessRecords)}
-                            className={`px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm ${u.canAccessRecords
-                              ? 'bg-green-soft text-green border border-green-soft hover:bg-green hover:text-white'
-                              : 'bg-bg-input text-text-muted border border-border hover:border-accent hover:text-accent'
-                              }`}
-                          >
-                            {u.canAccessRecords ? 'ENABLED' : 'DISABLED'}
-                          </button>
-                        </td>
-                        <td className="px-4 py-4">
-                          <select
-                            className={inputClass}
-                            value={roleUpdates[u._id] || u.role}
-                            onChange={e => handleChangeUserRole(u._id, e.target.value)}
-                          >
-                            <option value="Super Admin">Super Admin</option>
-                            <option value="Admin">Admin</option>
-                            <option value="Operations">Operations</option>
-                            <option value="Reviewer">Reviewer</option>
-                            <option value="Accountant">Accountant</option>
-                            <option value="Staff">Staff</option>
-                          </select>
-                        </td>
-                        <td className="px-4 py-4 text-right">
-                          <button
-                            onClick={() => handleUpdateUserRole(u._id)}
-                            className="bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-2xl transition-all active:scale-95 whitespace-nowrap"
-                          >
-                            Update Role
-                          </button>
-                        </td>
+                  </thead>
+                  <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
+                    {users.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="px-4 py-10 text-center text-text-muted uppercase tracking-[0.2em]">No users available.</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      users.map(u => (
+                        <tr key={u._id} className="hover:bg-bg-input/30 transition-all">
+                          <td className="px-4 py-3 font-black text-text-primary uppercase tracking-tight">{u.fullName}</td>
+                          <td className="px-4 py-3 font-bold text-text-muted italic">{u.role}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => handleToggleRecordsAccess(u._id, u.canAccessRecords)}
+                              className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all shadow-sm ${u.canAccessRecords
+                                ? 'bg-green-soft text-green border border-green-soft hover:bg-green hover:text-white'
+                                : 'bg-bg-input text-text-muted border border-border hover:border-accent hover:text-accent'
+                                }`}
+                            >
+                              {u.canAccessRecords ? 'ENABLED' : 'DISABLED'}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 min-w-[130px]">
+                            <select
+                              className="w-full bg-bg-input border border-border rounded-xl px-2 py-1.5 text-[10px] text-text-primary focus:border-accent outline-none transition-all font-bold"
+                              value={roleUpdates[u._id] || u.role}
+                              onChange={e => handleChangeUserRole(u._id, e.target.value)}
+                            >
+                              <option value="Super Admin">Super Admin</option>
+                              <option value="Admin">Admin</option>
+                              <option value="Operations">Operations</option>
+                              <option value="Reviewer">Reviewer</option>
+                              <option value="Accountant">Accountant</option>
+                              <option value="Staff">Staff</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              onClick={() => handleUpdateUserRole(u._id)}
+                              className="bg-accent hover:bg-accent-hover text-white text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-xl transition-all active:scale-95 whitespace-nowrap"
+                            >
+                              Update
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -357,9 +387,9 @@ const AdminPanelTab = () => {
           <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">Missed EOD Users</h2>
         </div>
 
-        <div className="table-wrap overflow-x-auto scrollbar-thin">
+        <div className="overflow-y-auto max-h-[300px] scrollbar-thin border-b border-border">
           <table className="w-full text-left border-collapse min-w-[600px]">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-bg-card shadow-sm">
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                 <th className="px-4 py-5 whitespace-nowrap">User Name</th>
                 <th className="px-4 py-5 whitespace-nowrap">Email</th>
@@ -422,9 +452,9 @@ const AdminPanelTab = () => {
           <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">Pending Refunds</h2>
         </div>
 
-        <div className="table-wrap overflow-x-auto scrollbar-thin">
+        <div className="overflow-y-auto max-h-[350px] scrollbar-thin border-b border-border">
           <table className="w-full text-left border-collapse min-w-[800px]">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-bg-card shadow-sm">
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                 <th className="px-4 py-5 whitespace-nowrap">Submission Date</th>
                 <th className="px-4 py-5 whitespace-nowrap">Case Link</th>
@@ -446,31 +476,74 @@ const AdminPanelTab = () => {
                   </td>
                 </tr>
               ) : (
-                pendingRefunds.map(r => (
-                  <tr key={r._id} className="hover:bg-bg-input/30 transition-all group">
-                    <td className="px-4 py-5 text-text-muted font-bold italic">
-                      {new Date(r.timestamp).toLocaleDateString('en-IN')}
-                    </td>
-                    <td className="px-4 py-5">
-                      <button
-                        onClick={() => { setSelectedRefund(r); setIsDetailOpen(true); }}
-                        className="bg-accent-soft text-accent px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all shadow-sm"
+                groupRefundsByCase(pendingRefunds).map(g => {
+                  const isExpanded = !!expandedCases[g.caseId];
+                  return (
+                    <React.Fragment key={g.caseId}>
+                      {/* Parent Case Row */}
+                      <tr 
+                        onClick={() => toggleCaseExpand(g.caseId)}
+                        className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none"
                       >
-                        {r.caseId}
-                      </button>
-                    </td>
-                    <td className="px-4 py-5 text-center">
-                      <span className="text-lg font-black text-green tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</span>
-                    </td>
-                    <td className="px-4 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">{r.requestedByName || r.requestedBy}</td>
-                    <td className="px-4 py-5 text-center">
-                      <div className="flex justify-center gap-3">
-                        <button onClick={() => handleApproveRefund(r._id)} className="bg-green hover:bg-green-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-lg shadow-green-900/20 uppercase tracking-widest transition-all active:scale-95">Approve</button>
-                        <button onClick={() => handleRejectRefund(r._id)} className="bg-red hover:bg-red-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-lg shadow-red-900/20 uppercase tracking-widest transition-all active:scale-95">Reject</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                        <td className="px-4 py-5 text-text-muted font-bold">
+                          <span className="inline-flex items-center gap-2">
+                            <span className="text-[12px] font-black text-accent">{isExpanded ? '▼' : '▶'}</span>
+                            Group ({g.requests.length})
+                          </span>
+                        </td>
+                        <td className="px-4 py-5">
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="bg-accent-soft text-accent px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all shadow-sm">
+                              {g.caseId}
+                            </span>
+                            {g.companyName && (
+                              <span className="text-[10px] text-text-muted font-bold tracking-normal normal-case ml-1">{g.companyName}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-5 text-center">
+                          <span className="text-lg font-black text-green tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</span>
+                        </td>
+                        <td className="px-4 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
+                          {g.requests.length === 1 ? (g.requests[0].requestedByName || g.requests[0].requestedBy) : 'Multiple Requesters'}
+                        </td>
+                        <td className="px-4 py-5 text-center">
+                          <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                            {isExpanded ? 'Hide Details' : 'Show Requests'}
+                          </span>
+                        </td>
+                      </tr>
+                      {/* Expanded Sub-Rows for each individual request */}
+                      {isExpanded && g.requests.map((r, idx) => (
+                        <tr key={r._id} className="bg-bg-input/20 hover:bg-bg-input/35 transition-all border-l-4 border-accent">
+                          <td className="px-4 py-5 text-text-muted font-bold italic pl-8">
+                            Request #{idx + 1} — {new Date(r.timestamp).toLocaleDateString('en-IN')}
+                          </td>
+                          <td className="px-4 py-5">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedRefund(r); setIsDetailOpen(true); }}
+                              className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all shadow-sm"
+                            >
+                              View Details 🔍
+                            </button>
+                          </td>
+                          <td className="px-4 py-5 text-center">
+                            <span className="text-base font-black text-green tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</span>
+                          </td>
+                          <td className="px-4 py-5 font-black text-text-secondary uppercase text-[10px] tracking-wider">
+                            {r.requestedByName || r.requestedBy}
+                          </td>
+                          <td className="px-4 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-center gap-3">
+                              <button onClick={() => handleApproveRefund(r._id)} className="bg-green hover:bg-green-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-lg shadow-green-900/20 uppercase tracking-widest transition-all active:scale-95">Approve</button>
+                              <button onClick={() => handleRejectRefund(r._id)} className="bg-red hover:bg-red-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-lg shadow-red-900/20 uppercase tracking-widest transition-all active:scale-95">Reject</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -488,9 +561,9 @@ const AdminPanelTab = () => {
           <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">Refund Actions</h2>
         </div>
 
-        <div className="table-wrap overflow-x-auto scrollbar-thin">
+        <div className="overflow-y-auto max-h-[350px] scrollbar-thin border-b border-border">
           <table className="w-full text-left border-collapse min-w-[1000px]">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-bg-card shadow-sm">
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                 <th className="px-4 py-5 whitespace-nowrap">Case ID</th>
                 <th className="px-4 py-5 whitespace-nowrap">Total Amount</th>
@@ -505,32 +578,77 @@ const AdminPanelTab = () => {
                   <td colSpan="5" className="px-6 py-12 text-center text-text-muted italic">No refund records found in the ledger.</td>
                 </tr>
               ) : (
-                allRefunds.map(r => (
-                  <tr key={r._id} className="hover:bg-bg-input/30 transition-all">
-                    <td className="px-4 py-5 font-black text-accent uppercase tracking-tighter">
-                      <div>{r.caseId}</div>
-                      {r.companyName && (
-                        <div className="text-[10px] text-text-muted font-bold tracking-normal normal-case mt-0.5">{r.companyName}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-5 font-black text-green">₹{Number(r.amount).toLocaleString('en-IN')}</td>
-                    <td className="px-4 py-5 font-bold uppercase text-[10px]">{r.requestedByName || r.requestedBy}</td>
-                    <td className="px-4 py-5 text-center">
-                      <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${r.status === 'Paid' ? 'bg-green-soft text-green border-green-soft' :
-                        r.status === 'Rejected' ? 'bg-red-soft text-red border-red-soft' :
-                          r.status === 'Pending Admin Approval' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
-                            'bg-bg-input text-text-muted border-border'
-                        }`}>
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-5 text-center">
-                      <button onClick={() => { setSelectedRefund(r); setIsDetailOpen(true); }} className="p-2 bg-bg-input hover:bg-bg-card-hover rounded-xl text-text-primary transition-all border border-border">
-                        <Eye size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                groupRefundsByCase(allRefunds).map(g => {
+                  const isExpanded = !!expandedCases[`all_${g.caseId}`];
+                  return (
+                    <React.Fragment key={g.caseId}>
+                      {/* Parent Case Row */}
+                      <tr 
+                        onClick={() => toggleCaseExpand(`all_${g.caseId}`)}
+                        className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none"
+                      >
+                        <td className="px-4 py-5 font-black text-accent uppercase tracking-tighter">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[12px] font-black text-accent">{isExpanded ? '▼' : '▶'}</span>
+                            <div>{g.caseId}</div>
+                          </div>
+                          {g.companyName && (
+                            <div className="text-[10px] text-text-muted font-bold tracking-normal normal-case mt-0.5 ml-5">{g.companyName}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-5 font-black text-green">
+                          <div className="text-lg tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</div>
+                          <div className="text-[9px] text-text-muted font-bold mt-1 ml-0.5">{g.requests.length} Requests</div>
+                        </td>
+                        <td className="px-4 py-5 font-bold uppercase text-[10px]">
+                          {g.requests.length === 1 ? (g.requests[0].requestedByName || g.requests[0].requestedBy) : 'Multiple Requesters'}
+                        </td>
+                        <td className="px-4 py-5 text-center">
+                          <div className="flex flex-wrap justify-center gap-1 max-w-[150px] mx-auto">
+                            {[...new Set(g.requests.map(r => r.status))].map(status => (
+                              <span key={status} className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border ${status === 'Paid' ? 'bg-green-soft text-green border-green-soft' :
+                                status === 'Rejected' ? 'bg-red-soft text-red border-red-soft' :
+                                  status === 'Pending Admin Approval' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
+                                    'bg-bg-input text-text-muted border-border'
+                                }`}>
+                                {status}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-5 text-center">
+                          <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                            {isExpanded ? 'Hide' : 'Expand'}
+                          </span>
+                        </td>
+                      </tr>
+                      {/* Child Request Rows */}
+                      {isExpanded && g.requests.map((r, idx) => (
+                        <tr key={r._id} className="bg-bg-input/20 hover:bg-bg-input/35 transition-all border-l-4 border-accent">
+                          <td className="px-4 py-5 font-black text-accent uppercase tracking-tighter pl-8">
+                            <div className="text-[10px] text-text-muted font-bold">Request #{idx + 1} — {new Date(r.timestamp).toLocaleDateString('en-IN')}</div>
+                          </td>
+                          <td className="px-4 py-5 font-black text-green">₹{Number(r.amount).toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-5 font-bold uppercase text-[10px] text-text-secondary">{r.requestedByName || r.requestedBy}</td>
+                          <td className="px-4 py-5 text-center">
+                            <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${r.status === 'Paid' ? 'bg-green-soft text-green border-green-soft' :
+                              r.status === 'Rejected' ? 'bg-red-soft text-red border-red-soft' :
+                              r.status === 'Pending Admin Approval' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
+                                'bg-bg-input text-text-muted border-border'
+                              }`}>
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => { setSelectedRefund(r); setIsDetailOpen(true); }} className="p-2 bg-bg-input hover:bg-bg-card-hover rounded-xl text-text-primary transition-all border border-border">
+                              <Eye size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -557,9 +675,9 @@ const AdminPanelTab = () => {
           </button>
         </div>
 
-        <div className="table-wrap overflow-x-auto scrollbar-thin">
+        <div className="overflow-y-auto max-h-[450px] scrollbar-thin border-b border-border">
           <table className="w-full text-left border-collapse min-w-[1100px]">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-bg-card shadow-sm">
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                 <th className="px-6 py-5 w-[15%]">Timestamp</th>
                 <th className="px-6 py-5 w-[15%]">User Account</th>
@@ -813,11 +931,11 @@ const AdminPanelTab = () => {
                     </div>
                     <div>
                       <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Transaction UTR</p>
-                      <p className="font-mono font-black text-accent select-all tracking-wider uppercase">{refundToRender.transactionId || '—'}</p>
+                      <p className="font-mono font-black text-accent select-all tracking-wider uppercase break-all">{refundToRender.transactionId || '—'}</p>
                     </div>
                     <div>
                       <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Paid By</p>
-                      <p className="text-text-primary font-black uppercase text-[10px] tracking-wider">{refundToRender.paidBy || '—'}</p>
+                      <p className="text-text-primary font-black uppercase text-[10px] tracking-wider break-all">{refundToRender.paidBy || '—'}</p>
                     </div>
                     {refundToRender.paymentProof && (
                       <div className="md:col-span-2 lg:col-span-3 border-t border-border/50 pt-6">

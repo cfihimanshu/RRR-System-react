@@ -12,6 +12,9 @@ import {
   IndianRupee,
   CheckCircle,
   Clock,
+  Camera,
+  MapPin,
+  RefreshCw,
   Calendar,
   Folder,
   FileText,
@@ -155,8 +158,94 @@ const DashboardTab = () => {
   });
 
   const [expandedTaskIds, setExpandedTaskIds] = useState([]);
+  const [selfie, setSelfie] = useState('');
+  const [coords, setCoords] = useState(null);
+  const [gpsStatus, setGpsStatus] = useState('idle');
+  const [gpsError, setGpsError] = useState('');
+  const [cameraStream, setCameraStream] = useState(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const videoRef = React.useRef(null);
+
+  const startCamera = async () => {
+    try {
+      setIsCameraActive(true);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 300, facingMode: 'user' } });
+      setCameraStream(stream);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 100);
+    } catch (err) {
+      console.error('Camera access failed:', err);
+      setIsCameraActive(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setIsCameraActive(false);
+  };
+
+  const captureSelfie = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 300;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      setSelfie(dataUrl);
+      stopCamera();
+      toast.success('Selfie captured successfully!');
+    }
+  };
+
+  const fetchGPSLocation = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus('error');
+      setGpsError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setGpsStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCoords({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+        setGpsStatus('success');
+      },
+      (err) => {
+        console.error('GPS fetch failed:', err);
+        setGpsStatus('error');
+        setGpsError(err.message || 'Permission denied or timed out');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  useEffect(() => {
+    if (isReportModalOpen && (reportType === 'SOD' || reportType === 'EOD')) {
+      setSelfie('');
+      setCoords(null);
+      setGpsStatus('idle');
+      setGpsError('');
+      fetchGPSLocation();
+      startCamera();
+    } else {
+      stopCamera();
+    }
+  }, [isReportModalOpen, reportType]);
+
   const [isViolationsModalOpen, setIsViolationsModalOpen] = useState(false);
   const [violationType, setViolationType] = useState('SOD');
+  const [dueCasesTab, setDueCasesTab] = useState('today');
+  const [selectedDueCaseDetails, setSelectedDueCaseDetails] = useState(null);
 
   const openViolationsModal = (type) => {
     setViolationType(type);
@@ -171,7 +260,7 @@ const DashboardTab = () => {
 
   const fetchUserCases = async () => {
     try {
-      const res = await api.get('/cases/summary?limit=100'); // Limit for dashboard preview
+      const res = await api.get('/cases/summary?limit=1000'); // Limit for dashboard preview
       setUserCases(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
@@ -220,6 +309,45 @@ const DashboardTab = () => {
   const getTodayDateStr = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const getFilteredDueCases = (tab) => {
+    const today = new Date();
+    const getLocalDateString = (d) => {
+      const offset = d.getTimezoneOffset();
+      const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+      return localDate.toISOString().split('T')[0];
+    };
+
+    const todayStr = getLocalDateString(today);
+
+    // Calculate week start and end (Monday to Sunday)
+    const currentDay = today.getDay();
+    // In javascript 0 is Sunday. We want Monday to be 1st day.
+    const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+    const monday = new Date(today);
+    monday.setDate(diff);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    const mondayStr = getLocalDateString(monday);
+    const sundayStr = getLocalDateString(sunday);
+
+    const currentMonthPrefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+    return userCases.filter(c => {
+      if (!c.dueDate) return false;
+      const cleanDueDate = c.dueDate.split('T')[0];
+
+      if (tab === 'today') {
+        return cleanDueDate === todayStr;
+      } else if (tab === 'thisWeek') {
+        return cleanDueDate >= mondayStr && cleanDueDate <= sundayStr;
+      } else if (tab === 'thisMonth') {
+        return cleanDueDate.startsWith(currentMonthPrefix);
+      }
+      return false;
+    });
   };
 
   const fetchTodayReports = async () => {
@@ -637,6 +765,21 @@ const DashboardTab = () => {
     setIsSubmitting(true);
     const loadingToast = toast.loading(`Submitting ${reportType} report...`);
     try {
+      if (reportType === 'SOD' || reportType === 'EOD') {
+        if (!selfie) {
+          toast.dismiss(loadingToast);
+          setIsSubmitting(false);
+          toast.error(`Please capture a GPS selfie before submitting your ${reportType}!`);
+          return;
+        }
+        if (gpsStatus !== 'success' || !coords) {
+          toast.dismiss(loadingToast);
+          setIsSubmitting(false);
+          toast.error(`Please ensure GPS location tracking is successful before submitting your ${reportType}!`);
+          return;
+        }
+      }
+
       const d = new Date();
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const payload = {
@@ -651,7 +794,12 @@ const DashboardTab = () => {
         workSummary: reportType === 'EOD' ? reportFormData.workSummary : '',
         completionStatus: reportType === 'EOD' ? reportFormData.completionStatus : 'Incomplete',
         progressScore: reportType === 'EOD' ? reportFormData.progressScore : '',
-        moodEnergy: reportType === 'EOD' ? reportFormData.moodEnergy : ''
+        moodEnergy: reportType === 'EOD' ? reportFormData.moodEnergy : '',
+        // GPS & Selfie verification fields
+        selfieUrl: (reportType === 'SOD' || reportType === 'EOD') ? selfie : '',
+        latitude: (reportType === 'SOD' || reportType === 'EOD') && coords ? coords.latitude : null,
+        longitude: (reportType === 'SOD' || reportType === 'EOD') && coords ? coords.longitude : null,
+        gpsAddress: (reportType === 'SOD' || reportType === 'EOD') && coords ? `Latitude: ${coords.latitude.toFixed(6)}, Longitude: ${coords.longitude.toFixed(6)}` : ''
       };
 
       await api.post('/reports', payload);
@@ -845,6 +993,36 @@ const DashboardTab = () => {
                   )}
                 </>
               )}
+
+              {viewingReport.selfieUrl && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-bg-secondary rounded-xl p-8 border-2 border-border shadow-sm">
+                  <div className="space-y-4">
+                    <div className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-2 flex items-center gap-2"><MapPin size={16} /> GPS Location Verified</div>
+                    <div className="bg-bg-input rounded-2xl p-5 border border-border">
+                      <div className="text-[10px] font-black text-text-muted uppercase mb-1">Coordinates</div>
+                      <div className="font-mono text-xs font-black text-text-primary">
+                        {viewingReport.latitude?.toFixed(6)}°, {viewingReport.longitude?.toFixed(6)}°
+                      </div>
+                      {viewingReport.latitude && viewingReport.longitude && (
+                        <a
+                          href={`https://www.google.com/maps?q=${viewingReport.latitude},${viewingReport.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-accent hover:text-accent-hover transition-all"
+                        >
+                          <MapPin size={12} /> View on Google Maps →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 self-start flex items-center gap-2"><Camera size={16} /> Captured GPS Selfie</div>
+                    <div className="w-48 h-36 rounded-xl overflow-hidden border border-border shadow-md bg-black">
+                      <img src={viewingReport.selfieUrl} alt="GPS Verification Selfie" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="p-8 border-t-2 border-border flex justify-end bg-bg-secondary">
               <button onClick={() => setViewingReport(null)} className="px-12 py-4 bg-accent text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] hover:bg-accent-hover transition-all shadow-xl shadow-orange-900/20 active:scale-95">Acknowledge</button>
@@ -898,6 +1076,145 @@ const DashboardTab = () => {
                 </div>
               </div>
 
+              {(reportType === 'SOD' || reportType === 'EOD') && (
+                <div className="flex flex-col gap-6 bg-bg-secondary/40 p-6 rounded-3xl border-2 border-border">
+                  {/* GPS Tracking Panel */}
+                  <div className="p-5 bg-bg-card rounded-2xl border border-border shadow-sm w-full">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] flex items-center gap-2">
+                          <MapPin size={14} className="text-accent" /> GPS Verification
+                        </label>
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+                            <MapPin size={20} />
+                            {gpsStatus === 'success' && (
+                              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500"></span>
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-xs font-black uppercase text-text-primary">
+                              {gpsStatus === 'loading' && 'Acquiring Satellites...'}
+                              {gpsStatus === 'success' && 'Coordinates Locked'}
+                              {gpsStatus === 'error' && 'Satellite Lock Failed'}
+                              {gpsStatus === 'idle' && 'GPS Inactive'}
+                            </div>
+                            <div className="text-[10px] font-bold text-text-muted mt-0.5 leading-relaxed">
+                              {gpsStatus === 'loading' && 'Querying browser geolocation telemetry...'}
+                              {gpsStatus === 'success' && coords && (
+                                <div className="font-mono text-[10px] text-green-400 font-bold bg-green-500/10 px-2.5 py-0.5 rounded-md mt-1 inline-block border border-green-500/20">
+                                  LAT: {coords.latitude.toFixed(6)} | LNG: {coords.longitude.toFixed(6)}
+                                </div>
+                              )}
+                              {gpsStatus === 'error' && (
+                                <span className="text-red-400 font-bold block text-[9px]">{gpsError || 'Please enable GPS permissions.'}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center sm:self-end">
+                        {gpsStatus === 'error' && (
+                          <button
+                            type="button"
+                            onClick={fetchGPSLocation}
+                            className="w-full sm:w-auto flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl text-[10px] font-black uppercase tracking-wider text-accent border border-accent/20 bg-accent/5 hover:bg-accent hover:text-white transition-all active:scale-95"
+                          >
+                            <RefreshCw size={12} className="animate-spin" /> Retry GPS Lock
+                          </button>
+                        )}
+                        {gpsStatus === 'success' && (
+                          <div className="py-2 px-4 bg-green-500/5 rounded-xl border border-green-500/10 text-center">
+                            <span className="text-[9px] font-black text-green-400 uppercase tracking-widest flex items-center justify-center gap-1.5">
+                              <Check size={12} strokeWidth={3} className="text-green-400" /> Location Locked
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Selfie Verification Panel */}
+                  <div className="flex flex-col items-center p-4 sm:p-6 bg-bg-card rounded-2xl border border-border shadow-sm w-full">
+                    <label className="block text-[10px] font-black text-text-muted uppercase mb-4 tracking-[0.2em] flex items-center gap-2 self-start ml-1">
+                      <Camera size={14} className="text-accent" /> GPS Selfie Capture
+                    </label>
+
+                    <div className="w-full flex flex-col items-center mt-1">
+                      {selfie ? (
+                        <div className="w-full flex flex-col items-center">
+                          <div className="w-full max-w-[480px] aspect-[4/3] rounded-2xl overflow-hidden border border-border shadow-lg bg-black">
+                            <img src={selfie} alt="Selfie" className="w-full h-full object-cover animate-in fade-in duration-300" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setSelfie(''); startCamera(); }}
+                            className="mt-4 w-full max-w-[480px] bg-bg-input hover:bg-bg-secondary border border-border/80 p-3.5 rounded-2xl text-text-primary transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                          >
+                            <RefreshCw size={14} /> Retake Photo
+                          </button>
+                        </div>
+                      ) : isCameraActive ? (
+                        <div className="w-full flex flex-col items-center">
+                          <div className="relative w-full max-w-[480px] aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-black shadow-lg">
+                            <video
+                              ref={videoRef}
+                              autoPlay
+                              playsInline
+                              muted
+                              className="w-full h-full object-cover transform -scale-x-100"
+                            />
+                            <div className="absolute inset-0 border-4 border-accent/40 rounded-full m-8 pointer-events-none border-dashed animate-pulse"></div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={captureSelfie}
+                            className="mt-4 w-full max-w-[480px] bg-accent hover:bg-accent-hover py-3.5 rounded-2xl text-white text-[11px] font-black uppercase tracking-widest shadow-xl border border-accent/20 active:scale-95 flex items-center justify-center gap-2"
+                          >
+                            <Camera size={16} /> Capture Selfie
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-full max-w-[480px] aspect-[4/3] rounded-2xl border-2 border-dashed border-border bg-bg-secondary/20 flex flex-col items-center justify-center p-6 text-center">
+                          <div className="p-4 bg-accent/5 rounded-full text-accent/50 border border-accent/10 mb-4 animate-bounce">
+                            <Camera size={32} />
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={startCamera}
+                              className="px-6 py-3 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95"
+                            >
+                              Activate Camera
+                            </button>
+                            <span className="block text-[8px] text-text-muted uppercase tracking-widest mt-2.5">or select an image file</span>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="user"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setSelfie(reader.result);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="text-[10px] font-bold text-text-muted mt-4 w-full max-w-[200px] text-center file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[9px] file:font-black file:bg-bg-input file:text-accent file:uppercase file:tracking-widest cursor-pointer file:cursor-pointer"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {reportType === 'SOD' ? (
                 stats?.isEodMissed && !stats?.bypassEodCheck ? (
                   <div className="p-8 text-center space-y-4">
@@ -925,9 +1242,9 @@ const DashboardTab = () => {
 
                       <div className="space-y-3">
                         {reportFormData.sodTasks.map((t, index) => (
-                          <div key={index} className="flex flex-col lg:flex-row items-end gap-4 p-5 bg-bg-secondary/40 rounded-2xl border-2 border-border relative group shadow-sm transition-all hover:bg-bg-secondary/60">
+                          <div key={index} className="flex flex-col lg:flex-row items-stretch lg:items-end gap-4 p-5 bg-bg-secondary/40 rounded-2xl border-2 border-border relative group shadow-sm transition-all hover:bg-bg-secondary/60 w-full">
                             {/* Task Type Selector */}
-                            <div className="flex-1 space-y-2">
+                            <div className="w-full lg:flex-1 space-y-2">
                               <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Selection</label>
                               <select
                                 className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-3 text-[11px] font-black text-text-primary outline-none focus:border-accent transition-all uppercase cursor-pointer h-[48px]"
@@ -940,7 +1257,7 @@ const DashboardTab = () => {
                             </div>
 
                             {/* Dynamic Input (Case Search or Task Text) */}
-                            <div className="flex-1 space-y-2 min-w-0">
+                            <div className="w-full lg:flex-1 space-y-2 min-w-0">
                               <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">
                                 {t.type === 'Case ID' ? 'Select Case File' : 'Enter Task Details'}
                               </label>
@@ -967,7 +1284,7 @@ const DashboardTab = () => {
                             </div>
 
                             {/* Mode Selector */}
-                            <div className="flex-1 space-y-2">
+                            <div className="w-full lg:flex-1 space-y-2">
                               <label className="text-[9px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Mode</label>
                               <select
                                 required
@@ -993,7 +1310,7 @@ const DashboardTab = () => {
                             </div>
 
                             {/* Action Button */}
-                            <div className="flex items-center justify-center pb-0.5 lg:w-10">
+                            <div className="flex items-center justify-end lg:justify-center pt-2 lg:pt-0 lg:w-10 w-full pb-0.5">
                               <button
                                 type="button"
                                 onClick={() => removeSodTaskRow(index)}
@@ -1297,102 +1614,80 @@ const DashboardTab = () => {
 
             {/* NEW GRID FOR TASKS & PERFORMANCE */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8 mt-6">
-              {/* MY TASKS – SOD TO EOD */}
-              <div className="xl:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY TASKS – SOD TO EOD</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* SOD SUBMISSION */}
-                  <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
-                    <div>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
-                          <Zap size={16} />
-                        </div>
-                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">SOD Submission</div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Daily Checklist</span>
-                          <span className="font-black whitespace-nowrap">{stats?.timeBoundActions?.completedTasksToday || 0} / {stats?.timeBoundActions?.totalTasksToday || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Priority Cases Plan</span>
-                          <span className="font-black whitespace-nowrap">{stats?.closedCriticalCases || 0} / {stats?.totalCriticalCases || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Yesterday's EOD</span>
-                          <span className="font-black whitespace-nowrap">{stats?.yesterdayEodFilled ? 'Filled' : 'Pending'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                      <span className="text-text-muted">SOD Submitted At</span>
-                      <span className={stats?.todaySod ? "text-green" : "text-red"}>
-                        {stats?.todaySod ? new Date(stats.todaySod.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Pending'}
-                      </span>
+              {/* Upcoming / Due Cases (My Cases) */}
+              <div className="xl:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 min-w-0 overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Upcoming / Due Cases (My Cases)</div>
+                    <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl w-full sm:w-auto">
+                      {[
+                        { key: 'today', label: 'Today' },
+                        { key: 'thisWeek', label: 'This Week' },
+                        { key: 'thisMonth', label: 'This Month' }
+                      ].map((tab) => {
+                        const count = getFilteredDueCases(tab.key).length;
+                        return (
+                          <button
+                            key={tab.key}
+                            onClick={() => setDueCasesTab(tab.key)}
+                            className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-initial ${dueCasesTab === tab.key ? 'bg-blue text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                          >
+                            <span>{tab.label}</span>
+                            <span className={`px-1.5 py-0.2 rounded-md text-[8px] font-bold ${dueCasesTab === tab.key ? 'bg-white/20 text-white' : 'bg-bg-input text-text-secondary'}`}>{count}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* WORK TASK SUBMISSION */}
-                  <div className="bg-bg-card rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
-                    <div>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
-                          <ClipboardList size={16} />
-                        </div>
-                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Work Task Submission</div>
+                  <div className="max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                    {getFilteredDueCases(dueCasesTab).length > 0 ? (
+                      <div className="table-wrap overflow-x-auto scrollbar-thin">
+                        <table className="w-full text-left border-collapse min-w-[500px]">
+                          <thead>
+                            <tr className="bg-bg-secondary text-text-primary text-[8px] font-black tracking-[0.2em] uppercase border-b border-border/30 sticky top-0 z-10">
+                              <th className="px-4 py-2.5 text-blue-500">Case ID</th>
+                              <th className="px-4 py-2.5 text-indigo-500">Company</th>
+                              <th className="px-4 py-2.5 text-emerald-500">Complaint</th>
+                              <th className="px-4 py-2.5 text-accent text-center">Assigned To</th>
+                              <th className="px-4 py-2.5 text-orange text-right">Due Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-[10px] text-text-secondary divide-y divide-border/20">
+                            {getFilteredDueCases(dueCasesTab).map((c, index) => (
+                              <tr
+                                key={index}
+                                onClick={() => setSelectedDueCaseDetails(c)}
+                                className="hover:bg-bg-input/50 transition-all cursor-pointer group border-b border-border/10 last:border-0"
+                              >
+                                <td className="px-4 py-3 font-black text-blue group-hover:underline">
+                                  {c.caseId}
+                                </td>
+                                <td className="px-4 py-3 font-black text-text-primary uppercase tracking-tight truncate max-w-[120px]" title={c.companyName}>
+                                  {c.companyName || '—'}
+                                </td>
+                                <td className="px-4 py-3 font-bold text-text-secondary truncate max-w-[150px]" title={c.typeOfComplaint}>
+                                  {c.typeOfComplaint}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="inline-block px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest bg-accent-soft text-accent border border-accent-soft/30 truncate max-w-[110px]" title={c.assignedTo || 'Unassigned'}>
+                                    👤 {c.assignedTo || 'Unassigned'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right font-black text-orange">
+                                  {c.dueDate ? new Date(c.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Case Updates</span>
-                          <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Client Comms</span>
-                          <span className="font-black whitespace-nowrap">{stats?.communicationsToday || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Doc Uploads</span>
-                          <span className="font-black whitespace-nowrap">{stats?.documentsUploadedToday || 0}</span>
-                        </div>
+                    ) : (
+                      <div className="text-center py-10 animate-enter">
+                        <Clock size={24} className="text-text-muted mx-auto mb-2 opacity-50" />
+                        <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">No cases due {dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}</div>
                       </div>
-                    </div>
-                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                      <span className="text-text-muted">Last Submission</span>
-                      <span className="text-blue">
-                        {stats?.lastTimeline ? new Date(stats.lastTimeline.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'No Activity'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* EOD SUBMISSION */}
-                  <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
-                    <div>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="p-1.5 bg-purple-soft rounded-lg text-purple">
-                          <Clock size={16} />
-                        </div>
-                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">EOD Submission</div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Daily Case Summary</span>
-                          <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday > 0 ? '1 / 1' : '0 / 1'}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Calls & Meetings</span>
-                          <span className="font-black whitespace-nowrap">{stats?.communicationsToday > 0 ? '1 / 1' : '0 / 1'}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Next Day Plan</span>
-                          <span className="font-black whitespace-nowrap">{stats?.todayEod ? '1 / 1' : '0 / 1'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                      <span className="text-text-muted">EOD Due By</span>
-                      <span className="text-purple">08:00 PM</span>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1539,49 +1834,103 @@ const DashboardTab = () => {
                 </div>
               </div>
 
-              {/* TOP URGENT CASES */}
+              {/* MY TASKS – SOD TO EOD */}
               <div className="xl:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Top Urgent Cases (My Cases)</div>
-                <div className="table-wrap overflow-x-auto scrollbar-thin">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-bg-secondary text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
-                        <th className="px-3 py-3">Case ID</th>
-                        <th className="px-3 py-3">Type of Threat</th>
-                        <th className="px-3 py-3">Amount Paid</th>
-                        <th className="px-3 py-3">Last Updated</th>
-                        <th className="px-3 py-3">Status</th>
-                        <th className="px-3 py-3">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {userCases.filter(c => c.priority === 'High' && c.currentStatus !== 'Closed').slice(0, 5).map((c, idx) => {
-                        return (
-                          <tr key={idx} className="border-b border-border/50 hover:bg-bg-secondary/30 transition-all text-[11px] font-bold text-text-primary">
-                            <td className="px-3 py-4 text-blue">{c.caseId}</td>
-                            <td className="px-3 py-4">{c.typeOfComplaint}</td>
-                            <td className="px-3 py-4">₹{Number(c.totalAmtPaid || c.amountPaid || 0).toLocaleString('en-IN')}</td>
-                            <td className="px-3 py-4 text-text-muted">
-                              {c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '--'}
-                            </td>
-                            <td className="px-3 py-4">
-                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${c.currentStatus === 'Escalated' ? 'bg-red-soft text-red' : 'bg-orange-soft text-orange'}`}>
-                                {c.currentStatus}
-                              </span>
-                            </td>
-                            <td className="px-3 py-4">
-                              <button
-                                onClick={() => navigate('/case-master', { state: { searchId: c.caseId } })}
-                                className="text-[9px] font-black text-blue uppercase tracking-widest hover:underline"
-                              >
-                                View Case
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY TASKS – SOD TO EOD</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* SOD SUBMISSION */}
+                  <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
+                          <Zap size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">SOD Submission</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Daily Checklist</span>
+                          <span className="font-black whitespace-nowrap">{stats?.timeBoundActions?.completedTasksToday || 0} / {stats?.timeBoundActions?.totalTasksToday || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Priority Cases Plan</span>
+                          <span className="font-black whitespace-nowrap">{stats?.closedCriticalCases || 0} / {stats?.totalCriticalCases || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Yesterday's EOD</span>
+                          <span className="font-black whitespace-nowrap">{stats?.yesterdayEodFilled ? 'Filled' : 'Pending'}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-text-muted">SOD Submitted At</span>
+                      <span className={stats?.todaySod ? "text-green" : "text-red"}>
+                        {stats?.todaySod ? new Date(stats.todaySod.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Pending'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* WORK TASK SUBMISSION */}
+                  <div className="bg-bg-card rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
+                          <ClipboardList size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Work Task Submission</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Case Updates</span>
+                          <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Client Comms</span>
+                          <span className="font-black whitespace-nowrap">{stats?.communicationsToday || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Doc Uploads</span>
+                          <span className="font-black whitespace-nowrap">{stats?.documentsUploadedToday || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-text-muted">Last Submission</span>
+                      <span className="text-blue">
+                        {stats?.lastTimeline ? new Date(stats.lastTimeline.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'No Activity'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* EOD SUBMISSION */}
+                  <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="p-1.5 bg-purple-soft rounded-lg text-purple">
+                          <Clock size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">EOD Submission</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Daily Case Summary</span>
+                          <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday > 0 ? '1 / 1' : '0 / 1'}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Calls & Meetings</span>
+                          <span className="font-black whitespace-nowrap">{stats?.communicationsToday > 0 ? '1 / 1' : '0 / 1'}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                          <span className="truncate">Next Day Plan</span>
+                          <span className="font-black whitespace-nowrap">{stats?.todayEod ? '1 / 1' : '0 / 1'}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-text-muted">EOD Due By</span>
+                      <span className="text-purple">08:00 PM</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1786,57 +2135,81 @@ const DashboardTab = () => {
               </div>
             </div>
 
-            {/* Active Users (Right) */}
-            <div className="lg:col-span-6 bg-bg-card rounded-2xl p-5 shadow-sm min-w-0 overflow-hidden">
-              <div className="flex justify-between items-center mb-5">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Users</div>
-              </div>
-              <div className="max-h-[200px] overflow-y-auto overflow-x-auto pr-2 scrollbar-thin">
-                <table className="w-full text-left text-[10px] font-bold uppercase tracking-widest text-text-secondary border-collapse">
-                  <thead>
-                    <tr className="border-b border-border/50">
-                      <th className="pb-2 text-text-muted">Name</th>
-                      <th className="pb-2 text-text-muted">SOD / EOD</th>
-                      <th className="pb-2 text-text-muted">Duration</th>
-                      <th className="pb-2 text-text-muted text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...(stats?.activeUsers || [])].sort((a, b) => (a.status === 'Active' ? -1 : 1)).map((u, index) => (
-                      <tr key={index} className="border-b border-border/10 last:border-0">
-                        <td className="py-3">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${u.status === 'Active' ? 'bg-green' : 'bg-text-muted'}`}></div>
-                            <div>
-                              <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{u.name}</div>
-                              <div className="text-[9px] font-bold text-text-muted mt-0.5 normal-case">{u.role}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3">
-                          {u.sodTime && (
-                            <div className="text-text-primary">SOD: {u.sodTime}</div>
-                          )}
-                          {u.eodTime && (
-                            <div className="text-text-muted mt-0.5">EOD: {u.eodTime}</div>
-                          )}
-                          {!u.sodTime && !u.eodTime && <span className="text-text-muted">—</span>}
-                        </td>
-                        <td className="py-3">
-                          <span className="text-text-primary">{u.duration || '—'}</span>
-                        </td>
-                        <td className="py-3 text-right">
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${u.status === 'Active' ? 'bg-green-soft text-green' : 'bg-bg-input text-text-muted'}`}>
-                            {u.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {(!stats?.activeUsers || stats.activeUsers.length === 0) && (
-                  <div className="text-xs font-bold text-text-muted text-center py-4">No user data available</div>
-                )}
+            {/* Due Cases (Right Side, Col Span 6) */}
+            <div className="lg:col-span-6 bg-bg-card rounded-2xl p-5 shadow-sm min-w-0 overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="flex justify-between items-center mb-5">
+                  <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Upcoming / Due Cases</div>
+                  <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl">
+                    {[
+                      { key: 'today', label: 'Today' },
+                      { key: 'thisWeek', label: 'This Week' },
+                      { key: 'thisMonth', label: 'This Month' }
+                    ].map((tab) => {
+                      const count = getFilteredDueCases(tab.key).length;
+                      return (
+                        <button
+                          key={tab.key}
+                          onClick={() => setDueCasesTab(tab.key)}
+                          className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all flex items-center gap-1.5 ${dueCasesTab === tab.key ? 'bg-blue text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                        >
+                          <span>{tab.label}</span>
+                          <span className={`px-1.5 py-0.2 rounded-md text-[8px] font-bold ${dueCasesTab === tab.key ? 'bg-white/20 text-white' : 'bg-bg-input text-text-secondary'}`}>{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                  {getFilteredDueCases(dueCasesTab).length > 0 ? (
+                    <div className="table-wrap overflow-x-auto scrollbar-thin">
+                      <table className="w-full text-left border-collapse min-w-[500px]">
+                        <thead>
+                          <tr className="bg-bg-secondary text-text-primary text-[8px] font-black tracking-[0.2em] uppercase border-b border-border/30 sticky top-0 z-10">
+                            <th className="px-4 py-2.5 text-blue-500">Case ID</th>
+                            <th className="px-4 py-2.5 text-indigo-500">Company</th>
+                            <th className="px-4 py-2.5 text-emerald-500">Complaint</th>
+                            <th className="px-4 py-2.5 text-accent text-center">Assignee</th>
+                            <th className="px-4 py-2.5 text-orange text-right">Due Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-[10px] text-text-secondary divide-y divide-border/20">
+                          {getFilteredDueCases(dueCasesTab).map((c, index) => (
+                            <tr
+                              key={index}
+                              onClick={() => setSelectedDueCaseDetails(c)}
+                              className="hover:bg-bg-input/50 transition-all cursor-pointer group border-b border-border/10 last:border-0"
+                            >
+                              <td className="px-4 py-3 font-black text-blue group-hover:underline">
+                                {c.caseId}
+                              </td>
+                              <td className="px-4 py-3 font-black text-text-primary uppercase tracking-tight truncate max-w-[120px]" title={c.companyName}>
+                                {c.companyName || '—'}
+                              </td>
+                              <td className="px-4 py-3 font-bold text-text-secondary truncate max-w-[150px]" title={c.typeOfComplaint}>
+                                {c.typeOfComplaint}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className="inline-block px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest bg-accent-soft text-accent border border-accent-soft/30 truncate max-w-[110px]" title={c.assignedTo || 'Unassigned'}>
+                                  👤 {c.assignedTo || 'Unassigned'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right font-black text-orange">
+                                {c.dueDate ? new Date(c.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-10 animate-enter">
+                      <Clock size={24} className="text-text-muted mx-auto mb-2 opacity-50" />
+                      <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">No cases due {dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}</div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1891,6 +2264,8 @@ const DashboardTab = () => {
                 })}
               </div>
             </div>
+
+
           </div>
         )}
       </div>
@@ -2187,138 +2562,182 @@ const DashboardTab = () => {
       )}
 
       {user?.role === 'Admin' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
-          {/* Box 1: Staff Performance Analysis */}
-          <div className="lg:col-span-5 bg-bg-card rounded-2xl p-5 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
-              <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">Staff Performance Analysis</div>
-              <div className="flex gap-2">
-                {[
-                  { label: 'All Time', value: 'all' },
-                  { label: 'Last 7 Days', value: '7days' },
-                  { label: 'Last 1 Month', value: '1month' },
-                  { label: 'Last 3 Months', value: '3months' }
-                ].map((item) => (
-                  <button
-                    key={item.value}
-                    className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${teamFilter === item.value ? 'bg-blue-600 text-white shadow-sm' : 'bg-bg-secondary text-text-muted hover:bg-bg-input'}`}
-                    onClick={() => setTeamFilter(item.value)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
+            {/* Box 1: Staff Performance Analysis */}
+            <div className="lg:col-span-5 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/40 min-w-0 overflow-hidden">
+              <div className="flex justify-between items-center mb-4">
+                <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">Staff Performance Analysis</div>
+                <div className="flex gap-2">
+                  {[
+                    { label: 'All Time', value: 'all' },
+                    { label: 'Last 7 Days', value: '7days' },
+                    { label: 'Last 1 Month', value: '1month' },
+                    { label: 'Last 3 Months', value: '3months' }
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${teamFilter === item.value ? 'bg-blue-600 text-white shadow-sm' : 'bg-bg-secondary text-text-muted hover:bg-bg-input'}`}
+                      onClick={() => setTeamFilter(item.value)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
+                      <th className="py-2">Staff Name</th>
+                      <th className="py-2 text-center">Cases Assigned</th>
+                      <th className="py-2 text-center">Cases Closed</th>
+                      {/* <th className="py-2 text-center">Avg. Response Time</th> */}
+                      <th className="py-2 text-center">Overdue Cases</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[10px] font-bold text-text-primary">
+                    {(stats?.teamPerformance || []).slice(0, 5).map((member, index) => (
+                      <tr key={index} className="border-b border-border/50 last:border-b-0 hover:bg-bg-secondary/50">
+                        <td className="py-3 cursor-pointer hover:text-blue-600 hover:underline" onClick={() => navigate('/case-master', { state: { searchId: member.name } })}>{member.name}</td>
+                        <td className="py-3 text-center">{member.assigned}</td>
+                        <td className="py-3 text-center">{member.settled}</td>
+                        {/* <td className="py-3 text-center text-text-muted">{member.responseTime || 'N/A'}</td> */}
+                        <td className="py-3 text-center text-red-500">{member.pending}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+
+            {/* Box 2: Time Bound Actions */}
+            <div className="lg:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Time Bound Actions</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
+                    <span className="text-[8px] font-black text-red-500 uppercase">Due Today</span>
+                    <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.dueToday || 0}</span>
+                  </div>
+                  <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}>
+                    <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 24 Hrs</span>
+                    <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin24h || 0}</span>
+                  </div>
+                  <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}>
+                    <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 48 Hrs</span>
+                    <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin48h || 0}</span>
+                  </div>
+                  <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
+                    <span className="text-[8px] font-black text-red-500 uppercase">Overdue</span>
+                    <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.overdue || 0}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                <div className="cursor-pointer hover:opacity-80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'completed_today' } })}>
+                  <span className="text-text-muted">Action Taken (Today)</span>
+                  <div className="text-lg font-black text-green-500 mt-1">{stats?.timeBoundActions?.actionTakenToday || 0}</div>
+                </div>
+              </div>
+              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/my-task')}>
+                View All Actions <ArrowRight size={12} />
+              </div>
+            </div>
+
+            {/* Box 3: Violations */}
+            <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Violations</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('SOD')}>
+                    <span className="text-[8px] font-black text-purple-500 uppercase">SOD Not Submitted</span>
+                    <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.sodNotSubmitted || 0}</span>
+                  </div>
+                  <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('EOD')}>
+                    <span className="text-[8px] font-black text-purple-500 uppercase">EOD Not Submitted</span>
+                    <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.eodNotSubmitted || 0}</span>
+                  </div>
+                  <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => openViolationsModal('48H')}>
+                    <span className="text-[8px] font-black text-orange-500 uppercase">No Update &gt; 48 Hrs</span>
+                    <span className="text-2xl font-black text-orange-500 mt-1">{stats?.violations?.noUpdate48Hrs || 0}</span>
+                  </div>
+                  <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => openViolationsModal('SLA')}>
+                    <span className="text-[8px] font-black text-red-500 uppercase">SLA Breached</span>
+                    <span className="text-2xl font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                <div>
+                  <span className="text-text-muted">Total Violations</span>
+                  <div className="text-lg font-black text-red-500 mt-1">{(stats?.violations?.sodNotSubmitted || 0) + (stats?.violations?.eodNotSubmitted || 0) + (stats?.violations?.noUpdate48Hrs || 0) + (stats?.violations?.slaBreached || 0)}</div>
+                </div>
+                <div>
+                  <span className="text-text-muted">Critical Violations</span>
+                  <div className="text-lg font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</div>
+                </div>
+              </div>
+              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/work-report')}>
+                View All Violations <ArrowRight size={12} />
+              </div>
+            </div>
+          </div>
+
+          {/* Active Users (Full Width below the three cards) */}
+          <div className="bg-bg-card rounded-2xl p-5 shadow-sm min-w-0 overflow-hidden mb-8 border border-border/40">
+            <div className="flex justify-between items-center mb-5">
+              <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Users</div>
+            </div>
+            <div className="max-h-[300px] overflow-y-auto overflow-x-auto pr-2 scrollbar-thin">
+              <table className="w-full text-left text-[10px] font-bold uppercase tracking-widest text-text-secondary border-collapse">
                 <thead>
-                  <tr className="text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
-                    <th className="py-2">Staff Name</th>
-                    <th className="py-2 text-center">Cases Assigned</th>
-                    <th className="py-2 text-center">Cases Closed</th>
-                    {/* <th className="py-2 text-center">Avg. Response Time</th> */}
-                    <th className="py-2 text-center">Overdue Cases</th>
+                  <tr className="border-b border-border/50">
+                    <th className="pb-2 text-text-muted">Name</th>
+                    <th className="pb-2 text-text-muted">SOD / EOD</th>
+                    <th className="pb-2 text-text-muted">Duration</th>
+                    <th className="pb-2 text-text-muted text-right">Status</th>
                   </tr>
                 </thead>
-                <tbody className="text-[10px] font-bold text-text-primary">
-                  {(stats?.teamPerformance || []).slice(0, 5).map((member, index) => (
-                    <tr key={index} className="border-b border-border/50 last:border-b-0 hover:bg-bg-secondary/50">
-                      <td className="py-3 cursor-pointer hover:text-blue-600 hover:underline" onClick={() => navigate('/case-master', { state: { searchId: member.name } })}>{member.name}</td>
-                      <td className="py-3 text-center">{member.assigned}</td>
-                      <td className="py-3 text-center">{member.settled}</td>
-                      {/* <td className="py-3 text-center text-text-muted">{member.responseTime || 'N/A'}</td> */}
-                      <td className="py-3 text-center text-red-500">{member.pending}</td>
+                <tbody>
+                  {[...(stats?.activeUsers || [])].sort((a, b) => (a.status === 'Active' ? -1 : 1)).map((u, index) => (
+                    <tr key={index} className="border-b border-border/10 last:border-0 hover:bg-bg-secondary/20 transition-all">
+                      <td className="py-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-2.5 h-2.5 rounded-full ${u.status === 'Active' ? 'bg-green animate-pulse' : 'bg-text-muted'}`}></div>
+                          <div>
+                            <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{u.name}</div>
+                            <div className="text-[9px] font-bold text-text-muted mt-0.5 normal-case">{u.role}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3">
+                        {u.sodTime && (
+                          <div className="text-text-primary">SOD: {u.sodTime}</div>
+                        )}
+                        {u.eodTime && (
+                          <div className="text-text-muted mt-0.5">EOD: {u.eodTime}</div>
+                        )}
+                        {!u.sodTime && !u.eodTime && <span className="text-text-muted">—</span>}
+                      </td>
+                      <td className="py-3">
+                        <span className="text-text-primary font-mono">{u.duration || '—'}</span>
+                      </td>
+                      <td className="py-3 text-right">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${u.status === 'Active' ? 'bg-green-soft text-green' : 'bg-bg-input text-text-muted'}`}>
+                          {u.status}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-            {/* <div className="mt-4 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master')}>
-              View Full Staff Report <ArrowRight size={12} />
-            </div> */}
-          </div>
-
-          {/* Box 2: Time Bound Actions */}
-          <div className="lg:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
-            <div>
-              <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Time Bound Actions</div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
-                  <span className="text-[8px] font-black text-red-500 uppercase">Due Today</span>
-                  <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.dueToday || 0}</span>
-                </div>
-                <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}>
-                  <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 24 Hrs</span>
-                  <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin24h || 0}</span>
-                </div>
-                <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}>
-                  <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 48 Hrs</span>
-                  <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin48h || 0}</span>
-                </div>
-                <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
-                  <span className="text-[8px] font-black text-red-500 uppercase">Overdue</span>
-                  <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.overdue || 0}</span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-              {/* <div className="flex-1">
-                <span className="text-text-muted">Compliance Rate</span>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="text-lg font-black text-green-500">{stats?.complianceRate || 0}%</div>
-                  <div className="w-20 bg-bg-secondary h-2 rounded-full overflow-hidden">
-                    <div className="bg-green-500 h-full" style={{ width: `${stats?.complianceRate || 0}%` }}></div>
-                  </div>
-                </div>
-              </div> */}
-              <div className="cursor-pointer hover:opacity-80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'completed_today' } })}>
-                <span className="text-text-muted">Action Taken (Today)</span>
-                <div className="text-lg font-black text-green-500 mt-1">{stats?.timeBoundActions?.actionTakenToday || 0}</div>
-              </div>
-            </div>
-            <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/my-task')}>
-              View All Actions <ArrowRight size={12} />
+              {(!stats?.activeUsers || stats.activeUsers.length === 0) && (
+                <div className="text-xs font-bold text-text-muted text-center py-4">No user data available</div>
+              )}
             </div>
           </div>
-
-          {/* Box 3: Violations */}
-          <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
-            <div>
-              <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Violations</div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('SOD')}>
-                  <span className="text-[8px] font-black text-purple-500 uppercase">SOD Not Submitted</span>
-                  <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.sodNotSubmitted || 0}</span>
-                </div>
-                <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('EOD')}>
-                  <span className="text-[8px] font-black text-purple-500 uppercase">EOD Not Submitted</span>
-                  <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.eodNotSubmitted || 0}</span>
-                </div>
-                <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => openViolationsModal('48H')}>
-                  <span className="text-[8px] font-black text-orange-500 uppercase">No Update &gt; 48 Hrs</span>
-                  <span className="text-2xl font-black text-orange-500 mt-1">{stats?.violations?.noUpdate48Hrs || 0}</span>
-                </div>
-                <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => openViolationsModal('SLA')}>
-                  <span className="text-[8px] font-black text-red-500 uppercase">SLA Breached</span>
-                  <span className="text-2xl font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-              <div>
-                <span className="text-text-muted">Total Violations</span>
-                <div className="text-lg font-black text-red-500 mt-1">{(stats?.violations?.sodNotSubmitted || 0) + (stats?.violations?.eodNotSubmitted || 0) + (stats?.violations?.noUpdate48Hrs || 0) + (stats?.violations?.slaBreached || 0)}</div>
-              </div>
-              <div>
-                <span className="text-text-muted">Critical Violations</span>
-                <div className="text-lg font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</div>
-              </div>
-            </div>
-            <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/work-report')}>
-              View All Violations <ArrowRight size={12} />
-            </div>
-          </div>
-        </div>
+        </>
       )}
 
       {user?.role === 'Admin' && (
@@ -3147,6 +3566,96 @@ const DashboardTab = () => {
                   })()}
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Due Case Detailed Preview Modal */}
+      {selectedDueCaseDetails && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setSelectedDueCaseDetails(null)}>
+          <div className="bg-bg-card border border-border/80 w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden animate-enter" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-border/60 flex justify-between items-center bg-bg-secondary/40">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-black text-blue">{selectedDueCaseDetails.caseId}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-border"></span>
+                  <span className="text-[10px] font-black uppercase text-text-muted tracking-wider">{selectedDueCaseDetails.companyName}</span>
+                </div>
+                <h3 className="text-base font-black text-text-primary">{selectedDueCaseDetails.typeOfComplaint}</h3>
+              </div>
+              <button
+                onClick={() => setSelectedDueCaseDetails(null)}
+                className="p-2 hover:bg-bg-secondary rounded-xl text-text-muted hover:text-text-primary transition-all font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto scrollbar-thin">
+              {/* Due Date Indicator */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-orange-soft/30 border border-orange-soft/40 p-4 rounded-xl">
+                  <div className="text-[9px] font-black text-orange uppercase tracking-wider mb-1">Due Date</div>
+                  <div className="text-lg font-black text-orange">
+                    {selectedDueCaseDetails.dueDate ? new Date(selectedDueCaseDetails.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                  </div>
+                </div>
+
+                <div className="bg-blue-soft/30 border border-blue-soft/40 p-4 rounded-xl">
+                  <div className="text-[9px] font-black text-blue uppercase tracking-wider mb-1">Client Name</div>
+                  <div className="text-lg font-black text-text-primary truncate">
+                    {selectedDueCaseDetails.clientName || 'N/A'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Section */}
+              <div>
+                <h4 className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-2">Case Summary Description</h4>
+                <div className="bg-bg-secondary p-4 rounded-xl border border-border/40 text-xs font-bold text-text-secondary leading-relaxed whitespace-pre-wrap">
+                  {selectedDueCaseDetails.caseSummary || selectedDueCaseDetails.summary || 'No summary or description provided for this case.'}
+                </div>
+              </div>
+
+              {/* Basic Fields Grid */}
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="bg-bg-secondary/40 p-3 rounded-xl border border-border/20">
+                  <div className="text-[8px] font-black text-text-muted uppercase">Status</div>
+                  <div className="text-xs font-black text-text-primary mt-1 uppercase tracking-tight">{selectedDueCaseDetails.currentStatus || 'New'}</div>
+                </div>
+                <div className="bg-bg-secondary/40 p-3 rounded-xl border border-border/20">
+                  <div className="text-[8px] font-black text-text-muted uppercase">Assigned To</div>
+                  <div className="text-xs font-black text-text-primary mt-1 uppercase tracking-tight">{selectedDueCaseDetails.assignedTo || 'Unassigned'}</div>
+                </div>
+                <div className="bg-bg-secondary/40 p-3 rounded-xl border border-border/20">
+                  <div className="text-[8px] font-black text-text-muted uppercase">Initiator</div>
+                  <div className="text-xs font-black text-text-primary mt-1 uppercase tracking-tight">{selectedDueCaseDetails.initiatedBy || 'Form'}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-border/60 bg-bg-secondary/20 flex justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedDueCaseDetails(null)}
+                className="px-5 py-2.5 bg-bg-secondary border border-border text-text-secondary hover:text-text-primary rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+              >
+                Close Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDueCaseDetails(null);
+                  navigate('/case-master', { state: { searchId: selectedDueCaseDetails.caseId } });
+                }}
+                className="px-6 py-2.5 bg-blue hover:bg-blue-hover text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all flex items-center gap-2"
+              >
+                <span>View in Case Master</span>
+                <span>→</span>
+              </button>
             </div>
           </div>
         </div>

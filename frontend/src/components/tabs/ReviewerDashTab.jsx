@@ -15,6 +15,29 @@ const ReviewerDashTab = () => {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
 
+  const [expandedCases, setExpandedCases] = useState({});
+
+  const toggleCaseExpand = (caseId) => {
+    setExpandedCases(prev => ({ ...prev, [caseId]: !prev[caseId] }));
+  };
+
+  const groupRefundsByCase = (list) => {
+    const groups = {};
+    list.forEach(r => {
+      if (!groups[r.caseId]) {
+        groups[r.caseId] = {
+          caseId: r.caseId,
+          companyName: r.companyName || '',
+          requests: [],
+          totalAmount: 0
+        };
+      }
+      groups[r.caseId].requests.push(r);
+      groups[r.caseId].totalAmount += Number(r.amount) || 0;
+    });
+    return Object.values(groups);
+  };
+
   const fetchRefunds = async () => {
     try {
       const res = await api.get('/refunds?status=Pending Review');
@@ -99,45 +122,71 @@ const ReviewerDashTab = () => {
                     </div>
                   </td>
                 </tr>
-              ) : refunds.map(r => (
-                <tr
-                  key={r._id}
-                  className="hover:bg-bg-input/30 transition-all group cursor-pointer"
-                  onClick={() => { setSelectedRefund(r); setIsDetailOpen(true); }}
-                >
-                  <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex flex-col items-start gap-1">
-                      <button
-                        onClick={() => navigate('/case-master', { state: { searchId: r.caseId } })}
-                        className="bg-accent-soft text-accent px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all shadow-sm"
+              ) : groupRefundsByCase(refunds).map(g => {
+                const isExpanded = !!expandedCases[g.caseId];
+                return (
+                  <React.Fragment key={g.caseId}>
+                    {/* Parent Row */}
+                    <tr
+                      className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none"
+                      onClick={() => toggleCaseExpand(g.caseId)}
+                    >
+                      <td className="px-6 py-5">
+                        <div className="flex flex-col items-start gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigate('/case-master', { state: { searchId: g.caseId } }); }}
+                            className="bg-accent-soft text-accent px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all shadow-sm"
+                          >
+                            <span className="mr-1">{isExpanded ? '▼' : '▶'}</span> {g.caseId}
+                          </button>
+                          {g.companyName && (
+                            <span className="text-[10px] text-text-muted font-bold tracking-normal normal-case ml-1 mt-0.5">{g.companyName}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 font-black text-green text-sm tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</td>
+                      <td className="px-6 py-5 text-text-muted font-bold" colSpan="3">
+                        {g.requests.length} refund requests pending review for this case
+                      </td>
+                      <td className="px-6 py-5 text-center">
+                        <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                          {isExpanded ? 'Hide Requests' : 'Show Requests'}
+                        </span>
+                      </td>
+                    </tr>
+                    {/* Expanded child request rows */}
+                    {isExpanded && g.requests.map((r, idx) => (
+                      <tr
+                        key={r._id}
+                        className="bg-bg-input/20 hover:bg-bg-input/35 transition-all border-l-4 border-accent cursor-pointer"
+                        onClick={() => { setSelectedRefund(r); setIsDetailOpen(true); }}
                       >
-                        {r.caseId}
-                      </button>
-                      {r.companyName && (
-                        <span className="text-[10px] text-text-muted font-bold tracking-normal normal-case ml-1 mt-0.5">{r.companyName}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 font-black text-green text-sm tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</td>
-                  <td className="px-6 py-5">
-                    <div className="font-black text-text-primary uppercase tracking-tight">{r.bankName}</div>
-                    <div className="text-[9px] text-text-muted font-bold mt-1">IFSC: <span className="text-accent">{r.ifsc}</span></div>
-                    <div className="text-[9px] text-text-muted font-bold italic">{r.branch}</div>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="font-black text-text-primary uppercase tracking-tight">{r.accHolder}</div>
-                    <div className="text-[9px] text-text-muted font-bold font-mono mt-1">{r.accNum}</div>
-                    <div className="text-[9px] text-accent font-black uppercase tracking-widest mt-1 opacity-50">{r.accType}</div>
-                  </td>
-                  <td className="px-6 py-5 text-text-muted leading-relaxed font-medium italic max-w-xs line-clamp-2">"{r.summary}"</td>
-                  <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex justify-center gap-3">
-                      <button className="bg-green hover:bg-green-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-sm uppercase tracking-widest transition-all active:scale-95" onClick={() => handleApprove(r._id)}>Approve</button>
-                      <button className="bg-red hover:bg-red-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-sm uppercase tracking-widest transition-all active:scale-95" onClick={() => { setSelectedRefund(r); setModalOpen(true); }}>Reject</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        <td className="px-6 py-5 text-text-muted font-bold pl-8">
+                          Request #{idx + 1}
+                        </td>
+                        <td className="px-6 py-5 font-black text-green text-sm tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</td>
+                        <td className="px-6 py-5">
+                          <div className="font-black text-text-primary uppercase tracking-tight">{r.bankName}</div>
+                          <div className="text-[9px] text-text-muted font-bold mt-1">IFSC: <span className="text-accent">{r.ifsc}</span></div>
+                          <div className="text-[9px] text-text-muted font-bold italic">{r.branch}</div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="font-black text-text-primary uppercase tracking-tight">{r.accHolder}</div>
+                          <div className="text-[9px] text-text-muted font-bold font-mono mt-1">{r.accNum}</div>
+                          <div className="text-[9px] text-accent font-black uppercase tracking-widest mt-1 opacity-50">{r.accType}</div>
+                        </td>
+                        <td className="px-6 py-5 text-text-muted leading-relaxed font-medium italic max-w-xs line-clamp-2">"{r.summary}"</td>
+                        <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-center gap-3">
+                            <button className="bg-green hover:bg-green-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-sm uppercase tracking-widest transition-all active:scale-95" onClick={() => handleApprove(r._id)}>Approve</button>
+                            <button className="bg-red hover:bg-red-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-sm uppercase tracking-widest transition-all active:scale-95" onClick={() => { setSelectedRefund(r); setModalOpen(true); }}>Reject</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

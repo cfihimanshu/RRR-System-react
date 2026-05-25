@@ -17,6 +17,29 @@ const AccountantDashTab = () => {
   const [lastUTR, setLastUTR] = useState('');
   const { user } = useContext(AuthContext);
 
+  const [expandedCases, setExpandedCases] = useState({});
+
+  const toggleCaseExpand = (caseId) => {
+    setExpandedCases(prev => ({ ...prev, [caseId]: !prev[caseId] }));
+  };
+
+  const groupRefundsByCase = (list) => {
+    const groups = {};
+    list.forEach(r => {
+      if (!groups[r.caseId]) {
+        groups[r.caseId] = {
+          caseId: r.caseId,
+          companyName: r.companyName || '',
+          requests: [],
+          totalAmount: 0
+        };
+      }
+      groups[r.caseId].requests.push(r);
+      groups[r.caseId].totalAmount += Number(r.amount) || 0;
+    });
+    return Object.values(groups);
+  };
+
   const fetchRefunds = async () => {
     try {
       const res = await api.get('/refunds?status=Pending Payment');
@@ -138,51 +161,84 @@ const AccountantDashTab = () => {
                     </div>
                   </td>
                 </tr>
-              ) : refunds.map(r => (
-                <tr key={r._id} className="hover:bg-bg-input/30 transition-all group">
-                  <td className="px-4 py-5 align-top flex flex-col items-start gap-2">
-                    <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border border-accent-soft">
-                      {r.caseId}
-                    </span>
-                    {r.companyName && (
-                      <div className="text-[10px] text-text-secondary font-black tracking-wide uppercase bg-bg-input/60 px-2.5 py-1 rounded-xl border border-border inline-block shadow-sm">
-                        🏢 {r.companyName}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-5 align-top">
-                    <div className="font-black text-text-primary mb-1 uppercase text-xs tracking-tight">{r.bankName}</div>
-                    <div className="text-text-muted font-bold">A/C: <span className="text-text-secondary">{r.accNum}</span> ({r.accType})</div>
-                    <div className="text-text-muted font-bold">IFSC: <span className="text-text-secondary">{r.ifsc}</span></div>
-                    <div className="text-text-muted font-bold">Holder: <span className="text-text-secondary uppercase">{r.accHolder}</span></div>
-                  </td>
-                  <td className="px-4 py-5 align-top">
-                    <div className="text-lg font-black text-green tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</div>
-                    <div className="text-[9px] font-black uppercase text-accent mt-2 tracking-wider">
-                      {r.installments && r.installments.length > 0
-                        ? `${r.installments.filter(i => i.status === 'Paid').length} of ${r.installments.length} PAID`
-                        : 'Single Payout'}
-                    </div>
-                  </td>
-                  <td className="px-4 py-5 align-top">
-                    <div className="text-text-primary font-bold mb-1">Req: <span className="text-text-secondary font-medium">{r.requestedByName || r.requestedBy}</span></div>
-                    <div className="text-text-primary font-bold mb-2">Appr: <span className="text-text-secondary font-medium">{r.approvedBy}</span></div>
-                    <div className="text-[10px] text-text-muted leading-relaxed italic border-l-2 border-border pl-3">"{r.summary}"</div>
-                  </td>
-                  <td className="px-4 py-5 align-top text-right">
-                    <button
-                      className="bg-accent hover:bg-accent-hover text-white font-black py-2.5 px-6 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-md shadow-orange-950/20 active:scale-95 whitespace-nowrap"
-                      onClick={() => {
-                        setSelectedRefund(r);
-                        setSelectedInstIndex(null);
-                        setModalOpen(true);
-                      }}
+              ) : groupRefundsByCase(refunds).map(g => {
+                const isExpanded = !!expandedCases[g.caseId];
+                return (
+                  <React.Fragment key={g.caseId}>
+                    {/* Parent Case Row */}
+                    <tr 
+                      onClick={() => toggleCaseExpand(g.caseId)}
+                      className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none"
                     >
-                      Manage Payouts 💰
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      <td className="px-4 py-5 align-top flex flex-col items-start gap-2">
+                        <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border border-accent-soft">
+                          <span className="mr-1">{isExpanded ? '▼' : '▶'}</span> {g.caseId}
+                        </span>
+                        {g.companyName && (
+                          <div className="text-[10px] text-text-secondary font-black tracking-wide uppercase bg-bg-input/60 px-2.5 py-1 rounded-xl border border-border inline-block shadow-sm">
+                            🏢 {g.companyName}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-5 align-top" colSpan="1">
+                        <div className="text-text-muted font-bold">
+                          {g.requests.length} pending requests grouped for payout
+                        </div>
+                      </td>
+                      <td className="px-4 py-5 align-top">
+                        <div className="text-lg font-black text-green tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</div>
+                      </td>
+                      <td className="px-4 py-5 align-top">
+                        <div className="text-[9px] text-text-muted font-bold mt-1">Click to expand & pay individual requests</div>
+                      </td>
+                      <td className="px-4 py-5 align-top text-right">
+                        <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                          {isExpanded ? 'Hide Details' : 'Show Requests'}
+                        </span>
+                      </td>
+                    </tr>
+                    {/* Expanded child request rows */}
+                    {isExpanded && g.requests.map((r, idx) => (
+                      <tr key={r._id} className="bg-bg-input/20 hover:bg-bg-input/35 transition-all border-l-4 border-accent">
+                        <td className="px-4 py-5 align-top pl-8">
+                          <div className="font-black text-text-muted">Request #{idx + 1}</div>
+                        </td>
+                        <td className="px-4 py-5 align-top">
+                          <div className="font-black text-text-primary mb-1 uppercase text-xs tracking-tight">{r.bankName}</div>
+                          <div className="text-text-muted font-bold">A/C: <span className="text-text-secondary">{r.accNum}</span> ({r.accType})</div>
+                          <div className="text-text-muted font-bold">IFSC: <span className="text-text-secondary">{r.ifsc}</span></div>
+                          <div className="text-text-muted font-bold">Holder: <span className="text-text-secondary uppercase">{r.accHolder}</span></div>
+                        </td>
+                        <td className="px-4 py-5 align-top">
+                          <div className="text-base font-black text-green tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</div>
+                          <div className="text-[9px] font-black uppercase text-accent mt-2 tracking-wider">
+                            {r.installments && r.installments.length > 0
+                              ? `${r.installments.filter(i => i.status === 'Paid').length} of ${r.installments.length} PAID`
+                              : 'Single Payout'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-5 align-top">
+                          <div className="text-text-primary font-bold mb-1">Req: <span className="text-text-secondary font-medium">{r.requestedByName || r.requestedBy}</span></div>
+                          <div className="text-text-primary font-bold mb-2">Appr: <span className="text-text-secondary font-medium">{r.approvedBy}</span></div>
+                          <div className="text-[10px] text-text-muted leading-relaxed italic border-l-2 border-border pl-3">"{r.summary}"</div>
+                        </td>
+                        <td className="px-4 py-5 align-top text-right">
+                          <button
+                            className="bg-accent hover:bg-accent-hover text-white font-black py-2.5 px-6 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-md shadow-orange-950/20 active:scale-95 whitespace-nowrap"
+                            onClick={() => {
+                              setSelectedRefund(r);
+                              setSelectedInstIndex(null);
+                              setModalOpen(true);
+                            }}
+                          >
+                            Manage Payouts 💰
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
