@@ -16,5 +16,5 @@ export const TAB_ACCESS = {
   "my-task":              ["Admin", "Operations", "Staff", "Accountant", "Legal", "Super Admin"],
   "sod-eod-reports":      ["Admin", "Operations", "Staff", "Accountant", "Super Admin"],
   "work-report":          ["Admin", "Operations", "Legal", "Super Admin"],
-  "refund-request":       ["Operations", "Staff", "Super Admin"]
+  "refund-request":       ["Admin", "Operations", "Staff", "Super Admin"]
 };

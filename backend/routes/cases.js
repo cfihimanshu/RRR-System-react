@@ -21,6 +21,10 @@ const User = require('../models/User');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function generateCaseId(brandName, companyName, existingCases) {
   const year = new Date().getFullYear();
   const bName = (brandName || '').trim();
@@ -344,8 +348,9 @@ router.get('/check-duplicate', verifyToken, async (req, res) => {
     const { companyName } = req.query;
     if (!companyName) return res.json({ exists: false });
     
+    const escapedName = escapeRegExp(companyName.trim());
     const existing = await Case.findOne({ 
-      companyName: { $regex: new RegExp(`^\\s*${companyName.trim()}\\s*$`, 'i') } 
+      companyName: { $regex: `^\\s*${escapedName}\\s*$`, $options: 'i' } 
     }).lean();
     
     res.json({ exists: !!existing });
@@ -393,8 +398,9 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async
     const typeOfComplaint = req.body.typeOfComplaint;
 
     // Duplicate Check - Strict match on Company Name only
+    const escapedName = escapeRegExp(companyName.trim());
     const existingCase = await Case.findOne({ 
-      companyName: { $regex: new RegExp(`^\\s*${companyName.trim()}\\s*$`, 'i') } 
+      companyName: { $regex: `^\\s*${escapedName}\\s*$`, $options: 'i' } 
     });
     if (existingCase) {
       return res.status(400).json({
@@ -1003,14 +1009,21 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.s
       const compName = row.companyName?.trim();
       const complaintType = row.typeOfComplaint;
 
-      // Check for duplicates in DB or current batch
-      const isDuplicate = existingCasesInDb.some(ex =>
-        (cMobile && ex.clientMobile === cMobile && ex.companyName === compName) ||
-        (cName === ex.clientName && compName === ex.companyName && complaintType === ex.typeOfComplaint)
-      ) || finalCases.some(ex =>
-        (cMobile && ex.clientMobile === cMobile && ex.companyName === compName) ||
-        (cName === ex.clientName && compName === ex.companyName && complaintType === ex.typeOfComplaint)
-      );
+      const isDuplicate = existingCasesInDb.some(ex => {
+        const exCompName = ex.companyName?.trim().toLowerCase();
+        const rowCompName = compName?.toLowerCase();
+        const exClientName = ex.clientName?.trim().toLowerCase();
+        const rowClientName = cName?.toLowerCase();
+        return (cMobile && ex.clientMobile === cMobile && exCompName === rowCompName) ||
+          (exClientName === rowClientName && exCompName === rowCompName && ex.typeOfComplaint === complaintType);
+      }) || finalCases.some(ex => {
+        const exCompName = ex.companyName?.trim().toLowerCase();
+        const rowCompName = compName?.toLowerCase();
+        const exClientName = ex.clientName?.trim().toLowerCase();
+        const rowClientName = cName?.toLowerCase();
+        return (cMobile && ex.clientMobile === cMobile && exCompName === rowCompName) ||
+          (exClientName === rowClientName && exCompName === rowCompName && ex.typeOfComplaint === complaintType);
+      });
 
       if (isDuplicate) {
         skippedCount++;

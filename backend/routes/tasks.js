@@ -53,7 +53,7 @@ router.get('/', verifyToken, async (req, res) => {
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limit)
-      .select('taskId title priority assignee dueDate caseId details status reminderDateTime source createdBy createdAt updatedAt')
+      .select('taskId title priority assignee dueDate caseId details status reminderDateTime source notes createdBy createdAt updatedAt')
       .lean();
 
     const caseIds = [...new Set(rawTasks.map(t => t.caseId).filter(Boolean))];

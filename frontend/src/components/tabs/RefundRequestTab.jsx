@@ -331,7 +331,9 @@ const RefundRequestTab = () => {
             <div className="p-3 bg-accent-soft rounded-2xl border border-accent-soft/30 text-accent">
               <ClipboardList size={22} />
             </div>
-            <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">My Submitted Requests</h3>
+            <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
+              {user?.role === 'Admin' ? 'Refund Requests' : 'My Submitted Requests'}
+            </h3>
           </div>
           <div className="flex items-center gap-2">
             <label className="text-[10px] font-black text-text-muted uppercase tracking-widest">Status Filter:</label>
