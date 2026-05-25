@@ -36,6 +36,7 @@ const WorkReportTab = () => {
   const [dayActivities, setDayActivities] = useState([]);
   const [dayTasks, setDayTasks] = useState([]);
   const [fetchingActivities, setFetchingActivities] = useState(false);
+  const [previewSelfie, setPreviewSelfie] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -548,8 +549,15 @@ const WorkReportTab = () => {
                                         <div className="flex items-center gap-1.5 text-[10px] font-black text-text-muted uppercase tracking-widest self-start mb-2 lg:mb-1">
                                           <Camera size={12} className="text-accent" /> SOD Selfie Proof
                                         </div>
-                                        <div className="w-32 h-24 rounded-lg overflow-hidden border border-border shadow bg-black transition-all">
+                                        <div 
+                                          className="w-32 h-24 rounded-lg overflow-hidden border border-border shadow bg-black transition-all hover:scale-[1.04] active:scale-95 cursor-pointer relative group"
+                                          title="Click to view full image"
+                                          onClick={() => setPreviewSelfie({ url: report.sod.selfieUrl, type: 'SOD Checkpoint', userName: report.userName, lat: report.sod.latitude, lng: report.sod.longitude })}
+                                        >
                                           <img src={report.sod.selfieUrl} alt="SOD GPS Selfie" className="w-full h-full object-cover" />
+                                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-all">
+                                            <Eye size={16} />
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
@@ -582,8 +590,15 @@ const WorkReportTab = () => {
                                         <div className="flex items-center gap-1.5 text-[10px] font-black text-text-muted uppercase tracking-widest self-start mb-2 lg:mb-1">
                                           <Camera size={12} className="text-purple" /> EOD Selfie Proof
                                         </div>
-                                        <div className="w-32 h-24 rounded-lg overflow-hidden border border-border shadow bg-black transition-all">
+                                        <div 
+                                          className="w-32 h-24 rounded-lg overflow-hidden border border-border shadow bg-black transition-all hover:scale-[1.04] active:scale-95 cursor-pointer relative group"
+                                          title="Click to view full image"
+                                          onClick={() => setPreviewSelfie({ url: report.eod.selfieUrl, type: 'EOD Checkpoint', userName: report.userName, lat: report.eod.latitude, lng: report.eod.longitude })}
+                                        >
                                           <img src={report.eod.selfieUrl} alt="EOD GPS Selfie" className="w-full h-full object-cover" />
+                                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-all">
+                                            <Eye size={16} />
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
@@ -758,6 +773,54 @@ const WorkReportTab = () => {
           </div>
         )}
       </div>
+
+      {/* Premium Lightbox Selfie Preview Modal */}
+      {previewSelfie && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in duration-300 p-4">
+          <div className="relative w-full max-w-[500px] bg-bg-card border-2 border-border rounded-3xl overflow-hidden shadow-[0_25px_60px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-300 flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border/80 bg-bg-secondary/40">
+              <span className="text-[10px] font-black text-text-primary uppercase tracking-[0.2em] flex items-center gap-2">
+                <Camera size={14} className="text-accent" /> GPS Selfie Proof
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewSelfie(null)}
+                className="p-2 text-text-muted hover:text-accent bg-bg-input rounded-xl border border-border hover:border-accent/30 transition-all active:scale-95"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Content / Picture */}
+            <div className="p-6 flex flex-col items-center gap-4 bg-black/20">
+              <div className="w-full aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-black shadow-inner">
+                <img src={previewSelfie.url} alt="Selfie Proof" className="w-full h-full object-cover" />
+              </div>
+              
+              {/* Telemetry info */}
+              <div className="w-full p-4 bg-bg-input rounded-2xl border border-border/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="text-[8px] font-black text-text-muted uppercase tracking-widest">Verification Target</div>
+                  <div className="text-xs font-black text-text-primary uppercase">
+                    {previewSelfie.type} • {previewSelfie.userName}
+                  </div>
+                </div>
+                {previewSelfie.lat && previewSelfie.lng && (
+                  <a
+                    href={`https://www.google.com/maps?q=${previewSelfie.lat},${previewSelfie.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl text-[10px] font-black uppercase tracking-wider text-accent border border-accent/20 bg-accent/5 hover:bg-accent hover:text-white transition-all active:scale-95"
+                  >
+                    <MapPin size={12} /> Track Location →
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

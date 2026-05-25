@@ -179,6 +179,10 @@ const DashboardTab = () => {
     } catch (err) {
       console.error('Camera access failed:', err);
       setIsCameraActive(false);
+      toast.error('Camera access blocked! Please click the camera icon with the red line in your browser address bar (top left of the page) and select "Allow".', {
+        duration: 7000,
+        style: { borderRadius: '15px', fontWeight: 'bold' }
+      });
     }
   };
 
@@ -1190,24 +1194,7 @@ const DashboardTab = () => {
                             >
                               Activate Camera
                             </button>
-                            <span className="block text-[8px] text-text-muted uppercase tracking-widest mt-2.5">or select an image file</span>
                           </div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="user"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  setSelfie(reader.result);
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                            className="text-[10px] font-bold text-text-muted mt-4 w-full max-w-[200px] text-center file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[9px] file:font-black file:bg-bg-input file:text-accent file:uppercase file:tracking-widest cursor-pointer file:cursor-pointer"
-                          />
                         </div>
                       )}
                     </div>

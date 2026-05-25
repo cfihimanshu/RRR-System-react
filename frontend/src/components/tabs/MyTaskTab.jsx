@@ -118,6 +118,14 @@ const MyTaskTab = () => {
   };
 
   const fetchUsers = async () => {
+    const privilegedRoles = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'];
+    if (!privilegedRoles.includes(user?.role)) {
+      if (user?.fullName) {
+        setUsers([{ _id: 'current-user', fullName: user.fullName, role: user.role }]);
+      }
+      return;
+    }
+
     try {
       const res = await api.get('/users');
       let opsUsers = res.data.filter(u => u.fullName && u.fullName.trim() !== '');
@@ -133,6 +141,9 @@ const MyTaskTab = () => {
       setUsers(opsUsers);
     } catch (err) {
       console.error('Failed to fetch users:', err);
+      if (user?.fullName) {
+        setUsers([{ _id: 'current-user', fullName: user.fullName, role: user.role }]);
+      }
     }
   };
 
