@@ -124,7 +124,6 @@ const normalizeStatus = (status, assignedTo, initiatedBy) => {
   return normalized;
 };
 
-
 const filterableFields = [
   { label: 'Case ID', key: 'caseId' },
   { label: 'Company Name', key: 'companyName' },
@@ -1032,8 +1031,20 @@ const CaseMasterTab = () => {
     } else {
       matchStatus = appliedFilters.status.some(selectedStatus => {
         if (selectedStatus === 'Active') {
-          const isStatusNotCompleted = normalizedCaseStatus !== 'Settlement' && normalizedCaseStatus !== 'Closure' && normalizedCaseStatus !== 'Settled' && normalizedCaseStatus !== 'Closed' && normalizedCaseStatus !== 'Resolution';
-          const isRefundNotPaid = c.refundStatus !== 'Paid';
+          const caseStatusLower = (c.currentStatus || c.status || '').toLowerCase().trim();
+          const completedList = [
+            'settled', 'settlement', 'closure', 'resolution', 'resolved', 'done', 
+            'complete', 'completed', 'closed', 'na', 'na non agreement', 'non agreement'
+          ];
+          const isStatusNotCompleted = !completedList.some(s => caseStatusLower.includes(s) || caseStatusLower === s);
+          
+          const caseRefund = refundsList.find(r => r.caseId === c.caseId);
+          let refundStatusVal = '';
+          if (caseRefund) {
+            const isSinglePaidFallback = caseRefund.transactionId && (caseRefund.installments || []).length <= 1;
+            refundStatusVal = (caseRefund.status === 'Paid' || isSinglePaidFallback) ? 'Paid' : 'Pending';
+          }
+          const isRefundNotPaid = refundStatusVal !== 'Paid';
           return isStatusNotCompleted && isRefundNotPaid;
         } else if (selectedStatus === 'Closed' || selectedStatus === 'Closure') {
           return normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Closed' || normalizedCaseStatus === 'Resolution';
@@ -1395,7 +1406,7 @@ const CaseMasterTab = () => {
         totalAmtPaid: caseToUse.totalAmtPaid || caseToUse.amountPaid || '',
         totalMouValue: caseToUse.totalMouValue || caseToUse.mouValue || '',
         amtInDispute: caseToUse.amtInDispute || caseToUse.disputeAmount || '',
-        dateOfLastPayment: formatDateForInput(caseToUse.dateOfLastPayment || caseToUse.lastUpdateDate),
+        dateOfLastPayment: formatDateForInput(caseToUse.dateOfLastPayment || ''),
         refundedAmount: caseToUse.refundedAmount || 0,
         savedAmount: caseToUse.savedAmount || 0,
         dueDate: formatDateForInput(caseToUse.dueDate || ''),
@@ -1689,7 +1700,10 @@ const CaseMasterTab = () => {
           totalAmtPaid: updatedCase.totalAmtPaid || updatedCase.amountPaid || '',
           totalMouValue: updatedCase.totalMouValue || updatedCase.mouValue || '',
           amtInDispute: updatedCase.amtInDispute || updatedCase.disputeAmount || '',
-          dateOfLastPayment: formatDateForInput(updatedCase.dateOfLastPayment || updatedCase.lastUpdateDate),
+          dateOfLastPayment: formatDateForInput(updatedCase.dateOfLastPayment || ''),
+          refundedAmount: updatedCase.refundedAmount || 0,
+          savedAmount: updatedCase.savedAmount || 0,
+          dueDate: formatDateForInput(updatedCase.dueDate || ''),
           initiatedBy: updatedCase.initiatedBy || updatedCase.initiator || '',
           accountable: updatedCase.accountable || '',
           legalOfficer: updatedCase.legalOfficer || '',
@@ -2808,8 +2822,8 @@ const CaseMasterTab = () => {
                   }}
                 >
                   <option value="">Bulk Assign Mode...</option>
-                  {allDynamicAssignees.map(u => (
-                    <option key={`bulk-${u._id}`} value={u.fullName}>Assign: {u.fullName}</option>
+                  {opsUsers.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
+                    <option key={`bulk-${u._id || u.email}`} value={u.fullName}>Assign: {u.fullName}</option>
                   ))}
                 </select>
 
@@ -3227,6 +3241,7 @@ const CaseMasterTab = () => {
                             <option value="Submitted">Submitted</option>
                             <option value="On Hold">On Hold</option>
                             <option value="Converted">Converted</option>
+                            <option value="Completed">Completed</option>
                             <option value="Q/A not approved">Q/A not approved</option>
                           </select>
                         </div>
@@ -4205,10 +4220,10 @@ const CaseMasterTab = () => {
                       {['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'].map((opt) => {
                         const stages = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
                         const originalStage = caseProgressLogs[0]?.stage || 'Case Logged';
-                        
+
                         // Enforce forward-only progression by locking any stages strictly before the case's current stage
                         const isDisabled = stages.indexOf(opt) < stages.indexOf(originalStage);
-                        
+
                         return (
                           <option key={opt} value={opt} disabled={isDisabled}>
                             {opt} {isDisabled ? '🔒 (Locked)' : ''}
@@ -4306,9 +4321,14 @@ const CaseMasterTab = () => {
                         className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent uppercase tracking-widest"
                       >
                         <option value="">-- NO ESCALATION --</option>
-                        {allDynamicAssignees.map(u => (
-                          <option key={`escalate-${u._id}`} value={u.fullName}>{u.fullName}</option>
-                        ))}
+                        {user?.role?.toLowerCase() === 'admin'
+                          ? opsUsers.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
+                              <option key={`escalate-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
+                            ))
+                          : (user?.fullName && (
+                              <option value={user.fullName}>{user.fullName}</option>
+                            ))
+                        }
                       </select>
                     </div>
                   </div>
@@ -4975,7 +4995,7 @@ const CaseRow = memo(({
           </div>
 
           {/* Bottom Row: Assignment Section */}
-          {user?.role === 'Admin' && (
+          {['Admin', 'Operations'].includes(user?.role) && (
             <div className="flex gap-2 w-full">
               <select
                 className="flex-1 bg-bg-input border-2 border-border rounded-xl text-[9px] px-2 py-2.5 outline-none focus:border-accent shadow-sm min-w-0 text-text-primary font-black uppercase tracking-widest cursor-pointer"
@@ -4983,9 +5003,14 @@ const CaseRow = memo(({
                 onChange={(e) => handleAssignmentInputChange(c.caseId, e.target.value)}
               >
                 <option value="">Assign</option>
-                {allDynamicAssignees.map(u => (
-                  <option key={u._id} value={u.fullName}>{u.fullName}</option>
-                ))}
+                {user?.role?.toLowerCase() === 'admin'
+                  ? opsUsers.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
+                      <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
+                    ))
+                  : (user?.fullName && (
+                      <option value={user.fullName}>{user.fullName}</option>
+                    ))
+                }
               </select>
               <button
                 onClick={() => handleAssign(c.caseId)}

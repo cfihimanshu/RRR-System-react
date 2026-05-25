@@ -238,6 +238,11 @@ app.get('/api/admin/migrate-fir-types', require('./middleware/auth').verifyToken
 const statsCache = new Map();
 const CACHE_DURATION = 60000; // 1 minute in milliseconds
 
+global.clearStatsCache = () => {
+  statsCache.clear();
+  console.log('Dashboard stats cache cleared successfully.');
+};
+
 function buildAnchoredRegex(text) {
   const safe = String(text || '').trim();
   if (!safe) return null;
@@ -458,8 +463,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
                   _id: null,
                   totalCases: { $sum: 1 },
                   totalAmountPaid: { $sum: { $ifNull: ['$totalAmtPaid', 0] } },
-                  openCases: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, 1, 0] } },
-                  openCasesAmount: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
+                  openCases: { $sum: { $cond: [{ $and: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, 1, 0] } },
+                  openCasesAmount: { $sum: { $cond: [{ $and: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
                   settledCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement']] }, 1, 0] } },
                   settledAmount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Settled', 'settled', 'Settlement', 'settlement']] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
                   closedCount: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed']] }, 1, 0] } },
@@ -474,9 +479,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
                   lowPriorityAmount: { $sum: { $cond: [{ $eq: ["$priority", "Low"] }, { $ifNull: ['$totalAmtPaid', 0] }, 0] } },
                   linkedByCount: { $sum: { $cond: [{ $and: [{ $gt: ["$linkedBy", null] }, { $ne: ["$linkedBy", ""] }] }, 1, 0] } },
                   createdToday: { $sum: { $cond: [{ $gte: ["$createdAt", startOfToday] }, 1, 0] } },
-                  liveEscalations: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $gte: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
-                  noUpdate48Hrs: { $sum: { $cond: [{ $and: [{ $lt: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
-                  slaBreached: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $lt: ["$nextActionDate", today] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }] }, 1, 0] } },
+                  liveEscalations: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $gte: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, 1, 0] } },
+                  noUpdate48Hrs: { $sum: { $cond: [{ $and: [{ $lt: ["$updatedAt", fortyEightHrsAgo] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, 1, 0] } },
+                  slaBreached: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $lt: ["$nextActionDate", today] }, { $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, 1, 0] } },
                   totalCriticalCases: { $sum: { $cond: [{ $eq: ["$priority", "High"] }, 1, 0] } },
                   closedCriticalCases: { $sum: { $cond: [{ $and: [{ $eq: ["$priority", "High"] }, { $in: ["$currentStatus", ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution', 'settled', 'settlement', 'closed', 'closure', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']] }] }, 1, 0] } }
                 }
@@ -539,7 +544,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
               { $limit: 10 }
             ],
             highPriorityCases: [
-              { $match: { priority: 'High', currentStatus: { $nin: completedStatuses } } },
+              { $match: { priority: 'High', currentStatus: { $nin: completedStatuses }, refundStatus: { $ne: 'Paid' } } },
               { $sort: { createdAt: -1 } },
               { $limit: 10 }
             ],
@@ -804,6 +809,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
             'Non Agreement', 'non agreement'
           ] 
         },
+        refundStatus: { $ne: 'Paid' },
         $or: [
           { nextActionDate: { $lt: dateStrIST } },
           { nextActionDate: { $lt: new Date().toISOString().split('T')[0] } }
@@ -1053,7 +1059,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         $group: {
           _id: "$calculatedUser",
           total: { $sum: 1 },
-          pending: { $sum: { $cond: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, 1, 0] } },
+          pending: { $sum: { $cond: [{ $and: [{ $not: [{ $in: ["$currentStatus", completedStatuses] }] }, { $ne: ["$refundStatus", "Paid"] }] }, 1, 0] } },
           settled: { $sum: { $cond: [{ $in: ["$currentStatus", ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']] }, 1, 0] } },
           overdue: {
             $sum: {
@@ -1063,7 +1069,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
                     { $ne: ["$nextActionDate", null] },
                     { $ne: ["$nextActionDate", ""] },
                     { $lt: ["$nextActionDate", today] },
-                    { $not: [{ $in: ["$currentStatus", completedStatuses] }] }
+                    { $not: [{ $in: ["$currentStatus", completedStatuses] }] },
+                    { $ne: ["$refundStatus", "Paid"] }
                   ]
                 }, 1, 0
               ]
