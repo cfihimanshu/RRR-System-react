@@ -514,10 +514,20 @@ const NewCaseTab = () => {
         const { _id, __v, caseId, createdAt, updatedAt, ...cleanPayload } = payload;
         await api.put(`/cases/${editCase.caseId}`, cleanPayload);
         toast.success('Case updated successfully');
+        try {
+          const channel = new BroadcastChannel('case_updates');
+          channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+          channel.close();
+        } catch (e) {}
         navigate('/case-master'); // Go back to master list after edit
       } else {
         await api.post('/cases', payload);
         toast.success('Case created successfully');
+        try {
+          const channel = new BroadcastChannel('case_updates');
+          channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+          channel.close();
+        } catch (e) {}
         clearFormPersistence();
         setFormData({
           companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',

@@ -10,7 +10,7 @@ const User = require('../models/User');
 router.get('/', verifyToken, async (req, res) => {
   try {
     let matchQuery = {};
-    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
+    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Operations', 'Reviewer', 'Accountant'].includes(req.user.role)) {
       matchQuery.userEmail = req.user.email;
     }
     if (req.query.date) {
@@ -145,6 +145,16 @@ router.post('/', verifyToken, async (req, res) => {
       userName: req.user.fullName
     };
 
+    // Validation: Require GPS Selfie and Coordinates for SOD/EOD for non-exempt roles
+    if ((reportData.type === 'SOD' || reportData.type === 'EOD') && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
+      if (!reportData.selfieUrl) {
+        return res.status(400).json({ error: 'GPS Selfie is required for SOD/EOD submission!' });
+      }
+      if (!reportData.latitude || !reportData.longitude) {
+        return res.status(400).json({ error: 'GPS coordinates are required for SOD/EOD submission!' });
+      }
+    }
+
     if (reportData.type === 'SOD' && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
       const User = require('../models/User');
       const user = await User.findById(req.user.id).lean();
@@ -186,7 +196,7 @@ router.get('/stats', verifyToken, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const isAdmin = req.user.role === 'Admin';
+    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin', 'Operations'].includes(req.user.role);
     let query = {};
     let taskQuery = {};
     let caseQuery = {};

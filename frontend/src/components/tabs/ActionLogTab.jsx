@@ -58,6 +58,11 @@ const ActionLogTab = () => {
       }
 
       toast.success('Action logged successfully');
+      try {
+        const channel = new BroadcastChannel('case_updates');
+        channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+        channel.close();
+      } catch (e) {}
 
       // Reset form
       setFormData({

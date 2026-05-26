@@ -1001,6 +1001,11 @@ const CaseMasterTab = () => {
     try {
       await api.delete(`/cases/${caseId}`);
       toast.success('Case deleted successfully');
+      try {
+        const channel = new BroadcastChannel('case_updates');
+        channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+        channel.close();
+      } catch (e) {}
       fetchCases();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to delete case');
@@ -1036,7 +1041,10 @@ const CaseMasterTab = () => {
             'settled', 'settlement', 'closure', 'resolution', 'resolved', 'done', 
             'complete', 'completed', 'closed', 'na', 'na non agreement', 'non agreement'
           ];
-          const isStatusNotCompleted = !completedList.some(s => caseStatusLower.includes(s) || caseStatusLower === s);
+          const isStatusNotCompleted = !completedList.some(s => {
+            if (s === 'na') return caseStatusLower === 'na';
+            return caseStatusLower.includes(s) || caseStatusLower === s;
+          });
           
           const caseRefund = refundsList.find(r => r.caseId === c.caseId);
           let refundStatusVal = '';
@@ -1672,6 +1680,11 @@ const CaseMasterTab = () => {
 
       await api.put(`/cases/${viewCase.caseId}`, payload);
       toast.success('Case profile updated successfully', { id: loadingToast });
+      try {
+        const channel = new BroadcastChannel('case_updates');
+        channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+        channel.close();
+      } catch (e) {}
       fetchCases();
 
       // Refresh the viewCase data to reflect backend auto-updates (like status changed to Assigned)
@@ -1767,6 +1780,11 @@ const CaseMasterTab = () => {
       });
 
       toast.success('Case marked as resolved', { id: loadingToast });
+      try {
+        const channel = new BroadcastChannel('case_updates');
+        channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+        channel.close();
+      } catch (e) {}
       fetchCases();
       // Update local view
       setViewCase(prev => ({ ...prev, currentStatus: 'Closure', progressPercentage: 100 }));
@@ -1928,6 +1946,11 @@ const CaseMasterTab = () => {
       await api.put(`/cases/${viewCase.caseId}`, caseUpdatePayload);
 
       toast.success('Progress updated', { id: loadingToast });
+      try {
+        const channel = new BroadcastChannel('case_updates');
+        channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+        channel.close();
+      } catch (e) {}
 
       // Update local viewCase to reflect new status/percentage/assignee
       const updatedCase = {
@@ -2146,6 +2169,11 @@ const CaseMasterTab = () => {
     try {
       await api.put(`/cases/${caseId}`, { assignedTo: name });
       toast.success(`Case assigned to ${name}`);
+      try {
+        const channel = new BroadcastChannel('case_updates');
+        channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+        channel.close();
+      } catch (e) {}
       fetchCases(); // Refresh list
     } catch (err) {
       toast.error("Failed to assign case");
@@ -2162,6 +2190,11 @@ const CaseMasterTab = () => {
     try {
       await api.put('/cases/bulk-assign', { caseIds: selectedCases, assignedTo: name });
       toast.success(`Successfully assigned ${selectedCases.length} cases to ${name}`, { id: loadingToast });
+      try {
+        const channel = new BroadcastChannel('case_updates');
+        channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+        channel.close();
+      } catch (e) {}
       setSelectedCases([]);
       setBulkAssignUser('');
       fetchCases();

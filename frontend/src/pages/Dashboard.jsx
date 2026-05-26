@@ -30,11 +30,7 @@ const WorkReportTab = React.lazy(() => import('../components/tabs/WorkReportTab'
 const RefundRequestTab = React.lazy(() => import('../components/tabs/RefundRequestTab'));
 const LegalDashboardTab = React.lazy(() => import('../components/tabs/LegalDashboardTab'));
 
-const TabLoader = () => (
-  <div className="flex-1 flex items-center justify-center min-h-[200px]">
-    <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-700 rounded-full animate-spin" />
-  </div>
-);
+import TabLoader from '../components/shared/TabLoader';
 
 const ProtectedRoute = ({ children, allowedRoles, id }) => {
   const { user } = useContext(AuthContext);

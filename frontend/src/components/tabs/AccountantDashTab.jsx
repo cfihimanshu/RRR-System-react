@@ -412,7 +412,7 @@ const AccountantDashTab = () => {
                                       {isInstPaid ? 'Paid' : (inst.status || 'Pending')}
                                     </span>
                                     {isInstPaid && txId && (
-                                      <div className="text-[8px] text-text-muted font-mono mt-1 select-all">
+                                      <div className="text-[9px] font-bold text-text-muted font-mono mt-1 select-all">
                                         UTR: {txId}
                                       </div>
                                     )}

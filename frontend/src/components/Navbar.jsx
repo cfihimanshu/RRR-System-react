@@ -118,17 +118,17 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed, onLogoutClick, onC
   return (
     <div className="navbar print:hidden shadow-lg relative">
       {/* Mobile Toggle */}
-      <button className="md:hidden flex items-center justify-center min-w-[40px] px-2 py-1.5 border border-gray-800/70 rounded hover:bg-orange-300/20 transition-colors" onClick={toggleSidebar}>
+      <button className="md:hidden flex items-center justify-center min-w-[40px] px-2 py-1.5 border border-border rounded-lg text-text-secondary hover:bg-bg-secondary transition-colors" onClick={toggleSidebar}>
         <Menu size={20} />
       </button>
 
       {/* Desktop Collapse Toggle */}
       <button
-        className="hidden md:flex items-center justify-center min-w-[40px] h-10 w-10 hover:bg-gray-600 rounded-lg transition-colors"
+        className="hidden md:flex items-center justify-center min-w-[40px] h-10 w-10 hover:bg-bg-secondary text-text-secondary hover:text-text-primary rounded-lg transition-all active:scale-95 duration-200 cursor-pointer"
         onClick={toggleCollapse}
         title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
       >
-        <Menu size={22} className="text-gray-400 hover:text-white" />
+        <Menu size={20} className="transition-colors" />
       </button>
 
       <div className="flex items-center gap-2 cursor-pointer transition-transform hover:scale-105 active:scale-95" onClick={toggleCollapse}>

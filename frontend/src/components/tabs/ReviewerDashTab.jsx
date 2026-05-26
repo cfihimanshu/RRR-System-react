@@ -475,7 +475,7 @@ const ReviewerDashTab = () => {
             {selectedRefund.installments && selectedRefund.installments.length > 0 ? (
               <div className="bg-bg-secondary rounded-2xl border-2 border-border overflow-hidden shadow-sm">
                 <div className="bg-bg-card px-6 py-4 border-b border-border font-black text-text-muted text-[10px] uppercase tracking-[0.2em]">
-                  Installments Details(Click for details)
+                  Installments Details(Click for More Details)
                 </div>
                 <div className="p-0 overflow-x-auto">
                   <table className="w-full text-left border-collapse">

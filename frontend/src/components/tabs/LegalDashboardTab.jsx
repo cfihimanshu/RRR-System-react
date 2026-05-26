@@ -25,7 +25,10 @@ import {
   ShieldAlert,
   MessageCircle,
   HelpCircle,
-  Clock
+  Clock,
+  Camera,
+  MapPin,
+  RefreshCw
 } from 'lucide-react';
 
 const LegalDashboardTab = () => {
@@ -54,6 +57,94 @@ const LegalDashboardTab = () => {
     eodCompletedTaskIds: [],
     sodTasks: [{ type: 'Case ID', caseId: '', task: '', mode: '' }]
   });
+
+  const [selfie, setSelfie] = useState('');
+  const [coords, setCoords] = useState(null);
+  const [gpsStatus, setGpsStatus] = useState('idle');
+  const [gpsError, setGpsError] = useState('');
+  const [cameraStream, setCameraStream] = useState(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const videoRef = React.useRef(null);
+
+  const startCamera = async () => {
+    try {
+      setIsCameraActive(true);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 300, facingMode: 'user' } });
+      setCameraStream(stream);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 100);
+    } catch (err) {
+      console.error('Camera access failed:', err);
+      setIsCameraActive(false);
+      toast.error('Camera access blocked! Please click the camera icon with the red line in your browser address bar (top left of the page) and select "Allow".', {
+        duration: 7000,
+        style: { borderRadius: '15px', fontWeight: 'bold' }
+      });
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setIsCameraActive(false);
+  };
+
+  const captureSelfie = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 300;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      setSelfie(dataUrl);
+      stopCamera();
+      toast.success('Selfie captured successfully!');
+    }
+  };
+
+  const fetchGPSLocation = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus('error');
+      setGpsError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setGpsStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCoords({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+        setGpsStatus('success');
+      },
+      (err) => {
+        console.error('GPS fetch failed:', err);
+        setGpsStatus('error');
+        setGpsError(err.message || 'Permission denied or timed out');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  useEffect(() => {
+    if (isReportModalOpen && (reportType === 'SOD' || reportType === 'EOD')) {
+      setSelfie('');
+      setCoords(null);
+      setGpsStatus('idle');
+      setGpsError('');
+      fetchGPSLocation();
+      startCamera();
+    } else {
+      stopCamera();
+    }
+  }, [isReportModalOpen, reportType]);
 
   // Live Clock Effect
   useEffect(() => {
@@ -151,7 +242,7 @@ const LegalDashboardTab = () => {
 
   const fetchDashboardStats = async () => {
     try {
-      const res = await api.get('/dashboard/stats');
+      const res = await api.get(`/dashboard/stats?t=${Date.now()}`);
       const data = res.data;
 
       if (data.caseTypeWiseData) {
@@ -197,6 +288,17 @@ const LegalDashboardTab = () => {
       fetchMyTodayTasks();
       fetchDashboardStats();
     }
+
+    const channel = new BroadcastChannel('case_updates');
+    channel.onmessage = (event) => {
+      if (event.data.type === 'CASE_PROGRESS_UPDATED') {
+        fetchDashboardStats();
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
   }, [user]);
 
   const openReportModal = async (type) => {
@@ -250,6 +352,19 @@ const LegalDashboardTab = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     const loadingToast = toast.loading(`Submitting ${reportType} report...`);
+    
+    // GPS & Selfie Verification Validation
+    if (!selfie) {
+      toast.error('Please capture your GPS Verification Selfie first!', { id: loadingToast });
+      setIsSubmitting(false);
+      return;
+    }
+    if (gpsStatus !== 'success' || !coords) {
+      toast.error('GPS coordinates are required to submit the report!', { id: loadingToast });
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const d = new Date();
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -265,7 +380,10 @@ const LegalDashboardTab = () => {
         workSummary: reportType === 'EOD' ? reportFormData.workSummary : '',
         completionStatus: reportType === 'EOD' ? reportFormData.completionStatus : 'Incomplete',
         progressScore: reportType === 'EOD' ? reportFormData.progressScore : '',
-        moodEnergy: reportType === 'EOD' ? reportFormData.moodEnergy : ''
+        moodEnergy: reportType === 'EOD' ? reportFormData.moodEnergy : '',
+        selfieUrl: selfie,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude
       };
 
       await api.post('/reports', payload);
@@ -291,6 +409,9 @@ const LegalDashboardTab = () => {
         eodCompletedTaskIds: [],
         sodTasks: [{ type: 'Case ID', caseId: '', task: '', mode: '' }]
       });
+
+      setSelfie('');
+      setCoords(null);
 
       if (reportType === 'SOD') {
         for (const t of reportFormData.sodTasks) {
@@ -859,7 +980,129 @@ const LegalDashboardTab = () => {
                 </>
               )}
 
-              <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 pt-10 border-t-2 border-border">
+              {(reportType === 'SOD' || reportType === 'EOD') && (
+                <div className="flex flex-col gap-6 bg-bg-secondary/40 p-6 rounded-3xl border-2 border-border mt-6">
+                  {/* GPS Tracking Panel */}
+                  <div className="p-5 bg-bg-card rounded-2xl border border-border shadow-sm w-full">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] flex items-center gap-2">
+                          <MapPin size={14} className="text-accent" /> GPS Verification
+                        </label>
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+                            <MapPin size={20} />
+                            {gpsStatus === 'success' && (
+                              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500"></span>
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-xs font-black uppercase text-text-primary">
+                              {gpsStatus === 'loading' && 'Acquiring Satellites...'}
+                              {gpsStatus === 'success' && 'Coordinates Locked'}
+                              {gpsStatus === 'error' && 'Satellite Lock Failed'}
+                              {gpsStatus === 'idle' && 'GPS Inactive'}
+                            </div>
+                            <div className="text-[10px] font-bold text-text-muted mt-0.5 leading-relaxed">
+                              {gpsStatus === 'loading' && 'Querying browser geolocation telemetry...'}
+                              {gpsStatus === 'success' && coords && (
+                                <div className="font-mono text-[10px] text-green-400 font-bold bg-green-500/10 px-2.5 py-0.5 rounded-md mt-1 inline-block border border-green-500/20">
+                                  LAT: {coords.latitude.toFixed(6)} | LNG: {coords.longitude.toFixed(6)}
+                                </div>
+                              )}
+                              {gpsStatus === 'error' && (
+                                <span className="text-red-400 font-bold block text-[9px]">{gpsError || 'Please enable GPS permissions.'}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center sm:self-end">
+                        {gpsStatus === 'error' && (
+                          <button
+                            type="button"
+                            onClick={fetchGPSLocation}
+                            className="w-full sm:w-auto flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl text-[10px] font-black uppercase tracking-wider text-accent border border-accent/20 bg-accent/5 hover:bg-accent hover:text-white transition-all active:scale-95"
+                          >
+                            <RefreshCw size={12} className="animate-spin" /> Retry GPS Lock
+                          </button>
+                        )}
+                        {gpsStatus === 'success' && (
+                          <div className="py-2 px-4 bg-green-500/5 rounded-xl border border-green-500/10 text-center">
+                            <span className="text-[9px] font-black text-green-400 uppercase tracking-widest flex items-center justify-center gap-1.5">
+                              <Check size={12} strokeWidth={3} className="text-green-400" /> Location Locked
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Selfie Verification Panel */}
+                  <div className="flex flex-col items-center p-4 sm:p-6 bg-bg-card rounded-2xl border border-border shadow-sm w-full">
+                    <label className="block text-[10px] font-black text-text-muted uppercase mb-4 tracking-[0.2em] flex items-center gap-2 self-start ml-1">
+                      <Camera size={14} className="text-accent" /> GPS Selfie Capture
+                    </label>
+
+                    <div className="w-full flex flex-col items-center mt-1">
+                      {selfie ? (
+                        <div className="w-full flex flex-col items-center">
+                          <div className="w-full max-w-[480px] aspect-[4/3] rounded-2xl overflow-hidden border border-border shadow-lg bg-black">
+                            <img src={selfie} alt="Selfie" className="w-full h-full object-cover animate-in fade-in duration-300" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setSelfie(''); startCamera(); }}
+                            className="mt-4 w-full max-w-[480px] bg-bg-input hover:bg-bg-secondary border border-border/80 p-3.5 rounded-2xl text-text-primary transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                          >
+                            <RefreshCw size={14} /> Retake Photo
+                          </button>
+                        </div>
+                      ) : isCameraActive ? (
+                        <div className="w-full flex flex-col items-center">
+                          <div className="relative w-full max-w-[480px] aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-black shadow-lg">
+                            <video
+                              ref={videoRef}
+                              autoPlay
+                              playsInline
+                              muted
+                              className="w-full h-full object-cover transform -scale-x-100"
+                            />
+                            <div className="absolute inset-0 border-4 border-accent/40 rounded-full m-8 pointer-events-none border-dashed animate-pulse"></div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={captureSelfie}
+                            className="mt-4 w-full max-w-[480px] bg-accent hover:bg-accent-hover py-3.5 rounded-2xl text-white text-[11px] font-black uppercase tracking-widest shadow-xl border border-accent/20 active:scale-95 flex items-center justify-center gap-2"
+                          >
+                            <Camera size={16} /> Capture Selfie
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-full max-w-[480px] aspect-[4/3] rounded-2xl border-2 border-dashed border-border bg-bg-secondary/20 flex flex-col items-center justify-center p-6 text-center">
+                          <div className="p-4 bg-accent/5 rounded-full text-accent/50 border border-accent/10 mb-4 animate-bounce">
+                            <Camera size={32} />
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={startCamera}
+                              className="px-6 py-3 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95"
+                            >
+                              Activate Camera
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 pt-10 border-t-2 border-border mt-6">
                 {!(reportType === 'SOD' && !hasSodToday) && (
                   <button
                     type="button"
