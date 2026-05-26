@@ -163,16 +163,14 @@ const AccountantDashTab = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2.5 active:scale-95 ${
-                isActive 
-                  ? tab.activeColor 
-                  : 'bg-bg-secondary text-text-secondary border-2 border-border hover:bg-bg-card'
-              }`}
+              className={`px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2.5 active:scale-95 ${isActive
+                ? tab.activeColor
+                : 'bg-bg-secondary text-text-secondary border-2 border-border hover:bg-bg-card'
+                }`}
             >
               {tab.label}
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                isActive ? 'bg-white/20 text-white' : 'bg-bg-input text-text-muted border border-border'
-              }`}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isActive ? 'bg-white/20 text-white' : 'bg-bg-input text-text-muted border border-border'
+                }`}>
                 {count}
               </span>
             </button>
@@ -182,9 +180,8 @@ const AccountantDashTab = () => {
 
       <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border overflow-hidden mb-8">
         <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
-          <div className={`w-1.5 h-6 rounded-full ${
-            activeTab === 'pending' ? 'bg-orange-500' : 'bg-green'
-          }`} />
+          <div className={`w-1.5 h-6 rounded-full ${activeTab === 'pending' ? 'bg-orange-500' : 'bg-green'
+            }`} />
           <h3 className="text-sm font-black text-text-primary uppercase tracking-widest">
             {activeTab === 'pending' ? 'Pending Payments' : 'Settled Payments'}
           </h3>
@@ -196,8 +193,8 @@ const AccountantDashTab = () => {
                 <th className="px-4 py-5">Case ID</th>
                 <th className="px-4 py-5">Bank Details</th>
                 <th className="px-4 py-5">Amount</th>
-                <th className="px-4 py-5">Audit History</th>
-                <th className="px-4 py-5 text-right">Final Execution</th>
+                <th className="px-4 py-5">History</th>
+                <th className="px-4 py-5 text-right">Details</th>
               </tr>
             </thead>
             <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
@@ -216,6 +213,54 @@ const AccountantDashTab = () => {
                 </tr>
               ) : groupRefundsByCase(filteredRefunds).map(g => {
                 const isExpanded = !!expandedCases[g.caseId];
+                if (g.requests.length === 1) {
+                  const r = g.requests[0];
+                  return (
+                    <tr key={r._id} className="hover:bg-bg-input/40 transition-all bg-bg-card font-bold select-none">
+                      <td className="px-4 py-5 align-top flex flex-col items-start gap-2">
+                        <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border border-accent-soft">
+                          {g.caseId}
+                        </span>
+                        {g.companyName && (
+                          <div className="text-[10px] text-text-secondary font-black tracking-wide uppercase bg-bg-input/60 px-2.5 py-1 rounded-xl border border-border inline-block shadow-sm">
+                            🏢 {g.companyName}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-5 align-top">
+                        <div className="font-black text-text-primary mb-1 uppercase text-xs tracking-tight">{r.bankName}</div>
+                        <div className="text-text-muted font-bold">A/C: <span className="text-text-secondary">{r.accNum}</span> ({r.accType})</div>
+                        <div className="text-text-muted font-bold">IFSC: <span className="text-text-secondary">{r.ifsc}</span></div>
+                        <div className="text-text-muted font-bold">Holder: <span className="text-text-secondary uppercase">{r.accHolder}</span></div>
+                      </td>
+                      <td className="px-4 py-5 align-top">
+                        <div className="text-base font-black text-green tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</div>
+                        <div className="text-[9px] font-black uppercase text-accent mt-2 tracking-wider">
+                          {r.installments && r.installments.length > 0
+                            ? `${r.installments.filter(i => i.status === 'Paid').length} of ${r.installments.length} PAID`
+                            : 'Single Payout'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-5 align-top">
+                        <div className="text-text-primary font-bold mb-1">Req: <span className="text-text-secondary font-medium">{r.requestedByName || r.requestedBy}</span></div>
+                        <div className="text-text-primary font-bold mb-2">Appr: <span className="text-text-secondary font-medium">{r.approvedBy}</span></div>
+                        <div className="text-[10px] text-text-muted leading-relaxed italic border-l-2 border-border pl-3">"{r.summary}"</div>
+                      </td>
+                      <td className="px-4 py-5 align-top text-right">
+                        <button
+                          className="bg-accent hover:bg-accent-hover text-white font-black py-2.5 px-6 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-md shadow-orange-950/20 active:scale-95 whitespace-nowrap"
+                          onClick={() => {
+                            setSelectedRefund(r);
+                            setSelectedInstIndex(null);
+                            setModalOpen(true);
+                          }}
+                        >
+                          {activeTab === 'pending' ? 'Manage Payouts 💰' : 'View Details 👁️'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
                   <React.Fragment key={g.caseId}>
                     {/* Parent Case Row */}
@@ -302,7 +347,7 @@ const AccountantDashTab = () => {
           {selectedRefund && (
             <>
               <div className="bg-bg-input p-5 rounded-3xl border border-border shadow-sm flex flex-col gap-1 mb-2">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest">Target Case ID</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest">Case ID</p>
                 <p className="font-black text-accent text-sm tracking-tighter uppercase mb-1">{selectedRefund.caseId}</p>
                 {selectedRefund.companyName && (
                   <div className="text-[10px] text-text-secondary font-black tracking-wide uppercase bg-bg-card px-2.5 py-1 rounded-xl border border-border inline-block self-start shadow-sm mt-1">
@@ -333,13 +378,13 @@ const AccountantDashTab = () => {
 
                   <div className="bg-bg-secondary rounded-2xl border-2 border-border overflow-hidden">
                     <div className="p-4 border-b border-border bg-bg-card font-black text-text-muted text-[9px] uppercase tracking-widest">
-                      Authorized Payout Schedule
+                      Payout Details
                     </div>
                     <div className="p-0">
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="bg-bg-input text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
-                            <th className="px-4 py-3">Milestone</th>
+                            <th className="px-4 py-3">Installments</th>
                             <th className="px-4 py-3">Due Date</th>
                             <th className="px-4 py-3">Amount</th>
                             <th className="px-4 py-3 text-center">Status</th>
@@ -350,9 +395,9 @@ const AccountantDashTab = () => {
                         <tbody className="text-[10px] text-text-secondary divide-y divide-border/50">
                           {selectedRefund.installments && selectedRefund.installments.length > 0 ? (
                             selectedRefund.installments.map((inst, i) => {
-                              const isInstPaid = inst.status?.toLowerCase() === 'paid' || 
-                                                 selectedRefund.status?.toLowerCase() === 'paid' || 
-                                                 (selectedRefund.installments.length <= 1 && (selectedRefund.status?.toLowerCase() === 'paid' || (selectedRefund.transactionId && selectedRefund.paymentProof)));
+                              const isInstPaid = inst.status?.toLowerCase() === 'paid' ||
+                                selectedRefund.status?.toLowerCase() === 'paid' ||
+                                (selectedRefund.installments.length <= 1 && (selectedRefund.status?.toLowerCase() === 'paid' || (selectedRefund.transactionId && selectedRefund.paymentProof)));
                               const proofUrl = inst.paymentProof || (isInstPaid ? selectedRefund.paymentProof : '');
                               const txId = inst.transactionId || (isInstPaid ? selectedRefund.transactionId : '');
 

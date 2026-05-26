@@ -489,6 +489,41 @@ const AdminPanelTab = () => {
               ) : (
                 groupRefundsByCase(pendingRefunds).map(g => {
                   const isExpanded = !!expandedCases[g.caseId];
+                  if (g.requests.length === 1) {
+                    const r = g.requests[0];
+                    return (
+                      <tr key={r._id} className="hover:bg-bg-input/40 transition-all bg-bg-card font-bold select-none">
+                        <td className="px-4 py-5 text-text-muted font-bold">—</td>
+                        <td className="px-4 py-5">
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="bg-accent-soft text-accent px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all shadow-sm">
+                              {g.caseId}
+                            </span>
+                            {g.companyName && (
+                              <span className="text-[10px] text-text-muted font-bold tracking-normal normal-case ml-1">{g.companyName}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-5 text-center">
+                          <span className="text-lg font-black text-green tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</span>
+                          <div className="text-[9px] text-text-muted font-bold mt-1 uppercase tracking-wider">
+                            {r.installments && r.installments.length > 0
+                              ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
+                              : '1 Installment'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
+                          {r.requestedByName || r.requestedBy}
+                        </td>
+                        <td className="px-4 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-center gap-3">
+                            <button onClick={() => handleApproveRefund(r._id)} className="bg-green hover:bg-green-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-lg shadow-green-900/20 uppercase tracking-widest transition-all active:scale-95">Approve</button>
+                            <button onClick={() => handleRejectRefund(r._id)} className="bg-red hover:bg-red-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-lg shadow-red-900/20 uppercase tracking-widest transition-all active:scale-95">Reject</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
                   return (
                     <React.Fragment key={g.caseId}>
                       {/* Parent Case Row */}
@@ -540,6 +575,11 @@ const AdminPanelTab = () => {
                           </td>
                           <td className="px-4 py-5 text-center">
                             <span className="text-base font-black text-green tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</span>
+                            <div className="text-[9px] text-text-muted font-bold mt-1 uppercase tracking-wider">
+                              {r.installments && r.installments.length > 0
+                                ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
+                                : '1 Installment'}
+                            </div>
                           </td>
                           <td className="px-4 py-5 font-black text-text-secondary uppercase text-[10px] tracking-wider">
                             {r.requestedByName || r.requestedBy}
@@ -591,6 +631,46 @@ const AdminPanelTab = () => {
               ) : (
                 groupRefundsByCase(filteredAllRefunds).map(g => {
                   const isExpanded = !!expandedCases[`all_${g.caseId}`];
+                  if (g.requests.length === 1) {
+                    const r = g.requests[0];
+                    return (
+                      <tr key={r._id} className="hover:bg-bg-input/40 transition-all bg-bg-card font-bold select-none">
+                        <td className="px-4 py-5 font-black text-accent uppercase tracking-tighter">
+                          <div className="flex items-center gap-2">
+                            <div>{g.caseId}</div>
+                          </div>
+                          {g.companyName && (
+                            <div className="text-[10px] text-text-muted font-bold tracking-normal normal-case mt-0.5">{g.companyName}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-5 font-black text-green">
+                          <div className="text-lg tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</div>
+                          <div className="text-[9px] text-text-muted font-bold mt-1 uppercase tracking-wider">
+                            {r.installments && r.installments.length > 0
+                              ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
+                              : '1 Installment'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-5 font-bold uppercase text-[10px]">
+                          {r.requestedByName || r.requestedBy}
+                        </td>
+                        <td className="px-4 py-5 text-center">
+                          <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${r.status === 'Paid' ? 'bg-green-soft text-green border-green-soft' :
+                            r.status === 'Rejected' ? 'bg-red-soft text-red border-red-soft' :
+                              r.status === 'Pending Admin Approval' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
+                                'bg-bg-input text-text-muted border-border'
+                            }`}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => { setSelectedRefund(r); setIsDetailOpen(true); }} className="p-2 bg-bg-input hover:bg-bg-card-hover rounded-xl text-text-primary transition-all border border-border">
+                            <Eye size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
                   return (
                     <React.Fragment key={g.caseId}>
                       {/* Parent Case Row */}
@@ -639,7 +719,14 @@ const AdminPanelTab = () => {
                           <td className="px-4 py-5 font-black text-accent uppercase tracking-tighter pl-8">
                             <div className="text-[10px] text-text-muted font-bold">Request #{idx + 1} — {new Date(r.timestamp).toLocaleDateString('en-IN')}</div>
                           </td>
-                          <td className="px-4 py-5 font-black text-green">₹{Number(r.amount).toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-5 font-black text-green">
+                            <div className="text-sm font-black tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</div>
+                            <div className="text-[9px] text-text-muted font-bold mt-1 uppercase tracking-wider">
+                              {r.installments && r.installments.length > 0
+                                ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
+                                : '1 Installment'}
+                            </div>
+                          </td>
                           <td className="px-4 py-5 font-bold uppercase text-[10px] text-text-secondary">{r.requestedByName || r.requestedBy}</td>
                           <td className="px-4 py-5 text-center">
                             <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${r.status === 'Paid' ? 'bg-green-soft text-green border-green-soft' :

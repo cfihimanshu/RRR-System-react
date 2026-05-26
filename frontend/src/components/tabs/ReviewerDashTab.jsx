@@ -58,6 +58,8 @@ const ReviewerDashTab = () => {
     fetchRefunds();
   }, []);
 
+  const isReviewer = user?.role === 'Reviewer';
+
   const filteredRefunds = React.useMemo(() => {
     return refunds.filter(r => {
       const statusLower = r.status?.toLowerCase();
@@ -65,18 +67,24 @@ const ReviewerDashTab = () => {
         return statusLower === 'pending review';
       }
       if (activeTab === 'approved') {
+        if (!isReviewer) {
+          return ['paid', 'pending payment', 'pending admin approval'].includes(statusLower);
+        }
         const isReviewedByMe = !!r.reviewedBy && r.reviewedBy.toLowerCase() === user?.email?.toLowerCase() && statusLower !== 'rejected';
         const isPastApproved = (!r.reviewedBy || r.reviewedBy.trim() === '') && ['paid', 'pending payment', 'pending admin approval'].includes(statusLower);
         return isReviewedByMe || isPastApproved;
       }
       if (activeTab === 'rejected') {
+        if (!isReviewer) {
+          return statusLower === 'rejected';
+        }
         const isRejectedByMe = statusLower === 'rejected' && r.reviewedBy.toLowerCase() === user?.email?.toLowerCase();
         const isPastRejected = statusLower === 'rejected' && (!r.reviewedBy || r.reviewedBy.trim() === '');
         return isRejectedByMe || isPastRejected;
       }
       return false;
     });
-  }, [refunds, activeTab, user?.email]);
+  }, [refunds, activeTab, user?.email, isReviewer]);
 
   const handleApprove = async (id) => {
     try {
@@ -122,18 +130,24 @@ const ReviewerDashTab = () => {
       <div className="flex flex-wrap gap-3 mb-6">
         {[
           { id: 'pending', label: 'Pending Review', activeColor: 'bg-accent text-white shadow-lg shadow-orange-950/20' },
-          { id: 'approved', label: 'My Approved', activeColor: 'bg-green text-white shadow-lg shadow-green-950/20' },
-          { id: 'rejected', label: 'My Rejected', activeColor: 'bg-red text-white shadow-lg shadow-red-950/20' }
+          { id: 'approved', label: isReviewer ? 'My Approved' : 'Approved Requests', activeColor: 'bg-green text-white shadow-lg shadow-green-950/20' },
+          { id: 'rejected', label: isReviewer ? 'My Rejected' : 'Rejected Requests', activeColor: 'bg-red text-white shadow-lg shadow-red-950/20' }
         ].map(tab => {
           const count = refunds.filter(r => {
             const statusLower = r.status?.toLowerCase();
             if (tab.id === 'pending') return statusLower === 'pending review';
             if (tab.id === 'approved') {
+              if (!isReviewer) {
+                return ['paid', 'pending payment', 'pending admin approval'].includes(statusLower);
+              }
               const isReviewedByMe = !!r.reviewedBy && r.reviewedBy.toLowerCase() === user?.email?.toLowerCase() && statusLower !== 'rejected';
               const isPastApproved = (!r.reviewedBy || r.reviewedBy.trim() === '') && ['paid', 'pending payment', 'pending admin approval'].includes(statusLower);
               return isReviewedByMe || isPastApproved;
             }
             if (tab.id === 'rejected') {
+              if (!isReviewer) {
+                return statusLower === 'rejected';
+              }
               const isRejectedByMe = statusLower === 'rejected' && r.reviewedBy.toLowerCase() === user?.email?.toLowerCase();
               const isPastRejected = statusLower === 'rejected' && (!r.reviewedBy || r.reviewedBy.trim() === '');
               return isRejectedByMe || isPastRejected;
@@ -146,16 +160,14 @@ const ReviewerDashTab = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2.5 active:scale-95 ${
-                isActive 
-                  ? tab.activeColor 
-                  : 'bg-bg-secondary text-text-secondary border-2 border-border hover:bg-bg-card'
-              }`}
+              className={`px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2.5 active:scale-95 ${isActive
+                ? tab.activeColor
+                : 'bg-bg-secondary text-text-secondary border-2 border-border hover:bg-bg-card'
+                }`}
             >
               {tab.label}
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                isActive ? 'bg-white/20 text-white' : 'bg-bg-input text-text-muted border border-border'
-              }`}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isActive ? 'bg-white/20 text-white' : 'bg-bg-input text-text-muted border border-border'
+                }`}>
                 {count}
               </span>
             </button>
@@ -165,13 +177,12 @@ const ReviewerDashTab = () => {
 
       <div className="bg-bg-secondary rounded-2xl shadow-sm border-2 border-border overflow-hidden mb-10">
         <div className="p-6 border-b border-border bg-bg-card flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg ${
-            activeTab === 'pending' ? 'bg-yellow-soft text-yellow' : activeTab === 'approved' ? 'bg-green-soft text-green' : 'bg-red-soft text-red'
-          }`}>
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg ${activeTab === 'pending' ? 'bg-yellow-soft text-yellow' : activeTab === 'approved' ? 'bg-green-soft text-green' : 'bg-red-soft text-red'
+            }`}>
             {activeTab === 'pending' ? '⚖️' : activeTab === 'approved' ? '✅' : '❌'}
           </div>
           <h3 className="text-lg font-black text-text-primary uppercase tracking-tight">
-            {activeTab === 'pending' ? 'Pending for Review' : activeTab === 'approved' ? 'Approved by Me' : 'Rejected by Me'}
+            {activeTab === 'pending' ? 'Pending for Review' : activeTab === 'approved' ? (isReviewer ? 'Approved by Me' : 'Approved Requests') : (isReviewer ? 'Rejected by Me' : 'Rejected Requests')}
           </h3>
         </div>
 
@@ -182,7 +193,7 @@ const ReviewerDashTab = () => {
                 <th className="px-6 py-5">Case Id</th>
                 <th className="px-6 py-5">Amount</th>
                 <th className="px-6 py-5">Bank Details</th>
-                <th className="px-6 py-5">Holder Details</th>
+                <th className="px-6 py-5">Details</th>
                 <th className="px-6 py-5 min-w-[200px]">Summary</th>
                 <th className="px-6 py-5 text-center">Document</th>
                 <th className="px-6 py-5 text-center">Action</th>
@@ -204,7 +215,80 @@ const ReviewerDashTab = () => {
                 </tr>
               ) : groupRefundsByCase(filteredRefunds).map(g => {
                 const isExpanded = !!expandedCases[g.caseId];
-                const groupColSpan = 7;
+                if (g.requests.length === 1) {
+                  const r = g.requests[0];
+                  return (
+                    <tr
+                      key={r._id}
+                      className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none"
+                      onClick={() => { setSelectedRefund(r); setExpandedInst({}); setIsDetailOpen(true); }}
+                    >
+                      <td className="px-6 py-5">
+                        <div className="flex flex-col items-start gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigate('/case-master', { state: { searchId: g.caseId } }); }}
+                            className="bg-accent-soft text-accent px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all shadow-sm"
+                          >
+                            {g.caseId}
+                          </button>
+                          {g.companyName && (
+                            <span className="text-[10px] text-text-muted font-bold tracking-normal normal-case ml-1 mt-0.5">{g.companyName}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 font-black text-green text-sm tracking-tight">
+                        <div>₹{Number(r.amount).toLocaleString('en-IN')}</div>
+                        <div className="text-[9px] text-text-muted font-bold mt-1 uppercase tracking-wider">
+                          {r.installments && r.installments.length > 0
+                            ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
+                            : '1 Installment'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="font-black text-text-primary uppercase tracking-tight">{r.bankName}</div>
+                        <div className="text-[9px] text-text-muted font-bold mt-1">IFSC: <span className="text-accent">{r.ifsc}</span></div>
+                        <div className="text-[9px] text-text-muted font-bold italic">{r.branch}</div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="font-black text-text-primary uppercase tracking-tight">{r.accHolder}</div>
+                        <div className="text-[9px] text-text-muted font-bold font-mono mt-1">{r.accNum}</div>
+                        <div className="text-[9px] text-accent font-black uppercase tracking-widest mt-1 opacity-50">{r.accType}</div>
+                      </td>
+                      <td className="px-6 py-5 text-text-muted leading-relaxed font-medium italic max-w-md whitespace-pre-wrap">"{r.summary}"</td>
+                      <td className="px-6 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                        {r.documentLink ? (
+                          <a
+                            href={r.documentLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm"
+                          >
+                            <Eye size={12} /> View Doc
+                          </a>
+                        ) : (
+                          <span className="text-[9px] text-text-muted font-bold">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                        {activeTab === 'pending' ? (
+                          <div className="flex justify-center gap-3">
+                            <button className="bg-green hover:bg-green-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-sm uppercase tracking-widest transition-all active:scale-95" onClick={() => handleApprove(r._id)}>Approve</button>
+                            <button className="bg-red hover:bg-red-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-sm uppercase tracking-widest transition-all active:scale-95" onClick={() => { setSelectedRefund(r); setModalOpen(true); }}>Reject</button>
+                          </div>
+                        ) : (
+                          <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider border ${r.status === 'Paid'
+                            ? 'bg-green-soft text-green border-green-soft'
+                            : r.status === 'Rejected'
+                              ? 'bg-red-soft text-red border-red-soft'
+                              : 'bg-yellow-soft text-yellow border-yellow-soft'
+                            }`}>
+                            {r.status}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
                   <React.Fragment key={g.caseId}>
                     {/* Parent Row */}
@@ -227,7 +311,10 @@ const ReviewerDashTab = () => {
                       </td>
                       <td className="px-6 py-5 font-black text-green text-sm tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</td>
                       <td className="px-6 py-5 text-text-muted font-bold" colSpan="4">
-                        {g.requests.length} refund requests for this case
+                        <span className="bg-amber-500/10 text-amber-700 border border-amber-500/20 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider mr-2">
+                          {g.requests.length} Requests
+                        </span>
+                        <span>Click to view individual details</span>
                       </td>
                       <td className="px-6 py-5 text-center">
                         <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
@@ -245,7 +332,14 @@ const ReviewerDashTab = () => {
                         <td className="px-6 py-5 text-text-muted font-bold pl-8">
                           Request #{idx + 1}
                         </td>
-                        <td className="px-6 py-5 font-black text-green text-sm tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</td>
+                        <td className="px-6 py-5 font-black text-green text-sm tracking-tight">
+                          <div>₹{Number(r.amount).toLocaleString('en-IN')}</div>
+                          <div className="text-[9px] text-text-muted font-bold mt-1 uppercase tracking-wider">
+                            {r.installments && r.installments.length > 0
+                              ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
+                              : '1 Installment'}
+                          </div>
+                        </td>
                         <td className="px-6 py-5">
                           <div className="font-black text-text-primary uppercase tracking-tight">{r.bankName}</div>
                           <div className="text-[9px] text-text-muted font-bold mt-1">IFSC: <span className="text-accent">{r.ifsc}</span></div>
@@ -256,7 +350,7 @@ const ReviewerDashTab = () => {
                           <div className="text-[9px] text-text-muted font-bold font-mono mt-1">{r.accNum}</div>
                           <div className="text-[9px] text-accent font-black uppercase tracking-widest mt-1 opacity-50">{r.accType}</div>
                         </td>
-                        <td className="px-6 py-5 text-text-muted leading-relaxed font-medium italic max-w-xs line-clamp-2">"{r.summary}"</td>
+                        <td className="px-6 py-5 text-text-muted leading-relaxed font-medium italic max-w-md whitespace-pre-wrap">"{r.summary}"</td>
                         {/* Document Link Column */}
                         <td className="px-6 py-5 text-center" onClick={(e) => e.stopPropagation()}>
                           {r.documentLink ? (
@@ -279,9 +373,12 @@ const ReviewerDashTab = () => {
                               <button className="bg-red hover:bg-red-600 text-white text-[9px] font-black py-2 px-5 rounded-xl shadow-sm uppercase tracking-widest transition-all active:scale-95" onClick={() => { setSelectedRefund(r); setModalOpen(true); }}>Reject</button>
                             </div>
                           ) : (
-                            <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider ${
-                              r.status === 'Rejected' ? 'bg-red-soft text-red' : 'bg-green-soft text-green'
-                            }`}>
+                            <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider border ${r.status === 'Paid'
+                              ? 'bg-green-soft text-green border-green-soft'
+                              : r.status === 'Rejected'
+                                ? 'bg-red-soft text-red border-red-soft'
+                                : 'bg-yellow-soft text-yellow border-yellow-soft'
+                              }`}>
                               {r.status}
                             </span>
                           )}
@@ -328,7 +425,7 @@ const ReviewerDashTab = () => {
                 )}
               </div>
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
-                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Payment Amount</p>
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Amount</p>
                 <p className="font-black text-green text-sm tracking-tight">₹{Number(selectedRefund.amount).toLocaleString('en-IN')}</p>
               </div>
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
@@ -345,7 +442,7 @@ const ReviewerDashTab = () => {
 
             <div className="bg-bg-secondary rounded-2xl border-2 border-border overflow-hidden shadow-sm">
               <div className="bg-bg-card px-6 py-4 border-b border-border font-black text-text-muted text-[10px] uppercase tracking-[0.2em]">
-                Verified Bank Configuration
+                Bank Details
               </div>
               <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-sm">
                 <div>
@@ -378,7 +475,7 @@ const ReviewerDashTab = () => {
             {selectedRefund.installments && selectedRefund.installments.length > 0 ? (
               <div className="bg-bg-secondary rounded-2xl border-2 border-border overflow-hidden shadow-sm">
                 <div className="bg-bg-card px-6 py-4 border-b border-border font-black text-text-muted text-[10px] uppercase tracking-[0.2em]">
-                  Refund Installments (Click row to view payment details)
+                  Installments Details(Click for details)
                 </div>
                 <div className="p-0 overflow-x-auto">
                   <table className="w-full text-left border-collapse">
@@ -386,16 +483,16 @@ const ReviewerDashTab = () => {
                       <tr className="bg-bg-input text-text-muted text-[9px] font-black uppercase tracking-widest border-b border-border">
                         <th className="px-6 py-4">S.No</th>
                         <th className="px-6 py-4">Expected Date</th>
-                        <th className="px-6 py-4">Disbursement Amount</th>
+                        <th className="px-6 py-4">Amount</th>
                         <th className="px-6 py-4">Status</th>
                       </tr>
                     </thead>
                     <tbody className="text-[10px] text-text-secondary divide-y divide-border/50">
                       {selectedRefund.installments.map((inst, i) => {
                         const isInstExpanded = !!expandedInst[i];
-                        const isInstPaid = inst.status?.toLowerCase() === 'paid' || 
-                                           selectedRefund.status?.toLowerCase() === 'paid' || 
-                                           (selectedRefund.installments.length <= 1 && (selectedRefund.status?.toLowerCase() === 'paid' || (selectedRefund.transactionId && selectedRefund.paymentProof)));
+                        const isInstPaid = inst.status?.toLowerCase() === 'paid' ||
+                          selectedRefund.status?.toLowerCase() === 'paid' ||
+                          (selectedRefund.installments.length <= 1 && (selectedRefund.status?.toLowerCase() === 'paid' || (selectedRefund.transactionId && selectedRefund.paymentProof)));
 
                         const pDate = inst.paymentDate || (isInstPaid ? selectedRefund.paymentDate : '');
                         const txId = inst.transactionId || (isInstPaid ? selectedRefund.transactionId : '');
@@ -415,10 +512,10 @@ const ReviewerDashTab = () => {
                               <td className="px-6 py-4 font-black text-green">₹{Number(inst.amount).toLocaleString('en-IN')}</td>
                               <td className="px-6 py-4">
                                 <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${isInstPaid
-                                    ? 'bg-green-soft text-green'
-                                    : inst.status === 'Due'
-                                      ? 'bg-red-soft text-red'
-                                      : 'bg-yellow-soft text-yellow'
+                                  ? 'bg-green-soft text-green'
+                                  : inst.status === 'Due'
+                                    ? 'bg-red-soft text-red'
+                                    : 'bg-yellow-soft text-yellow'
                                   }`}>
                                   {isInstPaid ? 'Paid' : (inst.status || 'Pending')}
                                 </span>

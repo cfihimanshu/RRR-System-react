@@ -368,80 +368,121 @@ const RefundRequestTab = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {groupRefundsByCase(filteredRefunds).map((g) => {
-                    const isExpanded = !!expandedCases[g.caseId];
-                    return (
-                      <React.Fragment key={g.caseId}>
-                        {/* Parent Case Row */}
-                        <tr
-                          className="hover:bg-bg-secondary/40 transition-colors cursor-pointer bg-bg-secondary/20 font-bold select-none"
-                          onClick={() => toggleCaseExpand(g.caseId)}
-                        >
-                          <td className="px-4 py-4 align-middle">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[12px] font-black text-accent">{isExpanded ? '▼' : '▶'}</span>
-                              <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{g.caseId}</div>
-                            </div>
-                            <div className="text-[9px] font-bold text-accent uppercase tracking-widest mt-0.5 ml-4">{g.companyName || 'N/A'}</div>
-                          </td>
-                          <td className="px-4 py-4 align-middle">
-                            <div className="text-sm font-black text-text-primary tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</div>
-                            <div className="text-[9px] text-text-muted font-bold mt-0.5">{g.requests.length} Requests</div>
-                          </td>
-                          <td className="px-4 py-4 align-middle">
-                            <div className="flex flex-wrap gap-1 max-w-[120px]">
-                              {[...new Set(g.requests.map(r => r.status))].map(status => (
-                                <span key={status} className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border ${status === 'Paid'
-                                  ? 'bg-green-soft text-green border-green-soft'
-                                  : status === 'Rejected'
-                                    ? 'bg-red-soft text-red border-red-soft'
-                                    : 'bg-yellow-soft text-yellow border-yellow-soft'
-                                  }`}>
-                                  {status}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 align-middle text-right">
-                            <span className="bg-accent-soft text-accent px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest">
-                              {isExpanded ? 'Hide' : 'Expand'}
-                            </span>
-                          </td>
-                        </tr>
-                        {/* Expanded child request rows */}
-                        {isExpanded && g.requests.map((r, idx) => (
-                          <tr
-                            key={r._id}
-                            className="hover:bg-bg-secondary/40 transition-colors cursor-pointer group bg-bg-card border-l-4 border-accent"
-                             onClick={() => { setSelectedRefund(r); setShowPaymentDetails(false); }}
-                          >
-                            <td className="px-4 py-4 align-middle pl-8">
-                              <div className="text-[10px] font-black text-text-muted">Request #{idx + 1}</div>
-                              <div className="text-[9px] font-bold text-text-muted mt-0.5">
-                                {r.timestamp ? new Date(r.timestamp).toLocaleDateString('en-IN') : ''}
+                   {groupRefundsByCase(filteredRefunds).map((g) => {
+                     const isExpanded = !!expandedCases[g.caseId];
+                     if (g.requests.length === 1) {
+                       const r = g.requests[0];
+                       return (
+                         <tr
+                           key={r._id}
+                           className="hover:bg-bg-secondary/40 transition-colors cursor-pointer bg-bg-card font-bold select-none"
+                           onClick={() => { setSelectedRefund(r); setShowPaymentDetails(false); }}
+                         >
+                           <td className="px-4 py-4 align-middle">
+                             <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{g.caseId}</div>
+                             <div className="text-[9px] font-bold text-accent uppercase tracking-widest mt-0.5">{g.companyName || 'N/A'}</div>
+                           </td>
+                           <td className="px-4 py-4 align-middle">
+                              <div className="text-sm font-black text-text-primary tracking-tight">₹{Number(r.amount || 0).toLocaleString('en-IN')}</div>
+                              <div className="text-[9px] text-text-muted font-bold mt-1 uppercase tracking-wider">
+                                {r.installments && r.installments.length > 0
+                                  ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
+                                  : '1 Installment'}
                               </div>
                             </td>
-                            <td className="px-4 py-4 align-middle">
-                              <div className="text-sm font-black text-text-primary tracking-tight">₹{Number(r.amount || 0).toLocaleString('en-IN')}</div>
-                            </td>
-                            <td className="px-4 py-4 align-middle">
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border-2 ${r.status === 'Paid'
-                                ? 'bg-green-soft text-green border-green-soft'
-                                : r.status === 'Rejected'
-                                  ? 'bg-red-soft text-red border-red-soft'
-                                  : 'bg-yellow-soft text-yellow border-yellow-soft'
-                                }`}>
-                                {r.status}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 align-middle text-right">
-                              <ChevronRight size={14} className="text-text-muted group-hover:text-accent transition-colors" />
-                            </td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
-                    );
-                  })}
+                           <td className="px-4 py-4 align-middle">
+                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border ${r.status === 'Paid'
+                               ? 'bg-green-soft text-green border-green-soft'
+                               : r.status === 'Rejected'
+                                 ? 'bg-red-soft text-red border-red-soft'
+                                 : 'bg-yellow-soft text-yellow border-yellow-soft'
+                               }`}>
+                               {r.status}
+                             </span>
+                           </td>
+                           <td className="px-4 py-3 align-middle text-right">
+                             <ChevronRight size={14} className="text-text-muted inline-block" />
+                           </td>
+                         </tr>
+                       );
+                     }
+                     return (
+                       <React.Fragment key={g.caseId}>
+                         {/* Parent Case Row */}
+                         <tr
+                           className="hover:bg-bg-secondary/40 transition-colors cursor-pointer bg-bg-secondary/20 font-bold select-none"
+                           onClick={() => toggleCaseExpand(g.caseId)}
+                         >
+                           <td className="px-4 py-4 align-middle">
+                             <div className="flex items-center gap-1.5">
+                               <span className="text-[12px] font-black text-accent">{isExpanded ? '▼' : '▶'}</span>
+                               <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{g.caseId}</div>
+                             </div>
+                             <div className="text-[9px] font-bold text-accent uppercase tracking-widest mt-0.5 ml-4">{g.companyName || 'N/A'}</div>
+                           </td>
+                           <td className="px-4 py-4 align-middle">
+                             <div className="text-sm font-black text-text-primary tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</div>
+                             <div className="text-[9px] text-text-muted font-bold mt-0.5">{g.requests.length} Requests</div>
+                           </td>
+                           <td className="px-4 py-4 align-middle">
+                             <div className="flex flex-wrap gap-1 max-w-[120px]">
+                               {[...new Set(g.requests.map(r => r.status))].map(status => (
+                                 <span key={status} className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border ${status === 'Paid'
+                                   ? 'bg-green-soft text-green border-green-soft'
+                                   : status === 'Rejected'
+                                     ? 'bg-red-soft text-red border-red-soft'
+                                     : 'bg-yellow-soft text-yellow border-yellow-soft'
+                                   }`}>
+                                   {status}
+                                 </span>
+                               ))}
+                             </div>
+                           </td>
+                           <td className="px-4 py-3 align-middle text-right">
+                             <span className="bg-accent-soft text-accent px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest">
+                               {isExpanded ? 'Hide' : 'Expand'}
+                             </span>
+                           </td>
+                         </tr>
+                         {/* Expanded child request rows */}
+                         {isExpanded && g.requests.map((r, idx) => (
+                           <tr
+                             key={r._id}
+                             className="hover:bg-bg-secondary/40 transition-colors cursor-pointer group bg-bg-card border-l-4 border-accent"
+                             onClick={() => { setSelectedRefund(r); setShowPaymentDetails(false); }}
+                           >
+                             <td className="px-4 py-4 align-middle pl-8">
+                               <div className="text-[10px] font-black text-text-muted">Request #{idx + 1}</div>
+                               <div className="text-[9px] font-bold text-text-muted mt-0.5">
+                                 {r.timestamp ? new Date(r.timestamp).toLocaleDateString('en-IN') : ''}
+                               </div>
+                             </td>
+                             <td className="px-4 py-4 align-middle">
+                                <div className="text-sm font-black text-text-primary tracking-tight">₹{Number(r.amount || 0).toLocaleString('en-IN')}</div>
+                                <div className="text-[9px] text-text-muted font-bold mt-1 uppercase tracking-wider">
+                                  {r.installments && r.installments.length > 0
+                                    ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
+                                    : '1 Installment'}
+                                </div>
+                             </td>
+                             <td className="px-4 py-4 align-middle">
+                               <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border-2 ${r.status === 'Paid'
+                                 ? 'bg-green-soft text-green border-green-soft'
+                                 : r.status === 'Rejected'
+                                   ? 'bg-red-soft text-red border-red-soft'
+                                   : 'bg-yellow-soft text-yellow border-yellow-soft'
+                                 }`}>
+                                 {r.status}
+                               </span>
+                             </td>
+                             <td className="px-4 py-3 align-middle text-right">
+                               <ChevronRight size={14} className="text-text-muted group-hover:text-accent transition-colors" />
+                             </td>
+                           </tr>
+                         ))}
+                       </React.Fragment>
+                     );
+                   })}
                 </tbody>
               </table>
             </div>

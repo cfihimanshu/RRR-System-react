@@ -820,7 +820,7 @@ const CaseStudyTab = ({ caseData = null }) => {
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="w-full lg:w-[400px] flex-shrink-0 flex flex-col gap-8">
             <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border p-8">
-              <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 ml-1">Target Case ID</label>
+              <label className="block text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 ml-1">Case ID</label>
               <SearchableCaseSelect cases={cases} value={selectedCase} onChange={setSelectedCase} />
               <button
                 onClick={handleGenerate}

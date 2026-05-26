@@ -181,22 +181,22 @@ const WorkReportTab = () => {
       if (report.date) params.append('date', report.date);
       if (report.userEmail) params.append('userEmail', report.userEmail);
       if (report.userName) params.append('userName', report.userName);
-      
+
       const timelinePromise = api.get(`/timeline?${params.toString()}`);
-      
+
       // For tasks, we need to find the fullName from users list if possible
       const targetUser = users.find(u => u.email === report.userEmail);
       const taskParams = new URLSearchParams();
       if (report.date) taskParams.append('date', report.date);
       if (targetUser) taskParams.append('assignee', targetUser.fullName);
       else if (report.userName) taskParams.append('assignee', report.userName);
-      
+
       const tasksPromise = api.get(`/tasks?${taskParams.toString()}`);
 
       const [timelineRes, tasksRes] = await Promise.all([timelinePromise, tasksPromise]);
       const tlData = timelineRes.data.logs || timelineRes.data.timeline || (Array.isArray(timelineRes.data) ? timelineRes.data : []);
       const taskData = tasksRes.data.tasks || (Array.isArray(tasksRes.data) ? tasksRes.data : []);
-      
+
       setDayActivities(tlData);
       setDayTasks(taskData);
     } catch (err) {
@@ -209,14 +209,14 @@ const WorkReportTab = () => {
   // ── Download as CSV with Full Details ──
   const handleDownload = async () => {
     if (filteredReports.length === 0) return;
-    
+
     setLoading(true);
     try {
       const detailedRows = await Promise.all(filteredReports.map(async (r) => {
         const params = new URLSearchParams();
         if (r.date) params.append('date', r.date);
         if (r.userEmail) params.append('userEmail', r.userEmail);
-        
+
         // Fetch specific activities for this report row
         const [timelineRes, tasksRes] = await Promise.all([
           api.get(`/timeline?${params.toString()}`),
@@ -267,13 +267,13 @@ const WorkReportTab = () => {
       }));
 
       const headers = [
-        'Date', 'Type', 'Submitted By', 'Check-In', 'Check-Out', 'Duration', 
+        'Date', 'Type', 'Submitted By', 'Check-In', 'Check-Out', 'Duration',
         'Planned Tasks', 'Work Summary', 'Completion', 'Progress Score', 'Mood',
-        'Communication Details (ID: Summary)', 'Document Details (ID: Summary)', 
+        'Communication Details (ID: Summary)', 'Document Details (ID: Summary)',
         'Progress Updates (ID: Summary)', 'Task Details (ID: Title [Status])', 'Total Activity Count'
       ];
 
-      const csvContent = [headers, ...detailedRows].map(row => 
+      const csvContent = [headers, ...detailedRows].map(row =>
         row.map(v => {
           const content = String(v || '');
           return `"${content.replace(/"/g, '""')}"`;
@@ -321,13 +321,13 @@ const WorkReportTab = () => {
           </div>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <button
+          {/* <button
             onClick={fetchData}
             className="flex-1 md:flex-none flex justify-center items-center p-3 rounded-xl bg-bg-card border-2 border-border text-text-muted hover:border-accent hover:text-text-primary transition-all shadow-sm"
             title="Refresh"
           >
             <RefreshCw size={18} />
-          </button>
+          </button> */}
           <button
             onClick={handleDownload}
             className="btn btn-primary !py-3 !px-6 !rounded-xl shadow-lg shadow-blue-900/20"
@@ -347,7 +347,7 @@ const WorkReportTab = () => {
           </h2>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex items-center gap-2 bg-bg-input border-2 border-border rounded-xl px-4 py-2.5 shadow-inner">
-              <Calendar size={18} className="text-white" />
+              <Calendar size={18} className="text-black" />
               <input
                 type="date"
                 className="bg-transparent text-xs font-bold text-text-primary outline-none flex-1"
@@ -363,7 +363,7 @@ const WorkReportTab = () => {
 
             {isAdmin && (
               <div className="flex items-center gap-2 bg-bg-input border-2 border-border rounded-xl px-3 py-2.5 shadow-inner">
-                <span className="text-[10px] uppercase tracking-widest text-text-secondary">User</span>
+                {/* <span className="text-[10px] uppercase tracking-widest text-text-secondary">User</span> */}
                 <select
                   className="bg-transparent outline-none text-xs font-bold text-text-primary"
                   value={filterUser}
@@ -693,8 +693,8 @@ const WorkReportTab = () => {
                                       return (
                                         <div key={status} className="space-y-2">
                                           <div className={`text-[8px] font-black uppercase px-2 py-0.5 rounded w-fit ${status === 'Completed' ? 'bg-green-soft text-green' :
-                                              status === 'In Progress' ? 'bg-blue-soft text-blue' :
-                                                'bg-slate-soft text-slate-500'
+                                            status === 'In Progress' ? 'bg-blue-soft text-blue' :
+                                              'bg-slate-soft text-slate-500'
                                             }`}>
                                             {status} ({statusTasks.length})
                                           </div>

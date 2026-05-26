@@ -102,7 +102,7 @@ const ActionLogTab = () => {
 
             <div className="bg-bg-input p-6 rounded-2xl border-2 border-border shadow-inner">
               <label className="block text-[10px] font-black text-accent uppercase tracking-[0.2em] mb-4 ml-1 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" /> TARGET CASE IDENTIFIER
+                <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" /> CASE ID
               </label>
               <SearchableCaseSelect
                 cases={cases}
