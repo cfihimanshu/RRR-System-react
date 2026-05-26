@@ -192,6 +192,7 @@ const ReviewerDashTab = () => {
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                 <th className="px-6 py-5">Case Id</th>
                 <th className="px-6 py-5">Amount</th>
+                <th className="px-6 py-5">Refund Requested By</th>
                 <th className="px-6 py-5">Bank Details</th>
                 <th className="px-6 py-5">Details</th>
                 <th className="px-6 py-5 min-w-[200px]">Summary</th>
@@ -202,7 +203,7 @@ const ReviewerDashTab = () => {
             <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
               {filteredRefunds.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-24 text-center">
+                  <td colSpan="8" className="px-6 py-24 text-center">
                     <div className="flex flex-col items-center gap-4 opacity-30">
                       <div className="p-6 bg-bg-input rounded-full">
                         <span className="text-4xl">💎</span>
@@ -243,6 +244,9 @@ const ReviewerDashTab = () => {
                             ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
                             : '1 Installment'}
                         </div>
+                      </td>
+                      <td className="px-6 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
+                        {r.requestedByName || r.requestedBy}
                       </td>
                       <td className="px-6 py-5">
                         <div className="font-black text-text-primary uppercase tracking-tight">{r.bankName}</div>
@@ -310,6 +314,9 @@ const ReviewerDashTab = () => {
                         </div>
                       </td>
                       <td className="px-6 py-5 font-black text-green text-sm tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</td>
+                      <td className="px-6 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
+                        {g.requests.length === 1 ? (g.requests[0].requestedByName || g.requests[0].requestedBy) : 'Multiple Requesters'}
+                      </td>
                       <td className="px-6 py-5 text-text-muted font-bold" colSpan="4">
                         <span className="bg-amber-500/10 text-amber-700 border border-amber-500/20 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider mr-2">
                           {g.requests.length} Requests
@@ -339,6 +346,9 @@ const ReviewerDashTab = () => {
                               ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
                               : '1 Installment'}
                           </div>
+                        </td>
+                        <td className="px-6 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
+                          {r.requestedByName || r.requestedBy}
                         </td>
                         <td className="px-6 py-5">
                           <div className="font-black text-text-primary uppercase tracking-tight">{r.bankName}</div>

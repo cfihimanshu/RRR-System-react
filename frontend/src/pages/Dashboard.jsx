@@ -29,6 +29,7 @@ const SodEodReportTab = React.lazy(() => import('../components/tabs/SodEodReport
 const WorkReportTab = React.lazy(() => import('../components/tabs/WorkReportTab'));
 const RefundRequestTab = React.lazy(() => import('../components/tabs/RefundRequestTab'));
 const LegalDashboardTab = React.lazy(() => import('../components/tabs/LegalDashboardTab'));
+const PendingRefundsTab = React.lazy(() => import('../components/tabs/PendingRefundsTab'));
 
 import TabLoader from '../components/shared/TabLoader';
 
@@ -173,6 +174,10 @@ const Dashboard = () => {
 
             <Route path="/legal-dashboard" element={
               <ProtectedRoute id="legal-dashboard"><LegalDashboardTab /></ProtectedRoute>
+            } />
+
+            <Route path="/pending-refunds" element={
+              <ProtectedRoute id="pending-refunds"><PendingRefundsTab /></ProtectedRoute>
             } />
 
             {/* Catch-all for unauthorized or non-existent URLs */}

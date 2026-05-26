@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 import { Mail, Lock, LogIn, ShieldCheck, Key, X, Send } from 'lucide-react';
 import api from '../api/axios';
 
+import IntroAnimation from '../components/IntroAnimation';
+
 const SplitText = ({ text, className }) => {
   return (
     <span className={className}>
@@ -25,6 +27,7 @@ const SplitText = ({ text, className }) => {
 };
 
 const Login = () => {
+  const [showIntro, setShowIntro] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -32,6 +35,10 @@ const Login = () => {
   const [forgotLoading, setForgotLoading] = useState(false);
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  if (showIntro) {
+    return <IntroAnimation onComplete={() => setShowIntro(false)} />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -71,13 +78,34 @@ const Login = () => {
 
       <div className="w-full max-w-md relative z-10">
         {/* Logo/Brand Section */}
-        <div className="text-center mb-10 animate-in fade-in slide-in-from-top-4 duration-700">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-accent-soft rounded-2xl border-2 border-accent/20 mb-4 shadow-[0_0_20px_rgba(249,115,22,0.1)]">
-            <ShieldCheck size={32} className="text-accent" />
-          </div>
-          <h1 className="text-3xl font-black text-text-primary uppercase tracking-[0.2em] mb-1">
-            <SplitText text="RRR Engine" />
-          </h1>
+        <div className="text-center mb-8 flex flex-col items-center relative overflow-hidden">
+          <img 
+            src="/cfi-logo.png" 
+            alt="CFI India Network" 
+            className="w-56 h-auto object-contain drop-shadow-[0_4px_12px_rgba(11,114,184,0.06)] select-none animate-logo-wipe" 
+          />
+          <style>{`
+            @keyframes logoWipe {
+              0% {
+                clip-path: inset(0 100% 0 0);
+                transform: translateX(-12px);
+                opacity: 0;
+              }
+              35% {
+                opacity: 1;
+              }
+              100% {
+                clip-path: inset(0 0 0 0);
+                transform: translateX(0);
+                opacity: 1;
+              }
+            }
+            .animate-logo-wipe {
+              animation: logoWipe 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+              animation-delay: 0.25s;
+              opacity: 0;
+            }
+          `}</style>
         </div>
 
         {/* Login Card */}

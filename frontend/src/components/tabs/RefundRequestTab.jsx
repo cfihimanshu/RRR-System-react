@@ -152,6 +152,42 @@ const RefundRequestTab = () => {
     }
   };
 
+  const handleDeleteRequest = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this refund request? This action cannot be undone.")) return;
+    try {
+      await api.delete(`/refunds/${id}`);
+      toast.success("Refund request deleted successfully");
+      fetchMyRefunds();
+      if (selectedRefund && (selectedRefund._id === id || selectedRefund.parentRefundId === id)) {
+        setSelectedRefund(null);
+        setShowPaymentDetails(false);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to delete request");
+    }
+  };
+
+  const handleDeleteInstallment = async (instIndex) => {
+    if (!window.confirm("Are you sure you want to delete this installment?")) return;
+    try {
+      const updatedInstallments = selectedRefund.installments.filter((_, idx) => idx !== instIndex);
+      const newAmount = updatedInstallments.reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0);
+      
+      const res = await api.put(`/refunds/${selectedRefund._id}`, {
+        installments: updatedInstallments,
+        amount: String(newAmount)
+      });
+      
+      toast.success("Installment deleted successfully");
+      
+      // Update selectedRefund and all refunds state
+      setSelectedRefund(res.data);
+      fetchMyRefunds();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to delete installment");
+    }
+  };
+
   const filteredRefunds = myRefunds.filter(r => {
     if (statusFilter === 'All') return true;
     if (statusFilter === 'Paid') return r.status === 'Paid';
@@ -400,8 +436,19 @@ const RefundRequestTab = () => {
                               {r.status}
                             </span>
                           </td>
-                          <td className="px-4 py-3 align-middle text-right">
-                            <ChevronRight size={14} className="text-text-muted inline-block" />
+                          <td className="px-4 py-3 align-middle text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-2">
+                              {user?.role === 'Admin' && (
+                                <button
+                                  onClick={() => handleDeleteRequest(r._id)}
+                                  className="p-1.5 rounded-lg hover:bg-red-soft/30 text-text-muted hover:text-red transition-all"
+                                  title="Delete Request"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                              <ChevronRight size={14} className="text-text-muted inline-block" />
+                            </div>
                           </td>
                         </tr>
                       );
@@ -475,8 +522,19 @@ const RefundRequestTab = () => {
                                 {r.status}
                               </span>
                             </td>
-                            <td className="px-4 py-3 align-middle text-right">
-                              <ChevronRight size={14} className="text-text-muted group-hover:text-accent transition-colors" />
+                            <td className="px-4 py-3 align-middle text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-2">
+                                {user?.role === 'Admin' && (
+                                  <button
+                                    onClick={() => handleDeleteRequest(r._id)}
+                                    className="p-1.5 rounded-lg hover:bg-red-soft/30 text-text-muted hover:text-red transition-all"
+                                    title="Delete Request"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                                <ChevronRight size={14} className="text-text-muted group-hover:text-accent transition-colors" />
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -610,9 +668,21 @@ const RefundRequestTab = () => {
                               <div key={i} className="bg-bg-card rounded-lg p-2.5 border border-border/50 flex flex-col gap-1.5 text-[10px]">
                                 <div className="flex items-center justify-between">
                                   <span className="font-black text-accent uppercase">Inst. #{i + 1} (₹{Number(inst.amount).toLocaleString('en-IN')})</span>
-                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${isInstPaid ? 'bg-green-soft text-green' : inst.status === 'Due' ? 'bg-red-soft text-red' : 'bg-yellow-soft text-yellow'}`}>
-                                    {isInstPaid ? 'Paid' : (inst.status || 'Pending')}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    {user?.role === 'Admin' && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteInstallment(i); }}
+                                        className="p-1 rounded hover:bg-red-soft/30 text-text-muted hover:text-red transition-all"
+                                        title="Delete Installment"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    )}
+                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${isInstPaid ? 'bg-green-soft text-green' : inst.status === 'Due' ? 'bg-red-soft text-red' : 'bg-yellow-soft text-yellow'}`}>
+                                      {isInstPaid ? 'Paid' : (inst.status || 'Pending')}
+                                    </span>
+                                  </div>
                                 </div>
                                 {isInstPaid && (
                                   <div className="grid grid-cols-2 gap-2 text-[9px] text-text-secondary bg-bg-secondary/40 p-2 rounded-md">
@@ -652,6 +722,19 @@ const RefundRequestTab = () => {
 
                           return (
                             <div className="space-y-2.5 text-[10px]">
+                              <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                                <span className="font-black text-accent uppercase">Single Payout</span>
+                                {user?.role === 'Admin' && selectedRefund.installments?.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteInstallment(0)}
+                                    className="p-1 rounded hover:bg-red-soft/30 text-text-muted hover:text-red transition-all flex items-center gap-1"
+                                    title="Delete Installment"
+                                  >
+                                    <Trash2 size={12} /> <span className="text-[8px] font-black uppercase">Delete Payout</span>
+                                  </button>
+                                )}
+                              </div>
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
                                   <div className="text-[8px] text-text-muted uppercase font-black">UTR / Transaction ID</div>

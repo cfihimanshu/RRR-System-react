@@ -365,6 +365,23 @@ const WorkReportTab = () => {
             {isAdmin && (
               <div className="flex items-center gap-2 bg-bg-input border-2 border-border rounded-xl px-3 py-2.5 shadow-inner">
                 {/* <span className="text-[10px] uppercase tracking-widest text-text-secondary">User</span> */}
+                <span className="text-text-secondary">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="w-4 h-4"
+                  >
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </span>
                 <select
                   className="bg-transparent outline-none text-xs font-bold text-text-primary"
                   value={filterUser}

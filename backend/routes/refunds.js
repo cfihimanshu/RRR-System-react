@@ -496,4 +496,120 @@ router.put('/:id', verifyToken, async (req, res) => {
   }
 });
 
+router.delete('/:id', verifyToken, roleGuard(['Admin']), async (req, res) => {
+  try {
+    let refundId = req.params.id;
+    let requestIndex = null;
+    if (refundId.includes('_req_')) {
+      const parts = refundId.split('_req_');
+      refundId = parts[0];
+      requestIndex = parseInt(parts[1], 10);
+    }
+
+    const doc = await Refund.findById(refundId);
+    if (!doc) {
+      return res.status(404).json({ error: "Refund not found" });
+    }
+
+    let deletedAmount = doc.amount;
+    if (requestIndex !== null && doc.requests && doc.requests[requestIndex]) {
+      deletedAmount = doc.requests[requestIndex].amount;
+    }
+
+    if (requestIndex !== null) {
+      if (doc.requests && doc.requests.length > requestIndex) {
+        // Remove the request at requestIndex
+        doc.requests.splice(requestIndex, 1);
+        
+        if (doc.requests.length === 0) {
+          // Delete the entire document if no requests left
+          await Refund.findByIdAndDelete(refundId);
+        } else {
+          // If there are still requests, update the root fields to the last request in the array for backward compatibility
+          const lastReq = doc.requests[doc.requests.length - 1];
+          doc.amount = lastReq.amount;
+          doc.summary = lastReq.summary;
+          doc.status = lastReq.status;
+          doc.timestamp = lastReq.timestamp;
+          doc.installments = lastReq.installments;
+          doc.requestedByName = lastReq.requestedByName;
+          doc.requestedBy = lastReq.requestedBy;
+          doc.documentLink = lastReq.documentLink;
+          doc.bankName = lastReq.bankName;
+          doc.accHolder = lastReq.accHolder;
+          doc.ifsc = lastReq.ifsc;
+          doc.accNum = lastReq.accNum;
+          doc.branch = lastReq.branch;
+          doc.accType = lastReq.accType;
+          await doc.save();
+        }
+      } else {
+        return res.status(400).json({ error: "Invalid request index" });
+      }
+    } else {
+      // No request index, delete the whole document
+      await Refund.findByIdAndDelete(refundId);
+    }
+
+    // Sync Case refundStatus
+    const remaining = await Refund.findOne({ caseId: doc.caseId });
+    const caseDoc = await Case.findOne({ caseId: doc.caseId });
+    if (caseDoc) {
+      if (!remaining) {
+        caseDoc.refundStatus = '';
+      } else {
+        let mappedRefundStatus = '';
+        const reqList = remaining.requests && remaining.requests.length > 0 ? remaining.requests : [remaining];
+        
+        const hasPending = reqList.some(r => {
+          const s = r.status?.toLowerCase() || '';
+          return ['pending review', 'pending admin approval', 'pending payment', 'pending'].includes(s);
+        });
+        const allPaid = reqList.every(r => {
+          const s = r.status?.toLowerCase() || '';
+          if (s === 'paid') return true;
+          if (r.installments && r.installments.length > 0) {
+            return r.installments.every(inst => inst.status?.toLowerCase() === 'paid');
+          }
+          return r.transactionId && r.paymentDate;
+        });
+
+        if (hasPending) {
+          mappedRefundStatus = 'Pending';
+        } else if (allPaid) {
+          mappedRefundStatus = 'Paid';
+        }
+        caseDoc.refundStatus = mappedRefundStatus;
+      }
+      await caseDoc.save();
+    }
+
+    // Audit Log
+    await AuditLog.create({
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      user: req.user.email,
+      role: req.user.role,
+      category: 'Refund Deleted',
+      description: `Deleted refund request for case ${doc.caseId}`,
+      caseId: doc.caseId
+    });
+
+    // Timeline Log for Recent Activity
+    await new Timeline({
+      id: Date.now().toString() + Math.random().toString(36).substring(7),
+      caseId: doc.caseId,
+      eventDate: new Date().toISOString(),
+      source: req.user.fullName || req.user.email || 'System',
+      eventType: 'Refund Deleted',
+      summary: `Deleted refund request of ₹${Number(deletedAmount || 0).toLocaleString('en-IN')} for Case ${doc.caseId}`
+    }).save();
+
+    if (global.clearStatsCache) global.clearStatsCache();
+    res.json({ success: true, message: "Refund deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

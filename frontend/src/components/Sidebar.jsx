@@ -47,6 +47,7 @@ const tabsConfig = [
   // { id: 'sod-eod-reports', label: 'Reports', path: '/sod-eod-reports', icon: ClipboardList },
   { id: 'work-report', label: 'Work Report', path: '/work-report', icon: BarChart },
   { id: 'refund-request', label: 'Request', path: '/refund-request', icon: IndianRupee },
+  { id: 'pending-refunds', label: 'Pending Refunds', path: '/pending-refunds', icon: CircleDollarSign },
 ];
 
 const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogoutClick }) => {
@@ -73,7 +74,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
 
   const visibleTabs = tabsConfig.filter(tab => {
     if (!user) return false;
-    if (user?.role === 'Super Admin' && ['reviewer-panel', 'accountant-dashboard'].includes(tab.id)) {
+    if (user?.role === 'Super Admin' && ['accountant-dashboard'].includes(tab.id)) {
       return false;
     }
     // Show Records module if user has explicit permission OR role-based access
