@@ -99,9 +99,7 @@ const Dashboard = () => {
           <Suspense fallback={<TabLoader />}>
           <Routes>
             <Route path="/" element={
-              user?.role === 'Reviewer' 
-                ? <Navigate to="/reviewer-panel" replace /> 
-                : user?.role === 'Legal'
+              user?.role === 'Legal'
                 ? <Navigate to="/legal-dashboard" replace />
                 : user?.role === 'Super Admin'
                 ? <SuperAdminDashTab />

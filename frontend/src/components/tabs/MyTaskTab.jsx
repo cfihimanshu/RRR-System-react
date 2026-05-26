@@ -80,16 +80,16 @@ const MyTaskTab = () => {
       const assigneeFilter = selectedUser === 'All Users' ? 'All Users' : selectedUser;
       const limit = 10000;
       const res = await api.get(`/tasks?assignee=${assigneeFilter}&page=${pageNum}&limit=${limit}`);
-      
+
       const taskList = res.data.tasks || (Array.isArray(res.data) ? res.data : []);
       const prevCount = tasks.length;
-      
+
       if (pageNum === 1) {
         setTasks(taskList);
       } else {
         setTasks(prev => [...prev, ...taskList]);
       }
-      
+
       setTotalPages(res.data.pages || 1);
       setTotalCount(res.data.total || taskList.length);
 
@@ -175,6 +175,7 @@ const MyTaskTab = () => {
 
   const handleOpenTaskPanel = (task) => {
     setSelectedTask(task);
+    setNewNote(task.notes || ''); // Initialize notes input with stored notes
     setLinkedCase(null);
     setIsSidePanelOpen(true);
     setShowSavedNotes(true);
@@ -185,7 +186,12 @@ const MyTaskTab = () => {
 
   const handleUpdateTask = async (taskId, updates, silent = false) => {
     try {
-      const res = await api.put(`/tasks/${taskId}`, updates);
+      const payload = { ...updates };
+      // Keep unsaved progress notes if they exist and notes are not explicitly being updated
+      if (selectedTask?._id === taskId && newNote !== undefined && !payload.hasOwnProperty('notes')) {
+        payload.notes = newNote;
+      }
+      const res = await api.put(`/tasks/${taskId}`, payload);
       setTasks(prev => prev.map(t => t._id === taskId ? { ...t, ...res.data } : t));
       if (selectedTask?._id === taskId) {
         setSelectedTask(prev => ({ ...prev, ...res.data }));
@@ -203,11 +209,7 @@ const MyTaskTab = () => {
   const handlePersistSelectedTask = async () => {
     if (!selectedTask) return;
     try {
-      const updatedNotes = newNote.trim() 
-        ? (selectedTask.notes ? `${selectedTask.notes}\n\n${newNote.trim()}` : newNote.trim())
-        : selectedTask.notes;
-        
-      await handleUpdateTask(selectedTask._id, { ...selectedTask, notes: updatedNotes });
+      await handleUpdateTask(selectedTask._id, { notes: newNote.trim() }, true);
       setNewNote(''); // Clear input box
       setIsSidePanelOpen(false);
     } catch (err) {
@@ -599,7 +601,7 @@ const MyTaskTab = () => {
                 <span>•</span>
                 <span>Source: {selectedTask.source}</span>
               </div>
-              <h2 className="text-xl font-bold leading-tight">{selectedTask.title}</h2>
+              <h2 className="text-xl text-white font-bold leading-tight">{selectedTask.title}</h2>
               <div className="flex gap-2">
                 {['To Do', 'In Progress', 'Completed'].map(s => (
                   <button
@@ -656,8 +658,8 @@ const MyTaskTab = () => {
 
               {/* Brief Section */}
               <div className="space-y-4">
-                <h3 
-                  className="text-[11px] font-black text-accent uppercase tracking-[0.2em] flex items-center justify-between cursor-pointer bg-bg-input p-3 rounded-xl border border-border hover:bg-bg-card transition-all" 
+                <h3
+                  className="text-[11px] font-black text-accent uppercase tracking-[0.2em] flex items-center justify-between cursor-pointer bg-bg-input p-3 rounded-xl border border-border hover:bg-bg-card transition-all"
                   onClick={() => setShowTaskBrief(!showTaskBrief)}
                 >
                   <div className="flex items-center gap-2">
@@ -673,26 +675,6 @@ const MyTaskTab = () => {
                 )}
               </div>
 
-              {/* Saved Notes Section */}
-              {selectedTask.notes && (
-                <div className="space-y-4">
-                  <h3
-                    className="text-[11px] font-black text-accent uppercase tracking-[0.2em] flex items-center justify-between cursor-pointer bg-bg-input p-3 rounded-xl border border-border hover:bg-bg-card transition-all"
-                    onClick={() => setShowSavedNotes(!showSavedNotes)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-4 bg-accent rounded-full" />
-                      Progress Notes
-                    </div>
-                    <ChevronDown size={16} className={`transition-transform duration-300 ${showSavedNotes ? 'rotate-180' : 'rotate-0'}`} />
-                  </h3>
-                  {showSavedNotes && (
-                    <div className="text-[13px] text-text-primary font-medium leading-relaxed bg-bg-input p-5 rounded-3xl border border-border shadow-inner whitespace-pre-wrap">
-                      {selectedTask.notes}
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Reminder Section */}
               <div className="space-y-4">
@@ -732,6 +714,11 @@ const MyTaskTab = () => {
                   placeholder="Add progress notes, observations, or next steps..."
                   value={newNote}
                   onChange={(e) => setNewNote(e.target.value)}
+                  onBlur={() => {
+                    if (newNote !== selectedTask.notes) {
+                      handleUpdateTask(selectedTask._id, { notes: newNote }, true);
+                    }
+                  }}
                 />
               </div>
             </div>

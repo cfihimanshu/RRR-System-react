@@ -19,6 +19,8 @@ import {
   Eye,
   FileText,
   AlertTriangle,
+  AlertCircle,
+  Folder,
   RotateCcw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -146,8 +148,14 @@ const SuperAdminDashTab = () => {
     settledAmount: 0,
     closedCases: 0,
     closedAmount: 0,
-    highRiskCases: 0,
-    highRiskAmount: 0,
+    highPriority: 0,
+    highPriorityAmount: 0,
+    criticalPriority: 0,
+    criticalPriorityAmount: 0,
+    mediumPriority: 0,
+    mediumPriorityAmount: 0,
+    lowPriority: 0,
+    lowPriorityAmount: 0,
     refundCases: 0,
     refundAmount: 0,
     caseTypeWiseData: []
@@ -191,8 +199,14 @@ const SuperAdminDashTab = () => {
         settledAmount: statsData.settledAmount || 0,
         closedCases: statsData.closedCases || 0,
         closedAmount: statsData.closedAmount || 0,
-        highRiskCases: (statsData.highPriority || 0) + (statsData.criticalPriority || 0),
-        highRiskAmount: (statsData.highPriorityAmount || 0) + (statsData.criticalPriorityAmount || 0),
+        highPriority: statsData.highPriority || 0,
+        highPriorityAmount: statsData.highPriorityAmount || 0,
+        criticalPriority: statsData.criticalPriority || 0,
+        criticalPriorityAmount: statsData.criticalPriorityAmount || 0,
+        mediumPriority: statsData.mediumPriority || 0,
+        mediumPriorityAmount: statsData.mediumPriorityAmount || 0,
+        lowPriority: statsData.lowPriority || 0,
+        lowPriorityAmount: statsData.lowPriorityAmount || 0,
         refundCases: refundData.length || 0,
         refundAmount: statsData.totalRefundAmount || 0,
         caseTypeWiseData: statsData.caseTypeWiseData || []
@@ -327,8 +341,8 @@ const SuperAdminDashTab = () => {
         </div>
       </div>
 
-      {/* Dynamic Case Summaries Grid (6 Columns) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      {/* Dynamic Case Summaries Grid (8 Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
         {/* Total Cases */}
         <div
           onClick={() => navigate('/case-master')}
@@ -357,27 +371,43 @@ const SuperAdminDashTab = () => {
             <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono">Active</span>
           </div>
           <div className="text-2xl font-black text-text-primary mb-1 tracking-tight">{stats.activeCases}</div>
-          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Active Files</div>
+          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Active Cases</div>
           <div className="text-xs font-black text-blue">{formatCurrency(stats.openCasesAmount)}</div>
         </div>
 
-        {/* Settled Cases */}
+        {/* High Risk Cases */}
         <div
-          onClick={() => navigate('/case-master', { state: { statusFilter: 'Settlement' } })}
-          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-green-600/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
+          onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}
+          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-red-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
-            <div className="w-10 h-10 rounded-xl bg-green-soft text-green border border-green-soft flex items-center justify-center group-hover:scale-105 transition-transform">
-              <CheckCircle2 size={18} />
+            <div className="w-10 h-10 rounded-xl bg-red-soft text-red border border-red-soft flex items-center justify-center group-hover:scale-105 transition-transform">
+              <AlertTriangle size={18} />
             </div>
-            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono">Settled</span>
+            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono text-red-500">High Risk</span>
           </div>
-          <div className="text-2xl font-black text-text-primary mb-1 tracking-tight">{stats.settledCases}</div>
-          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Settled Files</div>
-          <div className="text-xs font-black text-green">{formatCurrency(stats.settledAmount)}</div>
+          <div className="text-2xl font-black text-red-500 mb-1 tracking-tight">{stats.highPriority}</div>
+          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">High Risk</div>
+          <div className="text-xs font-black text-red-500">{formatCurrency(stats.highPriorityAmount)}</div>
         </div>
 
-        {/* Closed Cases */}
+        {/* Critical Priority */}
+        <div
+          onClick={() => navigate('/case-master', { state: { priorityFilter: 'Critical' } })}
+          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-red-600/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
+        >
+          <div className="flex justify-between items-center mb-3">
+            <div className="w-10 h-10 rounded-xl bg-red-soft/20 text-red-600 border border-red-soft flex items-center justify-center group-hover:scale-105 transition-transform">
+              <AlertCircle size={18} />
+            </div>
+            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono text-red-600">Critical</span>
+          </div>
+          <div className="text-2xl font-black text-red-600 mb-1 tracking-tight">{stats.criticalPriority}</div>
+          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Critical Priority</div>
+          <div className="text-xs font-black text-red-600">{formatCurrency(stats.criticalPriorityAmount)}</div>
+        </div>
+
+        {/* Closure Cases */}
         <div
           onClick={() => navigate('/case-master', { state: { statusFilter: 'Closure' } })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-purple-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
@@ -386,43 +416,59 @@ const SuperAdminDashTab = () => {
             <div className="w-10 h-10 rounded-xl bg-purple-soft text-purple border border-purple-soft flex items-center justify-center group-hover:scale-105 transition-transform">
               <FileCheck size={18} />
             </div>
-            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono">Closed</span>
+            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono">Closure</span>
           </div>
           <div className="text-2xl font-black text-text-primary mb-1 tracking-tight">{stats.closedCases}</div>
-          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Closed Files</div>
+          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Closure Cases</div>
           <div className="text-xs font-black text-purple">{formatCurrency(stats.closedAmount)}</div>
         </div>
 
-        {/* High Risk Cases */}
+        {/* Medium Priority */}
         <div
-          onClick={() => navigate('/case-master', { state: { priorityFilter: ['High', 'Critical'] } })}
-          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-red-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
+          onClick={() => navigate('/case-master', { state: { priorityFilter: 'Medium' } })}
+          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-yellow-600/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
-            <div className="w-10 h-10 rounded-xl bg-red-soft text-red border border-red-soft flex items-center justify-center group-hover:scale-105 transition-transform">
-              <AlertTriangle size={18} />
+            <div className="w-10 h-10 rounded-xl bg-yellow-soft text-yellow-600 border border-yellow-soft flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Clock size={18} />
             </div>
-            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono">Critical</span>
+            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono">Medium</span>
           </div>
-          <div className="text-2xl font-black text-text-primary mb-1 tracking-tight">{stats.highRiskCases}</div>
-          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">High Risk Files</div>
-          <div className="text-xs font-black text-red">{formatCurrency(stats.highRiskAmount)}</div>
+          <div className="text-2xl font-black text-text-primary mb-1 tracking-tight">{stats.mediumPriority}</div>
+          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Medium Priority</div>
+          <div className="text-xs font-black text-yellow-600">{formatCurrency(stats.mediumPriorityAmount)}</div>
         </div>
 
-        {/* Refund Cases */}
+        {/* Low Priority */}
         <div
-          onClick={() => navigate('/case-master', { state: { refundStatusFilter: ['Paid', 'Pending'] } })}
-          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-yellow-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
+          onClick={() => navigate('/case-master', { state: { priorityFilter: 'Low' } })}
+          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-green-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
-            <div className="w-10 h-10 rounded-xl bg-yellow-soft text-yellow border border-yellow-soft flex items-center justify-center group-hover:scale-105 transition-transform">
-              <RotateCcw size={18} />
+            <div className="w-10 h-10 rounded-xl bg-green-soft text-green border border-green-soft flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Folder size={18} />
             </div>
-            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono">Refund</span>
+            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono">Low</span>
           </div>
-          <div className="text-2xl font-black text-text-primary mb-1 tracking-tight">{stats.refundCases}</div>
-          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Refund Actions</div>
-          <div className="text-xs font-black text-yellow">{formatCurrency(stats.refundAmount)}</div>
+          <div className="text-2xl font-black text-text-primary mb-1 tracking-tight">{stats.lowPriority}</div>
+          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Low Priority</div>
+          <div className="text-xs font-black text-green">{formatCurrency(stats.lowPriorityAmount)}</div>
+        </div>
+
+        {/* Settlement Stage Cases */}
+        <div
+          onClick={() => navigate('/case-master', { state: { statusFilter: 'Settlement' } })}
+          className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-green-600/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
+        >
+          <div className="flex justify-between items-center mb-3">
+            <div className="w-10 h-10 rounded-xl bg-green-soft/30 text-green-600 border border-green-soft flex items-center justify-center group-hover:scale-105 transition-transform">
+              <CheckCircle2 size={18} />
+            </div>
+            <span className="text-[9px] font-black text-text-muted bg-bg-input px-2 py-0.5 rounded-lg uppercase tracking-wider font-mono">Settlement</span>
+          </div>
+          <div className="text-2xl font-black text-text-primary mb-1 tracking-tight">{stats.settledCases}</div>
+          <div className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-1.5 line-clamp-1">Settlement Cases</div>
+          <div className="text-xs font-black text-green-600">{formatCurrency(stats.settledAmount)}</div>
         </div>
       </div>
 
@@ -442,7 +488,11 @@ const SuperAdminDashTab = () => {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {stats.caseTypeWiseData.slice(0, 8).map((item, index) => (
-                <div key={index} className="bg-bg-input border border-border p-4 rounded-2xl flex flex-col justify-between hover:border-accent transition-colors">
+                <div
+                  key={index}
+                  onClick={() => navigate('/case-master', { state: { typeFilter: item.caseType } })}
+                  className="bg-bg-input border border-border p-4 rounded-2xl flex flex-col justify-between hover:border-accent hover:shadow-md cursor-pointer transition-all active:scale-98"
+                >
                   <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider block truncate mb-2">
                     {item.caseType || 'General Case'}
                   </div>

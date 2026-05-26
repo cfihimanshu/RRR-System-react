@@ -133,7 +133,12 @@ const buildNameRegex = (text) => {
 async function buildCaseQuery(req) {
   let query = {};
 
-  if (req.user.role !== 'Admin' && req.user.role !== 'Reviewer') {
+  if (
+    req.user.role !== 'Admin' &&
+    req.user.role !== 'Reviewer' &&
+    req.user.role !== 'Super Admin' &&
+    req.user.role !== 'SuperAdmin'
+  ) {
     const User = require('../models/User');
     const dbUser = await User.findById(req.user.id).lean();
     const userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
@@ -237,6 +242,17 @@ router.post('/bulk/sync-ids', verifyToken, roleGuard(['Admin']), async (req, res
   }
 });
 
+router.post('/trigger-due-alerts', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmin', 'Operations']), async (req, res) => {
+  try {
+    const { runDueCaseAlerts } = require('../utils/scheduler');
+    await runDueCaseAlerts();
+    res.json({ message: 'Realtime due case alerts triggered and emails sent successfully!' });
+  } catch (error) {
+    console.error('Trigger due alerts error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- STANDARD ROUTES ---
 router.get('/count', verifyToken, async (req, res) => {
   try {
@@ -273,7 +289,7 @@ router.get('/summary', verifyToken, async (req, res) => {
       .select('caseId companyName clientName initiatedBy assignedTo currentStatus importDocumentLink firFileLink typeOfComplaint createdAt dueDate caseSummary')
       .lean();
 
-    res.set('Cache-Control', 'private, max-age=30');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json(cases);
   } catch (error) {
     res.status(500).json({ error: error.message });

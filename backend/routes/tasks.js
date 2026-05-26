@@ -70,7 +70,7 @@ router.get('/', verifyToken, async (req, res) => {
       companyName: caseMap[t.caseId] || ''
     }));
 
-    res.set('Cache-Control', 'private, max-age=30');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json({
       tasks,
       total,

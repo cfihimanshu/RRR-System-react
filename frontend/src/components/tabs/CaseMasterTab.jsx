@@ -463,7 +463,7 @@ const CaseMasterTab = () => {
       const s = normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy);
       if (s && s !== '—') statuses.add(s);
     });
-    return ['All Status', 'Unassigned', ...Array.from(statuses).sort()];
+    return ['All Status', ...Array.from(statuses).sort()];
   }, [cases]);
 
   const uniquePriorities = useMemo(() => {
@@ -483,6 +483,19 @@ const CaseMasterTab = () => {
       if (u.fullName) {
         const name = u.fullName.trim();
         const lower = name.toLowerCase();
+        const roleLower = (u.role || '').toLowerCase().trim();
+        if (
+          roleLower === 'admin' ||
+          roleLower === 'super admin' ||
+          roleLower === 'superadmin' ||
+          roleLower === 'staff' ||
+          lower === 'admin' ||
+          lower === 'super admin' ||
+          lower === 'superadmin' ||
+          lower === 'staff'
+        ) {
+          return;
+        }
         if (!seen.has(lower)) {
           seen.add(lower);
           list.push({ _id: u._id || `user-${name}`, fullName: name });
@@ -496,6 +509,31 @@ const CaseMasterTab = () => {
       if (a && a !== '—') {
         const name = a.trim();
         const lower = name.toLowerCase();
+
+        // Exclude if name itself is admin/super admin/staff
+        if (
+          lower === 'admin' ||
+          lower === 'super admin' ||
+          lower === 'superadmin' ||
+          lower === 'staff'
+        ) {
+          return;
+        }
+
+        // Find if this user exists in opsUsers, check their role
+        const matchUser = opsUsers.find(u => u.fullName && u.fullName.trim().toLowerCase() === lower);
+        if (matchUser) {
+          const roleLower = (matchUser.role || '').toLowerCase().trim();
+          if (
+            roleLower === 'admin' ||
+            roleLower === 'super admin' ||
+            roleLower === 'superadmin' ||
+            roleLower === 'staff'
+          ) {
+            return;
+          }
+        }
+
         if (!seen.has(lower)) {
           seen.add(lower);
           list.push({ _id: `case-${name}`, fullName: name });
@@ -518,7 +556,7 @@ const CaseMasterTab = () => {
       }
     }
 
-    return ['All Assignees', ...Array.from(new Set(assignees)).sort()];
+    return ['All Assignees', 'Unassigned', ...Array.from(new Set(assignees)).sort()];
   }, [allDynamicAssignees, user]);
 
   const uniqueTypes = useMemo(() => {
@@ -789,7 +827,7 @@ const CaseMasterTab = () => {
   };
 
   const fetchOpsUsers = async () => {
-    if (!user || (user.role !== 'Admin' && user.role !== 'Operations')) {
+    if (!user || (user.role !== 'Admin' && user.role !== 'Operations' && user.role !== 'Super Admin')) {
       return;
     }
     try {
@@ -881,8 +919,8 @@ const CaseMasterTab = () => {
       setTempFilters(prev => ({ ...prev, typeOfComplaint: tfArray }));
     }
     if (location.state?.unassignedOnly) {
-      setAppliedFilters(prev => ({ ...prev, status: ['Unassigned'] }));
-      setTempFilters(prev => ({ ...prev, status: ['Unassigned'] }));
+      setAppliedFilters(prev => ({ ...prev, assignee: ['Unassigned'] }));
+      setTempFilters(prev => ({ ...prev, assignee: ['Unassigned'] }));
     }
     if (location.state?.dateFilter) {
       const df = location.state.dateFilter;
@@ -1057,11 +1095,7 @@ const CaseMasterTab = () => {
         } else if (selectedStatus === 'Closed' || selectedStatus === 'Closure') {
           return normalizedCaseStatus === 'Closure' || normalizedCaseStatus === 'Closed' || normalizedCaseStatus === 'Resolution';
         } else if (selectedStatus === 'Unassigned') {
-          const initiatedByValue = c.initiatedBy?.toString?.() || '';
-          const assignedToValue = c.assignedTo?.toString?.() || '';
-          const isInitiatedByBlank = initiatedByValue.trim() === '' || initiatedByValue.trim().toLowerCase() === 'null' || initiatedByValue.trim().toLowerCase() === 'undefined';
-          const isAssignedToBlank = assignedToValue.trim() === '' || assignedToValue.trim().toLowerCase() === 'null' || assignedToValue.trim().toLowerCase() === 'undefined';
-          return isInitiatedByBlank && isAssignedToBlank;
+          return false;
         } else {
           return normalizedCaseStatus === selectedStatus;
         }
@@ -1071,8 +1105,20 @@ const CaseMasterTab = () => {
     const matchPriority = appliedFilters.priority.includes('All Priority') || appliedFilters.priority.length === 0 || appliedFilters.priority.includes(c.priority);
 
     const assignedPerson = c.assignedTo || c.initiatedBy || '';
-    const matchAssignee = appliedFilters.assignee.includes('All Assignees') || appliedFilters.assignee.length === 0 ||
-      appliedFilters.assignee.some(a => a.toLowerCase() === assignedPerson.toLowerCase());
+    let matchAssignee = false;
+    if (appliedFilters.assignee.includes('All Assignees') || appliedFilters.assignee.length === 0) {
+      matchAssignee = true;
+    } else {
+      const hasUnassigned = appliedFilters.assignee.includes('Unassigned');
+      const otherAssignees = appliedFilters.assignee.filter(a => a !== 'Unassigned');
+      const initiatedByValue = c.initiatedBy?.toString?.() || '';
+      const assignedToValue = c.assignedTo?.toString?.() || '';
+      const isInitiatedByBlank = initiatedByValue.trim() === '' || initiatedByValue.trim().toLowerCase() === 'null' || initiatedByValue.trim().toLowerCase() === 'undefined';
+      const isAssignedToBlank = assignedToValue.trim() === '' || assignedToValue.trim().toLowerCase() === 'null' || assignedToValue.trim().toLowerCase() === 'undefined';
+      const isUnassigned = isInitiatedByBlank && isAssignedToBlank;
+      const matchesName = otherAssignees.some(a => a.toLowerCase() === assignedPerson.toLowerCase());
+      matchAssignee = (hasUnassigned && isUnassigned) || matchesName;
+    }
 
     let matchDate = true;
     if (appliedFilters.date) {
@@ -1091,7 +1137,9 @@ const CaseMasterTab = () => {
       });
     }
 
-    const matchType = appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.typeOfComplaint.length === 0 || appliedFilters.typeOfComplaint.includes(c.typeOfComplaint);
+    const matchType = appliedFilters.typeOfComplaint.includes('All Types') || 
+      appliedFilters.typeOfComplaint.length === 0 || 
+      appliedFilters.typeOfComplaint.some(t => String(t || '').trim().toLowerCase() === String(c.typeOfComplaint || '').trim().toLowerCase());
 
     const matchSourceOfComplaint = !appliedFilters.sourceOfComplaint ||
       (appliedFilters.sourceOfComplaint.toLowerCase() === 'unknown'
@@ -2233,7 +2281,7 @@ const CaseMasterTab = () => {
 
             </div>
             <div className="flex flex-wrap gap-2 md:gap-3 mt-4 md:mt-0 w-full md:w-auto">
-              {user?.role === 'Admin' && (
+              {(user?.role === 'Admin' || user?.role === 'Super Admin') && (
                 <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
                   <button className={`w-full bg-purple text-white font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest ${importing ? 'opacity-70 cursor-wait' : 'hover:bg-purple-600 active:scale-95'}`} disabled={importing}>
                     {importing ? '⏳ IMPORTING...' : <><UploadCloud size={16} /> IMPORT</>}
@@ -2249,7 +2297,7 @@ const CaseMasterTab = () => {
                 </div>
               )}
 
-              {user?.role === 'Admin' && (
+              {(user?.role === 'Admin' || user?.role === 'Super Admin') && (
                 <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
                   <button onClick={handleExportExcel} className="w-full bg-bg-card hover:bg-bg-input text-text-primary border-2 border-border font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95">
                     <FileDown size={16} /> Export
@@ -2361,7 +2409,7 @@ const CaseMasterTab = () => {
                         {activeFilterType === 'Priority' && (
                           <div className="space-y-3">
                             {uniquePriorities.map((p) => {
-                              const isChecked = tempFilters.priority.includes(p);
+                              const isChecked = tempFilters.priority.some(val => val.toLowerCase() === p.toLowerCase());
                               return (
                                 <label key={p} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
                                   <input
@@ -2374,9 +2422,10 @@ const CaseMasterTab = () => {
                                         if (p === 'All Priority') {
                                           newPriority = ['All Priority'];
                                         } else {
-                                          const filtered = prev.priority.filter(item => item !== 'All Priority');
-                                          if (isChecked) {
-                                            newPriority = filtered.filter(item => item !== p);
+                                          const filtered = prev.priority.filter(item => item.toLowerCase() !== 'all priority');
+                                          const exists = filtered.some(item => item.toLowerCase() === p.toLowerCase());
+                                          if (exists) {
+                                            newPriority = filtered.filter(item => item.toLowerCase() !== p.toLowerCase());
                                             if (newPriority.length === 0) newPriority = ['All Priority'];
                                           } else {
                                             newPriority = [...filtered, p];
@@ -2400,16 +2449,16 @@ const CaseMasterTab = () => {
                               <input
                                 type="checkbox"
                                 name="assignee"
-                                checked={tempFilters.assignee.includes('All Assignees')}
+                                checked={tempFilters.assignee.some(val => val.toLowerCase() === 'all assignees')}
                                 onChange={() => {
                                   setTempFilters(prev => ({ ...prev, assignee: ['All Assignees'] }));
                                 }}
                                 className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
                               />
-                              <span className={`text-sm font-bold ${tempFilters.assignee.includes('All Assignees') ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>All Assignees</span>
+                              <span className={`text-sm font-bold ${tempFilters.assignee.some(val => val.toLowerCase() === 'all assignees') ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>All Assignees</span>
                             </label>
                             {uniqueAssignees.filter(a => a !== 'All Assignees').map((assigneeName) => {
-                              const isChecked = tempFilters.assignee.includes(assigneeName);
+                              const isChecked = tempFilters.assignee.some(val => val.toLowerCase() === assigneeName.toLowerCase());
                               return (
                                 <label key={assigneeName} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
                                   <input
@@ -2419,9 +2468,10 @@ const CaseMasterTab = () => {
                                     onChange={() => {
                                       setTempFilters(prev => {
                                         let newAssignee;
-                                        const filtered = prev.assignee.filter(item => item !== 'All Assignees');
-                                        if (isChecked) {
-                                          newAssignee = filtered.filter(item => item !== assigneeName);
+                                        const filtered = prev.assignee.filter(item => item.toLowerCase() !== 'all assignees');
+                                        const exists = filtered.some(item => item.toLowerCase() === assigneeName.toLowerCase());
+                                        if (exists) {
+                                          newAssignee = filtered.filter(item => item.toLowerCase() !== assigneeName.toLowerCase());
                                           if (newAssignee.length === 0) newAssignee = ['All Assignees'];
                                         } else {
                                           newAssignee = [...filtered, assigneeName];
@@ -2441,7 +2491,7 @@ const CaseMasterTab = () => {
                         {activeFilterType === 'Type' && (
                           <div className="space-y-3">
                             {uniqueTypes.map((t) => {
-                              const isChecked = tempFilters.typeOfComplaint.includes(t);
+                              const isChecked = tempFilters.typeOfComplaint.some(val => val.toLowerCase() === t.toLowerCase());
                               return (
                                 <label key={t} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
                                   <input
@@ -2454,9 +2504,10 @@ const CaseMasterTab = () => {
                                         if (t === 'All Types') {
                                           newType = ['All Types'];
                                         } else {
-                                          const filtered = prev.typeOfComplaint.filter(item => item !== 'All Types');
-                                          if (isChecked) {
-                                            newType = filtered.filter(item => item !== t);
+                                          const filtered = prev.typeOfComplaint.filter(item => item.toLowerCase() !== 'all types');
+                                          const exists = filtered.some(item => item.toLowerCase() === t.toLowerCase());
+                                          if (exists) {
+                                            newType = filtered.filter(item => item.toLowerCase() !== t.toLowerCase());
                                             if (newType.length === 0) newType = ['All Types'];
                                           } else {
                                             newType = [...filtered, t];
@@ -2842,7 +2893,7 @@ const CaseMasterTab = () => {
               )}
             </div>
 
-            {user?.role === 'Admin' && (
+            {(user?.role === 'Admin' || user?.role === 'Super Admin') && (
               <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full md:w-auto md:ml-auto">
                 <select
                   className={`border-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-widest outline-none shadow-sm min-w-[200px] transition-all ${bulkAssignUser ? 'border-accent bg-accent-soft text-accent' : 'border-border bg-bg-card text-text-secondary'}`}
@@ -4354,7 +4405,7 @@ const CaseMasterTab = () => {
                         className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent uppercase tracking-widest"
                       >
                         <option value="">-- NO ESCALATION --</option>
-                        {user?.role?.toLowerCase() === 'admin'
+                        {['admin', 'super admin'].includes(user?.role?.toLowerCase())
                           ? opsUsers.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
                               <option key={`escalate-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                             ))
@@ -5014,7 +5065,7 @@ const CaseRow = memo(({
             >
               <Edit3 size={16} />
             </button>
-            {user?.role === 'Admin' ? (
+            {user?.role === 'Admin' || user?.role === 'Super Admin' ? (
               <button
                 onClick={() => handleDeleteCase(c.caseId)}
                 className="bg-red-soft text-red hover:bg-red/20 p-2.5 rounded-xl border border-red-soft transition-all shadow-sm active:scale-95 flex items-center justify-center w-full"
@@ -5028,7 +5079,7 @@ const CaseRow = memo(({
           </div>
 
           {/* Bottom Row: Assignment Section */}
-          {['Admin', 'Operations'].includes(user?.role) && (
+          {['Admin', 'Operations', 'Super Admin'].includes(user?.role) && (
             <div className="flex gap-2 w-full">
               <select
                 className="flex-1 bg-bg-input border-2 border-border rounded-xl text-[9px] px-2 py-2.5 outline-none focus:border-accent shadow-sm min-w-0 text-text-primary font-black uppercase tracking-widest cursor-pointer"
@@ -5036,7 +5087,7 @@ const CaseRow = memo(({
                 onChange={(e) => handleAssignmentInputChange(c.caseId, e.target.value)}
               >
                 <option value="">Assign</option>
-                {user?.role?.toLowerCase() === 'admin'
+                {['admin', 'super admin'].includes(user?.role?.toLowerCase())
                   ? opsUsers.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
                       <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                     ))

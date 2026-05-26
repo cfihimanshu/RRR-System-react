@@ -349,7 +349,6 @@ const WorkReportTab = () => {
           </h2>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex items-center gap-2 bg-bg-input border-2 border-border rounded-xl px-4 py-2.5 shadow-inner">
-              <Calendar size={18} className="text-black" />
               <input
                 type="date"
                 className="bg-transparent text-xs font-bold text-text-primary outline-none flex-1"
@@ -410,7 +409,6 @@ const WorkReportTab = () => {
                   <th className="px-5 py-3.5 text-left">Duration</th>
                   <th className="px-5 py-3.5 text-left">Planned Task</th>
                   <th className="px-5 py-3.5">Completion</th>
-                  <th className="px-5 py-3.5">Score</th>
                   <th className="px-5 py-3.5 text-center">Other activity</th>
                 </tr>
               </thead>
@@ -454,16 +452,6 @@ const WorkReportTab = () => {
                           );
                         })()}
                       </td>
-                      <td className="px-5 py-4">
-                        {report.progressScore ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 bg-bg-input rounded-full overflow-hidden">
-                              <div className="h-full bg-blue rounded-full" style={{ width: `${(report.progressScore / 10) * 100}%` }} />
-                            </div>
-                            <span className="font-black text-text-secondary text-[10px]">{report.progressScore}/10</span>
-                          </div>
-                        ) : <span className="text-text-muted italic">—</span>}
-                      </td>
                       <td className="px-5 py-3.5 text-center">
                         <div className="text-[11px] font-black text-text-secondary">
                           {(report.commCount || 0) + (report.docCount || 0) + (report.progressCount || 0) + (report.taskCount || 0)}
@@ -484,7 +472,7 @@ const WorkReportTab = () => {
                     {/* Expandable Activity Content */}
                     {viewingReport?.key === report.key && (
                       <tr className="bg-bg-input/30">
-                        <td colSpan="10" className="px-8 py-6">
+                        <td colSpan="9" className="px-8 py-6">
                           <div className="animate-in slide-in-from-top-2 duration-300">
                             {/* Report Details & GPS Verification Grid */}
                             <div className={`grid grid-cols-1 ${report.sod?.selfieUrl || report.eod?.selfieUrl ? 'lg:grid-cols-3' : ''} gap-6 mb-6`}>
@@ -552,7 +540,7 @@ const WorkReportTab = () => {
                                         <div className="flex items-center gap-1.5 text-[10px] font-black text-text-muted uppercase tracking-widest self-start mb-2 lg:mb-1">
                                           <Camera size={12} className="text-accent" /> SOD Selfie Proof
                                         </div>
-                                        <div 
+                                        <div
                                           className="w-32 h-24 rounded-lg overflow-hidden border border-border shadow bg-black transition-all hover:scale-[1.04] active:scale-95 cursor-pointer relative group"
                                           title="Click to view full image"
                                           onClick={() => setPreviewSelfie({ url: report.sod.selfieUrl, type: 'SOD Checkpoint', userName: report.userName, lat: report.sod.latitude, lng: report.sod.longitude })}
@@ -593,7 +581,7 @@ const WorkReportTab = () => {
                                         <div className="flex items-center gap-1.5 text-[10px] font-black text-text-muted uppercase tracking-widest self-start mb-2 lg:mb-1">
                                           <Camera size={12} className="text-purple" /> EOD Selfie Proof
                                         </div>
-                                        <div 
+                                        <div
                                           className="w-32 h-24 rounded-lg overflow-hidden border border-border shadow bg-black transition-all hover:scale-[1.04] active:scale-95 cursor-pointer relative group"
                                           title="Click to view full image"
                                           onClick={() => setPreviewSelfie({ url: report.eod.selfieUrl, type: 'EOD Checkpoint', userName: report.userName, lat: report.eod.latitude, lng: report.eod.longitude })}
@@ -800,7 +788,7 @@ const WorkReportTab = () => {
               <div className="w-full aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-black shadow-inner">
                 <img src={previewSelfie.url} alt="Selfie Proof" className="w-full h-full object-cover" />
               </div>
-              
+
               {/* Telemetry info */}
               <div className="w-full p-4 bg-bg-input rounded-2xl border border-border/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
                 <div className="space-y-1">

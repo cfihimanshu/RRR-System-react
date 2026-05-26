@@ -1,5 +1,5 @@
 export const TAB_ACCESS = {
-  "dashboard":            ["Admin", "Operations", "Staff", "Accountant", "Super Admin"],
+  "dashboard":            ["Admin", "Operations", "Staff", "Accountant", "Super Admin", "Reviewer"],
   "new-case":             ["Admin", "Operations", "Staff", "Super Admin"],
   "case-master":          ["Admin", "Operations", "Reviewer", "Super Admin"],
   "history":              ["Admin", "Operations", "Staff", "Super Admin"],
@@ -11,7 +11,7 @@ export const TAB_ACCESS = {
   "internal-search":      ["Admin", "Super Admin"], // Explicitly only Admin by default, plus canAccessRecords override
   "reviewer-panel":       ["Admin", "Reviewer", "Super Admin"],
   "accountant-dashboard": ["Admin", "Accountant", "Super Admin"],
-  "legal-dashboard":      ["Legal", "Super Admin"],
+  "legal-dashboard":      ["Legal"],
   "agreement-gen":        ["Operations", "Super Admin"],
   "my-task":              ["Admin", "Operations", "Staff", "Accountant", "Legal", "Super Admin"],
   "sod-eod-reports":      ["Admin", "Operations", "Staff", "Accountant", "Super Admin"],
