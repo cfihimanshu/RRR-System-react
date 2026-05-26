@@ -251,6 +251,20 @@ const DashboardTab = () => {
   const [violationType, setViolationType] = useState('SOD');
   const [dueCasesTab, setDueCasesTab] = useState('today');
   const [selectedDueCaseDetails, setSelectedDueCaseDetails] = useState(null);
+  const [triggeringAlerts, setTriggeringAlerts] = useState(false);
+
+  const triggerDueAlerts = async () => {
+    setTriggeringAlerts(true);
+    try {
+      await api.post('/cases/trigger-due-alerts');
+      toast.success('Realtime due case email notifications sent successfully!');
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || 'Failed to send email notifications.');
+    } finally {
+      setTriggeringAlerts(false);
+    }
+  };
 
   const openViolationsModal = (type) => {
     setViolationType(type);
@@ -339,12 +353,16 @@ const DashboardTab = () => {
     const sundayStr = getLocalDateString(sunday);
 
     const currentMonthPrefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const completedStatuses = ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution', 'Resolved', 'Done', 'Complete', 'Completed', 'closed', 'settled'];
 
     return userCases.filter(c => {
       if (!c.dueDate) return false;
       const cleanDueDate = c.dueDate.split('T')[0];
 
-      if (tab === 'today') {
+      if (tab === 'overdue') {
+        const isCompleted = completedStatuses.includes(c.currentStatus || c.status);
+        return cleanDueDate < todayStr && !isCompleted;
+      } else if (tab === 'today') {
         return cleanDueDate === todayStr;
       } else if (tab === 'thisWeek') {
         return cleanDueDate >= mondayStr && cleanDueDate <= sundayStr;
@@ -920,6 +938,20 @@ const DashboardTab = () => {
                     }`}
                 >
                   <FileText size={16} /> Fill EOD
+                </button>
+              </div>
+            )}
+            {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  onClick={triggerDueAlerts}
+                  disabled={triggeringAlerts}
+                  className={`px-4 sm:px-8 py-3.5 rounded-2xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-2 uppercase tracking-[0.15em] shadow-xl active:scale-95 ${triggeringAlerts
+                    ? 'bg-bg-input text-text-muted cursor-not-allowed border-2 border-border opacity-50'
+                    : 'bg-accent text-white hover:bg-accent-hover shadow-orange-900/20'
+                    }`}
+                >
+                  <Send size={16} /> {triggeringAlerts ? 'Sending...' : 'Send Due Case Alerts'}
                 </button>
               </div>
             )}
@@ -1611,8 +1643,9 @@ const DashboardTab = () => {
                 <div>
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
                     <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Upcoming / Due Cases (My Cases)</div>
-                    <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl w-full sm:w-auto">
+                    <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl w-full sm:w-auto overflow-x-auto scrollbar-none">
                       {[
+                        { key: 'overdue', label: 'Overdue' },
                         { key: 'today', label: 'Today' },
                         { key: 'thisWeek', label: 'This Week' },
                         { key: 'thisMonth', label: 'This Month' }
@@ -1677,7 +1710,9 @@ const DashboardTab = () => {
                     ) : (
                       <div className="text-center py-10 animate-enter">
                         <Clock size={24} className="text-text-muted mx-auto mb-2 opacity-50" />
-                        <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">No cases due {dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}</div>
+                        <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">
+                          No {dueCasesTab === 'overdue' ? 'overdue cases' : `cases due ${dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}`}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2132,8 +2167,9 @@ const DashboardTab = () => {
               <div>
                 <div className="flex justify-between items-center mb-5">
                   <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Upcoming / Due Cases</div>
-                  <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl">
+                  <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl overflow-x-auto scrollbar-none">
                     {[
+                      { key: 'overdue', label: 'Overdue' },
                       { key: 'today', label: 'Today' },
                       { key: 'thisWeek', label: 'This Week' },
                       { key: 'thisMonth', label: 'This Month' }
@@ -2198,7 +2234,9 @@ const DashboardTab = () => {
                   ) : (
                     <div className="text-center py-10 animate-enter">
                       <Clock size={24} className="text-text-muted mx-auto mb-2 opacity-50" />
-                      <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">No cases due {dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}</div>
+                      <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">
+                        No {dueCasesTab === 'overdue' ? 'overdue cases' : `cases due ${dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}`}
+                      </div>
                     </div>
                   )}
                 </div>

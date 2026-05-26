@@ -237,6 +237,17 @@ router.post('/bulk/sync-ids', verifyToken, roleGuard(['Admin']), async (req, res
   }
 });
 
+router.post('/trigger-due-alerts', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmin', 'Operations']), async (req, res) => {
+  try {
+    const { runDueCaseAlerts } = require('../utils/scheduler');
+    await runDueCaseAlerts();
+    res.json({ message: 'Realtime due case alerts triggered and emails sent successfully!' });
+  } catch (error) {
+    console.error('Trigger due alerts error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- STANDARD ROUTES ---
 router.get('/count', verifyToken, async (req, res) => {
   try {
