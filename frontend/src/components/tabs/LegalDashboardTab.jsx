@@ -52,8 +52,6 @@ const LegalDashboardTab = () => {
     workDuration: '',
     completionStatus: 'Fully Completed',
     workSummary: '',
-    progressScore: '',
-    moodEnergy: '',
     eodCompletedTaskIds: [],
     sodTasks: [{ type: 'Case ID', caseId: '', task: '', mode: '' }]
   });
@@ -383,8 +381,6 @@ const LegalDashboardTab = () => {
           : '',
         workSummary: reportType === 'EOD' ? reportFormData.workSummary : '',
         completionStatus: reportType === 'EOD' ? reportFormData.completionStatus : 'Incomplete',
-        progressScore: reportType === 'EOD' ? reportFormData.progressScore : '',
-        moodEnergy: reportType === 'EOD' ? reportFormData.moodEnergy : '',
         selfieUrl: selfie,
         latitude: coords?.latitude,
         longitude: coords?.longitude
@@ -408,8 +404,6 @@ const LegalDashboardTab = () => {
         workDuration: '',
         completionStatus: 'Fully Completed',
         workSummary: '',
-        progressScore: '',
-        moodEnergy: '',
         eodCompletedTaskIds: [],
         sodTasks: [{ type: 'Case ID', caseId: '', task: '', mode: '' }]
       });

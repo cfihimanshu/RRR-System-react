@@ -505,11 +505,9 @@ const CaseMasterTab = () => {
         const lower = name.toLowerCase();
         const roleLower = (u.role || '').toLowerCase().trim();
         if (
-          roleLower === 'admin' ||
           roleLower === 'super admin' ||
           roleLower === 'superadmin' ||
           roleLower === 'staff' ||
-          lower === 'admin' ||
           lower === 'super admin' ||
           lower === 'superadmin' ||
           lower === 'staff'
@@ -530,9 +528,8 @@ const CaseMasterTab = () => {
         const name = a.trim();
         const lower = name.toLowerCase();
 
-        // Exclude if name itself is admin/super admin/staff
+        // Exclude if name itself is super admin/staff
         if (
-          lower === 'admin' ||
           lower === 'super admin' ||
           lower === 'superadmin' ||
           lower === 'staff'
@@ -545,7 +542,6 @@ const CaseMasterTab = () => {
         if (matchUser) {
           const roleLower = (matchUser.role || '').toLowerCase().trim();
           if (
-            roleLower === 'admin' ||
             roleLower === 'super admin' ||
             roleLower === 'superadmin' ||
             roleLower === 'staff'
@@ -3307,7 +3303,7 @@ const CaseMasterTab = () => {
                   }}
                 >
                   <option value="">Bulk Assign Mode...</option>
-                  {opsUsers.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
+                  {opsUsers.filter(u => u.role?.toLowerCase() === 'operations' || u.role?.toLowerCase() === 'admin').map(u => (
                     <option key={`bulk-${u._id || u.email}`} value={u.fullName}>Assign: {u.fullName}</option>
                   ))}
                 </select>
@@ -5603,7 +5599,7 @@ const CaseRow = memo(({
               >
                 <option value="">Assign</option>
                 {['admin', 'super admin'].includes(user?.role?.toLowerCase())
-                  ? opsUsers.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
+                  ? opsUsers.filter(u => u.role?.toLowerCase() === 'operations' || u.role?.toLowerCase() === 'admin').map(u => (
                     <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                   ))
                   : (user?.fullName && (

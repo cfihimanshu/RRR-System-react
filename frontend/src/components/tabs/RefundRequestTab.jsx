@@ -19,11 +19,13 @@ import {
   FileText,
   Edit,
   MapPin,
-  Send
+  Send,
+  Download
 } from 'lucide-react';
 
 import { useLocation } from 'react-router-dom';
 import TourTab from './TourTab';
+import * as XLSX from 'xlsx';
 
 const RefundRequestTab = () => {
   const location = useLocation();
@@ -114,6 +116,87 @@ const RefundRequestTab = () => {
     } catch (err) {
       console.error("Error fetching attendance reports:", err);
     }
+  };
+
+  const handleExportAttendance = () => {
+    const userName = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)
+      ? (allUsers.find(u => u.email === selectedUserEmail)?.fullName || selectedUserEmail)
+      : (user?.fullName || user?.name || user?.email);
+      
+    const emailToExport = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)
+      ? selectedUserEmail
+      : user?.email;
+
+    if (!emailToExport) {
+      toast.error('No user selected for export');
+      return;
+    }
+
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+
+    const data = [];
+    const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+    const todayKey = todayIST.toISOString().split('T')[0];
+
+    for (let d = 1; d <= totalDays; d++) {
+      const day = new Date(year, month, d);
+      const isSunday = day.getDay() === 0;
+      const yearStr = day.getFullYear();
+      const monthStr = String(day.getMonth() + 1).padStart(2, '0');
+      const dateStr = String(day.getDate()).padStart(2, '0');
+      const dayKey = `${yearStr}-${monthStr}-${dateStr}`;
+
+      const sodReport = attendanceReports.find(r => r.date === dayKey && r.type === 'SOD');
+      const eodReport = attendanceReports.find(r => r.date === dayKey && r.type === 'EOD');
+      const hasApprovedLeave = leaves.some(l => 
+        l.requestedBy === emailToExport &&
+        l.status === 'Approved' &&
+        l.startDate <= dayKey &&
+        dayKey <= l.endDate
+      );
+
+      let status = 'Absent';
+      if (isSunday) {
+        status = 'Off Day';
+      } else if (hasApprovedLeave) {
+        status = 'Leave';
+      } else if (sodReport) {
+        status = 'Present';
+      } else if (dayKey > todayKey) {
+        status = 'Scheduled';
+      }
+
+      data.push({
+        'Date': dayKey,
+        'Day': day.toLocaleDateString('en-US', { weekday: 'long' }),
+        'Status': status,
+        'Check-In': sodReport?.checkInTime || '',
+        'Check-Out': eodReport?.checkOutTime || '',
+        'Duration': eodReport?.workDuration || '',
+        'Work Summary': (eodReport?.workSummary || sodReport?.plannedTasks || '').replace(/\n/g, ' ')
+      });
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
+
+    // Auto-size columns
+    const headers = ['Date', 'Day', 'Status', 'Check-In', 'Check-Out', 'Duration', 'Work Summary'];
+    const maxWidths = headers.map(h => ({ wch: h.length + 5 }));
+    data.forEach(row => {
+      Object.values(row).forEach((val, i) => {
+        const len = val ? val.toString().length : 0;
+        if (len + 2 > maxWidths[i].wch) maxWidths[i].wch = len + 2;
+      });
+    });
+    worksheet['!cols'] = maxWidths;
+
+    const monthName = calendarDate.toLocaleString('default', { month: 'long' });
+    XLSX.writeFile(workbook, `Attendance_${userName.replace(/\s+/g, '_')}_${monthName}_${year}.xlsx`);
+    toast.success('Attendance exported successfully!');
   };
 
   const handlePrevMonth = () => {
@@ -287,6 +370,9 @@ const RefundRequestTab = () => {
     if (location.state?.filter) {
       setStatusFilter(location.state.filter);
     }
+    if (location.state?.activeRequestType) {
+      setActiveRequestType(location.state.activeRequestType);
+    }
   }, [location.state]);
 
   useEffect(() => {
@@ -378,6 +464,8 @@ const RefundRequestTab = () => {
     fetchLeaves();
     if (['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)) {
       fetchAllUsersForCalendar();
+    } else if (user?.email) {
+      setSelectedUserEmail(user.email);
     }
   }, [user]);
 
@@ -747,7 +835,7 @@ const RefundRequestTab = () => {
                   Submit Leave Request
                 </h3>
               </div>
-              <form onSubmit={handleLeaveSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <form onSubmit={handleLeaveSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="flex flex-col gap-3">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Leave Type</label>
                   <select
@@ -795,7 +883,7 @@ const RefundRequestTab = () => {
                     onChange={(e) => setLeaveFormData({ ...leaveFormData, endDate: e.target.value })}
                   />
                 </div>
-                <div className="flex flex-col gap-3 md:col-span-2">
+                <div className="flex flex-col gap-3 md:col-span-2 lg:col-span-3">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Reason for Leave</label>
                   <input
                     type="text"
@@ -806,7 +894,7 @@ const RefundRequestTab = () => {
                     onChange={(e) => setLeaveFormData({ ...leaveFormData, reason: e.target.value })}
                   />
                 </div>
-                <div className="md:col-span-3 flex justify-end">
+                <div className="md:col-span-2 lg:col-span-3 flex justify-end">
                   <button
                     type="submit"
                     className="w-full sm:w-auto bg-accent hover:bg-accent-hover text-white font-black py-4 px-12 rounded-2xl transition-all text-xs uppercase tracking-[0.2em] shadow-lg shadow-orange-950/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
@@ -817,7 +905,6 @@ const RefundRequestTab = () => {
               </form>
 
               {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
-                <>
                   <div className="mt-12 border-t-2 border-border pt-10">
                     <div className="flex items-center gap-4 mb-6">
                       <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
@@ -900,6 +987,7 @@ const RefundRequestTab = () => {
                       </div>
                     )}
                   </div>
+              )}
 
                   <div className="mt-12 border-t border-border pt-10">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
@@ -916,20 +1004,29 @@ const RefundRequestTab = () => {
 
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                       {/* User Selection */}
-                      <div className="flex flex-col gap-1.5 min-w-[250px]">
-                        <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Select User</span>
-                        <select
-                          className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[42px] cursor-pointer"
-                          value={selectedUserEmail}
-                          onChange={(e) => setSelectedUserEmail(e.target.value)}
-                        >
-                          {allUsers.map((u) => (
-                            <option key={u.email} value={u.email}>
-                              {u.fullName || u.name} ({u.role})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) ? (
+                        <div className="flex flex-col gap-1.5 min-w-[250px]">
+                          <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Select User</span>
+                          <select
+                            className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[42px] cursor-pointer"
+                            value={selectedUserEmail}
+                            onChange={(e) => setSelectedUserEmail(e.target.value)}
+                          >
+                            {allUsers.map((u) => (
+                              <option key={u.email} value={u.email}>
+                                {u.fullName || u.name} ({u.role})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 min-w-[200px]">
+                          <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">User</span>
+                          <span className="text-sm font-bold text-text-primary h-[42px] flex items-center bg-bg-input/30 px-4 rounded-xl border border-border/40 select-none">
+                            {user?.fullName || user?.name || selectedUserEmail}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Month Navigation */}
                       <div className="flex items-center gap-3 self-end h-[42px] mt-auto">
@@ -951,103 +1048,113 @@ const RefundRequestTab = () => {
                           <ChevronRight size={18} />
                         </button>
                       </div>
+
+                      {/* Export Excel Button */}
+                      <button
+                        type="button"
+                        onClick={handleExportAttendance}
+                        className="flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all h-[42px] self-end mt-auto bg-accent hover:bg-accent/80 text-white shadow-md active:scale-95 cursor-pointer border border-accent/20"
+                      >
+                        <Download size={14} /> Export Excel
+                      </button>
                     </div>
                   </div>
 
                   {/* Calendar Grid */}
-                  <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-6 overflow-hidden">
-                    {/* Days Header */}
-                    <div className="grid grid-cols-7 gap-2 mb-3 text-center border-b border-border pb-3">
-                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                        <div key={day} className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">
-                          {day}
-                        </div>
-                      ))}
-                    </div>
+                  <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-6 overflow-x-auto">
+                    <div className="min-w-[650px] md:min-w-0">
+                      {/* Days Header */}
+                      <div className="grid grid-cols-7 gap-2 mb-3 text-center border-b border-border pb-3">
+                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                          <div key={day} className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">
+                            {day}
+                          </div>
+                        ))}
+                      </div>
 
-                    {/* Days Grid */}
-                    <div className="grid grid-cols-7 gap-2.5">
-                      {(() => {
-                        const days = getCalendarDays();
-                        const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
-                        const todayKey = todayIST.toISOString().split('T')[0];
+                      {/* Days Grid */}
+                      <div className="grid grid-cols-7 gap-2.5">
+                        {(() => {
+                          const days = getCalendarDays();
+                          const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+                          const todayKey = todayIST.toISOString().split('T')[0];
 
-                        return days.map((day, idx) => {
-                          if (!day) {
-                            return <div key={`empty-${idx}`} className="bg-bg-input/20 rounded-xl min-h-[90px] border border-transparent" />;
-                          }
+                          return days.map((day, idx) => {
+                            if (!day) {
+                              return <div key={`empty-${idx}`} className="bg-bg-input/20 rounded-xl min-h-[90px] border border-transparent" />;
+                            }
 
-                          const isSunday = day.getDay() === 0;
-                          const yearStr = day.getFullYear();
-                          const monthStr = String(day.getMonth() + 1).padStart(2, '0');
-                          const dateStr = String(day.getDate()).padStart(2, '0');
-                          const dayKey = `${yearStr}-${monthStr}-${dateStr}`;
+                            const isSunday = day.getDay() === 0;
+                            const yearStr = day.getFullYear();
+                            const monthStr = String(day.getMonth() + 1).padStart(2, '0');
+                            const dateStr = String(day.getDate()).padStart(2, '0');
+                            const dayKey = `${yearStr}-${monthStr}-${dateStr}`;
 
-                          const hasSod = attendanceReports.some(r => r.date === dayKey && r.type === 'SOD');
-                          const hasApprovedLeave = leaves.some(l => 
-                            l.requestedBy === selectedUserEmail &&
-                            l.status === 'Approved' &&
-                            l.startDate <= dayKey &&
-                            dayKey <= l.endDate
-                          );
+                            const hasSod = attendanceReports.some(r => r.date === dayKey && r.type === 'SOD');
+                            const hasApprovedLeave = leaves.some(l => 
+                              l.requestedBy === selectedUserEmail &&
+                              l.status === 'Approved' &&
+                              l.startDate <= dayKey &&
+                              dayKey <= l.endDate
+                            );
 
-                          let status = 'Absent';
-                          if (isSunday) {
-                            status = 'Sunday';
-                          } else if (hasApprovedLeave) {
-                            status = 'Leave';
-                          } else if (hasSod) {
-                            status = 'Present';
-                          } else if (dayKey > todayKey) {
-                            status = 'Future';
-                          }
+                            let status = 'Absent';
+                            if (isSunday) {
+                              status = 'Sunday';
+                            } else if (hasApprovedLeave) {
+                              status = 'Leave';
+                            } else if (hasSod) {
+                              status = 'Present';
+                            } else if (dayKey > todayKey) {
+                              status = 'Future';
+                            }
 
-                          return (
-                            <div
-                              key={dayKey}
-                              className={`flex flex-col justify-between p-3 rounded-xl border-2 min-h-[90px] transition-all hover:scale-[1.02] ${dayKey === todayKey ? 'border-accent bg-accent/5' : 'border-border bg-bg-input/10'
-                                }`}
-                            >
-                              <span className="text-xs font-black text-text-primary self-end select-none">
-                                {day.getDate()}
-                              </span>
+                            return (
+                              <div
+                                key={dayKey}
+                                className={`flex flex-col justify-between p-3 rounded-xl border-2 min-h-[90px] transition-all hover:scale-[1.02] ${dayKey === todayKey ? 'border-accent bg-accent/5' : 'border-border bg-bg-input/10'
+                                  }`}
+                              >
+                                <span className="text-xs font-black text-text-primary self-end select-none">
+                                  {day.getDate()}
+                                </span>
 
-                              <div className="mt-2">
-                                {status === 'Sunday' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg w-full justify-center border border-blue-500/20 uppercase tracking-wider">
-                                    Off Day
-                                  </span>
-                                )}
-                                {status === 'Leave' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg w-full justify-center border border-purple-500/20 uppercase tracking-wider">
-                                    Leave
-                                  </span>
-                                )}
-                                {status === 'Present' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg w-full justify-center border border-emerald-500/20 uppercase tracking-wider">
-                                    Present
-                                  </span>
-                                )}
-                                {status === 'Absent' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-rose-500 bg-rose-500/10 px-2 py-1 rounded-lg w-full justify-center border border-rose-500/20 uppercase tracking-wider">
-                                    Absent
-                                  </span>
-                                )}
-                                {status === 'Future' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-text-muted/60 bg-bg-input px-2 py-1 rounded-lg w-full justify-center border border-border uppercase tracking-wider select-none">
-                                    Scheduled
-                                  </span>
-                                )}
+                                <div className="mt-2">
+                                  {status === 'Sunday' && (
+                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg w-full justify-center border border-blue-500/20 uppercase tracking-wider">
+                                      Off Day
+                                    </span>
+                                  )}
+                                  {status === 'Leave' && (
+                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg w-full justify-center border border-purple-500/20 uppercase tracking-wider">
+                                      Leave
+                                    </span>
+                                  )}
+                                  {status === 'Present' && (
+                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg w-full justify-center border border-emerald-500/20 uppercase tracking-wider">
+                                      Present
+                                    </span>
+                                  )}
+                                  {status === 'Absent' && (
+                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-rose-500 bg-rose-500/10 px-2 py-1 rounded-lg w-full justify-center border border-rose-500/20 uppercase tracking-wider">
+                                      Absent
+                                    </span>
+                                  )}
+                                  {status === 'Future' && (
+                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-text-muted/60 bg-bg-input px-2 py-1 rounded-lg w-full justify-center border border-border uppercase tracking-wider select-none">
+                                      Scheduled
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        });
-                      })()}
+                            );
+                          });
+                        })()}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </>
-            )}
+            )
             </div>
           )}
         </>

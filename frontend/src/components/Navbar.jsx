@@ -128,7 +128,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed, onLogoutClick, onC
         onClick={toggleCollapse}
         title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
       >
-        <Menu size={20} className="transition-colors" />
+        <Menu size={15} className="transition-colors" />
       </button>
 
       <div className="flex items-center gap-2 cursor-pointer transition-transform hover:scale-105 active:scale-95" onClick={toggleCollapse}>

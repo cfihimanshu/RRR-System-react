@@ -1175,8 +1175,8 @@ const NewCaseTab = () => {
                     <option value="">-- Select --</option>
                     {/* Only show Operations users in dropdown for Admin. For other roles (e.g. Operations), only show their own name. */}
                     {user?.role?.toLowerCase() !== 'staff' && (
-                      user?.role?.toLowerCase() === 'admin'
-                        ? userList.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
+                      ['admin', 'super admin', 'superadmin'].includes(user?.role?.toLowerCase())
+                        ? userList.filter(u => u.role?.toLowerCase() === 'operations' || u.role?.toLowerCase() === 'admin').map(u => (
                             <option key={u.email} value={u.fullName}>{u.fullName}</option>
                           ))
                         : (user?.fullName && (

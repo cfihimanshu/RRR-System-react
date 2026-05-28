@@ -28,6 +28,20 @@ import {
   Lock
 } from 'lucide-react';
 
+const POPULAR_CITIES = [
+  "Ahmedabad", "Agra", "Amritsar", "Aurangabad", "Bengaluru (Bangalore)",
+  "Bhopal", "Bhubaneswar", "Chandigarh", "Chennai", "Coimbatore",
+  "Dehradun", "Delhi / NCR", "Dhanbad", "Ernakulam (Kochi)", "Faridabad",
+  "Ghaziabad", "Goa", "Gurugram (Gurgaon)", "Guwahati", "Gwalior",
+  "Hyderabad", "Indore", "Jabalpur", "Jaipur", "Jalandhar", "Jammu",
+  "Jamnagar", "Jamshedpur", "Jodhpur", "Kanpur", "Kochi", "Kolkata",
+  "Kota", "Lucknow", "Ludhiana", "Madurai", "Mangaluru (Mangalore)",
+  "Meerut", "Mumbai", "Mysuru (Mysore)", "Nagpur", "Nashik",
+  "Navi Mumbai", "Noida", "Patna", "Pune", "Raipur", "Rajkot",
+  "Ranchi", "Surat", "Thiruvananthapuram", "Tiruchirappalli", "Vadodara",
+  "Varanasi", "Vijayawada", "Visakhapatnam"
+];
+
 export default function TourTab({ user }) {
   const isAdmin = user?.role === 'Admin' || user?.role === 'Super Admin' || user?.role === 'SuperAdmin';
   const [activeTab, setActiveTab] = useState('request');
@@ -98,6 +112,39 @@ export default function TourTab({ user }) {
   });
   const [customPurpose, setCustomPurpose] = useState('');
   const [editingRequestId, setEditingRequestId] = useState(null);
+
+  const [departureSuggestions, setDepartureSuggestions] = useState([]);
+  const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false);
+  const [destinationSuggestions, setDestinationSuggestions] = useState([]);
+  const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
+
+  const handleDepartureCityChange = (val) => {
+    setTripDetails(prev => ({ ...prev, departureCity: val }));
+    if (val.trim().length >= 1) {
+      const filtered = POPULAR_CITIES.filter(city =>
+        city.toLowerCase().includes(val.toLowerCase())
+      ).slice(0, 10);
+      setDepartureSuggestions(filtered);
+      setShowDepartureSuggestions(true);
+    } else {
+      setDepartureSuggestions([]);
+      setShowDepartureSuggestions(false);
+    }
+  };
+
+  const handleDestinationCityChange = (val) => {
+    setTripDetails(prev => ({ ...prev, destinationCity: val }));
+    if (val.trim().length >= 1) {
+      const filtered = POPULAR_CITIES.filter(city =>
+        city.toLowerCase().includes(val.toLowerCase())
+      ).slice(0, 10);
+      setDestinationSuggestions(filtered);
+      setShowDestinationSuggestions(true);
+    } else {
+      setDestinationSuggestions([]);
+      setShowDestinationSuggestions(false);
+    }
+  };
 
   const [departments, setDepartments] = useState([]);
   const [usersList, setUsersList] = useState([]);
@@ -227,6 +274,9 @@ export default function TourTab({ user }) {
     sum += (Number(mealDays) || 0) * (Number(mealRate) || 0);
     sum += (Number(accommodation.nights) || 0) * (Number(accommodation.rate) || 0);
     Object.keys(additionalExpenses).forEach(key => {
+      if (key === 'toll' && ['Flight', 'Train'].includes(travelMode)) return;
+      if (key === 'visa' && travelMode !== 'Flight') return;
+
       const amt = Number(additionalExpenses[key].amount);
       if (amt > 0) {
         sum += amt;
@@ -264,6 +314,8 @@ export default function TourTab({ user }) {
 
     // Travel Mode & Distance
     setTravelMode(req.travellingBy || 'Flight');
+    setBookingRef(req.bookingRef || '');
+    setTravelClass(req.travelClass || 'Economy');
     setDistanceKm(req.distanceKm || '0');
 
     // Meals
@@ -326,7 +378,7 @@ export default function TourTab({ user }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     triggerToast(`Editing Travel Request ${req.reqId}`);
   };
-  
+
   const uploadFiles = async (files, setFilesState) => {
     for (let file of files) {
       const tempId = Math.random().toString(36).substring(7);
@@ -374,7 +426,11 @@ export default function TourTab({ user }) {
         },
         hotelExpense: String(Number(accommodation.rate || 0) * Number(accommodation.nights || 0)),
         otherExpenses: Object.keys(additionalExpenses)
-          .filter(k => Number(additionalExpenses[k].amount) > 0)
+          .filter(k => {
+            if (k === 'toll' && ['Flight', 'Train'].includes(travelMode)) return false;
+            if (k === 'visa' && travelMode !== 'Flight') return false;
+            return Number(additionalExpenses[k].amount) > 0;
+          })
           .map(k => ({ name: k, amount: String(additionalExpenses[k].amount || '') })),
         estimatedFare: Number(estimatedFare) || 0,
         advanceRequested: Number(advanceRequested) || 0,
@@ -383,6 +439,9 @@ export default function TourTab({ user }) {
         hotelNights: Number(accommodation.nights) || 0,
         hotelRate: Number(accommodation.rate) || 0,
         hotelBookingRef: accommodation.bookingRef,
+        bookingRef: ['Flight', 'Train'].includes(travelMode) ? bookingRef : '',
+        travelClass: ['Flight', 'Train'].includes(travelMode) ? travelClass : '',
+        department: employeeInfo.department,
         mealDays: Number(mealDays) || 0,
         mealRate: Number(mealRate) || 0,
         specialRemarks: specialRemarks,
@@ -411,6 +470,8 @@ export default function TourTab({ user }) {
       });
       setCustomPurpose('');
       setTravelMode('Flight');
+      setBookingRef('');
+      setTravelClass('Economy');
       setDistanceKm('0');
       setMeals({ breakfast: true, lunch: true, dinner: true });
       setMealDays('');
@@ -478,7 +539,7 @@ export default function TourTab({ user }) {
         tripOutcome,
         outcomeNextSteps,
         employeeRemarks,
-        reimbursementStatus: isDraft ? 'Draft' : 'Submitted',
+        reimbursementStatus: isDraft ? 'Draft' : 'Pending',
         reimbursementBills: reimbursementFiles
           .filter(f => f.url && !f.uploading)
           .map(f => `${f.name}|${f.url}`)
@@ -486,7 +547,25 @@ export default function TourTab({ user }) {
 
       await api.put(`/tours/reimbursement/${reimLink}`, payload);
       triggerToast(isDraft ? 'Reimbursement draft saved successfully!' : 'Reimbursement claim submitted successfully!');
-      setReimbursementFiles([]);
+      
+      if (!isDraft) {
+        setReimLink('');
+        setActualDeparture('');
+        setActualReturn('');
+        setActualTravelMode('Flight');
+        setActualDistance('');
+        setActualExpenses({ fare: '', hotel: '', meals: '', local: '', comm: '', misc: '' });
+        setActualBillNos({ fare: '', hotel: '', meals: '', local: '', comm: '', misc: '' });
+        setActualReceipts({ fare: 'Pending', hotel: 'Pending', meals: 'Pending', local: 'Pending', comm: 'Pending', misc: 'Pending' });
+        setActualAdvanceReceived('');
+        setActualAdvanceRef('');
+        setTripOutcome('');
+        setOutcomeNextSteps('');
+        setEmployeeRemarks('');
+        setReimbursementFiles([]);
+      } else {
+        setReimbursementFiles([]);
+      }
 
       // Refresh request list
       fetchTours();
@@ -539,9 +618,33 @@ export default function TourTab({ user }) {
   const [reimbursementFiles, setReimbursementFiles] = useState([]);
 
   useEffect(() => {
-    if (!reimLink || dbRequests.length === 0) return;
+    if (!reimLink) {
+      setActualDeparture('');
+      setActualReturn('');
+      setActualTravelMode('Flight');
+      setActualDistance('');
+      setActualExpenses({ fare: '', hotel: '', meals: '', local: '', comm: '', misc: '' });
+      setActualBillNos({ fare: '', hotel: '', meals: '', local: '', comm: '', misc: '' });
+      setActualReceipts({ fare: 'Pending', hotel: 'Pending', meals: 'Pending', local: 'Pending', comm: 'Pending', misc: 'Pending' });
+      setActualAdvanceReceived('');
+      setActualAdvanceRef('');
+      setTripOutcome('');
+      setOutcomeNextSteps('');
+      setEmployeeRemarks('');
+      setReimbursementFiles([]);
+      return;
+    }
+
+    if (dbRequests.length === 0) return;
     const req = dbRequests.find(r => r.reqId === reimLink);
     if (req) {
+      // If the selected request already has a submitted/approved reimbursement claim,
+      // we should not show it in the form. Clear reimLink to lock/clear the form!
+      if (req.reimbursementStatus && req.reimbursementStatus !== '' && req.reimbursementStatus !== 'Draft') {
+        setReimLink('');
+        return;
+      }
+
       setActualDeparture(req.startDate || '');
       setActualReturn(req.endDate || '');
       setActualTravelMode(req.travellingBy || 'Flight');
@@ -663,7 +766,7 @@ export default function TourTab({ user }) {
     if (userFilter !== 'All Users') {
       list = list.filter(r => r.requestedBy === userFilter);
     }
-    
+
     if (typeFilter === 'Travel Requests') {
       const subList = list.filter(r => !r.reimbursementStatus || r.reimbursementStatus === '');
       return {
@@ -674,24 +777,25 @@ export default function TourTab({ user }) {
     } else if (typeFilter === 'Reimbursements') {
       const subList = list.filter(r => r.reimbursementStatus && r.reimbursementStatus !== '');
       return {
-        pending: subList.filter(r => r.reimbursementStatus === 'Submitted').length,
+        pending: subList.filter(r => r.reimbursementStatus === 'Submitted' || r.reimbursementStatus === 'Pending').length,
         approved: subList.filter(r => r.reimbursementStatus === 'Approved').length,
         rejected: subList.filter(r => r.reimbursementStatus === 'Rejected').length
       };
     } else {
       // All Types
       return {
-        pending: list.filter(r => 
-          r.status === 'Pending Review' || 
-          r.status === 'Pending' || 
-          r.reimbursementStatus === 'Submitted'
+        pending: list.filter(r =>
+          r.status === 'Pending Review' ||
+          r.status === 'Pending' ||
+          r.reimbursementStatus === 'Submitted' ||
+          r.reimbursementStatus === 'Pending'
         ).length,
-        approved: list.filter(r => 
-          r.status === 'Approved' || 
+        approved: list.filter(r =>
+          r.status === 'Approved' ||
           r.reimbursementStatus === 'Approved'
         ).length,
-        rejected: list.filter(r => 
-          r.status === 'Rejected' || 
+        rejected: list.filter(r =>
+          r.status === 'Rejected' ||
           r.reimbursementStatus === 'Rejected'
         ).length
       };
@@ -724,8 +828,8 @@ export default function TourTab({ user }) {
       if (statusFilter !== 'All') {
         if (statusFilter === 'Pending') {
           const isRequestPending = req.status === 'Pending' || req.status === 'Pending Review';
-          const isReimbursementPending = req.reimbursementStatus === 'Submitted';
-          
+          const isReimbursementPending = req.reimbursementStatus === 'Submitted' || req.reimbursementStatus === 'Pending';
+
           if (typeFilter === 'Travel Requests') {
             if (!isRequestPending) return false;
           } else if (typeFilter === 'Reimbursements') {
@@ -736,7 +840,7 @@ export default function TourTab({ user }) {
         } else if (statusFilter === 'Approved') {
           const isRequestApproved = req.status === 'Approved';
           const isReimbursementApproved = req.reimbursementStatus === 'Approved';
-          
+
           if (typeFilter === 'Travel Requests') {
             if (!isRequestApproved) return false;
           } else if (typeFilter === 'Reimbursements') {
@@ -747,7 +851,7 @@ export default function TourTab({ user }) {
         } else if (statusFilter === 'Rejected') {
           const isRequestRejected = req.status === 'Rejected';
           const isReimbursementRejected = req.reimbursementStatus === 'Rejected';
-          
+
           if (typeFilter === 'Travel Requests') {
             if (!isRequestRejected) return false;
           } else if (typeFilter === 'Reimbursements') {
@@ -839,7 +943,7 @@ export default function TourTab({ user }) {
         {/* ===== TAB 1: TRAVEL REQUEST ===== */}
         {activeTab === 'request' && (
           <>
-            <form onSubmit={handleRequestSubmit} className="tab-panel p-6 animate-zoom-in">
+            <form onSubmit={handleRequestSubmit} className="tab-panel p-4 sm:p-6 animate-zoom-in">
               <div className="info-box bg-blue-soft/30 border border-blue-soft/50 text-blue p-4 rounded-xl text-xs flex gap-3 items-start line-height-1.5 mb-6">
                 <Info size={16} className="shrink-0 mt-0.5" />
                 <span>
@@ -850,7 +954,7 @@ export default function TourTab({ user }) {
               <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8 first:mt-0">
                 Employee Information
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="field flex flex-col gap-2">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
                     Employee Name <span className="text-red-500">*</span>
@@ -879,7 +983,7 @@ export default function TourTab({ user }) {
               </div> */}
                 <div className="field flex flex-col gap-2">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
-                    Department <span className="text-red-500">*</span>
+                    Role <span className="text-red-500">*</span>
                   </label>
                   <select
                     className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] cursor-pointer"
@@ -887,7 +991,7 @@ export default function TourTab({ user }) {
                     onChange={(e) => setEmployeeInfo({ ...employeeInfo, department: e.target.value })}
                     required
                   >
-                    <option value="">Select Department</option>
+                    <option value="">Select Role</option>
                     {departments.map((dept, idx) => (
                       <option key={idx} value={dept}>{dept}</option>
                     ))}
@@ -939,7 +1043,6 @@ export default function TourTab({ user }) {
                     <option>Client Meeting</option>
                     <option>Conference / Seminar</option>
                     <option>Training / Workshop</option>
-                    <option>Site Inspection</option>
                     <option>Business Development</option>
                     <option>Internal Meeting</option>
                     <option>Other</option>
@@ -972,55 +1075,117 @@ export default function TourTab({ user }) {
                     placeholder="Associated project or client"
                   />
                 </div>
-                <div className="field flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
-                    Departure City <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                    value={tripDetails.departureCity}
-                    onChange={(e) => setTripDetails({ ...tripDetails, departureCity: e.target.value })}
-                    placeholder="From"
-                    required
-                  />
-                </div>
-                <div className="field flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
-                    Destination City <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                    value={tripDetails.destinationCity}
-                    onChange={(e) => setTripDetails({ ...tripDetails, destinationCity: e.target.value })}
-                    placeholder="To"
-                    required
-                  />
-                </div>
-                <div className="field flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
-                    Departure Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                    value={tripDetails.departureDate}
-                    onChange={(e) => setTripDetails({ ...tripDetails, departureDate: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="field flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
-                    Return Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                    value={tripDetails.returnDate}
-                    onChange={(e) => setTripDetails({ ...tripDetails, returnDate: e.target.value })}
-                    required
-                  />
+                <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="field flex flex-col gap-2 relative">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
+                      Departure City <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                        value={tripDetails.departureCity}
+                        onChange={(e) => handleDepartureCityChange(e.target.value)}
+                        onFocus={() => {
+                          if (tripDetails.departureCity.trim().length >= 1) {
+                            handleDepartureCityChange(tripDetails.departureCity);
+                          }
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            setShowDepartureSuggestions(false);
+                          }, 200);
+                        }}
+                        placeholder="From"
+                        required
+                      />
+                      {showDepartureSuggestions && departureSuggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-bg-card border-2 border-border rounded-2xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y divide-border">
+                          {departureSuggestions.map(city => (
+                            <button
+                              key={city}
+                              type="button"
+                              className="w-full text-left px-5 py-3 text-xs font-bold text-text-primary hover:bg-bg-input transition-colors cursor-pointer"
+                              style={{ textAlign: 'left' }}
+                              onMouseDown={() => {
+                                setTripDetails(prev => ({ ...prev, departureCity: city }));
+                                setShowDepartureSuggestions(false);
+                              }}
+                            >
+                              {city}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="field flex flex-col gap-2 relative">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
+                      Destination City <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                        value={tripDetails.destinationCity}
+                        onChange={(e) => handleDestinationCityChange(e.target.value)}
+                        onFocus={() => {
+                          if (tripDetails.destinationCity.trim().length >= 1) {
+                            handleDestinationCityChange(tripDetails.destinationCity);
+                          }
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            setShowDestinationSuggestions(false);
+                          }, 200);
+                        }}
+                        placeholder="To"
+                        required
+                      />
+                      {showDestinationSuggestions && destinationSuggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-bg-card border-2 border-border rounded-2xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y divide-border">
+                          {destinationSuggestions.map(city => (
+                            <button
+                              key={city}
+                              type="button"
+                              className="w-full text-left px-5 py-3 text-xs font-bold text-text-primary hover:bg-bg-input transition-colors cursor-pointer"
+                              style={{ textAlign: 'left' }}
+                              onMouseDown={() => {
+                                setTripDetails(prev => ({ ...prev, destinationCity: city }));
+                                setShowDestinationSuggestions(false);
+                              }}
+                            >
+                              {city}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
+                      Departure Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                      value={tripDetails.departureDate}
+                      onChange={(e) => setTripDetails({ ...tripDetails, departureDate: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
+                      Return Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                      value={tripDetails.returnDate}
+                      onChange={(e) => setTripDetails({ ...tripDetails, returnDate: e.target.value })}
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="field flex flex-col gap-2 md:col-span-2">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
@@ -1038,7 +1203,7 @@ export default function TourTab({ user }) {
               <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
                 Mode of Travel <span className="text-red-500">*</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4 select-none">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-4 select-none">
                 {[
                   { name: 'Owned vehicle', icon: Car },
                   { name: 'Cab / Taxi', icon: Car },
@@ -1062,7 +1227,7 @@ export default function TourTab({ user }) {
                 })}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
+              <div className={`grid grid-cols-1 ${['Flight', 'Train'].includes(travelMode) ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-6 mt-6`}>
                 <div className="field flex flex-col gap-2">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
                     Distance (KM)
@@ -1074,35 +1239,39 @@ export default function TourTab({ user }) {
                     readOnly
                   />
                 </div>
-                <div className="field flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
-                    Booking / Ticket Ref.
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                    value={bookingRef}
-                    onChange={(e) => setBookingRef(e.target.value)}
-                    placeholder="Booking number"
-                  />
-                </div>
-                <div className="field flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
-                    Class of Travel
-                  </label>
-                  <select
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] cursor-pointer"
-                    value={travelClass}
-                    onChange={(e) => setTravelClass(e.target.value)}
-                  >
-                    <option>Economy</option>
-                    <option>Business</option>
-                    <option>First Class</option>
-                    <option>AC 2 Tier</option>
-                    <option>AC 3 Tier</option>
-                    <option>Sleeper</option>
-                  </select>
-                </div>
+                {['Flight', 'Train'].includes(travelMode) && (
+                  <>
+                    <div className="field flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
+                        Booking / Ticket Ref.
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                        value={bookingRef}
+                        onChange={(e) => setBookingRef(e.target.value)}
+                        placeholder="Booking number"
+                      />
+                    </div>
+                    <div className="field flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
+                        Class of Travel
+                      </label>
+                      <select
+                        className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] cursor-pointer"
+                        value={travelClass}
+                        onChange={(e) => setTravelClass(e.target.value)}
+                      >
+                        <option>Economy</option>
+                        <option>Business</option>
+                        <option>First Class</option>
+                        <option>AC 2 Tier</option>
+                        <option>AC 3 Tier</option>
+                        <option>Sleeper</option>
+                      </select>
+                    </div>
+                  </>
+                )}
                 <div className="field flex flex-col gap-2">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
                     Estimated Fare (₹) <span className="text-red-500">*</span>
@@ -1264,41 +1433,47 @@ export default function TourTab({ user }) {
                 { key: 'visa', title: 'Visa / Travel document fees', sub: 'Applicable for international travel' },
                 { key: 'comm', title: 'Communication / SIM', sub: 'Roaming, data, calls' },
                 { key: 'misc', title: 'Miscellaneous', sub: 'Tips, stationery, printing, etc.' }
-              ].map(expense => {
-                const expState = additionalExpenses[expense.key];
-                return (
-                  <div
-                    key={expense.key}
-                    className="grid grid-cols-[1fr_auto] gap-4 items-center p-4 border-2 border-border rounded-2xl mb-3 bg-bg-input/5"
-                  >
-                    <div className="expense-label text-sm font-bold text-text-primary font-black uppercase tracking-wider">
-                      {expense.title}
-                      <span className="block text-[9px] font-bold text-text-muted uppercase tracking-wider mt-1 font-sans">
-                        {expense.sub}
-                      </span>
+              ]
+                .filter(expense => {
+                  if (expense.key === 'toll' && ['Flight', 'Train'].includes(travelMode)) return false;
+                  if (expense.key === 'visa' && travelMode !== 'Flight') return false;
+                  return true;
+                })
+                .map(expense => {
+                  const expState = additionalExpenses[expense.key];
+                  return (
+                    <div
+                      key={expense.key}
+                      className="grid grid-cols-[1fr_auto] gap-4 items-center p-4 border-2 border-border rounded-2xl mb-3 bg-bg-input/5"
+                    >
+                      <div className="expense-label text-sm font-bold text-text-primary font-black uppercase tracking-wider">
+                        {expense.title}
+                        <span className="block text-[9px] font-bold text-text-muted uppercase tracking-wider mt-1 font-sans">
+                          {expense.sub}
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        className="w-28 text-right bg-bg-input border-2 border-border rounded-xl px-3 py-2 text-sm font-bold text-text-primary focus:border-accent outline-none no-spinners"
+                        value={expState.amount}
+                        onWheel={(e) => e.target.blur()}
+                        onKeyDown={(e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const hasVal = val !== '' && Number(val) > 0;
+                          setAdditionalExpenses({
+                            ...additionalExpenses,
+                            [expense.key]: {
+                              amount: val === '' ? '' : (Number(val) || 0),
+                              enabled: hasVal
+                            }
+                          });
+                        }}
+                        placeholder="₹"
+                      />
                     </div>
-                    <input
-                      type="number"
-                      className="w-28 text-right bg-bg-input border-2 border-border rounded-xl px-3 py-2 text-sm font-bold text-text-primary focus:border-accent outline-none no-spinners"
-                      value={expState.amount}
-                      onWheel={(e) => e.target.blur()}
-                      onKeyDown={(e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const hasVal = val !== '' && Number(val) > 0;
-                        setAdditionalExpenses({
-                          ...additionalExpenses,
-                          [expense.key]: {
-                            amount: val === '' ? '' : (Number(val) || 0),
-                            enabled: hasVal
-                          }
-                        });
-                      }}
-                      placeholder="₹"
-                    />
-                  </div>
-                );
-              })}
+                  );
+                })}
 
               <div className="total-bar flex justify-between items-center p-5 bg-bg-input/20 border-2 border-border rounded-2xl mt-6">
                 <span className="total-label text-xs font-black text-text-muted uppercase tracking-[0.2em] flex items-center gap-2">
@@ -1342,90 +1517,93 @@ export default function TourTab({ user }) {
                     <option>Company Card</option>
                   </select>
                 </div>
-                <div className="field flex flex-col gap-2 md:col-span-2">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
-                    Special instructions / Remarks
-                  </label>
-                  <textarea
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all min-h-[85px] leading-relaxed"
-                    value={specialRemarks}
-                    onChange={(e) => setSpecialRemarks(e.target.value)}
-                    placeholder="Any special requirements, approvals needed, or notes..."
-                  />
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
+                      Special instructions / Remarks
+                    </label>
+                    <textarea
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[130px] leading-relaxed resize-none"
+                      value={specialRemarks}
+                      onChange={(e) => setSpecialRemarks(e.target.value)}
+                      placeholder="Any special requirements, approvals needed, or notes..."
+                    />
+                  </div>
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
+                      Pre-travel Documents (optional)
+                    </label>
+                    <input
+                      type="file"
+                      multiple
+                      id="pre-travel-file-input"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          uploadFiles(Array.from(e.target.files), setPreTravelFiles);
+                        }
+                      }}
+                    />
+                    <div
+                      className="doc-zone border-2 border-dashed border-border rounded-2xl p-4 text-center bg-bg-input/5 hover:bg-accent/5 hover:border-accent cursor-pointer transition-all flex flex-col items-center justify-center h-[130px]"
+                      onClick={() => document.getElementById('pre-travel-file-input').click()}
+                    >
+                      <UploadCloud size={24} className="text-text-muted mb-1.5" />
+                      <p className="text-xs font-bold text-text-primary">Click to upload documents</p>
+                      <p className="mt-0.5 text-[9px] font-black text-text-muted uppercase tracking-wider">PDF, JPG, PNG — max 10MB</p>
+                    </div>
+                    {preTravelFiles.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {preTravelFiles.map((file, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1.5 bg-bg-input/40 border border-border px-3 py-1 rounded-full text-[10px] font-black text-text-secondary uppercase tracking-wider select-none">
+                            {file.uploading ? (
+                              <div className="w-3 h-3 border border-accent border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <FileCheck size={12} className="text-emerald-500" />
+                            )}
+                            {file.name}
+                            {!file.uploading && file.url && (
+                              <a
+                                href={file.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                View
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setPreTravelFiles(prev => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="ml-1 text-rose-500 hover:text-rose-700 cursor-pointer"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
-                Pre-travel Documents (optional)
-              </div>
-              <input
-                type="file"
-                multiple
-                id="pre-travel-file-input"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    uploadFiles(Array.from(e.target.files), setPreTravelFiles);
-                  }
-                }}
-              />
-              <div
-                className="doc-zone border-2 border-dashed border-border rounded-2xl p-6 text-center bg-bg-input/5 hover:bg-accent/5 hover:border-accent cursor-pointer transition-all flex flex-col items-center justify-center"
-                onClick={() => document.getElementById('pre-travel-file-input').click()}
-              >
-                <UploadCloud size={30} className="text-text-muted mb-2" />
-                <p className="text-xs font-bold text-text-primary">Click to upload — invitation letter, itinerary, event brochure</p>
-                <p className="mt-1 text-[10px] font-black text-text-muted uppercase tracking-wider">PDF, JPG, PNG — max 10MB each</p>
-              </div>
-              {preTravelFiles.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {preTravelFiles.map((file, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1.5 bg-bg-input/40 border border-border px-3 py-1.5 rounded-full text-[10px] font-black text-text-secondary uppercase tracking-wider select-none">
-                      {file.uploading ? (
-                        <div className="w-3 h-3 border border-accent border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <FileCheck size={12} className="text-emerald-500" />
-                      )}
-                      {file.name}
-                      {!file.uploading && file.url && (
-                        <a
-                          href={file.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          View
-                        </a>
-                      )}
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setPreTravelFiles(prev => prev.filter((_, i) => i !== idx));
-                        }}
-                        className="ml-1 text-rose-500 hover:text-rose-700 cursor-pointer"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex gap-4 mt-6">
+              <div className="flex justify-end gap-3 mt-6">
                 <button
                   type="button"
-                  className="btn-secondary flex-1 py-4 text-xs font-black uppercase tracking-[0.2em] border-2 border-border rounded-2xl bg-bg-input/20 text-text-secondary hover:bg-bg-input transition-all cursor-pointer"
+                  className="btn-secondary px-6 py-2.5 text-xs font-black uppercase tracking-[0.15em] border-2 border-border rounded-xl bg-bg-input/20 text-text-secondary hover:bg-bg-input transition-all cursor-pointer"
                   onClick={() => triggerToast('Draft saved successfully')}
                 >
                   Save as Draft
                 </button>
                 <button
                   type="submit"
-                  className="btn-primary flex-[2] py-4 text-xs font-black uppercase tracking-[0.2em] rounded-2xl bg-accent text-white hover:bg-accent-hover transition-all cursor-pointer shadow-lg font-black"
+                  className="btn-primary px-6 py-2.5 text-xs font-black uppercase tracking-[0.15em] rounded-xl bg-accent text-white hover:bg-accent-hover transition-all cursor-pointer shadow-lg"
                 >
-                  {editingRequestId ? 'Update & Resubmit Request' : 'Submit Request for Approval'}
+                  {editingRequestId ? 'Update & Resubmit' : 'Submit Request'}
                 </button>
               </div>
             </form>
@@ -1534,7 +1712,7 @@ export default function TourTab({ user }) {
 
         {/* ===== TAB 2: REIMBURSEMENT ===== */}
         {activeTab === 'reimbursement' && (
-          <div className="tab-panel p-6 animate-zoom-in">
+          <div className="tab-panel p-4 sm:p-6 animate-zoom-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div>
                 <div className="text-sm font-black text-text-primary uppercase tracking-wider">
@@ -1568,10 +1746,10 @@ export default function TourTab({ user }) {
                   onChange={(e) => setReimLink(e.target.value)}
                   required
                 >
-                  {dbRequests.filter(req => req.status === 'Approved').length > 0 ? (
+                  {dbRequests.filter(req => req.status === 'Approved' && (!req.reimbursementStatus || req.reimbursementStatus === '' || req.reimbursementStatus === 'Draft')).length > 0 ? (
                     <>
                       <option value="">-- Select an Approved Request --</option>
-                      {dbRequests.filter(req => req.status === 'Approved').map(req => (
+                      {dbRequests.filter(req => req.status === 'Approved' && (!req.reimbursementStatus || req.reimbursementStatus === '' || req.reimbursementStatus === 'Draft')).map(req => (
                         <option key={req._id} value={req.reqId}>
                           {req.reqId} — {req.destinationTo || '-'}, {req.startDate || '-'}
                         </option>
@@ -1601,263 +1779,255 @@ export default function TourTab({ user }) {
                 <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
                   Actual Travel Details
                 </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="field flex flex-col gap-2">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Actual departure date</label>
-                <input
-                  type="date"
-                  className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                  value={actualDeparture}
-                  onChange={(e) => setActualDeparture(e.target.value)}
-                />
-              </div>
-              <div className="field flex flex-col gap-2">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Actual return date</label>
-                <input
-                  type="date"
-                  className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                  value={actualReturn}
-                  onChange={(e) => setActualReturn(e.target.value)}
-                />
-              </div>
-              <div className="field flex flex-col gap-2">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Mode of travel used</label>
-                <select
-                  className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] cursor-pointer"
-                  value={actualTravelMode}
-                  onChange={(e) => setActualTravelMode(e.target.value)}
-                >
-                  <option>Flight</option>
-                  <option>Train</option>
-                  <option>Bus</option>
-                  <option>Cab / Taxi</option>
-                  <option>Owned vehicle</option>
-                </select>
-              </div>
-              <div className="field flex flex-col gap-2">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Distance (km)</label>
-                <input
-                  type="number"
-                  className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] no-spinners"
-                  value={actualDistance}
-                  onWheel={(e) => e.target.blur()}
-                  onKeyDown={(e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }}
-                  onChange={(e) => setActualDistance(e.target.value)}
-                  placeholder="For fuel reimbursement"
-                />
-              </div>
-            </div>
-
-            <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
-              Actual Expense Breakdown <span className="text-red-500">*</span>
-            </div>
-            <div className="table-wrap border-2 border-border rounded-2xl overflow-hidden bg-bg-card">
-              <div className="overflow-x-auto">
-                <table className="data-table w-full text-xs text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-border bg-bg-input/20">
-                      <th className="p-4 font-black text-text-muted uppercase tracking-wider text-[9px] w-[35%]">Expense Head</th>
-                      <th className="p-4 font-black text-text-muted uppercase tracking-wider text-[9px] w-[22%]">Actual (₹)</th>
-                      <th className="p-4 font-black text-text-muted uppercase tracking-wider text-[9px] w-[23%]">Bill No.</th>
-                      <th className="p-4 font-black text-text-muted uppercase tracking-wider text-[9px] text-center w-[20%]">Receipt</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { key: 'fare', label: 'Travel fare' },
-                      { key: 'hotel', label: 'Hotel / Accommodation' },
-                      { key: 'meals', label: 'Meals (all)' },
-                      { key: 'local', label: 'Local conveyance' },
-                      { key: 'comm', label: 'Communication' },
-                      { key: 'misc', label: 'Miscellaneous' }
-                    ].map(row => (
-                      <tr key={row.key} className="border-b border-border hover:bg-bg-input/10">
-                        <td className="p-4 font-bold text-text-primary">{row.label}</td>
-                        <td className="p-4">
-                          <input
-                            type="number"
-                            className="w-full text-right bg-bg-input border border-border rounded-lg px-2 py-1.5 text-xs font-bold text-text-primary focus:border-accent outline-none no-spinners"
-                            value={actualExpenses[row.key]}
-                            onWheel={(e) => e.target.blur()}
-                            onKeyDown={(e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }}
-                            onChange={(e) => setActualExpenses({
-                              ...actualExpenses,
-                              [row.key]: Number(e.target.value) || 0
-                            })}
-                          />
-                        </td>
-                        <td className="p-4">
-                          <input
-                            type="text"
-                            className="w-full bg-bg-input border border-border rounded-lg px-2 py-1.5 text-xs font-bold text-text-primary focus:border-accent outline-none"
-                            value={actualBillNos[row.key]}
-                            onChange={(e) => setActualBillNos({
-                              ...actualBillNos,
-                              [row.key]: e.target.value
-                            })}
-                          />
-                        </td>
-                        <td className="p-4 text-center">
-                          {actualReceipts[row.key] === 'Uploaded' ? (
-                            <span className="status-badge badge-approved text-[8px] sm:text-[9px] font-black bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-lg border border-emerald-500/20 select-none">
-                              Uploaded
-                            </span>
-                          ) : (
-                            <span className="status-badge badge-pending text-[8px] sm:text-[9px] font-black bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-lg border border-orange-500/20 select-none">
-                              Pending
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-              <div className="p-4 rounded-xl border border-border bg-bg-input/10 flex flex-col gap-1">
-                <span className="text-[10px] font-black text-text-muted uppercase tracking-wider">Actual Claimed</span>
-                <span className="text-lg font-black text-text-primary font-black">
-                  ₹ {calculateActualClaimed().toLocaleString('en-IN')}
-                </span>
-              </div>
-              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex flex-col gap-1 font-black">
-                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Net Payable to You</span>
-                <span className="text-lg font-black text-emerald-600">
-                  ₹ {calculateNetPayable().toLocaleString('en-IN')}
-                </span>
-              </div>
-            </div>
-
-            <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
-              Advance Details
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="field flex flex-col gap-2">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Advance already received (₹)</label>
-                <input
-                  type="number"
-                  className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] no-spinners"
-                  value={actualAdvanceReceived}
-                  onWheel={(e) => e.target.blur()}
-                  onKeyDown={(e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }}
-                  onChange={(e) => setActualAdvanceReceived(Number(e.target.value) || '')}
-                />
-              </div>
-              <div className="field flex flex-col gap-2">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Advance payment reference</label>
-                <input
-                  type="text"
-                  className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                  value={actualAdvanceRef}
-                  onChange={(e) => setActualAdvanceRef(e.target.value)}
-                  placeholder="NEFT / UPI Ref."
-                />
-              </div>
-            </div>
-
-            <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
-              Trip Outcome &amp; Remarks
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="field flex flex-col gap-2">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
-                  Trip outcome <span className="text-red-500">*</span>
-                </label>
-                <select
-                  className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] cursor-pointer"
-                  value={tripOutcome}
-                  onChange={(e) => setTripOutcome(e.target.value)}
-                  required
-                >
-                  <option>Meeting successful — follow-up scheduled</option>
-                  <option>Deal closed</option>
-                  <option>Presentation delivered</option>
-                  <option>Site inspection completed</option>
-                  <option>Training attended</option>
-                  <option>No outcome — rescheduled</option>
-                </select>
-              </div>
-              <div className="field flex flex-col gap-2">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Next steps / follow-up</label>
-                <input
-                  type="text"
-                  className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                  value={outcomeNextSteps}
-                  onChange={(e) => setOutcomeNextSteps(e.target.value)}
-                  placeholder="E.g. Send proposal by 10 Jun"
-                />
-              </div>
-              <div className="field flex flex-col gap-2 md:col-span-2">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Employee remarks</label>
-                <textarea
-                  className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all min-h-[85px] leading-relaxed"
-                  value={employeeRemarks}
-                  onChange={(e) => setEmployeeRemarks(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
-              Upload Bills &amp; Receipts <span className="text-red-500">*</span>
-            </div>
-            <input
-              type="file"
-              multiple
-              id="reimbursement-file-input"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files && e.target.files.length > 0) {
-                  uploadFiles(Array.from(e.target.files), setReimbursementFiles);
-                }
-              }}
-            />
-            <div
-              className="doc-zone border-2 border-dashed border-border rounded-2xl p-6 text-center bg-bg-input/5 hover:bg-accent/5 hover:border-accent cursor-pointer transition-all flex flex-col items-center justify-center mb-4"
-              onClick={() => document.getElementById('reimbursement-file-input').click()}
-            >
-              <Receipt size={30} className="text-text-muted mb-2" />
-              <p className="text-xs font-bold text-text-primary">
-                Upload all original bills — flight tickets, hotel invoice, meal receipts, toll receipts, cab bills
-              </p>
-              <p className="mt-1 text-[10px] font-black text-text-muted uppercase tracking-wider">PDF, JPG, PNG — max 10MB each</p>
-            </div>
-            {reimbursementFiles.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-6">
-                {reimbursementFiles.map((file, idx) => (
-                  <span key={idx} className="inline-flex items-center gap-1.5 bg-bg-input/40 border border-border px-3 py-1.5 rounded-full text-[10px] font-black text-text-secondary uppercase tracking-wider select-none">
-                    {file.uploading ? (
-                      <div className="w-3 h-3 border border-accent border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <FileCheck size={12} className="text-emerald-500" />
-                    )}
-                    {file.name}
-                    {!file.uploading && file.url && (
-                      <a
-                        href={file.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        View
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setReimbursementFiles(prev => prev.filter((_, i) => i !== idx));
-                      }}
-                      className="ml-1 text-rose-500 hover:text-rose-700 cursor-pointer"
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Actual departure date</label>
+                    <input
+                      type="date"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                      value={actualDeparture}
+                      onChange={(e) => setActualDeparture(e.target.value)}
+                    />
+                  </div>
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Actual return date</label>
+                    <input
+                      type="date"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                      value={actualReturn}
+                      onChange={(e) => setActualReturn(e.target.value)}
+                    />
+                  </div>
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Mode of travel used</label>
+                    <select
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] cursor-pointer"
+                      value={actualTravelMode}
+                      onChange={(e) => setActualTravelMode(e.target.value)}
                     >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
+                      <option>Flight</option>
+                      <option>Train</option>
+                      <option>Bus</option>
+                      <option>Cab / Taxi</option>
+                      <option>Owned vehicle</option>
+                    </select>
+                  </div>
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Distance (km)</label>
+                    <input
+                      type="number"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] no-spinners"
+                      value={actualDistance}
+                      onWheel={(e) => e.target.blur()}
+                      onKeyDown={(e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }}
+                      onChange={(e) => setActualDistance(e.target.value)}
+                      placeholder="For fuel reimbursement"
+                    />
+                  </div>
+                </div>
+
+                <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
+                  Actual Expense Breakdown <span className="text-red-500">*</span>
+                </div>
+                <div className="table-wrap border-2 border-border rounded-2xl overflow-hidden bg-bg-card">
+                  <div className="overflow-x-auto">
+                    <table className="data-table w-full text-xs text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-border bg-bg-input/20">
+                          <th className="p-4 font-black text-text-muted uppercase tracking-wider text-[9px] w-[50%]">Expense Head</th>
+                          <th className="p-4 font-black text-text-muted uppercase tracking-wider text-[9px] w-[30%]">Actual (₹)</th>
+                          <th className="p-4 font-black text-text-muted uppercase tracking-wider text-[9px] text-center w-[20%]">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { key: 'fare', label: 'Travel fare' },
+                          { key: 'hotel', label: 'Hotel / Accommodation' },
+                          { key: 'meals', label: 'Meals (all)' },
+                          { key: 'local', label: 'Local conveyance' },
+                          { key: 'comm', label: 'Communication' },
+                          { key: 'misc', label: 'Miscellaneous' }
+                        ].map(row => {
+                          const currentReq = dbRequests.find(r => r.reqId === reimLink);
+                          const displayStatus = currentReq?.reimbursementStatus === 'Approved' ? 'Approved' : 'Pending';
+                          return (
+                            <tr key={row.key} className="border-b border-border hover:bg-bg-input/10">
+                              <td className="p-4 font-bold text-text-primary">{row.label}</td>
+                              <td className="p-4">
+                                <input
+                                  type="number"
+                                  className="w-full text-right bg-bg-input border border-border rounded-lg px-2 py-1.5 text-xs font-bold text-text-primary focus:border-accent outline-none no-spinners"
+                                  value={actualExpenses[row.key]}
+                                  onWheel={(e) => e.target.blur()}
+                                  onKeyDown={(e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }}
+                                  onChange={(e) => setActualExpenses({
+                                    ...actualExpenses,
+                                    [row.key]: Number(e.target.value) || 0
+                                  })}
+                                />
+                              </td>
+                              <td className="p-4 text-center">
+                                {displayStatus === 'Approved' ? (
+                                  <span className="status-badge badge-approved text-[8px] sm:text-[9px] font-black bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-lg border border-emerald-500/20 select-none">
+                                    Approved
+                                  </span>
+                                ) : (
+                                  <span className="status-badge badge-pending text-[8px] sm:text-[9px] font-black bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-lg border border-orange-500/20 select-none">
+                                    Pending
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                  <div className="p-4 rounded-xl border border-border bg-bg-input/10 flex flex-col gap-1">
+                    <span className="text-[10px] font-black text-text-muted uppercase tracking-wider">Actual Claimed</span>
+                    <span className="text-lg font-black text-text-primary font-black">
+                      ₹ {calculateActualClaimed().toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex flex-col gap-1 font-black">
+                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Net Payable to You</span>
+                    <span className="text-lg font-black text-emerald-600">
+                      ₹ {calculateNetPayable().toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
+                  Advance Details
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Advance already received (₹)</label>
+                    <input
+                      type="number"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] no-spinners"
+                      value={actualAdvanceReceived}
+                      onWheel={(e) => e.target.blur()}
+                      onKeyDown={(e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }}
+                      onChange={(e) => setActualAdvanceReceived(Number(e.target.value) || '')}
+                    />
+                  </div>
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Advance payment reference</label>
+                    <input
+                      type="text"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                      value={actualAdvanceRef}
+                      onChange={(e) => setActualAdvanceRef(e.target.value)}
+                      placeholder="NEFT / UPI Ref."
+                    />
+                  </div>
+                </div>
+
+                <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
+                  Trip Outcome &amp; Remarks
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">
+                      Trip outcome <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] cursor-pointer"
+                      value={tripOutcome}
+                      onChange={(e) => setTripOutcome(e.target.value)}
+                      required
+                    >
+                      <option>Meeting successful — follow-up scheduled</option>
+                      <option>Deal closed</option>
+                      <option>Presentation delivered</option>
+                      <option>Site inspection completed</option>
+                      <option>Training attended</option>
+                      <option>No outcome — rescheduled</option>
+                    </select>
+                  </div>
+                  <div className="field flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Next steps / follow-up</label>
+                    <input
+                      type="text"
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                      value={outcomeNextSteps}
+                      onChange={(e) => setOutcomeNextSteps(e.target.value)}
+                      placeholder="E.g. Send proposal by 10 Jun"
+                    />
+                  </div>
+                  <div className="field flex flex-col gap-2 md:col-span-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Employee remarks</label>
+                    <textarea
+                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all min-h-[85px] leading-relaxed"
+                      value={employeeRemarks}
+                      onChange={(e) => setEmployeeRemarks(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="section-label text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 mt-8">
+                  Upload Bills &amp; Receipts <span className="text-red-500">*</span>
+                </div>
+                <input
+                  type="file"
+                  multiple
+                  id="reimbursement-file-input"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      uploadFiles(Array.from(e.target.files), setReimbursementFiles);
+                    }
+                  }}
+                />
+                <div
+                  className="doc-zone border-2 border-dashed border-border rounded-2xl p-6 text-center bg-bg-input/5 hover:bg-accent/5 hover:border-accent cursor-pointer transition-all flex flex-col items-center justify-center mb-4"
+                  onClick={() => document.getElementById('reimbursement-file-input').click()}
+                >
+                  <Receipt size={30} className="text-text-muted mb-2" />
+                  <p className="text-xs font-bold text-text-primary">
+                    Upload all original bills — flight tickets, hotel invoice, meal receipts, toll receipts, cab bills
+                  </p>
+                  <p className="mt-1 text-[10px] font-black text-text-muted uppercase tracking-wider">PDF, JPG, PNG — max 10MB each</p>
+                </div>
+                {reimbursementFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {reimbursementFiles.map((file, idx) => (
+                      <span key={idx} className="inline-flex items-center gap-1.5 bg-bg-input/40 border border-border px-3 py-1.5 rounded-full text-[10px] font-black text-text-secondary uppercase tracking-wider select-none">
+                        {file.uploading ? (
+                          <div className="w-3 h-3 border border-accent border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <FileCheck size={12} className="text-emerald-500" />
+                        )}
+                        {file.name}
+                        {!file.uploading && file.url && (
+                          <a
+                            href={file.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setReimbursementFiles(prev => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="ml-1 text-rose-500 hover:text-rose-700 cursor-pointer"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 <div className="flex gap-4">
                   <button
@@ -1872,7 +2042,7 @@ export default function TourTab({ user }) {
                     className="btn-primary flex-[2] py-4 text-xs font-black uppercase tracking-[0.2em] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer shadow-lg font-black"
                     onClick={() => handleReimbursementSubmit(false)}
                   >
-                    Submit Reimbursement Claim
+                    Submit
                   </button>
                 </div>
               </>
@@ -1885,12 +2055,122 @@ export default function TourTab({ user }) {
                 </p>
               </div>
             )}
+
+            {/* Submitted Reimbursements Details Section */}
+            <div className="mt-8 pt-8 border-t border-border/60">
+              <div className="text-sm font-black text-text-primary uppercase tracking-wider mb-4">
+                Submitted Reimbursement Claims
+              </div>
+              {dbRequests.filter(req => req.reimbursementStatus && req.reimbursementStatus !== '').length > 0 ? (
+                <div className="flex flex-col gap-4">
+                  {dbRequests.filter(req => req.reimbursementStatus && req.reimbursementStatus !== '').map(req => {
+                    const totalExpenses = Object.values(req.actualExpenses || {}).reduce((a, b) => a + Number(b || 0), 0);
+                    const netPayable = totalExpenses - Number(req.actualAdvanceReceived || 0);
+
+                    return (
+                      <div key={req._id} className="border-2 border-border rounded-2xl p-5 bg-bg-input/5 hover:bg-bg-input/10 transition-all flex flex-col gap-4">
+                        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/40 pb-3">
+                          <div>
+                            <span className="text-[10px] font-black text-text-muted uppercase tracking-wider block">Travel Request ID</span>
+                            <span className="font-bold text-text-primary text-xs">{req.reqId}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black text-text-muted uppercase tracking-wider block">Destination</span>
+                            <span className="font-bold text-text-primary text-xs">{req.destinationTo || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black text-text-muted uppercase tracking-wider block">Total Claimed</span>
+                            <span className="font-bold text-text-primary text-xs">₹ {totalExpenses.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black text-text-muted uppercase tracking-wider block">Net Payable</span>
+                            <span className="font-bold text-emerald-600 text-xs">₹ {netPayable.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black text-text-muted uppercase tracking-wider block">Status</span>
+                            <span className={`status-badge text-[8px] sm:text-[9px] font-black px-2.5 py-0.5 rounded-lg border uppercase tracking-wider select-none ${
+                              req.reimbursementStatus === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                              req.reimbursementStatus === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                              'bg-orange-500/10 text-orange-500 border-orange-500/20'
+                            }`}>
+                              {req.reimbursementStatus}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Breakdown */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                          {Object.entries(req.actualExpenses || {}).map(([key, val]) => (
+                            <div key={key} className="bg-bg-card p-2 rounded-lg border border-border/60">
+                              <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block capitalize">{key === 'comm' ? 'Communication' : key === 'misc' ? 'Miscellaneous' : key}</span>
+                              <span className="font-bold text-text-primary text-xs">₹ {val || 0}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* More Details (Departure, Return, Remarks) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs mt-1">
+                          <div>
+                            <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Actual Travel Period</span>
+                            <span className="font-bold text-text-secondary">{req.actualDeparture || '-'} to {req.actualReturn || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Mode & Distance</span>
+                            <span className="font-bold text-text-secondary">{req.actualTravelMode || '-'} ({req.actualDistance || '-'} km)</span>
+                          </div>
+                          {req.employeeRemarks && (
+                            <div>
+                              <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Remarks</span>
+                              <span className="font-bold text-text-secondary block truncate" title={req.employeeRemarks}>{req.employeeRemarks}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Bills/Receipts Files */}
+                        {req.reimbursementBills && req.reimbursementBills.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block self-center mr-1">Receipts:</span>
+                            {req.reimbursementBills.map((docStr, idx) => {
+                              let name = 'Receipt';
+                              let url = docStr;
+                              if (docStr.includes('|')) {
+                                const parts = docStr.split('|');
+                                name = parts[0];
+                                url = parts[1];
+                              } else {
+                                name = docStr.split('/').pop();
+                              }
+                              return (
+                                <a
+                                  key={idx}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 bg-bg-card border border-border px-2.5 py-1 rounded-lg text-[9px] font-black text-accent hover:underline uppercase tracking-wider"
+                                >
+                                  <FileCheck size={10} className="text-emerald-500" />
+                                  {name}
+                                </a>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-xs text-text-muted font-bold bg-bg-input/5 border-2 border-dashed border-border rounded-2xl">
+                  No submitted reimbursement claims found.
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* ===== TAB 3: ADMIN VIEW ===== */}
         {activeTab === 'admin' && isAdmin && (
-          <div className="tab-panel p-6 animate-zoom-in">
+          <div className="tab-panel p-4 sm:p-6 animate-zoom-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div className="text-sm font-black text-text-primary uppercase tracking-[0.15em]">
                 Approvals Dashboard
@@ -1982,22 +2262,21 @@ export default function TourTab({ user }) {
                               {req.requestedByName || 'Ravi Kumar'} — {req.destinationTo}
                             </div>
                             <div className="text-[10px] font-bold text-text-muted uppercase tracking-wide mt-0.5">
-                              {req.department || 'Sales & Business Development'} &nbsp;|&nbsp; Manager: Priya Sharma
+                              Role: {req.department || 'Staff'}
                             </div>
                           </div>
-                          <span className={`status-badge text-[8px] sm:text-[9px] font-black px-2.5 py-1 rounded-full border uppercase tracking-wider ${
-                            req.reimbursementStatus && req.reimbursementStatus !== '' 
-                              ? (req.reimbursementStatus === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                                 req.reimbursementStatus === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
-                                 req.reimbursementStatus === 'Submitted' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
-                                 'bg-blue-500/10 text-blue border-blue-500/20')
-                              : (req.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                                 req.status === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
-                                 req.status === 'Pending Review' || req.status === 'Pending' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
-                                 'bg-blue-500/10 text-blue border-blue-500/20')
-                          }`}>
-                            {req.reimbursementStatus && req.reimbursementStatus !== '' 
-                              ? `Reimbursement: ${req.reimbursementStatus}` 
+                          <span className={`status-badge text-[8px] sm:text-[9px] font-black px-2.5 py-1 rounded-full border uppercase tracking-wider ${req.reimbursementStatus && req.reimbursementStatus !== ''
+                            ? (req.reimbursementStatus === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                              req.reimbursementStatus === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                                req.reimbursementStatus === 'Submitted' || req.reimbursementStatus === 'Pending' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
+                                  'bg-blue-500/10 text-blue border-blue-500/20')
+                            : (req.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                              req.status === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                                req.status === 'Pending Review' || req.status === 'Pending' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
+                                  'bg-blue-500/10 text-blue border-blue-500/20')
+                            }`}>
+                            {req.reimbursementStatus && req.reimbursementStatus !== ''
+                              ? `Reimbursement: ${req.reimbursementStatus}`
                               : req.status}
                           </span>
                         </div>
@@ -2122,51 +2401,51 @@ export default function TourTab({ user }) {
 
                             {/* Reimbursement Details */}
                             {req.reimbursementStatus && (
-                              <div className="border-t border-border/40 pt-4 mt-2">
-                                <div className="text-[10px] font-black text-emerald-600 uppercase tracking-wider mb-2 pb-1 border-b border-border/40 flex items-center justify-between">
-                                  <span>Reimbursement Claim Details</span>
-                                  <span className="bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-lg border border-emerald-500/20 text-[8px] font-black uppercase tracking-wider">
+                              <div className="border-2 border-emerald-500/20 rounded-xl p-4 bg-emerald-500/[0.02] mt-4 flex flex-col gap-4">
+                                <div className="text-[10px] font-black text-emerald-600 uppercase tracking-wider pb-2 border-b border-emerald-500/10 flex items-center justify-between">
+                                  <span className="flex items-center gap-1.5"><Receipt size={14} /> Reimbursement Claim Details</span>
+                                  <span className="bg-emerald-500/15 text-emerald-600 px-2.5 py-0.5 rounded-lg border border-emerald-500/25 text-[8px] font-black uppercase tracking-wider">
                                     {req.reimbursementStatus}
                                   </span>
                                 </div>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                   <div>
                                     <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Actual Departure</span>
-                                    <span className="font-bold text-text-primary">{req.actualDeparture || '-'}</span>
+                                    <span className="font-bold text-text-primary text-xs">{req.actualDeparture || '-'}</span>
                                   </div>
                                   <div>
                                     <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Actual Return</span>
-                                    <span className="font-bold text-text-primary">{req.actualReturn || '-'}</span>
+                                    <span className="font-bold text-text-primary text-xs">{req.actualReturn || '-'}</span>
                                   </div>
                                   <div>
                                     <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Actual Travel Mode</span>
-                                    <span className="font-bold text-text-primary">{req.actualTravelMode || '-'}</span>
+                                    <span className="font-bold text-text-primary text-xs">{req.actualTravelMode || '-'}</span>
                                   </div>
                                   <div>
                                     <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Actual Distance (km)</span>
-                                    <span className="font-bold text-text-primary">{req.actualDistance || '-'}</span>
+                                    <span className="font-bold text-text-primary text-xs">{req.actualDistance || '-'}</span>
                                   </div>
                                   {req.actualAdvanceReceived > 0 && (
                                     <>
                                       <div>
                                         <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Advance Received</span>
-                                        <span className="font-bold text-text-primary">₹ {req.actualAdvanceReceived}</span>
+                                        <span className="font-bold text-text-primary text-xs">₹ {req.actualAdvanceReceived}</span>
                                       </div>
                                       <div>
                                         <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Advance Payment Ref</span>
-                                        <span className="font-bold text-text-primary">{req.actualAdvanceRef || '-'}</span>
+                                        <span className="font-bold text-text-primary text-xs">{req.actualAdvanceRef || '-'}</span>
                                       </div>
                                     </>
                                   )}
                                 </div>
 
-                                <div className="mt-3 bg-bg-input/20 border border-border rounded-xl p-3">
-                                  <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block mb-2">Actual Expenses Breakdown</span>
+                                <div className="bg-white border border-emerald-500/10 rounded-xl p-3">
+                                  <span className="text-[9px] font-black text-emerald-600 uppercase tracking-wider block mb-2">Actual Expenses Breakdown</span>
                                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                                     {Object.entries(req.actualExpenses || {}).map(([key, val]) => (
-                                      <div key={key} className="bg-bg-card p-2 rounded-lg border border-border/60">
+                                      <div key={key} className="bg-emerald-500/[0.02] p-2.5 rounded-lg border border-emerald-500/10">
                                         <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block capitalize">{key === 'comm' ? 'Communication' : key === 'misc' ? 'Miscellaneous' : key}</span>
-                                        <span className="font-bold text-text-primary">₹ {val || 0}</span>
+                                        <span className="font-bold text-text-primary text-xs">₹ {val || 0}</span>
                                         {req.actualBillNos?.[key] && (
                                           <span className="text-[8px] text-text-muted block mt-0.5 truncate" title={req.actualBillNos[key]}>Bill: {req.actualBillNos[key]}</span>
                                         )}
@@ -2175,29 +2454,29 @@ export default function TourTab({ user }) {
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   {req.tripOutcome && (
                                     <div>
                                       <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Trip Outcome</span>
-                                      <span className="font-bold text-text-primary block mt-0.5">{req.tripOutcome}</span>
+                                      <span className="font-bold text-text-primary block mt-0.5 text-xs">{req.tripOutcome}</span>
                                     </div>
                                   )}
                                   {req.outcomeNextSteps && (
                                     <div>
                                       <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Next Steps / Follow-up</span>
-                                      <span className="font-bold text-text-primary block mt-0.5">{req.outcomeNextSteps}</span>
+                                      <span className="font-bold text-text-primary block mt-0.5 text-xs">{req.outcomeNextSteps}</span>
                                     </div>
                                   )}
                                 </div>
                                 {req.employeeRemarks && (
-                                  <div className="mt-3">
+                                  <div>
                                     <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Employee Remarks</span>
-                                    <p className="font-bold text-text-primary leading-relaxed mt-0.5">{req.employeeRemarks}</p>
+                                    <p className="font-bold text-text-primary leading-relaxed mt-0.5 text-xs">{req.employeeRemarks}</p>
                                   </div>
                                 )}
                               </div>
                             )}
-                            
+
                             {(req.status === 'Pending Review' || req.status === 'Pending') && (
                               <div className="flex gap-2">
                                 <button
@@ -2214,17 +2493,17 @@ export default function TourTab({ user }) {
                                 >
                                   <X size={12} /> Reject Request
                                 </button>
-                                <button
+                                {/* <button
                                   type="button"
                                   className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider border-2 border-border text-text-secondary bg-bg-input/20 rounded-xl cursor-pointer hover:bg-bg-input transition-all flex items-center justify-center gap-1"
                                   onClick={() => triggerToast(`Query sent to user for ${req.reqId}`)}
                                 >
                                   <MessageSquare size={12} /> Query
-                                </button>
+                                </button> */}
                               </div>
                             )}
 
-                            {req.reimbursementStatus === 'Submitted' && (
+                            {(req.reimbursementStatus === 'Submitted' || req.reimbursementStatus === 'Pending') && (
                               <div className="flex gap-2">
                                 <button
                                   type="button"
@@ -2258,7 +2537,7 @@ export default function TourTab({ user }) {
 
         {/* ===== TAB 4: POLICY ===== */}
         {activeTab === 'policy' && (
-          <div className="tab-panel p-6 animate-zoom-in">
+          <div className="tab-panel p-4 sm:p-6 animate-zoom-in">
             <div className="text-sm font-black text-text-primary uppercase tracking-[0.15em]">
               Company Travel Policy
             </div>

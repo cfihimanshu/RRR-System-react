@@ -95,8 +95,16 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
         `}
       >
         {/* Collapse Toggle Button */}
-        <button
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setIsCollapsed(!isCollapsed)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setIsCollapsed(!isCollapsed);
+            }
+          }}
           className="hidden md:flex items-center justify-center absolute -right-3.5 top-6 z-[100] w-7 h-7 rounded-full bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:scale-110 active:scale-95 transition-all duration-200 shadow-md cursor-pointer"
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
@@ -104,7 +112,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
             ? <ChevronRight size={14} strokeWidth={3.5} />
             : <ChevronLeft size={14} strokeWidth={3.5} />
           }
-        </button>
+        </div>
 
         {/* Nav Items */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 flex flex-col gap-1 px-2 hide-scrollbar">
@@ -166,20 +174,28 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
 
 
           {/* Logout */}
-          <button
+          <div
+            role="button"
+            tabIndex={0}
             onClick={onLogoutClick}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onLogoutClick();
+              }
+            }}
             title="Sign Out"
             className={`
               flex items-center gap-2 rounded-xl border border-red-500/20
               bg-red-500/5 text-red-400
               hover:bg-red-500 hover:text-white hover:border-red-500
-              transition-all text-[11px] font-black uppercase tracking-widest
+              transition-all text-[11px] font-black uppercase tracking-widest cursor-pointer
               ${isCollapsed ? 'w-10 h-10 justify-center' : 'px-3 py-2.5'}
             `}
           >
             <LogOut size={14} />
             {!isCollapsed && <span>Sign Out</span>}
-          </button>
+          </div>
         </div>
       </aside>
 

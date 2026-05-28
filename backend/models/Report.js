@@ -26,8 +26,6 @@ const reportSchema = new mongoose.Schema({
   workDuration: String,
   completionStatus: String,
   workSummary: String,
-  progressScore: Number,
-  moodEnergy: String,
   workingHours: Number,
   
   status: { type: String, default: 'Submitted' }

@@ -7,7 +7,7 @@ import { AuthContext } from '../../context/AuthContext';
 const AgreementGenerationTab = () => {
   const { user } = useContext(AuthContext);
   const [formData, setFormData] = useState({
-    templateId: '1Xlkl7KkF0YgYM1ZDu-FusPi_nY4IT5Hr68SbCOPB3bA', // Default ID
+    templateId: '1aRWJ9GA0gkGlBU33_N3eL2VkMiwwqnbVlRf6r6BM30Q', // Default ID 
     date: '',
     firstPartyCompany: '',
     clientName: '',
@@ -392,11 +392,10 @@ const AgreementGenerationTab = () => {
             <button
               type="submit"
               disabled={isGenerating}
-              className={`relative overflow-hidden font-black py-4 px-10 rounded-xl shadow-xl shadow-blue-900/20 transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em] active:scale-95 ${
-                isGenerating
-                  ? 'bg-blue/70 text-white cursor-not-allowed'
-                  : 'bg-blue hover:bg-blue-600 text-white'
-              }`}
+              className={`relative overflow-hidden font-black py-4 px-10 rounded-xl shadow-xl shadow-blue-900/20 transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em] active:scale-95 ${isGenerating
+                ? 'bg-blue/70 text-white cursor-not-allowed'
+                : 'bg-blue hover:bg-blue-600 text-white'
+                }`}
             >
               {isGenerating ? (
                 <>

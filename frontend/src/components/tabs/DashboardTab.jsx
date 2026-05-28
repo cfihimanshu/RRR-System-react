@@ -147,8 +147,6 @@ const DashboardTab = () => {
     workDuration: '',
     completionStatus: 'Fully Completed',
     workSummary: '',
-    progressScore: '',
-    moodEnergy: '',
     challenges: '',
     sodCaseId: '',
     sodTaskTitle: '',
@@ -838,8 +836,6 @@ const DashboardTab = () => {
           : '',
         workSummary: reportType === 'EOD' ? reportFormData.workSummary : '',
         completionStatus: reportType === 'EOD' ? reportFormData.completionStatus : 'Incomplete',
-        progressScore: reportType === 'EOD' ? reportFormData.progressScore : '',
-        moodEnergy: reportType === 'EOD' ? reportFormData.moodEnergy : '',
         // GPS & Selfie verification fields
         selfieUrl: (reportType === 'SOD' || reportType === 'EOD') ? selfie : '',
         latitude: (reportType === 'SOD' || reportType === 'EOD') && coords ? coords.latitude : null,
@@ -867,8 +863,6 @@ const DashboardTab = () => {
         workDuration: '',
         completionStatus: 'Fully Completed',
         workSummary: '',
-        progressScore: '',
-        moodEnergy: '',
         challenges: '',
         sodCaseId: '',
         sodTaskTitle: '',
@@ -1034,14 +1028,6 @@ const DashboardTab = () => {
                     <div className="bg-bg-input rounded-2xl p-4 border border-border">
                       <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Execution Index</div>
                       <div className="font-black text-text-primary text-sm">{viewingReport.completionStatus || '—'}</div>
-                    </div>
-                    <div className="bg-bg-input rounded-2xl p-4 border border-border">
-                      <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Performance Matrix</div>
-                      <div className="font-black text-text-primary text-sm">{viewingReport.progressScore ? `${viewingReport.progressScore}/10` : '—'}</div>
-                    </div>
-                    <div className="bg-bg-input rounded-2xl p-4 border border-border">
-                      <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Energy Calibration</div>
-                      <div className="font-black text-text-primary text-sm">{viewingReport.moodEnergy || '—'}</div>
                     </div>
                   </div>
                   <div className="bg-blue-soft rounded-xl p-8 border-2 border-blue-soft shadow-inner">
@@ -1754,15 +1740,15 @@ const DashboardTab = () => {
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3 text-center">
-                    <div className="bg-bg-secondary p-3 rounded-xl border border-border/30 cursor-pointer hover:bg-bg-secondary/70 transition-all" onClick={() => navigate('/refund-request', { state: { filter: 'All' } })}>
+                    <div className="bg-bg-secondary p-3 rounded-xl border border-border/30 cursor-pointer hover:bg-bg-secondary/70 transition-all" onClick={() => navigate('/refund-request', { state: { activeRequestType: 'Settlement', filter: 'All' } })}>
                       <div className="text-[8px] font-black text-text-muted uppercase mb-1">Total Filled</div>
                       <div className="text-lg font-black text-text-primary mt-1">{myRefunds.length}</div>
                     </div>
-                    <div className="bg-green-soft/30 p-3 rounded-xl border border-green-soft/40 cursor-pointer hover:bg-green-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { filter: 'Paid' } })}>
+                    <div className="bg-green-soft/30 p-3 rounded-xl border border-green-soft/40 cursor-pointer hover:bg-green-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { activeRequestType: 'Settlement', filter: 'Paid' } })}>
                       <div className="text-[8px] font-black text-green uppercase mb-1">Approved</div>
                       <div className="text-lg font-black text-green mt-1">{myRefunds.filter(r => r.status === 'Paid').length}</div>
                     </div>
-                    <div className="bg-red-soft/30 p-3 rounded-xl border border-red-soft/40 cursor-pointer hover:bg-red-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { filter: 'Rejected' } })}>
+                    <div className="bg-red-soft/30 p-3 rounded-xl border border-red-soft/40 cursor-pointer hover:bg-red-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { activeRequestType: 'Settlement', filter: 'Rejected' } })}>
                       <div className="text-[8px] font-black text-red uppercase mb-1">Rejected</div>
                       <div className="text-lg font-black text-red mt-1">{myRefunds.filter(r => r.status === 'Rejected').length}</div>
                     </div>

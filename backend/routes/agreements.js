@@ -25,12 +25,25 @@ router.post('/generate', verifyToken, async (req, res) => {
       body: JSON.stringify(data),
     });
 
-    if (!response.ok) {
-      throw new Error(`Google Apps Script responded with status: ${response.status}`);
+    // Read raw text first — Apps Script can return HTML error pages even with status 200
+    const rawText = await response.text();
+
+    if (!response.ok || rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html')) {
+      // Try to extract the actual error message from the HTML error page
+      const match = rawText.match(/monospace[^>]*>([^<]+)/);
+      const scriptError = match ? match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&') : `HTTP ${response.status}`;
+      console.error(`[AGREEMENT] Apps Script returned HTML error page: ${scriptError}`);
+      return res.status(500).json({ error: `Google Apps Script Error: ${scriptError}` });
     }
 
-    const result = await response.json();
-    
+    let result;
+    try {
+      result = JSON.parse(rawText);
+    } catch (parseErr) {
+      console.error(`[AGREEMENT] Failed to parse Apps Script response as JSON: ${rawText.substring(0, 200)}`);
+      return res.status(500).json({ error: 'Apps Script returned an unexpected response. Check the script for errors.' });
+    }
+
     if (result.error) {
       console.error(`[AGREEMENT] Apps Script Error: ${result.error}`);
       return res.status(500).json({ error: result.error });
