@@ -185,7 +185,8 @@ const LegalDashboardTab = () => {
 
   const fetchUserCases = async () => {
     try {
-      const res = await api.get('/cases?limit=100');
+      const isLegal = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role);
+      const res = await api.get(`/cases?limit=100${isLegal ? '&isLegalDashboard=true' : ''}`);
       setUserCases(res.data.cases || (Array.isArray(res.data) ? res.data : []));
     } catch (err) {
       console.error(err);
@@ -194,7 +195,8 @@ const LegalDashboardTab = () => {
 
   const fetchMyTodayTasks = async () => {
     try {
-      const res = await api.get('/tasks');
+      const isLegal = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role);
+      const res = await api.get(`/tasks?${isLegal ? 'isLegalDashboard=true' : ''}`);
       const taskList = res.data.tasks || (Array.isArray(res.data) ? res.data : []);
       const pending = taskList.filter(t => t.status !== 'Completed' && t.status !== 'Done');
       setMyTodayTasks(pending);
@@ -202,6 +204,7 @@ const LegalDashboardTab = () => {
       console.error(err);
     }
   };
+
 
   const checkSodStatus = async () => {
     if (['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user?.role)) return;
@@ -242,7 +245,8 @@ const LegalDashboardTab = () => {
 
   const fetchDashboardStats = async () => {
     try {
-      const res = await api.get(`/dashboard/stats?t=${Date.now()}`);
+      const isLegal = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role);
+      const res = await api.get(`/dashboard/stats?t=${Date.now()}${isLegal ? '&isLegalDashboard=true' : ''}`);
       const data = res.data;
 
       if (data.caseTypeWiseData) {
@@ -851,54 +855,7 @@ const LegalDashboardTab = () => {
                 )
               ) : (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
-                    <div>
-                      <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] ml-1 flex items-center gap-2">
-                        <CheckCircle size={12} className="text-purple" /> Completion Status
-                      </label>
-                      <select
-                        className="w-full border-2 border-border rounded-2xl p-4 text-sm bg-bg-input font-black text-text-primary outline-none focus:border-purple transition-all"
-                        value={reportFormData.completionStatus}
-                        onChange={(e) => setReportFormData({ ...reportFormData, completionStatus: e.target.value })}
-                      >
-                        <option value="Fully Completed">Fully Completed</option>
-                        <option value="Partially Completed">Partially Completed</option>
-                        <option value="Under Review">Under Review</option>
-                        <option value="Incomplete">Incomplete</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] ml-1 flex items-center gap-2">
-                        <TrendingUp size={12} className="text-purple" /> Progress Score (1-10)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="10"
-                        className="w-full border-2 border-border rounded-2xl p-4 text-sm bg-bg-input font-black text-text-primary outline-none focus:border-purple transition-all"
-                        value={reportFormData.progressScore}
-                        onChange={(e) => setReportFormData({ ...reportFormData, progressScore: e.target.value })}
-                        placeholder="Rate your day"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] ml-1 flex items-center gap-2">
-                        <Zap size={12} className="text-purple" /> Mood / Energy
-                      </label>
-                      <select
-                        className="w-full border-2 border-border rounded-2xl p-4 text-sm bg-bg-input font-black text-text-primary outline-none focus:border-purple transition-all"
-                        value={reportFormData.moodEnergy}
-                        onChange={(e) => setReportFormData({ ...reportFormData, moodEnergy: e.target.value })}
-                      >
-                        <option value="">Select Mood</option>
-                        <option value="High Energy">High Energy</option>
-                        <option value="Focused">Focused</option>
-                        <option value="Normal">Normal</option>
-                        <option value="Tired">Tired</option>
-                        <option value="Low Energy">Low Energy</option>
-                      </select>
-                    </div>
-                  </div>
+
 
                   <div className="space-y-4">
                     <label className="block text-[10px] font-black text-text-muted uppercase mb-3 tracking-[0.2em] ml-1 flex items-center gap-2">

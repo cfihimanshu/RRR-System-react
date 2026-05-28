@@ -54,4 +54,65 @@ router.post('/', verifyToken, async (req, res) => {
   }
 });
 
+router.put('/:id', verifyToken, async (req, res) => {
+  try {
+    const allowedRoles = ['Admin', 'Super Admin', 'SuperAdmin'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
+    }
+
+    const { id } = req.params;
+    const oldDoc = await Document.findById(id);
+    if (!oldDoc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const updatedDoc = await Document.findByIdAndUpdate(
+      id,
+      { $set: req.body },
+      { new: true }
+    );
+
+    // Sync timeline
+    try {
+      const Timeline = require('../models/Timeline');
+      const timelineEvent = await Timeline.findOne({
+        caseId: oldDoc.caseId,
+        eventType: 'Document Upload',
+        'metadata.fileLink': oldDoc.fileLink
+      });
+
+      if (timelineEvent) {
+        timelineEvent.summary = `Document Updated: ${updatedDoc.docType}`;
+        timelineEvent.details = `File: ${updatedDoc.fileLink?.split('/').pop() || updatedDoc.fileSummary || 'Unnamed'}. Remarks: ${updatedDoc.remarks || 'None'}`;
+        timelineEvent.metadata = {
+          ...timelineEvent.metadata,
+          docType: updatedDoc.docType,
+          fileSummary: updatedDoc.fileSummary,
+          fileLink: updatedDoc.fileLink,
+          remarks: updatedDoc.remarks
+        };
+        await timelineEvent.save();
+      }
+    } catch (timelineErr) {
+      console.error('Failed to sync timeline on document update:', timelineErr);
+    }
+
+    // Add Audit Log
+    await AuditLog.create({
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      user: req.user.email,
+      role: req.user.role,
+      category: 'Document Updated',
+      description: `Updated document (${updatedDoc.docType}) for case ${updatedDoc.caseId}`,
+      caseId: updatedDoc.caseId
+    });
+
+    res.json(updatedDoc);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

@@ -51,6 +51,7 @@ const MyTaskTab = () => {
   const [fetchingCase, setFetchingCase] = useState(false);
   const [showSavedNotes, setShowSavedNotes] = useState(false);
   const [showTaskBrief, setShowTaskBrief] = useState(true);
+  const [showProgressNotesDropdown, setShowProgressNotesDropdown] = useState(true);
   const [newNote, setNewNote] = useState('');
   const [collapsedColumns, setCollapsedColumns] = useState({
     'To Do': false,
@@ -175,7 +176,7 @@ const MyTaskTab = () => {
 
   const handleOpenTaskPanel = (task) => {
     setSelectedTask(task);
-    setNewNote(task.notes || ''); // Initialize notes input with stored notes
+    setNewNote(''); // Keep progress note input field clear
     setLinkedCase(null);
     setIsSidePanelOpen(true);
     setShowSavedNotes(true);
@@ -187,10 +188,6 @@ const MyTaskTab = () => {
   const handleUpdateTask = async (taskId, updates, silent = false) => {
     try {
       const payload = { ...updates };
-      // Keep unsaved progress notes if they exist and notes are not explicitly being updated
-      if (selectedTask?._id === taskId && newNote !== undefined && !payload.hasOwnProperty('notes')) {
-        payload.notes = newNote;
-      }
       const res = await api.put(`/tasks/${taskId}`, payload);
       setTasks(prev => prev.map(t => t._id === taskId ? { ...t, ...res.data } : t));
       if (selectedTask?._id === taskId) {
@@ -209,7 +206,12 @@ const MyTaskTab = () => {
   const handlePersistSelectedTask = async () => {
     if (!selectedTask) return;
     try {
-      await handleUpdateTask(selectedTask._id, { notes: newNote.trim() }, true);
+      if (newNote.trim()) {
+        const timestamp = new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
+        const formattedNote = `[${timestamp} - ${user?.fullName || 'User'}]: ${newNote.trim()}`;
+        const updatedNotes = selectedTask.notes ? (selectedTask.notes + '\n' + formattedNote) : formattedNote;
+        await handleUpdateTask(selectedTask._id, { notes: updatedNotes }, true);
+      }
       setNewNote(''); // Clear input box
       setIsSidePanelOpen(false);
     } catch (err) {
@@ -675,6 +677,25 @@ const MyTaskTab = () => {
                 )}
               </div>
 
+              {/* Saved Progress Notes */}
+              <div className="space-y-4">
+                <h3
+                  className="text-[11px] font-black text-accent uppercase tracking-[0.2em] flex items-center justify-between cursor-pointer bg-bg-input p-3 rounded-xl border border-border hover:bg-bg-card transition-all"
+                  onClick={() => setShowProgressNotesDropdown(!showProgressNotesDropdown)}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-accent rounded-full" />
+                    Saved Progress Notes
+                  </div>
+                  <ChevronDown size={16} className={`transition-transform duration-300 ${showProgressNotesDropdown ? 'rotate-180' : 'rotate-0'}`} />
+                </h3>
+                {showProgressNotesDropdown && (
+                  <div className="text-[13px] text-text-primary font-medium leading-relaxed bg-blue-soft/30 p-5 rounded-3xl border border-border shadow-inner min-h-[100px] whitespace-pre-wrap">
+                    {selectedTask.notes || 'No progress notes added yet.'}
+                  </div>
+                )}
+              </div>
+
 
               {/* Reminder Section */}
               <div className="space-y-4">
@@ -714,12 +735,21 @@ const MyTaskTab = () => {
                   placeholder="Add progress notes, observations, or next steps..."
                   value={newNote}
                   onChange={(e) => setNewNote(e.target.value)}
-                  onBlur={() => {
-                    if (newNote !== selectedTask.notes) {
-                      handleUpdateTask(selectedTask._id, { notes: newNote }, true);
-                    }
-                  }}
                 />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!newNote.trim()) return;
+                    const timestamp = new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
+                    const formattedNote = `[${timestamp} - ${user?.fullName || 'User'}]: ${newNote.trim()}`;
+                    const updatedNotes = selectedTask.notes ? (selectedTask.notes + '\n' + formattedNote) : formattedNote;
+                    await handleUpdateTask(selectedTask._id, { notes: updatedNotes }, true);
+                    setNewNote('');
+                  }}
+                  className="bg-accent text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-accent-hover transition-all shadow-lg active:scale-95 w-full"
+                >
+                  Save Progress Note
+                </button>
               </div>
             </div>
 

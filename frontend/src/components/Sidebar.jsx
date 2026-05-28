@@ -40,7 +40,7 @@ const tabsConfig = [
   { id: 'admin-panel', label: 'Admin Panel', path: '/admin-panel', icon: Settings },
   { id: 'internal-search', label: 'Records', path: '/internal-search', icon: Search },
   { id: 'reviewer-panel', label: 'Reviewer Dashboard', path: '/reviewer-panel', icon: ClipboardEdit },
-  { id: 'accountant-dashboard', label: 'Accountant', path: '/accountant-dashboard', icon: CircleDollarSign },
+  { id: 'accountant-dashboard', label: 'Accountant Dashboard', path: '/accountant-dashboard', icon: CircleDollarSign },
   { id: 'legal-dashboard', label: 'Legal Dashboard', path: '/legal-dashboard', icon: Scale },
   { id: 'agreement-gen', label: 'Agreement Generation', path: '/agreement-gen', icon: FileText },
   { id: 'my-task', label: 'My Tasks', path: '/my-task', icon: CheckSquare },
@@ -74,9 +74,6 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
 
   const visibleTabs = tabsConfig.filter(tab => {
     if (!user) return false;
-    if (user?.role === 'Super Admin' && ['accountant-dashboard'].includes(tab.id)) {
-      return false;
-    }
     // Show Records module if user has explicit permission OR role-based access
     if (tab.id === 'internal-search' && user.canAccessRecords) return true;
     return TAB_ACCESS[tab.id]?.includes(user?.role);

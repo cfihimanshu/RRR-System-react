@@ -53,4 +53,55 @@ router.post('/', verifyToken, async (req, res) => {
   }
 });
 
+router.put('/:id', verifyToken, async (req, res) => {
+  try {
+    const allowedRoles = ['Admin', 'Super Admin', 'SuperAdmin'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
+    }
+
+    const { id } = req.params;
+    const oldComm = await Communication.findById(id);
+    if (!oldComm) {
+      return res.status(404).json({ error: 'Communication log not found' });
+    }
+
+    const updatedComm = await Communication.findByIdAndUpdate(
+      id,
+      { $set: req.body },
+      { new: true }
+    );
+
+    // Sync Timeline entry
+    try {
+      const timelineEvent = await Timeline.findOne({
+        caseId: oldComm.caseId,
+        eventType: oldComm.mode,
+        summary: oldComm.summary
+      });
+      if (timelineEvent) {
+        timelineEvent.eventType = updatedComm.mode;
+        timelineEvent.summary = updatedComm.summary;
+        timelineEvent.eventDate = updatedComm.dateTime;
+        timelineEvent.details = `${updatedComm.mode} ${updatedComm.direction} with ${updatedComm.fromTo || 'Client'}. Summary: ${updatedComm.summary}`;
+        timelineEvent.metadata = {
+          ...timelineEvent.metadata,
+          direction: updatedComm.direction,
+          fromTo: updatedComm.fromTo,
+          exactDemand: updatedComm.exactDemand,
+          legalThreat: updatedComm.legalThreat,
+          smMentioned: updatedComm.smMentioned
+        };
+        await timelineEvent.save();
+      }
+    } catch (timelineErr) {
+      console.error('Failed to sync timeline on communication update:', timelineErr);
+    }
+
+    res.json(updatedComm);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

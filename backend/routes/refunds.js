@@ -13,7 +13,7 @@ const router = express.Router();
 router.get('/', verifyToken, async (req, res) => {
   try {
     let query = req.query.caseId ? { caseId: req.query.caseId } : {};
-    if (!['Admin', 'Reviewer', 'Accountant', 'Operations'].includes(req.user.role) && !req.query.caseId) {
+    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operations'].includes(req.user.role) && !req.query.caseId) {
       query.requestedBy = req.user.email;
     }
 
@@ -496,7 +496,7 @@ router.put('/:id', verifyToken, async (req, res) => {
   }
 });
 
-router.delete('/:id', verifyToken, roleGuard(['Admin']), async (req, res) => {
+router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmin']), async (req, res) => {
   try {
     let refundId = req.params.id;
     let requestIndex = null;

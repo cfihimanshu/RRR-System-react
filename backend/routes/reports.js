@@ -10,8 +10,10 @@ const User = require('../models/User');
 router.get('/', verifyToken, async (req, res) => {
   try {
     let matchQuery = {};
-    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Operations', 'Reviewer', 'Accountant'].includes(req.user.role)) {
+    if (!['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
       matchQuery.userEmail = req.user.email;
+    } else if (req.query.userEmail) {
+      matchQuery.userEmail = req.query.userEmail;
     }
     if (req.query.date) {
       matchQuery.date = req.query.date;
@@ -21,7 +23,7 @@ router.get('/', verifyToken, async (req, res) => {
     }
 
     const page = parseInt(req.query.page) || 1;
-    const limitNum = Math.min(parseInt(req.query.limit) || 50, 200);
+    const limitNum = Math.min(parseInt(req.query.limit) || 50, 1000);
     const skipNum = (page - 1) * limitNum;
 
     // Fast path for dashboard / SOD checks — skip expensive timeline+task lookups
@@ -196,7 +198,7 @@ router.get('/stats', verifyToken, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin', 'Operations'].includes(req.user.role);
+    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
     let query = {};
     let taskQuery = {};
     let caseQuery = {};

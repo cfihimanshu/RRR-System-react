@@ -12,8 +12,21 @@ router.get('/', verifyToken, async (req, res) => {
     const { assignee } = req.query;
     
     let query = {};
-    if (req.user.role === 'Admin') {
-      if (assignee && assignee !== 'All Users' && assignee !== 'undefined') {
+    if (['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
+      if (req.query.isLegalDashboard === 'true') {
+        const legalUsers = await User.find({ role: 'Legal' }).lean();
+        const legalNames = legalUsers.map(u => (u.fullName || u.name || '').trim()).filter(Boolean);
+        const legalEmails = legalUsers.map(u => (u.email || '').trim()).filter(Boolean);
+        if (legalNames.length > 0) {
+          const regexStr = legalNames.map(n => `^\\s*${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`).join('|');
+          query.$or = [
+            { assignee: new RegExp(regexStr, 'i') },
+            { createdBy: { $in: legalEmails } }
+          ];
+        } else {
+          query.assignee = '__non_existent_user__';
+        }
+      } else if (assignee && assignee !== 'All Users' && assignee !== 'undefined') {
         // Use \s* to ignore any leading/trailing spaces saved in the database
         query.assignee = new RegExp(`^\\s*${assignee.trim()}\\s*$`, 'i');
       }

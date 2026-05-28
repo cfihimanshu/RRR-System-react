@@ -356,6 +356,17 @@ const DashboardTab = () => {
     const completedStatuses = ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution', 'Resolved', 'Done', 'Complete', 'Completed', 'closed', 'settled'];
 
     return userCases.filter(c => {
+      if (user?.role === 'Admin') {
+        const type = (c.typeOfComplaint || '').toLowerCase().trim();
+        const allowedTypes = [
+          'legal notice',
+          '1930 cyber complaint',
+          'consumer complaint',
+          'criminal complaint/fir'
+        ];
+        if (!allowedTypes.includes(type)) return false;
+      }
+
       if (!c.dueDate) return false;
       const cleanDueDate = c.dueDate.split('T')[0];
 
@@ -1384,54 +1395,7 @@ const DashboardTab = () => {
                 )
               ) : (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
-                    <div>
-                      <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] ml-1 flex items-center gap-2">
-                        <CheckCircle size={12} className="text-purple" /> Completion Status
-                      </label>
-                      <select
-                        className="w-full border-2 border-border rounded-2xl p-4 text-sm bg-bg-input font-black text-text-primary outline-none focus:border-purple transition-all"
-                        value={reportFormData.completionStatus}
-                        onChange={(e) => setReportFormData({ ...reportFormData, completionStatus: e.target.value })}
-                      >
-                        <option value="Fully Completed">Fully Completed</option>
-                        <option value="Partially Completed">Partially Completed</option>
-                        <option value="Under Review">Under Review</option>
-                        <option value="Incomplete">Incomplete</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] ml-1 flex items-center gap-2">
-                        <TrendingUp size={12} className="text-purple" /> Progress Score (1-10)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="10"
-                        className="w-full border-2 border-border rounded-2xl p-4 text-sm bg-bg-input font-black text-text-primary outline-none focus:border-purple transition-all"
-                        value={reportFormData.progressScore}
-                        onChange={(e) => setReportFormData({ ...reportFormData, progressScore: e.target.value })}
-                        placeholder="Rate your day"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-text-muted uppercase mb-2 tracking-[0.2em] ml-1 flex items-center gap-2">
-                        <Zap size={12} className="text-purple" /> Mood / Energy
-                      </label>
-                      <select
-                        className="w-full border-2 border-border rounded-2xl p-4 text-sm bg-bg-input font-black text-text-primary outline-none focus:border-purple transition-all"
-                        value={reportFormData.moodEnergy}
-                        onChange={(e) => setReportFormData({ ...reportFormData, moodEnergy: e.target.value })}
-                      >
-                        <option value="">Select Mood</option>
-                        <option value="High Energy">High Energy</option>
-                        <option value="Focused">Focused</option>
-                        <option value="Normal">Normal</option>
-                        <option value="Tired">Tired</option>
-                        <option value="Low Energy">Low Energy</option>
-                      </select>
-                    </div>
-                  </div>
+
 
 
                   <div className="space-y-4">
@@ -2614,9 +2578,9 @@ const DashboardTab = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
             {/* Box 1: Staff Performance Analysis */}
             <div className="lg:col-span-5 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/40 min-w-0 overflow-hidden">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">Staff Performance Analysis</div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {[
                     { label: 'All Time', value: 'all' },
                     { label: 'Last 7 Days', value: '7days' },

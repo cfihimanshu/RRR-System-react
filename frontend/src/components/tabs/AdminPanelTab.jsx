@@ -609,25 +609,24 @@ const AdminPanelTab = () => {
 
       {/* SECTION 4: System Access & Audit Ledger */}
       <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-full overflow-hidden mt-10">
-        <div className="p-6 border-b border-border flex items-center justify-between bg-bg-card">
+        <div className="p-6 border-b border-border flex flex-col sm:flex-row gap-3 sm:items-center justify-between bg-bg-card">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-soft rounded-2xl flex items-center justify-center text-accent">
               <span className="font-black text-lg">🛡️</span>
             </div>
             <div>
               <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">System Access & Audit Ledger</h2>
-              <p className="text-[10px] text-text-muted uppercase tracking-[0.2em] mt-0.5">Real-time device & IP geolocation access monitoring</p>
             </div>
           </div>
           <button
             onClick={() => fetchAuditLogs(logPage)}
-            className="bg-accent hover:bg-accent-hover text-white text-[10px] font-black py-2.5 px-6 rounded-2xl shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2"
+            className="w-full sm:w-auto justify-center bg-accent hover:bg-accent-hover text-white text-[10px] font-black py-2.5 px-6 rounded-2xl shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2"
           >
             <span>Refresh Logs</span> 🔄
           </button>
         </div>
 
-        <div className="overflow-y-auto max-h-[450px] scrollbar-thin border-b border-border">
+        <div className="overflow-x-auto overflow-y-auto w-full max-h-[450px] scrollbar-thin border-b border-border">
           <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead className="sticky top-0 z-10 bg-bg-card shadow-sm">
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
@@ -686,11 +685,11 @@ const AdminPanelTab = () => {
 
         {/* Pagination controls */}
         {totalLogPages > 1 && (
-          <div className="px-6 py-5 bg-bg-card border-t border-border flex justify-between items-center">
-            <span className="text-[10px] text-text-muted font-black uppercase tracking-widest">
+          <div className="px-6 py-5 bg-bg-card border-t border-border flex flex-col sm:flex-row gap-3 sm:justify-between items-center">
+            <span className="text-[10px] text-text-muted font-black uppercase tracking-widest text-center sm:text-left">
               Showing Page {logPage} of {totalLogPages} ({totalLogsCount} total logs)
             </span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full sm:w-auto justify-center sm:justify-end">
               <button
                 onClick={() => fetchAuditLogs(logPage - 1)}
                 disabled={logPage === 1}

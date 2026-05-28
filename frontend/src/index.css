@@ -487,8 +487,8 @@ input:focus, select:focus, textarea:focus {
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -502,6 +502,30 @@ input:focus, select:focus, textarea:focus {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Custom Table Wrap Scrollbar */
+.table-wrap::-webkit-scrollbar {
+  height: 10px !important;
+  width: 8px !important;
+  display: block !important;
+}
+.table-wrap::-webkit-scrollbar-track {
+  background: #f8fafc !important;
+  border-top: 1px solid var(--border) !important;
+}
+.table-wrap::-webkit-scrollbar-thumb {
+  background-color: var(--accent) !important;
+  border-radius: 4px !important;
+}
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent-hover) !important;
+}
+
+.table-wrap th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
 }
 
 /* Overriding excessive rounded utilities inside React elements */
@@ -588,4 +612,16 @@ input:focus, select:focus, textarea:focus {
 
 .animate-pulse-letter {
   animation: pulseLetter 1.4s ease-in-out infinite;
+}
+
+/* Hide Spinners in Chrome, Safari, Edge, Opera */
+input.no-spinners::-webkit-outer-spin-button,
+input.no-spinners::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+/* Hide Spinners in Firefox */
+input.no-spinners[type=number] {
+  -moz-appearance: textfield !important;
 }

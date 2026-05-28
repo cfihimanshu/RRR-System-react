@@ -124,7 +124,7 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed, onLogoutClick, onC
 
       {/* Desktop Collapse Toggle */}
       <button
-        className="hidden md:flex items-center justify-center min-w-[40px] h-10 w-10 hover:bg-bg-secondary text-text-secondary hover:text-text-primary rounded-lg transition-all active:scale-95 duration-200 cursor-pointer"
+        className="hidden md:flex items-center justify-center min-w-[56px] h-10 w-10 hover:bg-bg-secondary text-text-secondary hover:text-text-primary rounded-lg transition-all active:scale-95 duration-200 cursor-pointer"
         onClick={toggleCollapse}
         title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
       >
@@ -146,8 +146,8 @@ const Navbar = ({ toggleSidebar, toggleCollapse, isCollapsed, onLogoutClick, onC
             {user?.fullName && <b className="text-text-primary mr-1.5">{user.fullName}</b>}
             <span className="text-[10px] text-text-muted uppercase tracking-wider">{user?.role}</span>
           </span>
-          
-          <button 
+
+          <button
             onClick={onChangePasswordClick}
             className="ml-2 p-1.5 hover:bg-white rounded-md text-text-muted hover:text-accent transition-all"
             title="Reset Password"

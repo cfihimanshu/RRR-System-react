@@ -88,7 +88,7 @@ router.post('/generate', verifyToken, async (req, res) => {
 // GET /api/agreements - Get agreements for logged-in user (Admin sees all)
 router.get('/', verifyToken, async (req, res) => {
   try {
-    const isAdmin = ['Admin', 'Reviewer'].includes(req.user.role);
+    const isAdmin = ['Admin', 'Reviewer', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
     const query = isAdmin ? {} : { generatedBy: req.user.email };
     const agreements = await Agreement.find(query).sort({ createdAt: -1 }).limit(50);
     res.json(agreements);
@@ -105,7 +105,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
     if (!agreement) return res.status(404).json({ error: 'Agreement not found' });
 
     // Only allow deletion by the creator or Admin
-    const isAdmin = ['Admin', 'Reviewer'].includes(req.user.role);
+    const isAdmin = ['Admin', 'Reviewer', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
     if (!isAdmin && agreement.generatedBy !== req.user.email) {
       return res.status(403).json({ error: 'Not authorized to delete this agreement' });
     }
@@ -142,7 +142,7 @@ router.get('/download/:id', async (req, res) => {
       return res.status(404).json({ error: 'Agreement not found' });
     }
 
-    const isAdmin = ['Admin', 'Reviewer'].includes(decoded.role);
+    const isAdmin = ['Admin', 'Reviewer', 'Super Admin', 'SuperAdmin'].includes(decoded.role);
     if (!isAdmin && agreement.generatedBy !== decoded.email) {
       return res.status(403).json({ error: 'Not authorized to view this agreement' });
     }

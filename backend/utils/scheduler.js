@@ -206,6 +206,9 @@ const runDueCaseAlerts = async () => {
         }
 
         // Notify via email: Both the Assignee and Admin
+        // NOTE: Disabled individual case alert emails to prevent spamming admins.
+        // We will send a consolidated summary instead or notify on user's first login of the day.
+        /*
         const emailRecipientsList = [...adminsList.map(a => a.email)];
         if (assignee && assignee.email) {
           emailRecipientsList.push(assignee.email);
@@ -220,6 +223,7 @@ const runDueCaseAlerts = async () => {
             console.error(`Failed to send email alert for case ${caseItem.caseId}:`, mailErr);
           }
         }
+        */
       }
     }
 
@@ -305,6 +309,149 @@ const runDueCaseAlerts = async () => {
   }
 };
 
+const sendUserOverdueAlerts = async (user) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const adminsList = await User.find({ role: 'Admin' });
+    const adminEmails = adminsList.map(a => a.email);
+
+    // Query active cases
+    let query = {
+      currentStatus: { $nin: ['Settled', 'Closed', 'Closure', 'Resolved'] }
+    };
+
+    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user.role);
+    if (!isAdmin) {
+      query.assignedTo = { $regex: new RegExp(`^\\s*${user.fullName.trim()}\\s*$`, 'i') };
+    }
+
+    const activeCases = await Case.find(query);
+
+    const overdueCases = [];
+    const dueTodayCases = [];
+
+    for (const caseItem of activeCases) {
+      let isOverdue = false;
+      let isDue = false;
+
+      if (caseItem.dueDate && caseItem.dueDate.trim() !== '') {
+        const dueDateObj = new Date(caseItem.dueDate);
+        if (!isNaN(dueDateObj.getTime())) {
+          dueDateObj.setHours(0, 0, 0, 0);
+          if (dueDateObj < today) {
+            isOverdue = true;
+          } else if (dueDateObj.getTime() === today.getTime()) {
+            isDue = true;
+          }
+        }
+      }
+
+      if (caseItem.nextActionDate && caseItem.nextActionDate.trim() !== '') {
+        const actionDateObj = new Date(caseItem.nextActionDate);
+        if (!isNaN(actionDateObj.getTime())) {
+          actionDateObj.setHours(0, 0, 0, 0);
+          if (actionDateObj < today) {
+            isOverdue = true;
+          } else if (actionDateObj.getTime() === today.getTime()) {
+            isDue = true;
+          }
+        }
+      }
+
+      if (isOverdue) {
+        overdueCases.push(caseItem);
+      } else if (isDue) {
+        dueTodayCases.push(caseItem);
+      }
+    }
+
+    if (overdueCases.length === 0 && dueTodayCases.length === 0) {
+      console.log(`No overdue or due cases found for user: ${user.fullName}`);
+      return;
+    }
+
+    // Recipients: Logged in user + Admins
+    const recipients = [user.email, ...adminEmails];
+    const uniqueRecipients = [...new Set(recipients)].join(',');
+
+    const subject = `🚨 RRR System: Overdue & Due Cases Daily Alert for ${user.fullName} (${new Date().toLocaleDateString('en-IN')})`;
+
+    let html = `
+      <div style="font-family: sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 12px; color: #333; max-width: 650px;">
+        <h2 style="color: #ea580c; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; text-transform: uppercase; font-size: 20px;">📅 Case Overdue & Due Alert</h2>
+        <p>Hello <strong>${user.fullName}</strong>,</p>
+        <p>This is your daily alert for cases that require immediate attention or have actions due today.</p>
+    `;
+
+    if (overdueCases.length > 0) {
+      html += `
+        <h3 style="color: #dc2626; margin-top: 24px; font-size: 16px;">🚨 OVERDUE CASES (${overdueCases.length})</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+          <thead>
+            <tr style="background: #fef2f2; border-bottom: 2px solid #fecaca; text-align: left;">
+              <th style="padding: 10px; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #fecaca;">Case ID</th>
+              <th style="padding: 10px; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #fecaca;">Company</th>
+              <th style="padding: 10px; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #fecaca;">Due Date</th>
+              <th style="padding: 10px; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #fecaca;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      overdueCases.forEach(c => {
+        html += `
+          <tr style="border-bottom: 1px solid #fee2e2;">
+            <td style="padding: 10px; font-weight: bold; color: #dc2626;">${c.caseId}</td>
+            <td style="padding: 10px;">${c.companyName || '—'}</td>
+            <td style="padding: 10px; font-weight: bold; color: #dc2626;">${c.dueDate || c.nextActionDate || '—'}</td>
+            <td style="padding: 10px;"><span style="background: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;">${c.currentStatus}</span></td>
+          </tr>
+        `;
+      });
+      html += `</tbody></table>`;
+    }
+
+    if (dueTodayCases.length > 0) {
+      html += `
+        <h3 style="color: #ea580c; margin-top: 24px; font-size: 16px;">⚠️ CASES DUE TODAY (${dueTodayCases.length})</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+          <thead>
+            <tr style="background: #fff7ed; border-bottom: 2px solid #ffedd5; text-align: left;">
+              <th style="padding: 10px; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #ffedd5;">Case ID</th>
+              <th style="padding: 10px; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #ffedd5;">Company</th>
+              <th style="padding: 10px; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #ffedd5;">Due Date</th>
+              <th style="padding: 10px; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #ffedd5;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      dueTodayCases.forEach(c => {
+        html += `
+          <tr style="border-bottom: 1px solid #ffedd5;">
+            <td style="padding: 10px; font-weight: bold; color: #ea580c;">${c.caseId}</td>
+            <td style="padding: 10px;">${c.companyName || '—'}</td>
+            <td style="padding: 10px; font-weight: bold; color: #ea580c;">${c.dueDate || c.nextActionDate || '—'}</td>
+            <td style="padding: 10px;"><span style="background: #fff7ed; color: #ea580c; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;">${c.currentStatus}</span></td>
+          </tr>
+        `;
+      });
+      html += `</tbody></table>`;
+    }
+
+    html += `
+        <p style="margin-top: 30px; font-size: 13px; color: #666; border-top: 1px solid #eee; padding-top: 15px;">Please log in to the dashboard to review and resolve these cases.</p>
+        <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}" style="display: inline-block; background: #ea580c; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">Go to Dashboard</a></p>
+      </div>
+    `;
+
+    await sendEmail(uniqueRecipients, subject, '', html);
+    console.log(`Overdue alert email successfully sent for user ${user.fullName} to: ${uniqueRecipients}`);
+  } catch (err) {
+    console.error('Error sending user-specific overdue alerts:', err);
+  }
+};
+
 const initScheduler = () => {
   // Run every morning at 9:00 AM
   cron.schedule('0 9 * * *', async () => {
@@ -312,9 +459,8 @@ const initScheduler = () => {
     await runDueCaseAlerts();
   });
 
-  // Also run ONCE on application startup to ensure we don't miss notifications due to system restarts!
-  console.log('Scheduler initialized. Performing initial startup due case scan...');
-  runDueCaseAlerts().catch(err => console.error('Error in initial startup scan:', err));
+  // Disabled initial startup scan to prevent flood of emails on server restarts
+  console.log('Scheduler initialized (Startup scan disabled to avoid duplicate emails).');
 };
 
-module.exports = { initScheduler, runDueCaseAlerts };
+module.exports = { initScheduler, runDueCaseAlerts, sendUserOverdueAlerts };

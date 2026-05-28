@@ -140,6 +140,7 @@ const filterableFields = [
   { label: 'City', key: 'city' },
   { label: 'Pincode', key: 'pincode' },
   { label: 'Total Amount Paid', key: 'totalAmtPaid' },
+  { label: 'Total Amount Paid by Client', key: 'totalAmtPaid' },
   { label: 'MOU Signed', key: 'mouSigned' },
   { label: 'Total MOU Value', key: 'totalMouValue' },
   { label: 'Amount in Dispute', key: 'amtInDispute' },
@@ -155,6 +156,7 @@ const filterableFields = [
   { label: 'Accounts', key: 'accounts' },
   { label: 'FIR Number', key: 'firNumber' },
   { label: 'Grievance Number', key: 'grievanceNumber' },
+  { label: 'Acknowledgment Number', key: 'cyberAckNumbers' },
   { label: 'Assigned To', key: 'assignedTo' },
   { label: 'Lien Marked On', key: 'lienMarkedOn' },
   { label: 'Lien Bank', key: 'lienBank' },
@@ -164,6 +166,11 @@ const filterableFields = [
   { label: 'Service Name', key: 'serviceName' },
   { label: 'BDA', key: 'bda' },
   { label: 'Work Status', key: 'workStatus' },
+  { label: 'Service Status', key: 'workStatus' },
+  { label: 'Service Amount', key: 'serviceAmount' },
+  { label: 'Service MOU Signed', key: 'serviceMouSigned' },
+  { label: 'Service Signed MOU Amount', key: 'signedMouAmount' },
+  { label: 'Service Department', key: 'department' },
   { label: 'Account 1 Number', key: 'bankAccountDetails.acc1No' },
   { label: 'Account 1 IFSC', key: 'bankAccountDetails.acc1Ifsc' },
   { label: 'Account 2 Number', key: 'bankAccountDetails.acc2No' },
@@ -297,6 +304,9 @@ const CaseMasterTab = () => {
     fileLink: ''
   });
   const [mouUploadKey, setMouUploadKey] = useState(0);
+  const [editingComm, setEditingComm] = useState(null);
+  const [editingDoc, setEditingDoc] = useState(null);
+  const [editingProgress, setEditingProgress] = useState(null);
   const [emailFormData, setEmailFormData] = useState({
     subject: '',
     emailDate: '',
@@ -319,6 +329,7 @@ const CaseMasterTab = () => {
   const [availableStates, setAvailableStates] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilterType, setActiveFilterType] = useState('Status');
+  const [expandedNumber, setExpandedNumber] = useState(null);
   const [columnFilters, setColumnFilters] = useState({});       // { colKey: [val1, val2] }
   const [expandedCustomFields, setExpandedCustomFields] = useState({});
 
@@ -334,9 +345,12 @@ const CaseMasterTab = () => {
     sourceOfComplaint: '',
     serviceMode: '',
     serviceName: '',
-    city: '',
+    city: ['All Cities'],
     lastPaymentStart: '',
     lastPaymentEnd: '',
+    caseNumbers: '',
+    selectedCaseNumbers: [],
+    showNumberTypes: ['Ack', 'Grievance', 'FIR'],
     customFilters: {
       companyName: '',
       clientName: '',
@@ -357,10 +371,13 @@ const CaseMasterTab = () => {
         if (parsed.sourceOfComplaint === undefined) parsed.sourceOfComplaint = '';
         if (parsed.serviceMode === undefined) parsed.serviceMode = '';
         if (parsed.serviceName === undefined) parsed.serviceName = '';
-        if (parsed.city === undefined) parsed.city = '';
+        if (!parsed.city || !Array.isArray(parsed.city)) parsed.city = ['All Cities'];
         if (parsed.lastPaymentStart === undefined) parsed.lastPaymentStart = '';
         if (parsed.lastPaymentEnd === undefined) parsed.lastPaymentEnd = '';
         if (parsed.amountSort === undefined) parsed.amountSort = '';
+        if (parsed.caseNumbers === undefined) parsed.caseNumbers = '';
+        if (!parsed.selectedCaseNumbers) parsed.selectedCaseNumbers = [];
+        if (!parsed.showNumberTypes) parsed.showNumberTypes = ['Ack', 'Grievance', 'FIR'];
         if (!parsed.customFilters) parsed.customFilters = {
           companyName: '',
           clientName: '',
@@ -388,10 +405,13 @@ const CaseMasterTab = () => {
       sourceOfComplaint: '',
       serviceMode: '',
       serviceName: '',
-      city: '',
+      city: ['All Cities'],
       lastPaymentStart: '',
       lastPaymentEnd: '',
       linkedOnly: false,
+      caseNumbers: '',
+      selectedCaseNumbers: [],
+      showNumberTypes: ['Ack', 'Grievance', 'FIR'],
       customFilters: {
         companyName: '',
         clientName: '',
@@ -575,6 +595,14 @@ const CaseMasterTab = () => {
     return ['All States', 'Blank', ...Array.from(states).sort()];
   }, [cases]);
 
+  const uniqueCities = useMemo(() => {
+    const cities = new Set();
+    cases.forEach((c) => {
+      if (c.city && c.city !== '—') cities.add(c.city.trim());
+    });
+    return ['All Cities', 'Blank', ...Array.from(cities).sort()];
+  }, [cases]);
+
   const uniqueRefundStatuses = useMemo(() => {
     const refunds = new Set();
     cases.forEach((c) => {
@@ -596,51 +624,64 @@ const CaseMasterTab = () => {
     const suggestions = [];
     const seen = new Set();
 
-    // Match only when query is a substring of the field label or key
     filterableFields.forEach(field => {
-      if (field.label.toLowerCase().includes(query) || field.key.toLowerCase().includes(query)) {
-        const vals = new Set();
-        cases.forEach(c => {
-          const serviceKeys = ['serviceName', 'bda', 'workStatus'];
-          if (serviceKeys.includes(field.key)) {
-            if (c[field.key]) {
-              vals.add(c[field.key].toString().trim());
-            }
-            if (c.servicesSold && Array.isArray(c.servicesSold)) {
-              c.servicesSold.forEach(s => {
-                if (s[field.key]) {
-                  vals.add(s[field.key].toString().trim());
+      const vals = new Set();
+      const serviceKeys = ['serviceName', 'bda', 'workStatus', 'serviceAmount', 'signedMouAmount', 'department', 'serviceMouSigned'];
+      const propKey = field.key === 'serviceMouSigned' ? 'mouSigned' : field.key;
+
+      cases.forEach(c => {
+        if (serviceKeys.includes(field.key)) {
+          if (c[propKey]) {
+            vals.add(c[propKey].toString().trim());
+          }
+          if (c.servicesSold && Array.isArray(c.servicesSold)) {
+            c.servicesSold.forEach(s => {
+              if (s[propKey]) {
+                vals.add(s[propKey].toString().trim());
+              }
+            });
+          }
+        } else if (field.key.includes('.')) {
+          const [parent, child] = field.key.split('.');
+          const val = c[parent]?.[child];
+          if (val !== undefined && val !== null) {
+            vals.add(val.toString().trim());
+          }
+        } else {
+          let val = c[field.key];
+          if (val !== undefined && val !== null) {
+            let valStr = '';
+            if (field.key === 'dateOfLastPayment' || field.key === 'lienMarkedOn' || field.key === 'createdDate') {
+              try {
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                  valStr = d.toISOString().split('T')[0];
                 }
-              });
+              } catch (e) { }
             }
-          } else if (field.key.includes('.')) {
-            const [parent, child] = field.key.split('.');
-            const val = c[parent]?.[child];
-            if (val !== undefined && val !== null) {
-              vals.add(val.toString().trim());
+            if (!valStr) {
+              valStr = val.toString().trim();
             }
-          } else {
-            let val = c[field.key];
-            if (val !== undefined && val !== null) {
-              let valStr = '';
-              if (field.key === 'dateOfLastPayment' || field.key === 'lienMarkedOn' || field.key === 'createdDate') {
-                try {
-                  const d = new Date(val);
-                  if (!isNaN(d.getTime())) {
-                    valStr = d.toISOString().split('T')[0];
-                  }
-                } catch (e) { }
-              }
-              if (!valStr) {
-                valStr = val.toString().trim();
-              }
-              if (valStr !== '') {
-                vals.add(valStr);
-              }
+            if (valStr !== '') {
+              vals.add(valStr);
             }
           }
-        });
-        Array.from(vals).forEach(val => {
+        }
+      });
+
+      const labelMatches = field.label.toLowerCase().includes(query) || field.key.toLowerCase().includes(query);
+      const isDescriptive = [
+        'caseSummary',
+        'clientAllegation',
+        'engagementNote',
+        'keyPendingIssue',
+        'recommendedNextSteps'
+      ].includes(field.key);
+
+      Array.from(vals).forEach(val => {
+        const valStr = val.toLowerCase();
+        const matches = isDescriptive ? labelMatches : (labelMatches || valStr.includes(query));
+        if (matches) {
           const key = `${field.key}::${val}`;
           if (!seen.has(key)) {
             seen.add(key);
@@ -650,8 +691,8 @@ const CaseMasterTab = () => {
               value: val
             });
           }
-        });
-      }
+        }
+      });
     });
 
     return suggestions.slice(0, 30);
@@ -827,7 +868,7 @@ const CaseMasterTab = () => {
   };
 
   const fetchOpsUsers = async () => {
-    if (!user || (user.role !== 'Admin' && user.role !== 'Operations' && user.role !== 'Super Admin')) {
+    if (!user || (user.role !== 'Admin' && user.role !== 'Operations' && user.role !== 'Super Admin' && user.role !== 'Legal')) {
       return;
     }
     try {
@@ -1043,12 +1084,63 @@ const CaseMasterTab = () => {
         const channel = new BroadcastChannel('case_updates');
         channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
         channel.close();
-      } catch (e) {}
+      } catch (e) { }
       fetchCases();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to delete case');
     }
   };
+
+  const uniqueCaseNumbersList = useMemo(() => {
+    const list = [];
+    const seenKeys = new Set();
+
+    (cases || []).forEach((c) => {
+      if (c.cyberAckNumbers) {
+        const acks = c.cyberAckNumbers.split(',').map(x => x.trim()).filter(Boolean);
+        acks.forEach(ack => {
+          const key = `ack-${ack}-${c.caseId}`;
+          if (!seenKeys.has(key)) {
+            seenKeys.add(key);
+            list.push({ type: 'Ack', value: ack, caseId: c.caseId });
+          }
+        });
+      }
+      if (c.grievanceNumber) {
+        const g = c.grievanceNumber.trim();
+        if (g) {
+          const key = `grievance-${g}-${c.caseId}`;
+          if (!seenKeys.has(key)) {
+            seenKeys.add(key);
+            list.push({ type: 'Grievance', value: g, caseId: c.caseId });
+          }
+        }
+      }
+      if (c.firNumber) {
+        const f = c.firNumber.trim();
+        if (f) {
+          const key = `fir-${f}-${c.caseId}`;
+          if (!seenKeys.has(key)) {
+            seenKeys.add(key);
+            list.push({ type: 'FIR', value: f, caseId: c.caseId });
+          }
+        }
+      }
+    });
+
+    return list.sort((a, b) => a.value.localeCompare(b.value));
+  }, [cases]);
+
+  const filteredNumbersList = useMemo(() => {
+    const search = (tempFilters.caseNumbers || '').toLowerCase().trim();
+    const showTypes = tempFilters.showNumberTypes || ['Ack', 'Grievance', 'FIR'];
+    let list = uniqueCaseNumbersList.filter(item => showTypes.includes(item.type));
+    if (!search) return list;
+    return list.filter(item =>
+      item.value.toLowerCase().includes(search) ||
+      item.caseId.toLowerCase().includes(search)
+    );
+  }, [uniqueCaseNumbersList, tempFilters.caseNumbers, tempFilters.showNumberTypes]);
 
   const filteredCases = cases.filter(c => {
     // Reviewer filter: only show cases that are in "Pending Review" status in refunds
@@ -1064,7 +1156,10 @@ const CaseMasterTab = () => {
     const matchSearch = (c.caseId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (c.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (c.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      (c.assignedTo?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+      (c.assignedTo?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (c.cyberAckNumbers?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (c.grievanceNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (c.firNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase());
 
     let matchStatus = false;
     const normalizedCaseStatus = normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy);
@@ -1076,14 +1171,14 @@ const CaseMasterTab = () => {
         if (selectedStatus === 'Active') {
           const caseStatusLower = (c.currentStatus || c.status || '').toLowerCase().trim();
           const completedList = [
-            'settled', 'settlement', 'closure', 'resolution', 'resolved', 'done', 
+            'settled', 'settlement', 'closure', 'resolution', 'resolved', 'done',
             'complete', 'completed', 'closed', 'na', 'na non agreement', 'non agreement'
           ];
           const isStatusNotCompleted = !completedList.some(s => {
             if (s === 'na') return caseStatusLower === 'na';
             return caseStatusLower.includes(s) || caseStatusLower === s;
           });
-          
+
           const caseRefund = refundsList.find(r => r.caseId === c.caseId);
           let refundStatusVal = '';
           if (caseRefund) {
@@ -1137,8 +1232,8 @@ const CaseMasterTab = () => {
       });
     }
 
-    const matchType = appliedFilters.typeOfComplaint.includes('All Types') || 
-      appliedFilters.typeOfComplaint.length === 0 || 
+    const matchType = appliedFilters.typeOfComplaint.includes('All Types') ||
+      appliedFilters.typeOfComplaint.length === 0 ||
       appliedFilters.typeOfComplaint.some(t => String(t || '').trim().toLowerCase() === String(c.typeOfComplaint || '').trim().toLowerCase());
 
     const matchSourceOfComplaint = !appliedFilters.sourceOfComplaint ||
@@ -1147,7 +1242,16 @@ const CaseMasterTab = () => {
         : c.sourceOfComplaint?.toLowerCase().includes(appliedFilters.sourceOfComplaint.toLowerCase()));
     const matchServiceMode = !appliedFilters.serviceMode || c.serviceMode?.toLowerCase().includes(appliedFilters.serviceMode.toLowerCase());
     const matchServiceName = !appliedFilters.serviceName || c.serviceName?.toLowerCase().includes(appliedFilters.serviceName.toLowerCase());
-    const matchCity = !appliedFilters.city || c.city?.toLowerCase().includes(appliedFilters.city.toLowerCase());
+    let matchCity = true;
+    if (appliedFilters.city && !appliedFilters.city.includes('All Cities') && appliedFilters.city.length > 0) {
+      const caseCity = c.city ? String(c.city).trim() : '';
+      matchCity = appliedFilters.city.some(selectedCity => {
+        if (selectedCity === 'Blank') {
+          return !caseCity || caseCity.trim() === '' || caseCity === '—';
+        }
+        return caseCity.toLowerCase() === selectedCity.trim().toLowerCase();
+      });
+    }
 
     let matchLastPayment = true;
     if (appliedFilters.lastPaymentStart || appliedFilters.lastPaymentEnd) {
@@ -1176,6 +1280,25 @@ const CaseMasterTab = () => {
       });
     }
 
+    let matchCaseNumbers = true;
+    if (appliedFilters.selectedCaseNumbers && appliedFilters.selectedCaseNumbers.length > 0) {
+      const selected = appliedFilters.selectedCaseNumbers.map(n => n.toLowerCase());
+      const cyberAck = (c.cyberAckNumbers || '').toLowerCase();
+      const grievance = (c.grievanceNumber || '').toLowerCase();
+      const fir = (c.firNumber || '').toLowerCase();
+      matchCaseNumbers = selected.some(searchNum =>
+        cyberAck.split(',').map(x => x.trim()).includes(searchNum) ||
+        grievance === searchNum ||
+        fir === searchNum
+      );
+    } else if (appliedFilters.caseNumbers) {
+      const searchNum = appliedFilters.caseNumbers.toLowerCase().trim();
+      const cyberAck = (c.cyberAckNumbers || '').toLowerCase();
+      const grievance = (c.grievanceNumber || '').toLowerCase();
+      const fir = (c.firNumber || '').toLowerCase();
+      matchCaseNumbers = cyberAck.includes(searchNum) || grievance.includes(searchNum) || fir.includes(searchNum);
+    }
+
     let matchCustom = true;
     if (appliedFilters.customFilters) {
       const customFilters = appliedFilters.customFilters;
@@ -1193,11 +1316,12 @@ const CaseMasterTab = () => {
       }
       if (customFilters.selectedField && customFilters.selectedValue) {
         const fieldKey = customFilters.selectedField;
-        const serviceKeys = ['serviceName', 'bda', 'workStatus'];
+        const serviceKeys = ['serviceName', 'bda', 'workStatus', 'serviceAmount', 'signedMouAmount', 'department', 'serviceMouSigned'];
         if (serviceKeys.includes(fieldKey)) {
           const targetVal = customFilters.selectedValue.toLowerCase();
-          const topMatch = c[fieldKey]?.toLowerCase().includes(targetVal);
-          const arrayMatch = c.servicesSold?.some(s => s[fieldKey]?.toLowerCase().includes(targetVal));
+          const propKey = fieldKey === 'serviceMouSigned' ? 'mouSigned' : fieldKey;
+          const topMatch = c[propKey]?.toString().toLowerCase().includes(targetVal);
+          const arrayMatch = c.servicesSold?.some(s => s[propKey]?.toString().toLowerCase().includes(targetVal));
           if (!topMatch && !arrayMatch) {
             matchCustom = false;
           }
@@ -1243,8 +1367,16 @@ const CaseMasterTab = () => {
           c.assignedTo,
           c.initiatedBy,
           c.currentStatus,
-          c.refundStatus
+          c.refundStatus,
+          c.cyberAckNumbers,
+          c.grievanceNumber,
+          c.firNumber
         ];
+        if (c.servicesSold && Array.isArray(c.servicesSold)) {
+          c.servicesSold.forEach(s => {
+            anyFields.push(s.serviceName, s.bda, s.workStatus, s.serviceAmount, s.mouSigned, s.signedMouAmount, s.department);
+          });
+        }
         matchCustom = anyFields.some(value => value?.toString?.().toLowerCase().includes(searchValue));
       }
     }
@@ -1284,7 +1416,7 @@ const CaseMasterTab = () => {
       if (!selectedVals.includes(cellVal)) { matchColumnFilters = false; break; }
     }
 
-    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchState && matchType && matchSourceOfComplaint && matchServiceMode && matchServiceName && matchCity && matchLastPayment && matchLinkedOnly && matchRefund && matchCustom && matchColumnFilters;
+    return matchSearch && matchStatus && matchPriority && matchAssignee && matchDate && matchState && matchType && matchSourceOfComplaint && matchServiceMode && matchServiceName && matchCity && matchLastPayment && matchLinkedOnly && matchRefund && matchCaseNumbers && matchCustom && matchColumnFilters;
   });
 
   if (colSortConfig.key && colSortConfig.direction) {
@@ -1358,11 +1490,13 @@ const CaseMasterTab = () => {
     appliedFilters.sourceOfComplaint ||
     appliedFilters.serviceMode ||
     appliedFilters.serviceName ||
-    appliedFilters.city ||
+    (appliedFilters.city && !appliedFilters.city.includes('All Cities')) ||
     appliedFilters.lastPaymentStart ||
     appliedFilters.lastPaymentEnd ||
     appliedFilters.linkedOnly ||
     appliedFilters.amountSort ||
+    appliedFilters.caseNumbers ||
+    (appliedFilters.selectedCaseNumbers && appliedFilters.selectedCaseNumbers.length > 0) ||
     colSortConfig.key ||
     Object.keys(columnFilters).length > 0 ||
     (appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v))
@@ -1386,9 +1520,12 @@ const CaseMasterTab = () => {
       sourceOfComplaint: '',
       serviceMode: '',
       serviceName: '',
-      city: '',
+      city: ['All Cities'],
       lastPaymentStart: '',
       lastPaymentEnd: '',
+      caseNumbers: '',
+      selectedCaseNumbers: [],
+      showNumberTypes: ['Ack', 'Grievance', 'FIR'],
       customFilters: {
         companyName: '',
         clientName: '',
@@ -1732,7 +1869,7 @@ const CaseMasterTab = () => {
         const channel = new BroadcastChannel('case_updates');
         channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
         channel.close();
-      } catch (e) {}
+      } catch (e) { }
       fetchCases();
 
       // Refresh the viewCase data to reflect backend auto-updates (like status changed to Assigned)
@@ -1832,7 +1969,7 @@ const CaseMasterTab = () => {
         const channel = new BroadcastChannel('case_updates');
         channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
         channel.close();
-      } catch (e) {}
+      } catch (e) { }
       fetchCases();
       // Update local view
       setViewCase(prev => ({ ...prev, currentStatus: 'Closure', progressPercentage: 100 }));
@@ -1960,6 +2097,63 @@ const CaseMasterTab = () => {
     }
   }, [viewCase, activeDetailTab, fetchCaseComms, fetchCaseDocs, fetchProgressData, fetchTimelineLogs]);
 
+  const handleStartEditComm = (comm) => {
+    setEditingComm(comm);
+    setCommFormData({
+      direction: comm.direction || 'Incoming',
+      mode: comm.mode || 'Call',
+      fromTo: comm.fromTo || '',
+      summary: comm.summary || '',
+      exactDemand: comm.exactDemand || '',
+      refundDemanded: comm.refundDemanded || '0',
+      legalThreat: comm.legalThreat || 'No',
+      smMentioned: comm.smMentioned || 'No',
+      fileLink: comm.fileLink || '',
+      dateTime: comm.dateTime ? new Date(comm.dateTime).toISOString().substring(0, 16) : new Date().toISOString().substring(0, 16)
+    });
+    const formElement = document.querySelector('.flex-1.overflow-auto') || window;
+    formElement.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleStartEditDoc = (doc) => {
+    setEditingDoc(doc);
+    const standardTypes = ['Legal Notice', 'Payment Receipt', 'MOU/Agreement', 'Complaint Copy', 'Refund Proof'];
+    const isOther = !standardTypes.includes(doc.docType);
+    let signatory = '';
+    if (doc.fileSummary && doc.fileSummary.includes(' - ')) {
+      const parts = doc.fileSummary.split(' - ');
+      signatory = parts.slice(1).join(' - ');
+    }
+    setMouFormData({
+      mouType: isOther ? 'Other' : doc.docType,
+      otherType: isOther ? doc.docType : '',
+      mouDate: doc.docDate ? doc.docDate.substring(0, 10) : '',
+      signatoryName: signatory,
+      remarks: doc.remarks || '',
+      fileLink: doc.fileLink || ''
+    });
+    const formElement = document.querySelector('.flex-1.overflow-auto') || window;
+    formElement.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleStartEditProgress = (log) => {
+    setEditingProgress(log);
+    setProgressFormData({
+      stage: log.stage || 'Case Logged',
+      percentage: log.percentage || 20,
+      summary: log.summary || '',
+      nextAction: log.nextAction || '',
+      blockers: log.blockers || '',
+      followUpDate: log.followUpDate ? log.followUpDate.substring(0, 10) : '',
+      escalateTo: log.escalateTo || '',
+      refundedAmount: log.refundedAmount || '',
+      savedAmount: log.savedAmount || '',
+      attachment: log.attachment || ''
+    });
+    const formElement = document.querySelector('.flex-1.overflow-auto') || window;
+    formElement.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleProgressSubmit = async (e) => {
     e.preventDefault();
     if (!progressFormData.summary) return toast.error('Update summary is required');
@@ -1972,55 +2166,66 @@ const CaseMasterTab = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
-    const loadingToast = toast.loading('Saving progress update...');
+    const loadingToast = toast.loading(editingProgress ? 'Updating progress...' : 'Saving progress update...');
     try {
-      await api.post('/progress', {
-        ...progressFormData,
-        stage: progressFormData.stage, // Explicitly send the derived stage
-        caseId: viewCase.caseId,
-        updatedBy: user?.fullName || user?.email,
-        checklist // Include current checklist state
-      });
-      const caseUpdatePayload = {
-        currentStatus: progressFormData.stage,
-        progressPercentage: progressFormData.percentage
-      };
+      if (editingProgress) {
+        await api.put(`/progress/${viewCase.caseId}/update/${editingProgress._id}`, {
+          ...progressFormData
+        });
+        toast.success('Progress updated', { id: loadingToast });
+        setEditingProgress(null);
+      } else {
+        await api.post('/progress', {
+          ...progressFormData,
+          stage: progressFormData.stage, // Explicitly send the derived stage
+          caseId: viewCase.caseId,
+          updatedBy: user?.fullName || user?.email,
+          checklist // Include current checklist state
+        });
+        const caseUpdatePayload = {
+          currentStatus: progressFormData.stage,
+          progressPercentage: progressFormData.percentage
+        };
 
-      if (progressFormData.escalateTo) {
-        caseUpdatePayload.assignedTo = progressFormData.escalateTo;
-      }
+        if (progressFormData.escalateTo) {
+          caseUpdatePayload.assignedTo = progressFormData.escalateTo;
+        }
 
-      // Update case status in DB
-      await api.put(`/cases/${viewCase.caseId}`, caseUpdatePayload);
+        // Update case status in DB
+        await api.put(`/cases/${viewCase.caseId}`, caseUpdatePayload);
 
-      toast.success('Progress updated', { id: loadingToast });
-      try {
-        const channel = new BroadcastChannel('case_updates');
-        channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
-        channel.close();
-      } catch (e) {}
+        toast.success('Progress updated', { id: loadingToast });
+        try {
+          const channel = new BroadcastChannel('case_updates');
+          channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+          channel.close();
+        } catch (e) { }
 
-      // Update local viewCase to reflect new status/percentage/assignee
-      const updatedCase = {
-        ...viewCase,
-        currentStatus: progressFormData.stage,
-        progressPercentage: progressFormData.percentage
-      };
-      if (progressFormData.escalateTo) {
-        updatedCase.assignedTo = progressFormData.escalateTo;
-      }
-      setViewCase(updatedCase);
+        // Update local viewCase to reflect new status/percentage/assignee
+        const updatedCase = {
+          ...viewCase,
+          currentStatus: progressFormData.stage,
+          progressPercentage: progressFormData.percentage
+        };
+        if (progressFormData.escalateTo) {
+          updatedCase.assignedTo = progressFormData.escalateTo;
+        }
+        setViewCase(updatedCase);
 
-      // If progress stage is Closure, mark closureReady so the Resolve button can be shown
-      if (progressFormData.stage === 'Closure') {
-        setClosureReady(true);
+        // If progress stage is Closure, mark closureReady so the Resolve button can be shown
+        if (progressFormData.stage === 'Closure') {
+          setClosureReady(true);
+        }
       }
 
       setProgressFormData({
-        ...progressFormData,
+        stage: 'Case Logged',
+        percentage: 20,
         summary: '',
         nextAction: '',
         blockers: '',
+        followUpDate: '',
+        escalateTo: '',
         refundedAmount: '',
         savedAmount: '',
         attachment: ''
@@ -2028,7 +2233,7 @@ const CaseMasterTab = () => {
       fetchProgressData(viewCase.caseId);
       fetchCases(); // Refresh global list
     } catch (err) {
-      toast.error('Failed to update progress', { id: loadingToast });
+      toast.error(editingProgress ? 'Failed to update progress log' : 'Failed to update progress', { id: loadingToast });
     } finally {
       setIsSubmitting(false);
     }
@@ -2040,14 +2245,22 @@ const CaseMasterTab = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
-    const loadingToast = toast.loading('Logging communication...');
+    const loadingToast = toast.loading(editingComm ? 'Updating communication...' : 'Logging communication...');
     try {
-      await api.post('/communications', {
-        ...commFormData,
-        caseId: viewCase.caseId,
-        loggedBy: user?.fullName || user?.email
-      });
-      toast.success('Communication logged', { id: loadingToast });
+      if (editingComm) {
+        await api.put(`/communications/${editingComm._id}`, {
+          ...commFormData
+        });
+        toast.success('Communication updated', { id: loadingToast });
+        setEditingComm(null);
+      } else {
+        await api.post('/communications', {
+          ...commFormData,
+          caseId: viewCase.caseId,
+          loggedBy: user?.fullName || user?.email
+        });
+        toast.success('Communication logged', { id: loadingToast });
+      }
       setCommFormData({
         direction: 'Incoming',
         mode: 'Call',
@@ -2062,7 +2275,7 @@ const CaseMasterTab = () => {
       });
       fetchCaseComms(viewCase.caseId);
     } catch (err) {
-      toast.error('Failed to log communication', { id: loadingToast });
+      toast.error(editingComm ? 'Failed to update communication' : 'Failed to log communication', { id: loadingToast });
     } finally {
       setIsSubmitting(false);
     }
@@ -2106,28 +2319,44 @@ const CaseMasterTab = () => {
     const finalDocType = mouFormData.mouType === 'Other' ? mouFormData.otherType : mouFormData.mouType;
     if (mouFormData.mouType === 'Other' && !mouFormData.otherType) return toast.error('Please specify the document type');
 
-    const loadingToast = toast.loading('Uploading MOU...');
+    const loadingToast = toast.loading(editingDoc ? 'Updating document...' : 'Uploading MOU...');
     try {
-      await api.post('/documents', {
-        caseId: viewCase.caseId,
-        docType: finalDocType,
-        docDate: mouFormData.mouDate,
-        fileSummary: `${finalDocType} - ${mouFormData.signatoryName}`,
-        fileLink: mouFormData.fileLink,
-        remarks: mouFormData.remarks,
-        uploadedBy: user?.email || 'System',
-        uploadDate: new Date().toISOString(),
-        sourceForm: 'MOU Upload'
-      });
-      toast.success('MOU uploaded successfully', { id: loadingToast });
+      if (editingDoc) {
+        await api.put(`/documents/${editingDoc._id}`, {
+          docType: finalDocType,
+          docDate: mouFormData.mouDate,
+          fileSummary: `${finalDocType} - ${mouFormData.signatoryName}`,
+          fileLink: mouFormData.fileLink,
+          remarks: mouFormData.remarks
+        });
+        toast.success('Document updated successfully', { id: loadingToast });
+        setEditingDoc(null);
+      } else {
+        await api.post('/documents', {
+          caseId: viewCase.caseId,
+          docType: finalDocType,
+          docDate: mouFormData.mouDate,
+          fileSummary: `${finalDocType} - ${mouFormData.signatoryName}`,
+          fileLink: mouFormData.fileLink,
+          remarks: mouFormData.remarks,
+          uploadedBy: user?.email || 'System',
+          uploadDate: new Date().toISOString(),
+          sourceForm: 'MOU Upload'
+        });
+        toast.success('uploaded successfully', { id: loadingToast });
+      }
       setMouFormData({
-        ...mouFormData,
+        mouType: 'Legal Notice',
+        otherType: '',
+        mouDate: '',
+        signatoryName: '',
+        remarks: '',
         fileLink: ''
       });
       setMouUploadKey(prev => prev + 1);
       fetchCaseDocs(viewCase.caseId);
     } catch (err) {
-      toast.error('Failed to upload MOU', { id: loadingToast });
+      toast.error(editingDoc ? 'Failed to update document' : 'Failed to upload MOU', { id: loadingToast });
     }
   };
 
@@ -2221,7 +2450,7 @@ const CaseMasterTab = () => {
         const channel = new BroadcastChannel('case_updates');
         channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
         channel.close();
-      } catch (e) {}
+      } catch (e) { }
       fetchCases(); // Refresh list
     } catch (err) {
       toast.error("Failed to assign case");
@@ -2242,7 +2471,7 @@ const CaseMasterTab = () => {
         const channel = new BroadcastChannel('case_updates');
         channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
         channel.close();
-      } catch (e) {}
+      } catch (e) { }
       setSelectedCases([]);
       setBulkAssignUser('');
       fetchCases();
@@ -2332,16 +2561,16 @@ const CaseMasterTab = () => {
             <div className="relative">
               <button
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || !appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || appliedFilters.date || (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds'))
+                className={`flex items-center gap-2 px-6 py-3 border-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${isFilterOpen || !appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || appliedFilters.date || (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds')) || (appliedFilters.city && !appliedFilters.city.includes('All Cities')) || appliedFilters.caseNumbers || (appliedFilters.selectedCaseNumbers && appliedFilters.selectedCaseNumbers.length > 0)
                   ? 'bg-accent text-white border-accent shadow-sm'
                   : 'bg-bg-card text-text-secondary border-border hover:bg-bg-card-hover'
                   }`}
               >
                 <Filter size={16} />
                 Filters
-                {(!appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date || (appliedFilters.state && !appliedFilters.state.includes('All States')) || (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds')) || appliedFilters.sourceOfComplaint || appliedFilters.serviceMode || appliedFilters.serviceName || appliedFilters.city || appliedFilters.lastPaymentStart || appliedFilters.lastPaymentEnd || appliedFilters.amountSort || (appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v))) && (
+                {(!appliedFilters.status.includes('All Status') || !appliedFilters.priority.includes('All Priority') || !appliedFilters.assignee.includes('All Assignees') || !appliedFilters.typeOfComplaint.includes('All Types') || appliedFilters.date || (appliedFilters.state && !appliedFilters.state.includes('All States')) || (appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds')) || appliedFilters.sourceOfComplaint || appliedFilters.serviceMode || appliedFilters.serviceName || (appliedFilters.city && !appliedFilters.city.includes('All Cities')) || appliedFilters.lastPaymentStart || appliedFilters.lastPaymentEnd || appliedFilters.amountSort || appliedFilters.caseNumbers || (appliedFilters.selectedCaseNumbers && appliedFilters.selectedCaseNumbers.length > 0) || (appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v))) && (
                   <span className="bg-white text-accent rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">
-                    {[!appliedFilters.status.includes('All Status'), !appliedFilters.priority.includes('All Priority'), !appliedFilters.assignee.includes('All Assignees'), !appliedFilters.typeOfComplaint.includes('All Types'), !!appliedFilters.date, appliedFilters.state && !appliedFilters.state.includes('All States'), appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds'), !!appliedFilters.sourceOfComplaint, !!appliedFilters.serviceMode, !!appliedFilters.serviceName, !!appliedFilters.city, !!appliedFilters.lastPaymentStart, !!appliedFilters.lastPaymentEnd, !!appliedFilters.amountSort, appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v)].filter(Boolean).length}
+                    {[!appliedFilters.status.includes('All Status'), !appliedFilters.priority.includes('All Priority'), !appliedFilters.assignee.includes('All Assignees'), !appliedFilters.typeOfComplaint.includes('All Types'), !!appliedFilters.date, appliedFilters.state && !appliedFilters.state.includes('All States'), appliedFilters.refundStatus && !appliedFilters.refundStatus.includes('All Refunds'), !!appliedFilters.sourceOfComplaint, !!appliedFilters.serviceMode, !!appliedFilters.serviceName, (appliedFilters.city && !appliedFilters.city.includes('All Cities')), !!appliedFilters.lastPaymentStart, !!appliedFilters.lastPaymentEnd, !!appliedFilters.amountSort, !!appliedFilters.caseNumbers, (appliedFilters.selectedCaseNumbers && appliedFilters.selectedCaseNumbers.length > 0), appliedFilters.customFilters && Object.values(appliedFilters.customFilters).some(v => v)].filter(Boolean).length}
                   </span>
                 )}
               </button>
@@ -2353,7 +2582,7 @@ const CaseMasterTab = () => {
                     <div className="flex flex-1 min-h-0 overflow-hidden">
                       {/* Left Sidebar */}
                       <div className="w-[100px] md:w-1/3 bg-bg-secondary border-r border-border py-4 overflow-y-auto h-full">
-                        {['Status', 'Priority', 'Assignees', 'Type', 'Amount', 'Date', 'State', 'Refund', 'Source', 'Service', 'City', 'Last Payment', 'Custom'].map((type) => (
+                        {['Status', 'Priority', 'Assignees', 'Type', 'Amount', 'Date', 'State', 'Refund', 'Source', 'Service', 'City', 'Last Payment', 'Ack/Grievance/FIR', 'Custom'].map((type) => (
                           <button
                             key={type}
                             onClick={() => setActiveFilterType(type)}
@@ -2658,15 +2887,68 @@ const CaseMasterTab = () => {
                         )}
 
                         {activeFilterType === 'City' && (
-                          <div className="space-y-3">
-                            <label className="block text-sm font-bold text-text-secondary">City</label>
-                            <input
-                              type="text"
-                              placeholder="Enter city"
-                              value={tempFilters.city}
-                              onChange={(e) => setTempFilters(prev => ({ ...prev, city: e.target.value }))}
-                              className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-all"
-                            />
+                          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin">
+                            <label className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                              <input
+                                type="checkbox"
+                                name="city"
+                                checked={tempFilters.city.includes('All Cities')}
+                                onChange={() => {
+                                  setTempFilters(prev => ({ ...prev, city: ['All Cities'] }));
+                                }}
+                                className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                              />
+                              <span className={`text-sm font-bold ${tempFilters.city.includes('All Cities') ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>All Cities</span>
+                            </label>
+                            <label className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                              <input
+                                type="checkbox"
+                                name="city"
+                                checked={tempFilters.city.includes('Blank')}
+                                onChange={() => {
+                                  setTempFilters(prev => {
+                                    let newCity;
+                                    const filtered = prev.city.filter(item => item !== 'All Cities');
+                                    if (prev.city.includes('Blank')) {
+                                      newCity = filtered.filter(item => item !== 'Blank');
+                                      if (newCity.length === 0) newCity = ['All Cities'];
+                                    } else {
+                                      newCity = [...filtered, 'Blank'];
+                                    }
+                                    return { ...prev, city: newCity };
+                                  });
+                                }}
+                                className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                              />
+                              <span className={`text-sm font-bold ${tempFilters.city.includes('Blank') ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>Blank</span>
+                            </label>
+                            {uniqueCities.filter(c => c !== 'All Cities' && c !== 'Blank').map((ct) => {
+                              const isChecked = tempFilters.city.includes(ct);
+                              return (
+                                <label key={ct} className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
+                                  <input
+                                    type="checkbox"
+                                    name="city"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setTempFilters(prev => {
+                                        let newCity;
+                                        const filtered = prev.city.filter(item => item !== 'All Cities');
+                                        if (isChecked) {
+                                          newCity = filtered.filter(item => item !== ct);
+                                          if (newCity.length === 0) newCity = ['All Cities'];
+                                        } else {
+                                          newCity = [...filtered, ct];
+                                        }
+                                        return { ...prev, city: newCity };
+                                      });
+                                    }}
+                                    className="w-4 h-4 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                                  />
+                                  <span className={`text-sm font-bold ${isChecked ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'}`}>{ct}</span>
+                                </label>
+                              );
+                            })}
                           </div>
                         )}
 
@@ -2690,7 +2972,7 @@ const CaseMasterTab = () => {
                         )}
 
                         {activeFilterType === 'State' && (
-                          <div className="space-y-3">
+                          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin">
                             <label className="flex items-center gap-4 p-3 hover:bg-bg-input rounded-2xl cursor-pointer group transition-all">
                               <input
                                 type="checkbox"
@@ -2788,6 +3070,125 @@ const CaseMasterTab = () => {
                                 </label>
                               );
                             })}
+                          </div>
+                        )}
+
+                        {activeFilterType === 'Ack/Grievance/FIR' && (
+                          <div className="space-y-3">
+                            <div className="flex flex-col gap-2 p-3 bg-bg-secondary/40 border border-border/40 rounded-xl mb-2">
+                              <span className="text-xs font-bold text-text-secondary uppercase tracking-widest">Select Types to Display:</span>
+                              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                                {['Ack', 'Grievance', 'FIR'].map(type => {
+                                  const label = type === 'Ack' ? 'Acknowledgment Numbers' : type === 'Grievance' ? 'Grievance Number' : 'FIR Number';
+                                  const isChecked = tempFilters.showNumberTypes?.includes(type) ?? true;
+                                  return (
+                                    <label key={type} className="flex items-center gap-2 text-xs font-semibold text-text-secondary cursor-pointer hover:text-text-primary transition-all">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          setTempFilters(prev => {
+                                            const show = prev.showNumberTypes || ['Ack', 'Grievance', 'FIR'];
+                                            const newShow = show.includes(type)
+                                              ? show.filter(t => t !== type)
+                                              : [...show, type];
+                                            return { ...prev, showNumberTypes: newShow };
+                                          });
+                                        }}
+                                        className="w-3.5 h-3.5 text-accent border-border focus:ring-accent bg-bg-input rounded"
+                                      />
+                                      {label}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <label className="block text-sm font-bold text-text-secondary">Search Ack, Grievance, or FIR Number</label>
+                            <input
+                              type="text"
+                              placeholder="Type Ack, Grievance, or FIR number to search..."
+                              value={tempFilters.caseNumbers || ''}
+                              onChange={(e) => setTempFilters(prev => ({ ...prev, caseNumbers: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-border rounded-xl bg-bg-input text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-all mb-3"
+                            />
+                            <div className="max-h-60 overflow-y-auto space-y-1 pr-1 border border-border/40 rounded-xl p-2 bg-bg-secondary/40">
+                              {filteredNumbersList.length === 0 ? (
+                                <div className="text-xs text-text-muted p-2 italic">No numbers found</div>
+                              ) : (
+                                filteredNumbersList.map((item, idx) => {
+                                  const isChecked = tempFilters.selectedCaseNumbers?.includes(item.value) || false;
+                                  const isExpanded = expandedNumber === item.value;
+                                  const matchedCase = cases.find(c => c.caseId === item.caseId);
+                                  return (
+                                    <div key={idx} className="flex flex-col p-2 hover:bg-bg-input rounded-xl transition-all">
+                                      <div className="flex items-start gap-3 w-full">
+                                        <input
+                                          type="checkbox"
+                                          id={`chk-${idx}`}
+                                          checked={isChecked}
+                                          onChange={() => {
+                                            setTempFilters(prev => {
+                                              const currentSelected = prev.selectedCaseNumbers || [];
+                                              const newSelected = currentSelected.includes(item.value)
+                                                ? currentSelected.filter(v => v !== item.value)
+                                                : [...currentSelected, item.value];
+                                              return { ...prev, selectedCaseNumbers: newSelected };
+                                            });
+                                            if (!isChecked) {
+                                              setExpandedNumber(item.value);
+                                            }
+                                          }}
+                                          className="w-4 h-4 mt-0.5 text-accent border-border focus:ring-accent bg-bg-input rounded cursor-pointer"
+                                        />
+                                        <div
+                                          className="flex flex-col flex-1 cursor-pointer select-none"
+                                          onClick={() => setExpandedNumber(isExpanded ? null : item.value)}
+                                        >
+                                          <span className={`text-sm font-bold flex items-center gap-1.5 ${isChecked ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}>
+                                            {item.value}
+                                            <span className="text-[10px] text-text-muted font-normal bg-bg-secondary px-1.5 py-0.5 rounded uppercase">{item.type}</span>
+                                          </span>
+                                          <span className="text-[11px] text-text-muted mt-0.5 font-semibold flex items-center justify-between">
+                                            <span>Case ID: {item.caseId}</span>
+                                            <span className="text-[10px] text-accent hover:underline font-bold uppercase tracking-wider">{isExpanded ? 'Hide Details' : 'Show Details'}</span>
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {isExpanded && matchedCase && (
+                                        <div className="mt-2 ml-7 p-3 bg-bg-card rounded-xl border border-border/80 text-xs space-y-1.5 animate-in slide-in-from-top-1 duration-150 shadow-inner">
+                                          <div className="flex justify-between gap-2">
+                                            <span className="text-text-muted">Client:</span>
+                                            <span className="font-bold text-text-primary text-right">{matchedCase.clientName || '—'}</span>
+                                          </div>
+                                          <div className="flex justify-between gap-2">
+                                            <span className="text-text-muted">Company:</span>
+                                            <span className="font-bold text-text-primary text-right">{matchedCase.companyName || '—'}</span>
+                                          </div>
+                                          <div className="flex justify-between gap-2">
+                                            <span className="text-text-muted">Type:</span>
+                                            <span className="font-bold text-text-primary text-right">{matchedCase.typeOfComplaint || '—'}</span>
+                                          </div>
+                                          <div className="flex justify-between gap-2">
+                                            <span className="text-text-muted">Amount:</span>
+                                            <span className="font-bold text-green-500 text-right">₹{matchedCase.totalAmtPaid ? Number(matchedCase.totalAmtPaid).toLocaleString('en-IN') : '0'}</span>
+                                          </div>
+                                          <div className="flex justify-between gap-2">
+                                            <span className="text-text-muted">Status:</span>
+                                            <span className="font-black uppercase tracking-wider text-accent text-right">{normalizeStatus(matchedCase.currentStatus || matchedCase.status, matchedCase.assignedTo, matchedCase.initiatedBy)}</span>
+                                          </div>
+                                          <div className="flex justify-between gap-2">
+                                            <span className="text-text-muted">Assigned:</span>
+                                            <span className="font-bold text-text-primary text-right">{matchedCase.assignedTo || matchedCase.initiatedBy || '—'}</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -3800,20 +4201,44 @@ const CaseMasterTab = () => {
                           <div className="mb-4">
                             <FileUpload onUploadSuccess={(url) => setCommFormData(prev => ({ ...prev, fileLink: url }))} label="Click to browse or drag & drop (Max 10MB)" />
                           </div>
-                          {/* <div className="relative group">
-                            <input
-                              type="text"
-                              value={commFormData.fileLink}
-                              onChange={(e) => setCommFormData({ ...commFormData, fileLink: e.target.value })}
-                              placeholder="Or paste Google Drive / URL link..."
-                              className="w-full bg-bg-card border-2 border-border rounded-xl px-5 py-3 text-[10px] font-black text-text-primary outline-none focus:border-accent transition-all shadow-inner"
-                            />
-                          </div> */}
+                          {commFormData.fileLink && (
+                            <div className="text-[10px] font-black text-accent mt-1 flex items-center gap-2">
+                              <span>Current Attachment:</span>
+                              <a href={commFormData.fileLink} target="_blank" rel="noreferrer" className="underline truncate max-w-[200px]">
+                                {commFormData.fileLink.split('/').pop()}
+                              </a>
+                            </div>
+                          )}
                         </div>
 
-                        <button type="submit" className="bg-accent hover:bg-accent-hover text-white font-black py-5 px-8 rounded-2xl shadow-lg shadow-orange-900/10 text-xs uppercase tracking-[0.25em] transition-all active:scale-95 w-full flex items-center justify-center gap-3">
-                          Submit
-                        </button>
+                        <div className="flex gap-4">
+                          <button type="submit" className="bg-accent hover:bg-accent-hover text-white font-black py-5 px-8 rounded-2xl shadow-lg shadow-orange-900/10 text-xs uppercase tracking-[0.25em] transition-all active:scale-95 w-full flex items-center justify-center gap-3">
+                            {editingComm ? 'Update Signal' : 'Submit'}
+                          </button>
+                          {editingComm && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingComm(null);
+                                setCommFormData({
+                                  direction: 'Incoming',
+                                  mode: 'Call',
+                                  fromTo: '',
+                                  summary: '',
+                                  exactDemand: '',
+                                  refundDemanded: '0',
+                                  legalThreat: 'No',
+                                  smMentioned: 'No',
+                                  fileLink: '',
+                                  dateTime: new Date().toISOString().substring(0, 16)
+                                });
+                              }}
+                              className="bg-bg-card hover:bg-bg-secondary text-text-primary border-2 border-border font-black py-5 px-8 rounded-2xl text-xs uppercase tracking-[0.25em] transition-all"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
                         <div className="text-center pt-2">
                           <span className="text-[9px] font-black text-text-muted uppercase tracking-widest bg-bg-card border border-border px-4 py-2 rounded-lg">
                             Case ID: <span className="text-accent">{viewCase.caseId}</span>
@@ -3848,6 +4273,19 @@ const CaseMasterTab = () => {
                                 <div className="mt-3 flex items-center justify-between border-t border-border pt-3 transition-all">
                                   <span className="text-[9px] font-black text-accent uppercase tracking-widest">{comm.mode} via {comm.fromTo || 'Client'}</span>
                                   <div className="flex gap-2 items-center">
+                                    {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleStartEditComm(comm);
+                                        }}
+                                        className="text-text-primary hover:text-accent bg-bg-secondary hover:bg-accent/10 p-1.5 rounded-md border border-border hover:border-accent transition-all flex items-center gap-1"
+                                        title="Edit Signal"
+                                      >
+                                        <Edit3 size={10} /> <span className="text-[8px] font-bold">EDIT</span>
+                                      </button>
+                                    )}
                                     {comm.fileLink ? (
                                       <a href={comm.fileLink} target="_blank" rel="noreferrer" className="text-accent hover:text-white bg-accent/10 hover:bg-accent p-1.5 rounded-md transition-all flex items-center gap-1" title="View Attachment">
                                         <Paperclip size={10} /> <span className="text-[8px] font-bold">VIEW FILE</span>
@@ -3925,6 +4363,14 @@ const CaseMasterTab = () => {
                           label="Click to upload or drag & drop. PDF, DOCX - Max 20MB"
                           icon={FileText}
                         />
+                        {mouFormData.fileLink && (
+                          <div className="text-[10px] font-black text-accent mt-1 flex items-center gap-2">
+                            <span>Current File:</span>
+                            <a href={mouFormData.fileLink} target="_blank" rel="noreferrer" className="underline truncate max-w-[200px]" title={mouFormData.fileLink}>
+                              {mouFormData.fileLink.split('/').pop()}
+                            </a>
+                          </div>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -3969,9 +4415,31 @@ const CaseMasterTab = () => {
                         ></textarea>
                       </div>
 
-                      <button type="submit" className="bg-accent hover:bg-accent-hover text-white font-black py-4 px-10 rounded-xl shadow-lg shadow-orange-900/20 text-[10px] uppercase tracking-[0.25em] transition-all active:scale-95">
-                        Submit
-                      </button>
+                      <div className="flex gap-4">
+                        <button type="submit" className="bg-accent hover:bg-accent-hover text-white font-black py-4 px-10 rounded-xl shadow-lg shadow-orange-900/20 text-[10px] uppercase tracking-[0.25em] transition-all active:scale-95">
+                          {editingDoc ? 'Update Document' : 'Submit'}
+                        </button>
+                        {editingDoc && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDoc(null);
+                              setMouFormData({
+                                mouType: 'Legal Notice',
+                                otherType: '',
+                                mouDate: '',
+                                signatoryName: '',
+                                remarks: '',
+                                fileLink: ''
+                              });
+                              setMouUploadKey(prev => prev + 1);
+                            }}
+                            className="bg-bg-card hover:bg-bg-secondary text-text-primary border border-border font-black py-4 px-10 rounded-xl text-[10px] uppercase tracking-[0.25em] transition-all"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
                       <div className="text-center pt-2">
                         <span className="text-[9px] font-black text-text-muted uppercase tracking-widest bg-bg-card border border-border px-4 py-2 rounded-lg">
                           Case ID: <span className="text-accent">{viewCase.caseId}</span>
@@ -4077,15 +4545,27 @@ const CaseMasterTab = () => {
                                     </div>
                                   </td>
                                   <td className="px-4 py-4 text-right pr-6">
-                                    <a
-                                      href={doc.fileLink}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="bg-accent-soft hover:bg-accent text-accent hover:text-white p-2 rounded-lg transition-all inline-flex items-center justify-center"
-                                      title="View Document"
-                                    >
-                                      <Eye size={12} />
-                                    </a>
+                                    <div className="flex gap-2 justify-end">
+                                      <a
+                                        href={doc.fileLink}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="bg-accent-soft hover:bg-accent text-accent hover:text-white p-2 rounded-lg transition-all inline-flex items-center justify-center"
+                                        title="View Document"
+                                      >
+                                        <Eye size={12} />
+                                      </a>
+                                      {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditDoc(doc)}
+                                          className="bg-bg-secondary hover:bg-accent-soft text-text-primary hover:text-accent p-2 rounded-lg border border-border hover:border-accent-soft transition-all inline-flex items-center justify-center"
+                                          title="Edit Document"
+                                        >
+                                          <Edit3 size={12} />
+                                        </button>
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
                               );
@@ -4353,9 +4833,12 @@ const CaseMasterTab = () => {
                       label="Upload Document"
                     />
                     {progressFormData.attachment && (
-                      <div className="flex items-center gap-2 px-4 py-2 bg-blue-soft rounded-lg mt-1">
-                        <Paperclip size={14} className="text-blue" />
-                        <span className="text-[10px] font-black text-blue truncate">{progressFormData.attachment}</span>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-blue-soft rounded-lg mt-1 justify-between">
+                        <div className="flex items-center gap-2 truncate">
+                          <Paperclip size={14} className="text-blue" />
+                          <span className="text-[10px] font-black text-blue truncate">{progressFormData.attachment.split('/').pop()}</span>
+                        </div>
+                        <a href={progressFormData.attachment} target="_blank" rel="noreferrer" className="text-[9px] font-bold text-blue underline">View</a>
                       </div>
                     )}
                   </div>
@@ -4405,21 +4888,41 @@ const CaseMasterTab = () => {
                         className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent uppercase tracking-widest"
                       >
                         <option value="">-- NO ESCALATION --</option>
-                        {['admin', 'super admin'].includes(user?.role?.toLowerCase())
-                          ? opsUsers.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
-                              <option key={`escalate-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
-                            ))
-                          : (user?.fullName && (
-                              <option value={user.fullName}>{user.fullName}</option>
-                            ))
-                        }
+                        {opsUsers.filter(u => ['operations', 'legal'].includes(u.role?.toLowerCase())).map(u => (
+                          <option key={`escalate-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
 
-                  <button type="submit" className="bg-accent hover:bg-accent-hover text-white font-black py-4 px-10 rounded-xl shadow-lg shadow-orange-900/20 text-[10px] uppercase tracking-[0.25em] transition-all active:scale-95">
-                    Submit
-                  </button>
+                  <div className="flex gap-4">
+                    <button type="submit" className="bg-accent hover:bg-accent-hover text-white font-black py-4 px-10 rounded-xl shadow-lg shadow-orange-900/20 text-[10px] uppercase tracking-[0.25em] transition-all active:scale-95">
+                      {editingProgress ? 'Update Progress' : 'Submit'}
+                    </button>
+                    {editingProgress && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingProgress(null);
+                          setProgressFormData({
+                            stage: 'Case Logged',
+                            percentage: 20,
+                            summary: '',
+                            nextAction: '',
+                            blockers: '',
+                            followUpDate: '',
+                            escalateTo: '',
+                            refundedAmount: '',
+                            savedAmount: '',
+                            attachment: ''
+                          });
+                        }}
+                        className="bg-bg-card hover:bg-bg-secondary text-text-primary border border-border font-black py-4 px-10 rounded-xl text-[10px] uppercase tracking-[0.25em] transition-all"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                   <div className="text-center pt-2">
                     <span className="text-[9px] font-black text-text-muted uppercase tracking-widest bg-bg-card border border-border px-4 py-2 rounded-lg">
                       Case ID: <span className="text-accent">{viewCase.caseId}</span>
@@ -4473,7 +4976,19 @@ const CaseMasterTab = () => {
                                 Saved Amount: ₹{Number(log.savedAmount).toLocaleString('en-IN')}
                               </div>
                             )}
-                            <div className="text-[9px] font-black text-accent uppercase tracking-widest opacity-80 mt-1">Updated by: {log.updatedBy === user?.email ? 'You' : log.updatedBy?.split('@')[0] || 'System'}</div>
+                            <div className="text-[9px] font-black text-accent uppercase tracking-widest opacity-80 mt-1 flex items-center justify-between">
+                              <span>Updated by: {log.updatedBy === user?.email ? 'You' : log.updatedBy?.split('@')[0] || 'System'}</span>
+                              {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditProgress(log)}
+                                  className="text-text-primary hover:text-accent font-black uppercase tracking-widest flex items-center gap-1 hover:underline cursor-pointer"
+                                  title="Edit Progress Log"
+                                >
+                                  <Edit3 size={10} /> Edit
+                                </button>
+                              )}
+                            </div>
                             {log.attachment && (
                               <div className="mt-1">
                                 <a
@@ -4635,8 +5150,8 @@ const CaseMasterTab = () => {
         </div>
       ) : (
         <div className="bg-bg-card rounded-2xl shadow-sm border-2 border-border overflow-hidden flex-1 flex flex-col">
-          <div className="table-wrap overflow-x-auto scrollbar-thin min-h-[450px]">
-            <table className="w-full text-left border-collapse">
+          <div className="table-wrap overflow-auto scrollbar-thin max-h-[calc(100vh-300px)] min-h-[450px]">
+            <table className="w-full text-left border-collapse" style={{ minWidth: '1300px' }}>
               <thead>
                 <tr className="bg-bg-secondary text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                   {bulkAssignUser && (
@@ -5089,11 +5604,11 @@ const CaseRow = memo(({
                 <option value="">Assign</option>
                 {['admin', 'super admin'].includes(user?.role?.toLowerCase())
                   ? opsUsers.filter(u => u.role?.toLowerCase() === 'operations').map(u => (
-                      <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
-                    ))
+                    <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
+                  ))
                   : (user?.fullName && (
-                      <option value={user.fullName}>{user.fullName}</option>
-                    ))
+                    <option value={user.fullName}>{user.fullName}</option>
+                  ))
                 }
               </select>
               <button

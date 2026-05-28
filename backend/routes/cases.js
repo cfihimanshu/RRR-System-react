@@ -134,6 +134,19 @@ async function buildCaseQuery(req) {
   let query = {};
 
   if (
+    (req.user.role === 'Admin' || req.user.role === 'Super Admin' || req.user.role === 'SuperAdmin') &&
+    req.query.isLegalDashboard === 'true'
+  ) {
+    const User = require('../models/User');
+    const legalUsers = await User.find({ role: 'Legal' }).lean();
+    const legalNames = legalUsers.map(u => (u.fullName || u.name || '').trim()).filter(Boolean);
+    if (legalNames.length > 0) {
+      const regexStr = legalNames.map(n => `^\\s*${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`).join('|');
+      query = { assignedTo: new RegExp(regexStr, 'i') };
+    } else {
+      query = { assignedTo: '__non_existent_user__' };
+    }
+  } else if (
     req.user.role !== 'Admin' &&
     req.user.role !== 'Reviewer' &&
     req.user.role !== 'Super Admin' &&

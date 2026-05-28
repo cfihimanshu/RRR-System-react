@@ -127,6 +127,8 @@ const connectToDatabase = async () => {
       const Report = require('./models/Report');
       const User = require('./models/User');
       const Communication = require('./models/Communication');
+      const TourRequest = require('./models/TourRequest');
+      const LeaveRequest = require('./models/LeaveRequest');
 
       Promise.all([
         Case.createIndexes(),
@@ -135,7 +137,9 @@ const connectToDatabase = async () => {
         Refund.createIndexes(),
         Report.createIndexes(),
         User.createIndexes(),
-        Communication.createIndexes()
+        Communication.createIndexes(),
+        TourRequest.createIndexes(),
+        LeaveRequest.createIndexes()
       ]).then(() => {
         console.log('✓ All database indexes verified/built successfully');
       }).catch(err => {
@@ -210,6 +214,158 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/progress', require('./routes/progress'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/case-study', require('./routes/caseStudy'));
+app.use('/api/tours', require('./routes/tours'));
+app.use('/api/leaves', require('./routes/leaves'));
+
+const CITY_COORDS = {
+  delhi: { lat: 28.6139, lon: 77.2090 },
+  'new delhi': { lat: 28.6139, lon: 77.2090 },
+  jaipur: { lat: 26.9124, lon: 75.7873 },
+  mumbai: { lat: 19.0760, lon: 72.8777 },
+  bangalore: { lat: 12.9716, lon: 77.5946 },
+  bengaluru: { lat: 12.9716, lon: 77.5946 },
+  kolkata: { lat: 22.5726, lon: 88.3639 },
+  chennai: { lat: 13.0827, lon: 80.2707 },
+  hyderabad: { lat: 17.3850, lon: 78.4867 },
+  pune: { lat: 18.5204, lon: 73.8567 },
+  ahmedabad: { lat: 23.0225, lon: 72.5714 },
+  lucknow: { lat: 26.8467, lon: 80.9462 },
+  chandigarh: { lat: 30.7333, lon: 76.7794 },
+  noida: { lat: 28.5355, lon: 77.3910 },
+  gurgaon: { lat: 28.4595, lon: 77.0266 },
+  gurugram: { lat: 28.4595, lon: 77.0266 },
+  ghaziabad: { lat: 28.6692, lon: 77.4538 },
+  agra: { lat: 27.1767, lon: 78.0081 },
+  patna: { lat: 25.5941, lon: 85.1376 },
+  bhopal: { lat: 23.2599, lon: 77.4126 },
+  indore: { lat: 22.7196, lon: 75.8577 },
+  kanpur: { lat: 26.4499, lon: 80.3319 }
+};
+
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function getDeterministicMockDistance(fromCity, toCity) {
+  let hash = 0;
+  const combined = (fromCity + toCity).toLowerCase();
+  for (let i = 0; i < combined.length; i++) {
+    hash += combined.charCodeAt(i);
+  }
+  return 150 + (hash % 800);
+}
+
+app.get('/api/distance', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    if (!from || !to) {
+      return res.status(400).json({
+        success: false,
+        message: "from and to are required"
+      });
+    }
+
+    const cleanFrom = from.trim().toLowerCase();
+    const cleanTo = to.trim().toLowerCase();
+
+    // Check if we have both coordinates locally
+    if (CITY_COORDS[cleanFrom] && CITY_COORDS[cleanTo]) {
+      const c1 = CITY_COORDS[cleanFrom];
+      const c2 = CITY_COORDS[cleanTo];
+      const straightLineDist = haversineDistance(c1.lat, c1.lon, c2.lat, c2.lon);
+      const drivingDistance = (straightLineDist * 1.15) + 2; // Apply correction factor
+      const speedKmh = 60; // Average driving speed
+      const durationMin = (drivingDistance / speedKmh) * 60;
+
+      return res.json({
+        success: true,
+        from,
+        to,
+        distance_km: Number(drivingDistance.toFixed(2)),
+        duration_minutes: Number(durationMin.toFixed(2)),
+        source: 'local_database'
+      });
+    }
+
+    // Otherwise, try external APIs
+    try {
+      // Geocode From
+      const fromUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(from)}&format=jsonv2&limit=1`;
+      const fromRes = await fetch(fromUrl, {
+        headers: {
+          "User-Agent": "DistanceAPI/1.0"
+        }
+      });
+      const fromGeo = await fromRes.json();
+
+      // Geocode To
+      const toUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(to)}&format=jsonv2&limit=1`;
+      const toRes = await fetch(toUrl, {
+        headers: {
+          "User-Agent": "DistanceAPI/1.0"
+        }
+      });
+      const toGeo = await toRes.json();
+
+      if (fromGeo && fromGeo.length && toGeo && toGeo.length) {
+        const fromLat = fromGeo[0].lat;
+        const fromLon = fromGeo[0].lon;
+        const toLat = toGeo[0].lat;
+        const toLon = toGeo[0].lon;
+
+        // Route Distance
+        const routeUrl = `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=false`;
+        const routeRes = await fetch(routeUrl);
+        const route = await routeRes.json();
+
+        if (route.routes && route.routes.length) {
+          const rawDistanceKm = route.routes[0].distance / 1000;
+          const distanceKm = (rawDistanceKm * 1.10) + 2;
+          const durationMin = route.routes[0].duration / 60;
+
+          return res.json({
+            success: true,
+            from,
+            to,
+            distance_km: Number(distanceKm.toFixed(2)),
+            duration_minutes: Number(durationMin.toFixed(2)),
+            source: 'osrm_api'
+          });
+        }
+      }
+    } catch (apiErr) {
+      // Quietly fall back to deterministic calculations when Nominatim is rate-limited
+    }
+
+    // Final fallback to deterministic mock distance so it never fails
+    const mockDist = getDeterministicMockDistance(from, to);
+    const mockDuration = (mockDist / 60) * 60; // 60 km/h average speed
+
+    res.json({
+      success: true,
+      from,
+      to,
+      distance_km: Number(mockDist.toFixed(2)),
+      duration_minutes: Number(mockDuration.toFixed(2)),
+      source: 'deterministic_fallback'
+    });
+
+  } catch (error) {
+    console.error("General error in distance calculation:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
 
 app.get('/api/test-db', async (req, res) => {
   try {
@@ -252,7 +408,7 @@ function buildAnchoredRegex(text) {
 
 app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async (req, res) => {
   try {
-    const cacheKey = `${req.user.id}_${req.query.teamFilter || ''}_${req.query.userFilter || ''}_${req.query.startDate || ''}_${req.query.endDate || ''}_${req.query.perfStartDate || ''}_${req.query.perfEndDate || ''}`;
+    const cacheKey = `${req.user.id}_${req.query.teamFilter || ''}_${req.query.userFilter || ''}_${req.query.startDate || ''}_${req.query.endDate || ''}_${req.query.perfStartDate || ''}_${req.query.perfEndDate || ''}_${req.query.isLegalDashboard || ''}`;
     const cachedItem = statsCache.get(cacheKey);
     if (cachedItem && (Date.now() - cachedItem.timestamp < CACHE_DURATION)) {
       res.set('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=45');
@@ -318,6 +474,20 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     let userEmail = (dbUser?.email || req.user.email || '').trim();
     let userId = req.user.id;
 
+    let targetEmail = userEmail;
+    if (userFilter) {
+      const filteredUser = await User.findOne({
+        $or: [
+          { fullName: { $regex: new RegExp(`^\\s*${userFilter.trim()}\\s*$`, 'i') } },
+          { name: { $regex: new RegExp(`^\\s*${userFilter.trim()}\\s*$`, 'i') } }
+        ]
+      }).lean();
+      if (filteredUser) {
+        targetEmail = filteredUser.email;
+      }
+    }
+
+
     const firstName = userName.split(/\s+/)[0];
     const searchValues = [userName, userEmail, userId];
     if (firstName && firstName.length >= 3) {
@@ -331,8 +501,23 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     let ownershipQuery = {};
     let activeNameRegex = myNameRegex;
+    let legalEmails = [];
 
-    if (req.user.role !== 'Admin') {
+    const isLegalDashboard = req.query.isLegalDashboard === 'true' || req.user.role === 'Legal';
+
+    if (isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
+      const legalUsers = await User.find({ role: 'Legal' }).lean();
+      const legalNames = legalUsers.map(u => (u.fullName || u.name || '').trim()).filter(Boolean);
+      legalEmails = legalUsers.map(u => (u.email || '').trim()).filter(Boolean);
+      if (legalNames.length > 0) {
+        const regexStr = legalNames.map(n => `^\\s*${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`).join('|');
+        activeNameRegex = new RegExp(regexStr, 'i');
+        ownershipQuery = { assignedTo: activeNameRegex };
+      } else {
+        activeNameRegex = /__non_existent_user__/i;
+        ownershipQuery = { assignedTo: '__non_existent_user__' };
+      }
+    } else if (req.user.role !== 'Admin') {
       ownershipQuery = {
         $or: [
           { assignedTo: myNameRegex },
@@ -411,31 +596,44 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     dayAfterTomorrowObj.setDate(nowForIST.getDate() + 2);
     const dayAfterTomorrowStr = dayAfterTomorrowObj.toISOString().split('T')[0];
 
-    const refundQuery = {
-      ...((req.user.role !== 'Admin' && req.user.role !== 'Accountant') ? { requestedBy: req.user.email } : {}),
+    let refundQuery = {
       status: { $in: ['Pending Payment', 'Paid'] }
     };
+    if (isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
+      refundQuery.requestedBy = { $in: legalEmails };
+    } else if (req.user.role !== 'Admin' && req.user.role !== 'Accountant') {
+      refundQuery.requestedBy = targetEmail;
+    }
 
-    const targetUserStr = String(userFilter || userName || '');
-    const escUser = targetUserStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const userQueryRegex = new RegExp(escUser, 'i');
-    const taskUserQuery = (req.user.role !== 'Admin' || userFilter) ? {
-      $or: [
-        { assignee: userQueryRegex },
-        { createdBy: req.user.email }
-      ]
-    } : {};
-
+    let taskUserQuery = {};
+    if (isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
+      taskUserQuery = {
+        $or: [
+          { assignee: activeNameRegex },
+          { createdBy: { $in: legalEmails } }
+        ]
+      };
+    } else if (req.user.role !== 'Admin' || userFilter) {
+      const targetUserStr = String(userFilter || userName || '');
+      const escUser = targetUserStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const userQueryRegex = new RegExp(escUser, 'i');
+      taskUserQuery = {
+        $or: [
+          { assignee: userQueryRegex },
+          { createdBy: targetEmail }
+        ]
+      };
+    }
 
     let myCaseIds = [];
-    if (req.user.role !== 'Admin') {
+    if (req.user.role !== 'Admin' || isLegalDashboard) {
       myCaseIds = await track('myCaseIdsDistinct', () => Case.distinct('caseId', query));
     }
-    const timelineQuery = req.user.role !== 'Admin' ? { caseId: { $in: myCaseIds } } : {};
+    const timelineQuery = (req.user.role !== 'Admin' || isLegalDashboard) ? { caseId: { $in: myCaseIds } } : {};
 
     let timelineMatch = { ...timelineQuery };
-    if (req.user.role === 'Admin' && userFilter) {
-      timelineMatch.source = activeNameRegex;
+    if (req.user.role !== 'Admin' || userFilter || isLegalDashboard) {
+      timelineMatch.source = activeNameRegex || nameRegex;
     }
 
     const yesterday = new Date(istTime);
@@ -589,9 +787,13 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       ])),
       track('refundMetrics', async () => {
         const paidFilter = {
-          ...((req.user.role !== 'Admin' && req.user.role !== 'Accountant') ? { requestedBy: req.user.email } : {}),
           status: 'Paid'
         };
+        if (isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
+          paidFilter.requestedBy = { $in: legalEmails };
+        } else if (req.user.role !== 'Admin' && req.user.role !== 'Accountant') {
+          paidFilter.requestedBy = targetEmail;
+        }
         const [paidSumResult, allRefunds, pendingApprovalsResult] = await Promise.all([
           Refund.aggregate([
             { $match: paidFilter },
@@ -608,8 +810,12 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         return { paidSumResult, allRefunds, pendingApprovalsResult };
       }),
       track('taskMetrics', async () => {
-        const sodReport = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean();
+        const sodReportQuery = isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)
+          ? { userEmail: { $in: legalEmails }, type: 'SOD', date: dateStrIST }
+          : { userEmail: targetEmail, type: 'SOD', date: dateStrIST };
+        const sodReport = await Report.findOne(sodReportQuery).sort({ createdAt: -1 }).lean();
         const sodTasksCount = sodReport ? (sodReport.myTasksToday?.length || 0) : 0;
+
 
         const taskCountsResult = await Task.aggregate([
           { $match: taskUserQuery },
@@ -702,9 +908,24 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
           completedTasksToday: tc.completedTasksToday?.[0]?.count || 0
         };
       }),
-      track('yesterdayEod', () => Report.findOne({ userEmail: req.user.email, type: 'EOD', date: yesterdayStr }).lean()),
-      track('todaySod', () => Report.findOne({ userEmail: req.user.email, type: 'SOD', date: dateStrIST }).lean()),
-      track('todayEod', () => Report.findOne({ userEmail: req.user.email, type: 'EOD', date: dateStrIST }).lean()),
+      track('yesterdayEod', () => {
+        const query = isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)
+          ? { userEmail: { $in: legalEmails }, type: 'EOD', date: yesterdayStr }
+          : { userEmail: targetEmail, type: 'EOD', date: yesterdayStr };
+        return Report.findOne(query).sort({ createdAt: -1 }).lean();
+      }),
+      track('todaySod', () => {
+        const query = isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)
+          ? { userEmail: { $in: legalEmails }, type: 'SOD', date: dateStrIST }
+          : { userEmail: targetEmail, type: 'SOD', date: dateStrIST };
+        return Report.findOne(query).sort({ createdAt: -1 }).lean();
+      }),
+      track('todayEod', () => {
+        const query = isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)
+          ? { userEmail: { $in: legalEmails }, type: 'EOD', date: dateStrIST }
+          : { userEmail: targetEmail, type: 'EOD', date: dateStrIST };
+        return Report.findOne(query).sort({ createdAt: -1 }).lean();
+      }),
       track('lastTimeline', () => Timeline.findOne({ source: nameRegex, createdAt: { $gte: startOfToday } }).sort({ createdAt: -1 }).lean()),
       track('perfCaseIds', () => Case.distinct('caseId', ownershipQuery))
     ]));

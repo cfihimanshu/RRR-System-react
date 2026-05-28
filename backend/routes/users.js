@@ -5,7 +5,7 @@ const { verifyToken } = require('../middleware/auth');
 const { roleGuard } = require('../middleware/roleGuard');
 
 // Get all users (Filtered for Operations in frontend)
-router.get('/', verifyToken, roleGuard(['Admin', 'Operations']), async (req, res) => {
+router.get('/', verifyToken, roleGuard(['Admin', 'Operations', 'Legal']), async (req, res) => {
   try {
     const users = await User.find({}, 'fullName email role department').lean();
     res.set('Cache-Control', 'private, max-age=60');

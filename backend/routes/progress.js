@@ -240,4 +240,108 @@ router.post('/', verifyToken, async (req, res) => {
   }
 });
 
+router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
+  try {
+    const allowedRoles = ['Admin', 'Super Admin', 'SuperAdmin'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
+    }
+
+    const { caseId, logId } = req.params;
+    const progressDoc = await Progress.findOne({ caseId });
+    if (!progressDoc) {
+      return res.status(404).json({ error: 'Progress document not found' });
+    }
+
+    // Find the specific update inside updates array
+    const updateIndex = progressDoc.updates.findIndex(u => u._id.toString() === logId);
+    if (updateIndex === -1) {
+      return res.status(404).json({ error: 'Progress log entry not found' });
+    }
+
+    const oldLog = progressDoc.updates[updateIndex];
+
+    // Update fields
+    const { stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, refundedAmount, savedAmount, attachment } = req.body;
+    
+    if (stage !== undefined) progressDoc.updates[updateIndex].stage = stage;
+    if (percentage !== undefined) progressDoc.updates[updateIndex].percentage = percentage;
+    if (summary !== undefined) progressDoc.updates[updateIndex].summary = summary;
+    if (nextAction !== undefined) progressDoc.updates[updateIndex].nextAction = nextAction;
+    if (blockers !== undefined) progressDoc.updates[updateIndex].blockers = blockers;
+    if (followUpDate !== undefined) progressDoc.updates[updateIndex].followUpDate = followUpDate;
+    if (escalateTo !== undefined) progressDoc.updates[updateIndex].escalateTo = escalateTo;
+    if (refundedAmount !== undefined) progressDoc.updates[updateIndex].refundedAmount = refundedAmount;
+    if (savedAmount !== undefined) progressDoc.updates[updateIndex].savedAmount = savedAmount;
+    if (attachment !== undefined) progressDoc.updates[updateIndex].attachment = attachment;
+    
+    // If we are editing the latest update, we should also update the top-level progressDoc fields and the Case document
+    const isLatest = updateIndex === progressDoc.updates.length - 1;
+    if (isLatest) {
+      if (stage !== undefined) progressDoc.stage = stage;
+      if (percentage !== undefined) progressDoc.percentage = percentage;
+      if (summary !== undefined) progressDoc.summary = summary;
+      if (nextAction !== undefined) progressDoc.nextAction = nextAction;
+      if (blockers !== undefined) progressDoc.blockers = blockers;
+      if (followUpDate !== undefined) progressDoc.followUpDate = followUpDate;
+      if (escalateTo !== undefined) progressDoc.escalateTo = escalateTo;
+      if (refundedAmount !== undefined) progressDoc.refundedAmount = refundedAmount;
+      if (savedAmount !== undefined) progressDoc.savedAmount = savedAmount;
+      if (attachment !== undefined) progressDoc.attachment = attachment;
+
+      // Update case
+      const caseUpdateFields = {};
+      if (stage !== undefined) {
+        caseUpdateFields.currentStatus = stage;
+        if (stage === 'Closure') {
+          if (refundedAmount !== undefined) caseUpdateFields.refundedAmount = refundedAmount;
+          if (savedAmount !== undefined) caseUpdateFields.savedAmount = savedAmount;
+        }
+      }
+      if (percentage !== undefined) caseUpdateFields.progressPercentage = percentage;
+      if (escalateTo) caseUpdateFields.assignedTo = escalateTo;
+
+      if (Object.keys(caseUpdateFields).length > 0) {
+        await Case.findOneAndUpdate({ caseId }, caseUpdateFields);
+      }
+    }
+
+    await progressDoc.save();
+
+    // Sync timeline event
+    try {
+      const timelineEvent = await Timeline.findOne({
+        caseId,
+        eventType: 'Progress Update',
+        summary: `Progress Updated: ${oldLog.summary} (${oldLog.stage || 'N/A'})`
+      });
+
+      if (timelineEvent) {
+        const updatedLog = progressDoc.updates[updateIndex];
+        timelineEvent.summary = `Progress Updated: ${updatedLog.summary} (${updatedLog.stage || 'N/A'})`;
+        timelineEvent.details = updatedLog.summary;
+        timelineEvent.metadata = {
+          ...timelineEvent.metadata,
+          stage: updatedLog.stage,
+          percentage: updatedLog.percentage,
+          nextAction: updatedLog.nextAction,
+          blockers: updatedLog.blockers,
+          followUpDate: updatedLog.followUpDate,
+          escalateTo: updatedLog.escalateTo,
+          attachment: updatedLog.attachment
+        };
+        await timelineEvent.save();
+      }
+    } catch (timelineErr) {
+      console.error('Failed to sync timeline on progress update:', timelineErr);
+    }
+
+    if (global.clearStatsCache) global.clearStatsCache();
+
+    res.json(progressDoc.updates[updateIndex]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

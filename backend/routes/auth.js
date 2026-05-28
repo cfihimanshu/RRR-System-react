@@ -57,7 +57,8 @@ router.post('/login', async (req, res) => {
 
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const normalizedEmail = email ? email.trim().toLowerCase() : '';
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -74,6 +75,18 @@ router.post('/login', async (req, res) => {
     }, process.env.JWT_SECRET, { expiresIn: '6h' });
 
     await logAuthAudit(req, user.email, user.role, 'Login', 'User logged in');
+
+    // Trigger overdue cases alert once a day on first login
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (user.lastLoginAlertDate !== todayStr) {
+      user.lastLoginAlertDate = todayStr;
+      await user.save();
+
+      const { sendUserOverdueAlerts } = require('../utils/scheduler');
+      // Fire and forget: run in background so it doesn't block the login response
+      sendUserOverdueAlerts(user).catch(err => console.error('Error in sendUserOverdueAlerts:', err));
+    }
 
     // Ensure we send back a name even for older users
     const displayName = user.fullName || user.name || "";
@@ -120,12 +133,13 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
     // Support both keys for maximum compatibility
     const finalName = fullName || name || "New User";
 
-    const existing = await User.findOne({ email });
+    const normalizedEmail = email ? email.trim().toLowerCase() : '';
+    const existing = await User.findOne({ email: normalizedEmail });
     if (existing) return res.status(400).json({ error: 'User already exists' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = new User({
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       role,
       fullName: finalName,
@@ -188,7 +202,7 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
 });
 
 // Get all users for assignment dropdown (Admin/Operations only)
-router.get('/users', verifyToken, roleGuard(['Admin', 'Operations']), async (req, res) => {
+router.get('/users', verifyToken, roleGuard(['Admin', 'Operations', 'Legal']), async (req, res) => {
   try {
     const users = await User.find({}, 'fullName email role canAccessRecords').sort({ fullName: 1 });
     res.json(users);
@@ -201,6 +215,7 @@ router.get('/users', verifyToken, roleGuard(['Admin', 'Operations']), async (req
 router.put('/users/:id/role', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     const { id } = req.params;
+    const { role } = req.body;
     if (!['Admin', 'Operations', 'Staff', 'Reviewer', 'Accountant', 'Legal', 'Super Admin', 'SuperAdmin'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role selected' });
     }
@@ -266,7 +281,8 @@ router.post('/change-password', verifyToken, async (req, res) => {
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email });
+    const normalizedEmail = email ? email.trim().toLowerCase() : '';
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) return res.status(404).json({ error: 'User with this email not found' });
 
     // Generate a secure temporary password

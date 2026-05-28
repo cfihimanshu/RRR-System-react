@@ -342,7 +342,7 @@ const SuperAdminDashTab = () => {
       </div>
 
       {/* Dynamic Case Summaries Grid (8 Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
         {/* Total Cases */}
         <div
           onClick={() => navigate('/case-master')}

@@ -10,7 +10,13 @@ const userSchema = new mongoose.Schema({
   bypassEodCheck: { type: Boolean, default: false },
   sodAccessGrantedAt: { type: String, default: "" },
   lastSeen: { type: Date, default: Date.now },
-  passwordVersion: { type: Number, default: 0 }
+  passwordVersion: { type: Number, default: 0 },
+  department: { type: String, default: "" },
+  designation: { type: String, default: "" },
+  empId: { type: String, default: "" },
+  manager: { type: String, default: "" },
+  contact: { type: String, default: "" },
+  lastLoginAlertDate: { type: String, default: "" }
 });
 
 module.exports = mongoose.model('User', userSchema);

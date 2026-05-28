@@ -19,16 +19,11 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
-router.post('/', verifyToken, (req, res, next) => {
-  console.log('Upload Route Hit:', req.file ? 'File present' : 'Waiting for multer');
-  next();
-}, upload.single('file'), async (req, res) => {
+router.post('/', verifyToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-
-    console.log('Attempting ImageKit upload for file:', req.file.originalname);
 
     // In @imagekit/nodejs v7+, upload is under .files.upload
     const response = await imagekit.files.upload({
@@ -38,7 +33,6 @@ router.post('/', verifyToken, (req, res, next) => {
       useUniqueFileName: true
     });
 
-    console.log('ImageKit Upload Success:', response.url);
     res.json({ url: response.url });
   } catch (error) {
     console.error('ImageKit Upload Error:', error);

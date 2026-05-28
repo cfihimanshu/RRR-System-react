@@ -5,11 +5,9 @@ const SearchableCaseSelect = ({ cases, value, onChange, placeholder = "Type or s
   const [searchTerm, setSearchTerm] = useState('');
   const wrapperRef = useRef(null);
 
-  // Sync internal search term with external value (for initial load)
+  // Sync internal search term with external value (for initial load and resets)
   useEffect(() => {
-    if (value) {
-      setSearchTerm(value);
-    }
+    setSearchTerm(value || '');
   }, [value]);
 
   // Handle clicks outside to close dropdown

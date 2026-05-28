@@ -37,6 +37,7 @@ export const AuthProvider = ({ children }) => {
           let role = res.data.role;
           if (role === 'SuperAdmin') role = 'Super Admin';
           setUser({
+            ...res.data,
             role: role,
             email: res.data.email,
             fullName: res.data.fullName || res.data.name || '',
@@ -63,7 +64,13 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('rrr_user_fullName', fullName || '');
     localStorage.setItem('rrr_user_canAccessRecords', canAccessRecords);
     setToken(newToken);
-    setUser({ role, email: userEmail, fullName: fullName || '', canAccessRecords });
+    setUser({ 
+      ...res.data, 
+      role, 
+      email: userEmail, 
+      fullName: fullName || '', 
+      canAccessRecords 
+    });
   };
 
   const logout = () => {

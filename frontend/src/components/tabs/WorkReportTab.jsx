@@ -50,7 +50,7 @@ const WorkReportTab = () => {
       const reportList = reportsRes.data.reports || (Array.isArray(reportsRes.data) ? reportsRes.data : []);
       setReports(reportList || []);
 
-      if (['Admin', 'Super Admin', 'SuperAdmin', 'Operations'].includes(statsRes.data?.role)) {
+      if (['Admin', 'Super Admin', 'SuperAdmin'].includes(statsRes.data?.role)) {
         try {
           const usersRes = await api.get('/auth/users');
           setUsers(usersRes.data || []);
@@ -305,7 +305,7 @@ const WorkReportTab = () => {
     </div>
   );
 
-  const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin', 'Operations'].includes(stats?.role);
+  const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(stats?.role);
 
   return (
     <div className="flex flex-col h-full bg-bg-primary p-4 md:p-8 overflow-hidden">
