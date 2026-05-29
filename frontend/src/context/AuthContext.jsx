@@ -73,6 +73,24 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
+  const loginWithGoogle = async (googleToken) => {
+    const res = await api.post('/auth/google-login', { token: googleToken });
+    let { token: newToken, role, email: userEmail, fullName, canAccessRecords } = res.data;
+    if (role === 'SuperAdmin') role = 'Super Admin';
+    localStorage.setItem('rrr_token', newToken);
+    localStorage.setItem('rrr_user_role', role);
+    localStorage.setItem('rrr_user_email', userEmail);
+    localStorage.setItem('rrr_user_fullName', fullName || '');
+    localStorage.setItem('rrr_user_canAccessRecords', canAccessRecords);
+    setToken(newToken);
+    setUser({ 
+      role, 
+      email: userEmail, 
+      fullName: fullName || '', 
+      canAccessRecords 
+    });
+  };
+
   const logout = () => {
     localStorage.removeItem('rrr_token');
     localStorage.removeItem('rrr_user_role');
@@ -84,7 +102,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, loginWithGoogle, logout, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );

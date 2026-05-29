@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
+const { OAuth2Client } = require('google-auth-library');
 
 
 const { verifyToken } = require('../middleware/auth');
@@ -103,6 +104,84 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Google Sign-In verification route
+router.post('/google-login', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token is required' });
+
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    
+    // Verify the Google ID Token
+    let ticket;
+    try {
+      ticket = await client.verifyIdToken({
+        idToken: token,
+        audience: process.env.GOOGLE_CLIENT_ID
+      });
+    } catch (verifyError) {
+      console.error('Google token verification failed:', verifyError);
+      return res.status(401).json({ error: 'Google authentication token is invalid or expired' });
+    }
+
+    const payload = ticket.getPayload();
+    const { email, name, picture } = payload;
+
+    // Look up the user by email in the database
+    const normalizedEmail = email ? email.trim() : '';
+    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+
+    if (!user) {
+      return res.status(401).json({ 
+        error: `Email ${email} is not registered in RRR Engine. Please contact your Administrator to create an account.` 
+      });
+    }
+
+    // Generate RRR Engine JWT Token
+    const tokenName = user.fullName || user.name || name || "User";
+    const jwtToken = jwt.sign({ 
+      id: user._id, 
+      email: user.email, 
+      role: user.role, 
+      fullName: tokenName,
+      canAccessRecords: user.canAccessRecords,
+      passwordVersion: user.passwordVersion || 0
+    }, process.env.JWT_SECRET, { expiresIn: '6h' });
+
+    await logAuthAudit(req, user.email, user.role, 'Login', 'User logged in via Google Sign-In');
+
+    // Automatically update display name in database if not set
+    if (!user.fullName) {
+      user.fullName = tokenName;
+      await user.save();
+    }
+
+    // Trigger overdue cases alert once a day on first login
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (user.lastLoginAlertDate !== todayStr) {
+      user.lastLoginAlertDate = todayStr;
+      await user.save();
+
+      const { sendUserOverdueAlerts } = require('../utils/scheduler');
+      sendUserOverdueAlerts(user).catch(err => console.error('Error in sendUserOverdueAlerts:', err));
+    }
+
+    res.json({ 
+      token: jwtToken, 
+      role: user.role, 
+      email: user.email, 
+      fullName: tokenName,
+      canAccessRecords: user.canAccessRecords
+    });
+  } catch (error) {
+    console.error('Google login route error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error during Google Sign-In' });
+  }
+});
+
 
 // Get current user profile from DB (to stay in sync with DB changes)
 router.get('/me', verifyToken, async (req, res) => {
@@ -279,7 +358,7 @@ router.post('/change-password', verifyToken, async (req, res) => {
   }
 });
 
-// Forgot password (request reset)
+// Forgot password (request OTP)
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
@@ -288,41 +367,85 @@ router.post('/forgot-password', async (req, res) => {
     const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
     if (!user) return res.status(404).json({ error: 'User with this email not found' });
 
-    // Generate a secure temporary password
-    const tempPassword = Math.random().toString(36).slice(-8).toUpperCase();
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    // Generate a 6-digit numeric OTP code
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
-    user.password = hashedPassword;
-    user.passwordVersion = (user.passwordVersion || 0) + 1;
+    // Save to user model
+    user.resetOTP = otp;
+    user.resetOTPExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
     await user.save();
 
-    // Send the temporary password via email
+    // Send the OTP via email
     try {
-      const subject = '🔐 Password Reset - RRR Engine';
+      const subject = '🔑 Verification Code: Password Reset - RRR Engine';
       const html = `
-        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-          <h2 style="color: #d97706;">Password Reset Request</h2>
-          <p>Hello <strong>${user.fullName || 'User'}</strong>,</p>
-          <p>You have requested a password reset. Below is your temporary login password:</p>
-          <div style="background: #fff7ed; padding: 15px; border: 1px solid #ffedd5; border-radius: 10px; margin: 20px 0; text-align: center;">
-            <p style="margin: 0; font-size: 24px; font-weight: 900; letter-spacing: 4px; color: #d97706;">${tempPassword}</p>
+        <div style="font-family: sans-serif; padding: 20px; max-width: 500px; margin: 0 auto; border: 1px solid #f1f5f9; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h2 style="color: #0284c7; margin: 0; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px;">RRR Engine</h2>
+            <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">Secure Verification Code</p>
           </div>
-          <p style="color: #ef4444; font-weight: bold;">Important: Please log in using this temporary password and change it immediately from your dashboard security settings.</p>
-          <p style="color: #666; font-size: 12px; border-top: 1px solid #eee; padding-top: 10px; margin-top: 20px;">
-            If you did not request this, please contact your Administrator immediately.
+          <p style="color: #334155; font-size: 14px; line-height: 1.6;">Hello <strong>${user.fullName || 'User'}</strong>,</p>
+          <p style="color: #334155; font-size: 14px; line-height: 1.6;">You have requested to reset your password. Use the verification code below to proceed with the password reset:</p>
+          <div style="background: #f0f9ff; padding: 18px; border: 1px solid #e0f2fe; border-radius: 12px; margin: 24px 0; text-align: center;">
+            <span style="font-size: 32px; font-weight: 900; letter-spacing: 8px; color: #0284c7; font-family: monospace;">${otp}</span>
+          </div>
+          <p style="color: #ef4444; font-size: 12px; font-weight: 600; text-align: center; margin-bottom: 24px;">This code is valid for 10 minutes. Do not share this code with anyone.</p>
+          <p style="color: #64748b; font-size: 11px; border-top: 1px solid #f1f5f9; padding-top: 16px; margin: 20px 0 0 0; text-align: center;">
+            If you did not request this, you can safely ignore this email or contact your Administrator.
           </p>
         </div>
       `;
       await sendEmail(email, subject, '', html);
-      console.log(`Password reset email sent to ${email}`);
+      console.log(`Password reset OTP sent to ${email}`);
     } catch (mailErr) {
       console.error('Failed to send reset email:', mailErr);
-      return res.status(500).json({ error: 'Failed to send reset email. Please contact Admin.' });
+      return res.status(500).json({ error: 'Failed to send verification email. Please contact Admin.' });
     }
 
-    await logAuthAudit(req, email, user.role, 'Security', 'User requested password reset (Temporary password sent)');
+    await logAuthAudit(req, email, user.role, 'Security', 'User requested password reset (OTP sent)');
 
-    res.json({ message: 'Temporary password sent to your email.' });
+    res.json({ message: 'Verification OTP sent to your email.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Verify OTP & Reset Password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Email, OTP, and new password are required' });
+    }
+
+    const normalizedEmail = email.trim();
+    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Validate OTP
+    if (!user.resetOTP || user.resetOTP !== otp.trim()) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    // Check expiry
+    if (!user.resetOTPExpires || new Date() > user.resetOTPExpires) {
+      return res.status(400).json({ error: 'Verification code has expired' });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    user.passwordVersion = (user.passwordVersion || 0) + 1;
+    
+    // Clear OTP fields
+    user.resetOTP = "";
+    user.resetOTPExpires = null;
+    await user.save();
+
+    await logAuthAudit(req, email, user.role, 'Security', 'User successfully reset password using OTP');
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -20,6 +20,7 @@ const AccountantDashTab = () => {
   const [previewFileUrl, setPreviewFileUrl] = useState(null);
   const [previewFileName, setPreviewFileName] = useState('');
 
+
   const [expandedCases, setExpandedCases] = useState({});
 
   const toggleCaseExpand = (caseId) => {
@@ -621,6 +622,7 @@ const AccountantDashTab = () => {
           </div>
         </div>
       </Modal>
+
       <FilePreviewModal
         isOpen={!!previewFileUrl}
         onClose={() => setPreviewFileUrl(null)}

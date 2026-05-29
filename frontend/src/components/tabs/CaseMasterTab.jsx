@@ -5402,7 +5402,7 @@ const CaseMasterTab = () => {
                                   setColSortConfig({ key: col.key, direction: 'asc' });
                                   setOpenColFilter(null);
                                 }}
-                                className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center transition-all ${colSortConfig.key === col.key && colSortConfig.direction === 'asc' ? 'bg-accent/10 text-accent font-black' : 'text-text-secondary hover:bg-bg-input'}`}
+                                className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-start transition-all ${colSortConfig.key === col.key && colSortConfig.direction === 'asc' ? 'bg-accent/10 text-accent font-black' : 'text-text-secondary hover:bg-bg-input'}`}
                               >
                                 <span className="uppercase tracking-wider text-[9px]">
                                   ↑ Sort {col.label === 'Created' || col.label === 'Last Update' ? 'Oldest to Newest' : col.label === 'Amount Received' ? 'Smallest to Largest' : 'A to Z'}
@@ -5414,7 +5414,7 @@ const CaseMasterTab = () => {
                                   setColSortConfig({ key: col.key, direction: 'desc' });
                                   setOpenColFilter(null);
                                 }}
-                                className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center transition-all ${colSortConfig.key === col.key && colSortConfig.direction === 'desc' ? 'bg-accent/10 text-accent font-black' : 'text-text-secondary hover:bg-bg-input'}`}
+                                className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-start transition-all ${colSortConfig.key === col.key && colSortConfig.direction === 'desc' ? 'bg-accent/10 text-accent font-black' : 'text-text-secondary hover:bg-bg-input'}`}
                               >
                                 <span className="uppercase tracking-wider text-[9px]">
                                   ↓ Sort {col.label === 'Created' || col.label === 'Last Update' ? 'Newest to Oldest' : col.label === 'Amount Received' ? 'Largest to Smallest' : 'Z to A'}
@@ -5474,7 +5474,7 @@ const CaseMasterTab = () => {
                                     setTempColFilters(uniqueVals);
                                   }
                                 }}
-                                className="w-full text-left px-3.5 py-1.5 text-[10px] font-bold transition-all flex items-center gap-2 text-text-primary hover:bg-bg-input"
+                                className="w-full text-left px-3.5 py-1.5 text-[10px] font-bold transition-all flex items-center justify-start gap-2 text-text-primary hover:bg-bg-input"
                               >
                                 <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${tempColFilters.length === uniqueVals.length ? 'bg-accent border-accent text-white' : 'border-border'}`}>
                                   {tempColFilters.length === uniqueVals.length && <Check size={8} strokeWidth={4} />}
@@ -5492,7 +5492,7 @@ const CaseMasterTab = () => {
                                       key={val}
                                       type="button"
                                       onClick={() => handleToggleTempFilter(val)}
-                                      className={`w-full text-left px-3.5 py-1.5 text-[10px] font-bold transition-all flex items-center gap-2 ${isChecked ? 'text-text-primary' : 'text-text-muted hover:bg-bg-input'}`}
+                                      className={`w-full text-left px-3.5 py-1.5 text-[10px] font-bold transition-all flex items-center justify-start gap-2 ${isChecked ? 'text-text-primary' : 'text-text-muted hover:bg-bg-input'}`}
                                     >
                                       <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${isChecked ? 'bg-accent border-accent text-white' : 'border-border'}`}>
                                         {isChecked && <Check size={8} strokeWidth={4} />}

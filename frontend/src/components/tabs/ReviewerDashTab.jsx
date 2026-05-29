@@ -11,6 +11,7 @@ const ReviewerDashTab = () => {
   const [refunds, setRefunds] = useState([]);
   const [previewFileUrl, setPreviewFileUrl] = useState(null);
   const [previewFileName, setPreviewFileName] = useState('');
+
   const [isModalOpen, setModalOpen] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState(null);
   const [remark, setRemark] = useState('');
@@ -266,7 +267,8 @@ const ReviewerDashTab = () => {
                         {r.documentLink ? (
                           <button
                               type="button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setPreviewFileUrl(r.documentLink);
                                 setPreviewFileName('Supporting Document');
                               }}
@@ -371,7 +373,8 @@ const ReviewerDashTab = () => {
                           {r.documentLink ? (
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setPreviewFileUrl(r.documentLink);
                                 setPreviewFileName('Supporting Document');
                               }}
@@ -667,6 +670,7 @@ const ReviewerDashTab = () => {
           </div>
         )}
       </Modal>
+
       <FilePreviewModal
         isOpen={!!previewFileUrl}
         onClose={() => setPreviewFileUrl(null)}

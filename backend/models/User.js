@@ -16,7 +16,9 @@ const userSchema = new mongoose.Schema({
   empId: { type: String, default: "" },
   manager: { type: String, default: "" },
   contact: { type: String, default: "" },
-  lastLoginAlertDate: { type: String, default: "" }
+  lastLoginAlertDate: { type: String, default: "" },
+  resetOTP: { type: String, default: "" },
+  resetOTPExpires: { type: Date }
 });
 
 module.exports = mongoose.model('User', userSchema);
