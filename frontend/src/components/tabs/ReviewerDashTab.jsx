@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import FilePreviewModal from '../shared/FilePreviewModal';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import Modal from '../shared/Modal';
@@ -8,6 +9,8 @@ import { Eye } from 'lucide-react';
 
 const ReviewerDashTab = () => {
   const [refunds, setRefunds] = useState([]);
+  const [previewFileUrl, setPreviewFileUrl] = useState(null);
+  const [previewFileName, setPreviewFileName] = useState('');
   const [isModalOpen, setModalOpen] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState(null);
   const [remark, setRemark] = useState('');
@@ -261,14 +264,16 @@ const ReviewerDashTab = () => {
                       <td className="px-6 py-5 text-text-muted leading-relaxed font-medium italic max-w-md whitespace-pre-wrap">"{r.summary}"</td>
                       <td className="px-6 py-5 text-center" onClick={(e) => e.stopPropagation()}>
                         {r.documentLink ? (
-                          <a
-                            href={r.documentLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm"
-                          >
-                            <Eye size={12} /> View Doc
-                          </a>
+                          <button
+                              type="button"
+                              onClick={() => {
+                                setPreviewFileUrl(r.documentLink);
+                                setPreviewFileName('Supporting Document');
+                              }}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm text-left"
+                            >
+                              <Eye size={12} /> View Doc
+                            </button>
                         ) : (
                           <span className="text-[9px] text-text-muted font-bold">—</span>
                         )}
@@ -364,14 +369,16 @@ const ReviewerDashTab = () => {
                         {/* Document Link Column */}
                         <td className="px-6 py-5 text-center" onClick={(e) => e.stopPropagation()}>
                           {r.documentLink ? (
-                            <a
-                              href={r.documentLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm"
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPreviewFileUrl(r.documentLink);
+                                setPreviewFileName('Supporting Document');
+                              }}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm text-left"
                             >
                               <Eye size={12} /> View Doc
-                            </a>
+                            </button>
                           ) : (
                             <span className="text-[9px] text-text-muted font-bold">—</span>
                           )}
@@ -547,14 +554,16 @@ const ReviewerDashTab = () => {
                                       <div>
                                         <p className="text-[8px] text-text-muted font-black uppercase tracking-widest mb-1">Payment Proof</p>
                                         {pProof ? (
-                                          <a
-                                            href={pProof}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green text-white rounded-xl text-[8px] font-black uppercase tracking-wider hover:bg-green-600 transition-all active:scale-95 shadow-sm"
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setPreviewFileUrl(pProof);
+                                              setPreviewFileName('Payment Proof');
+                                            }}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green text-white rounded-xl text-[8px] font-black uppercase tracking-wider hover:bg-green-600 transition-all active:scale-95 shadow-sm text-left"
                                           >
                                             <Eye size={10} /> View Proof
-                                          </a>
+                                          </button>
                                         ) : (
                                           <p className="text-text-muted italic text-[10px]">No proof uploaded</p>
                                         )}
@@ -594,14 +603,16 @@ const ReviewerDashTab = () => {
                       <div>
                         <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-1">Payment Proof</p>
                         {selectedRefund.paymentProof ? (
-                          <a
-                            href={selectedRefund.paymentProof}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-green text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-green-600 transition-all active:scale-95 shadow-sm"
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewFileUrl(selectedRefund.paymentProof);
+                              setPreviewFileName('Payment Proof');
+                            }}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-green text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-green-600 transition-all active:scale-95 shadow-sm text-left"
                           >
                             <Eye size={12} /> View Proof
-                          </a>
+                          </button>
                         ) : (
                           <p className="text-text-muted italic">No proof uploaded</p>
                         )}
@@ -626,14 +637,16 @@ const ReviewerDashTab = () => {
             {selectedRefund.documentLink && (
               <div className="bg-bg-input p-6 rounded-2xl border border-border shadow-inner">
                 <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-3 ml-2">Supporting Document / Proof</p>
-                <a
-                  href={selectedRefund.documentLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-3 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewFileUrl(selectedRefund.documentLink);
+                    setPreviewFileName('Supporting Document');
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm"
                 >
                   <Eye size={14} /> View Supporting Document
-                </a>
+                </button>
               </div>
             )}
 
@@ -654,6 +667,12 @@ const ReviewerDashTab = () => {
           </div>
         )}
       </Modal>
+      <FilePreviewModal
+        isOpen={!!previewFileUrl}
+        onClose={() => setPreviewFileUrl(null)}
+        fileUrl={previewFileUrl}
+        fileName={previewFileName}
+      />
     </div>
   );
 };

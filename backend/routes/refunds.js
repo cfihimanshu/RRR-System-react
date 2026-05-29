@@ -398,8 +398,30 @@ router.put('/:id', verifyToken, async (req, res) => {
         }
 
         caseDoc.refundStatus = mappedRefundStatus;
+
+        // Automatically calculate and sync refundedAmount on Case
+        let totalPaidAmount = 0;
+        reqList.forEach(r => {
+          if (r.status?.toLowerCase() === 'paid') {
+            totalPaidAmount += Number(r.amount) || 0;
+          } else if (r.installments && r.installments.length > 0) {
+            r.installments.forEach(inst => {
+              if (inst.status?.toLowerCase() === 'paid') {
+                totalPaidAmount += Number(inst.amount) || 0;
+              }
+            });
+          }
+        });
+
+        caseDoc.refundedAmount = totalPaidAmount;
+
+        // Auto-set savedAmount to 0 if fully refunded
+        if (totalPaidAmount >= (caseDoc.amtInDispute || 0) && (caseDoc.amtInDispute || 0) > 0) {
+          caseDoc.savedAmount = 0;
+        }
+
         await caseDoc.save();
-        console.log(`Synced Case ${doc.caseId} refundStatus to: ${mappedRefundStatus}`);
+        console.log(`Synced Case ${doc.caseId} refundStatus to: ${mappedRefundStatus}, refundedAmount to: ${totalPaidAmount}`);
       }
     } catch (caseErr) {
       console.error(`Failed to sync refundStatus to Case: ${caseErr.message}`);
@@ -557,6 +579,7 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
     if (caseDoc) {
       if (!remaining) {
         caseDoc.refundStatus = '';
+        caseDoc.refundedAmount = 0;
       } else {
         let mappedRefundStatus = '';
         const reqList = remaining.requests && remaining.requests.length > 0 ? remaining.requests : [remaining];
@@ -580,6 +603,27 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
           mappedRefundStatus = 'Paid';
         }
         caseDoc.refundStatus = mappedRefundStatus;
+
+        // Automatically calculate and sync refundedAmount on Case
+        let totalPaidAmount = 0;
+        reqList.forEach(r => {
+          if (r.status?.toLowerCase() === 'paid') {
+            totalPaidAmount += Number(r.amount) || 0;
+          } else if (r.installments && r.installments.length > 0) {
+            r.installments.forEach(inst => {
+              if (inst.status?.toLowerCase() === 'paid') {
+                totalPaidAmount += Number(inst.amount) || 0;
+              }
+            });
+          }
+        });
+
+        caseDoc.refundedAmount = totalPaidAmount;
+
+        // Auto-set savedAmount to 0 if fully refunded
+        if (totalPaidAmount >= (caseDoc.amtInDispute || 0) && (caseDoc.amtInDispute || 0) > 0) {
+          caseDoc.savedAmount = 0;
+        }
       }
       await caseDoc.save();
     }

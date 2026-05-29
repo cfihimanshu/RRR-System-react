@@ -5,6 +5,7 @@ import Modal from '../shared/Modal';
 import FileUpload from '../shared/FileUpload';
 import { AuthContext } from '../../context/AuthContext';
 import { Image, CheckCircle, UploadCloud, Eye } from 'lucide-react';
+import FilePreviewModal from '../shared/FilePreviewModal';
 
 const AccountantDashTab = () => {
   const [refunds, setRefunds] = useState([]);
@@ -16,6 +17,8 @@ const AccountantDashTab = () => {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [lastUTR, setLastUTR] = useState('');
   const { user } = useContext(AuthContext);
+  const [previewFileUrl, setPreviewFileUrl] = useState(null);
+  const [previewFileName, setPreviewFileName] = useState('');
 
   const [expandedCases, setExpandedCases] = useState({});
 
@@ -365,14 +368,16 @@ const AccountantDashTab = () => {
                         <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-0.5">Supporting Document / Proof</p>
                         <p className="text-[10px] text-text-secondary font-bold">Submitted by requester — click to view</p>
                       </div>
-                      <a
-                        href={selectedRefund.documentLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPreviewFileUrl(selectedRefund.documentLink);
+                          setPreviewFileName('Supporting Document');
+                        }}
                         className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm whitespace-nowrap"
                       >
                         <Eye size={13} /> View Document
-                      </a>
+                      </button>
                     </div>
                   )}
 
@@ -419,14 +424,16 @@ const AccountantDashTab = () => {
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     {proofUrl ? (
-                                      <a
-                                        href={proofUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 bg-accent/10 hover:bg-accent text-accent hover:text-white text-[8px] font-black py-1 px-2.5 rounded-lg transition-all"
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setPreviewFileUrl(proofUrl);
+                                          setPreviewFileName('Payment Proof');
+                                        }}
+                                        className="inline-flex items-center gap-1 bg-accent/10 hover:bg-accent text-accent hover:text-white text-[8px] font-black py-1 px-2.5 rounded-lg transition-all text-left"
                                       >
                                         <Eye size={10} /> View Document
-                                      </a>
+                                      </button>
                                     ) : (
                                       <span className="text-[9px] text-text-muted font-bold">—</span>
                                     )}
@@ -464,14 +471,16 @@ const AccountantDashTab = () => {
                               </td>
                               <td className="px-4 py-4 text-center">
                                 {selectedRefund.paymentProof ? (
-                                  <a
-                                    href={selectedRefund.paymentProof}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 bg-accent/10 hover:bg-accent text-accent hover:text-white text-[8px] font-black py-1 px-2.5 rounded-lg transition-all"
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setPreviewFileUrl(selectedRefund.paymentProof);
+                                      setPreviewFileName('Payment Proof');
+                                    }}
+                                    className="inline-flex items-center gap-1 bg-accent/10 hover:bg-accent text-accent hover:text-white text-[8px] font-black py-1 px-2.5 rounded-lg transition-all text-left"
                                   >
                                     <Eye size={10} /> View Document
-                                  </a>
+                                  </button>
                                 ) : (
                                   <span className="text-[9px] text-text-muted font-bold">—</span>
                                 )}
@@ -612,6 +621,12 @@ const AccountantDashTab = () => {
           </div>
         </div>
       </Modal>
+      <FilePreviewModal
+        isOpen={!!previewFileUrl}
+        onClose={() => setPreviewFileUrl(null)}
+        fileUrl={previewFileUrl}
+        fileName={previewFileName}
+      />
     </div>
   );
 };

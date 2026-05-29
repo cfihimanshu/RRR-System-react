@@ -133,6 +133,9 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
               }
               onClick={() => {
                 if (window.innerWidth <= 768) setSidebarOpen(false);
+                if (tab.id === 'case-master') {
+                  window.dispatchEvent(new CustomEvent('reset-case-view'));
+                }
               }}
             >
               {({ isActive }) => (

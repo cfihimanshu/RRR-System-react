@@ -1699,7 +1699,18 @@ const CaseMasterTab = () => {
     }));
   }, [services, viewCase]);
 
-  const handleFormat = (fieldName, type) => {
+  // Listen to custom reset event from sidebar 'My Cases' link
+  useEffect(() => {
+    const handleReset = () => {
+      setViewCase(null);
+    };
+    window.addEventListener('reset-case-view', handleReset);
+    return () => {
+      window.removeEventListener('reset-case-view', handleReset);
+    };
+  }, []);
+
+  const handleFormat = (fieldName, type, formType = 'case') => {
     const textarea = document.getElementsByName(fieldName)[0];
     if (!textarea) return;
 
@@ -1769,7 +1780,21 @@ const CaseMasterTab = () => {
 
 
     const newValue = beforeText + replacement + afterText;
-    setFormData(prev => ({ ...prev, [fieldName]: newValue }));
+    const targetKey = 
+      formType === 'communication' && fieldName === 'commSummary' ? 'summary' :
+      formType === 'document' && fieldName === 'mouRemarks' ? 'remarks' :
+      formType === 'progress' && fieldName === 'progressSummary' ? 'summary' :
+      fieldName;
+
+    if (formType === 'communication') {
+      setCommFormData(prev => ({ ...prev, [targetKey]: newValue }));
+    } else if (formType === 'document') {
+      setMouFormData(prev => ({ ...prev, [targetKey]: newValue }));
+    } else if (formType === 'progress') {
+      setProgressFormData(prev => ({ ...prev, [targetKey]: newValue }));
+    } else {
+      setFormData(prev => ({ ...prev, [targetKey]: newValue }));
+    }
 
     setTimeout(() => {
       textarea.focus();
@@ -1786,6 +1811,23 @@ const CaseMasterTab = () => {
     }
 
     let updates = { [name]: value };
+
+    if (name === 'refundedAmount') {
+      const refundVal = Number(value) || 0;
+      const disputeVal = Number(formData.amtInDispute) || 0;
+      if (refundVal >= disputeVal && disputeVal > 0) {
+        updates.savedAmount = 0;
+      }
+    }
+
+    if (name === 'savedAmount') {
+      const refundVal = Number(formData.refundedAmount) || 0;
+      const disputeVal = Number(formData.amtInDispute) || 0;
+      if (refundVal >= disputeVal && disputeVal > 0) {
+        value = '0';
+        updates.savedAmount = 0;
+      }
+    }
 
     if (name === 'companyName' || name === 'typeOfComplaint') {
       const comp = name === 'companyName' ? value : formData.companyName;
@@ -1846,8 +1888,10 @@ const CaseMasterTab = () => {
     e.preventDefault();
     const loadingToast = toast.loading('Updating case profile...');
     try {
+      const isFullyRefunded = Number(formData.refundedAmount) >= Number(formData.amtInDispute) && Number(formData.amtInDispute) > 0;
       const payload = {
         ...formData,
+        savedAmount: isFullyRefunded ? 0 : (formData.savedAmount || 0),
         serviceMode,
         servicesSold: services,
         cyberAckNumbers: cyberAcks.filter(Boolean).join(','),
@@ -2154,25 +2198,35 @@ const CaseMasterTab = () => {
     e.preventDefault();
     if (!progressFormData.summary) return toast.error('Update summary is required');
 
+    const isFullyRefunded = Number(progressFormData.refundedAmount) >= Number(viewCase.amtInDispute) && Number(viewCase.amtInDispute) > 0;
+    const adjustedSavedAmount = isFullyRefunded ? 0 : progressFormData.savedAmount;
+
     if (progressFormData.stage === 'Closure') {
-      if (!progressFormData.refundedAmount) return toast.error('Refunded Amount is required');
-      if (!progressFormData.savedAmount) return toast.error('Saved Amount is required');
+      if (progressFormData.refundedAmount === undefined || progressFormData.refundedAmount === null || progressFormData.refundedAmount === '') {
+        return toast.error('Refunded Amount is required');
+      }
+      if (adjustedSavedAmount === undefined || adjustedSavedAmount === null || adjustedSavedAmount === '') {
+        return toast.error('Saved Amount is required');
+      }
     }
 
     if (isSubmitting) return;
     setIsSubmitting(true);
 
+    const adjustedProgressFormData = {
+      ...progressFormData,
+      savedAmount: adjustedSavedAmount !== '' ? Number(adjustedSavedAmount) : ''
+    };
+
     const loadingToast = toast.loading(editingProgress ? 'Updating progress...' : 'Saving progress update...');
     try {
       if (editingProgress) {
-        await api.put(`/progress/${viewCase.caseId}/update/${editingProgress._id}`, {
-          ...progressFormData
-        });
+        await api.put(`/progress/${viewCase.caseId}/update/${editingProgress._id}`, adjustedProgressFormData);
         toast.success('Progress updated', { id: loadingToast });
         setEditingProgress(null);
       } else {
         await api.post('/progress', {
-          ...progressFormData,
+          ...adjustedProgressFormData,
           stage: progressFormData.stage, // Explicitly send the derived stage
           caseId: viewCase.caseId,
           updatedBy: user?.fullName || user?.email,
@@ -2180,7 +2234,9 @@ const CaseMasterTab = () => {
         });
         const caseUpdatePayload = {
           currentStatus: progressFormData.stage,
-          progressPercentage: progressFormData.percentage
+          progressPercentage: progressFormData.percentage,
+          refundedAmount: adjustedProgressFormData.refundedAmount !== '' ? Number(adjustedProgressFormData.refundedAmount) : undefined,
+          savedAmount: adjustedProgressFormData.savedAmount !== '' ? Number(adjustedProgressFormData.savedAmount) : undefined
         };
 
         if (progressFormData.escalateTo) {
@@ -2201,7 +2257,9 @@ const CaseMasterTab = () => {
         const updatedCase = {
           ...viewCase,
           currentStatus: progressFormData.stage,
-          progressPercentage: progressFormData.percentage
+          progressPercentage: progressFormData.percentage,
+          refundedAmount: adjustedProgressFormData.refundedAmount !== '' ? Number(adjustedProgressFormData.refundedAmount) : viewCase.refundedAmount,
+          savedAmount: adjustedProgressFormData.savedAmount !== '' ? Number(adjustedProgressFormData.savedAmount) : viewCase.savedAmount
         };
         if (progressFormData.escalateTo) {
           updatedCase.assignedTo = progressFormData.escalateTo;
@@ -3522,7 +3580,9 @@ const CaseMasterTab = () => {
               </div>
               <div>
                 <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Saved Amount</div>
-                <div className="text-sm font-black text-blue">₹{(viewCase.savedAmount || 0).toLocaleString('en-IN')}</div>
+                <div className="text-sm font-black text-blue">
+                  ₹{(Number(viewCase.refundedAmount) >= Number(viewCase.amtInDispute) && Number(viewCase.amtInDispute) > 0 ? 0 : (viewCase.savedAmount || 0)).toLocaleString('en-IN')}
+                </div>
               </div>
             </div>
           </div>
@@ -3820,31 +3880,31 @@ const CaseMasterTab = () => {
                   <h3 className={sectionTitleClass}><IndianRupee size={18} className="text-yellow" /> Financial Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-6">
                     <div>
-                      <label className={labelClass}>Total Amount Paid (₹)</label>
-                      <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Total Amount Paid (₹)</label>
+                      <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black h-12`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
                     </div>
                     <div>
-                      <label className={labelClass}>Total MOU Value (₹)</label>
-                      <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Total MOU Value (₹)</label>
+                      <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black h-12`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
                     </div>
                     <div>
-                      <label className={labelClass}>Amount In Dispute (₹)</label>
-                      <input type="text" className={`${inputClass} bg-blue-soft font-black text-blue border-blue-soft`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Amount In Dispute (₹)</label>
+                      <input type="text" className={`${inputClass} bg-blue-soft font-black text-blue border-blue-soft h-12`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
                     </div>
                     <div>
-                      <label className={labelClass}>Refunded Amount (₹)</label>
-                      <input type="number" className={`${inputClass} font-black text-green-600`} name="refundedAmount" value={formData.refundedAmount || ''} onChange={handleFormChange} placeholder="0" disabled={!isEditing} />
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Refunded Amount (₹)</label>
+                      <input type="number" className={`${inputClass} font-black text-green-600 h-12`} name="refundedAmount" value={formData.refundedAmount || ''} onChange={handleFormChange} placeholder="0" disabled={!isEditing} />
                     </div>
                     <div>
-                      <label className={labelClass}>Saved Amount (₹)</label>
-                      <input type="number" className={`${inputClass} font-black text-blue`} name="savedAmount" value={formData.savedAmount || ''} onChange={handleFormChange} placeholder="0" disabled={!isEditing} />
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Saved Amount (₹)</label>
+                      <input type="number" className={`${inputClass} font-black text-blue h-12`} name="savedAmount" value={formData.savedAmount || ''} onChange={handleFormChange} placeholder="0" disabled={!isEditing} />
                     </div>
                     <div>
-                      <label className={labelClass}>Date of Last Payment</label>
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Date of Last Payment</label>
                       <input type="date" className={`${inputClass} h-12`} name="dateOfLastPayment" value={formData.dateOfLastPayment || ''} onChange={handleFormChange} disabled={!isEditing} />
                     </div>
                     <div>
-                      <label className={labelClass}>Due Date</label>
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Due Date</label>
                       <input type="date" className={`${inputClass} h-12`} name="dueDate" value={formData.dueDate || ''} onChange={handleFormChange} disabled={!isEditing} />
                     </div>
                   </div>
@@ -3855,8 +3915,8 @@ const CaseMasterTab = () => {
                   <h3 className={sectionTitleClass}><AlertTriangle size={18} className="text-red" /> Risk & Threat Assessment</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
                     <div>
-                      <label className={labelClass}>Social Media Risk</label>
-                      <select className={inputClass} name="smRisk" value={formData.smRisk || 'None'} onChange={handleFormChange} disabled={!isEditing}>
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Social Media Risk</label>
+                      <select className={`${inputClass} h-12`} name="smRisk" value={formData.smRisk || 'None'} onChange={handleFormChange} disabled={!isEditing}>
                         <option value="None">None</option>
                         <option value="Low">Low</option>
                         <option value="High">High</option>
@@ -3864,15 +3924,15 @@ const CaseMasterTab = () => {
                       </select>
                     </div>
                     <div>
-                      <label className={labelClass}>Consumer Complaint Filed?</label>
-                      <select className={inputClass} name="consumerComplaintFiled" value={formData.consumerComplaintFiled || 'No'} onChange={handleFormChange} disabled={!isEditing}>
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Consumer Complaint Filed?</label>
+                      <select className={`${inputClass} h-12`} name="consumerComplaintFiled" value={formData.consumerComplaintFiled || 'No'} onChange={handleFormChange} disabled={!isEditing}>
                         <option value="No">No</option>
                         <option value="Yes">Yes</option>
                       </select>
                     </div>
                     <div>
-                      <label className={labelClass}>Police / Cyber Threat</label>
-                      <select className={inputClass} name="policeThreat" value={formData.policeThreat || 'None'} onChange={handleFormChange} disabled={!isEditing}>
+                      <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Police / Cyber Threat</label>
+                      <select className={`${inputClass} h-12`} name="policeThreat" value={formData.policeThreat || 'None'} onChange={handleFormChange} disabled={!isEditing}>
                         <option value="None">None</option>
                         <option value="Low">Low</option>
                         <option value="High">High</option>
@@ -4129,10 +4189,49 @@ const CaseMasterTab = () => {
 
                         <div className="space-y-2">
                           <label className="text-[9px] font-black text-accent uppercase tracking-[0.2em] ml-1 after:content-['*'] after:ml-0.5">SUMMARY</label>
+                          {/* Formatting Toolbar */}
+                          <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
+                            <button
+                              type="button"
+                              title="Paragraph"
+                              onClick={() => handleFormat('commSummary', 'paragraph', 'communication')}
+                              className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-accent hover:text-accent cursor-pointer"
+                            >
+                              <span className="text-[12px]">¶</span> Paragraph
+                            </button>
+                            <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                            <button
+                              type="button"
+                              title="Bullet List"
+                              onClick={() => handleFormat('commSummary', 'bullets', 'communication')}
+                              className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                            >
+                              <span className="text-[11px]">≡</span> Bullet List
+                            </button>
+                            <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                            <button
+                              type="button"
+                              title="Number List"
+                              onClick={() => handleFormat('commSummary', 'numbers', 'communication')}
+                              className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                            >
+                              <span className="text-[11px]">≡</span> Number List
+                            </button>
+                            <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                            <button
+                              type="button"
+                              title="Bold"
+                              onClick={() => handleFormat('commSummary', 'bold', 'communication')}
+                              className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                            >
+                              <span className="font-black text-[12px]">B</span> Bold
+                            </button>
+                          </div>
                           <textarea
+                            name="commSummary"
                             value={commFormData.summary}
                             onChange={(e) => setCommFormData({ ...commFormData, summary: e.target.value })}
-                            className="w-full bg-bg-input border-2 border-border rounded-xl px-6 py-5 text-sm font-medium text-text-primary focus:border-accent outline-none transition-all h-24 resize-none italic shadow-inner"
+                            className="w-full bg-bg-input border-2 border-border rounded-b-xl !rounded-t-none !border-t-0 px-6 py-5 text-sm font-medium text-text-primary focus:border-accent outline-none transition-all h-24 resize-none italic shadow-inner"
                             placeholder="What was communicated..."
                             required
                           ></textarea>
@@ -4402,12 +4501,51 @@ const CaseMasterTab = () => {
 
                       <div className="space-y-1.5">
                         <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1">REMARKS</label>
+                        {/* Formatting Toolbar */}
+                        <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
+                          <button
+                            type="button"
+                            title="Paragraph"
+                            onClick={() => handleFormat('mouRemarks', 'paragraph', 'document')}
+                            className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-accent hover:text-accent cursor-pointer"
+                          >
+                            <span className="text-[12px]">¶</span> Paragraph
+                          </button>
+                          <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                          <button
+                            type="button"
+                            title="Bullet List"
+                            onClick={() => handleFormat('mouRemarks', 'bullets', 'document')}
+                            className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                          >
+                            <span className="text-[11px]">≡</span> Bullet List
+                          </button>
+                          <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                          <button
+                            type="button"
+                            title="Number List"
+                            onClick={() => handleFormat('mouRemarks', 'numbers', 'document')}
+                            className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                          >
+                            <span className="text-[11px]">≡</span> Number List
+                          </button>
+                          <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                          <button
+                            type="button"
+                            title="Bold"
+                            onClick={() => handleFormat('mouRemarks', 'bold', 'document')}
+                            className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                          >
+                            <span className="font-black text-[12px]">B</span> Bold
+                          </button>
+                        </div>
                         <textarea
+                          name="mouRemarks"
                           rows="2"
                           value={mouFormData.remarks}
                           onChange={(e) => setMouFormData({ ...mouFormData, remarks: e.target.value })}
                           placeholder="Any notes about this MOU version..."
-                          className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-4 text-xs font-black text-text-primary outline-none focus:border-accent min-h-[80px]"
+                          className="w-full bg-bg-input border-2 border-border rounded-b-xl !rounded-t-none !border-t-0 px-5 py-4 text-xs font-black text-text-primary outline-none focus:border-accent min-h-[80px]"
                         ></textarea>
                       </div>
 
@@ -4794,11 +4932,50 @@ const CaseMasterTab = () => {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">UPDATE SUMMARY</label>
+                    {/* Formatting Toolbar */}
+                    <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
+                      <button
+                        type="button"
+                        title="Paragraph"
+                        onClick={() => handleFormat('progressSummary', 'paragraph', 'progress')}
+                        className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-accent hover:text-accent cursor-pointer"
+                      >
+                        <span className="text-[12px]">¶</span> Paragraph
+                      </button>
+                      <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                      <button
+                        type="button"
+                        title="Bullet List"
+                        onClick={() => handleFormat('progressSummary', 'bullets', 'progress')}
+                        className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                      >
+                        <span className="text-[11px]">≡</span> Bullet List
+                      </button>
+                      <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                      <button
+                        type="button"
+                        title="Number List"
+                        onClick={() => handleFormat('progressSummary', 'numbers', 'progress')}
+                        className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                      >
+                        <span className="text-[11px]">≡</span> Number List
+                      </button>
+                      <span className="w-px h-4 bg-border mx-1 shrink-0"></span>
+                      <button
+                        type="button"
+                        title="Bold"
+                        onClick={() => handleFormat('progressSummary', 'bold', 'progress')}
+                        className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap text-text-secondary hover:text-accent cursor-pointer"
+                      >
+                        <span className="font-black text-[12px]">B</span> Bold
+                      </button>
+                    </div>
                     <textarea
+                      name="progressSummary"
                       value={progressFormData.summary}
                       onChange={(e) => setProgressFormData({ ...progressFormData, summary: e.target.value })}
                       placeholder="What has been done? What's the current status?"
-                      className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3 text-xs font-black text-text-primary focus:border-accent outline-none transition-all h-20 resize-none shadow-sm"
+                      className="w-full bg-bg-input border-2 border-border rounded-b-xl !rounded-t-none !border-t-0 px-5 py-3 text-xs font-black text-text-primary focus:border-accent outline-none transition-all h-20 resize-none shadow-sm"
                     ></textarea>
                   </div>
 

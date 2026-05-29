@@ -49,6 +49,8 @@ const RefundRequestTab = () => {
   const [accNum, setAccNum] = useState('');
   const [branch, setBranch] = useState('');
   const [accType, setAccType] = useState('Saving');
+  const [paymentMethod, setPaymentMethod] = useState('Bank');
+  const [upiQrLink, setUpiQrLink] = useState('');
   const containerRef = React.useRef(null);
   const [activeRequestType, setActiveRequestType] = useState(null);
 
@@ -122,7 +124,7 @@ const RefundRequestTab = () => {
     const userName = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)
       ? (allUsers.find(u => u.email === selectedUserEmail)?.fullName || selectedUserEmail)
       : (user?.fullName || user?.name || user?.email);
-      
+
     const emailToExport = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)
       ? selectedUserEmail
       : user?.email;
@@ -150,7 +152,7 @@ const RefundRequestTab = () => {
 
       const sodReport = attendanceReports.find(r => r.date === dayKey && r.type === 'SOD');
       const eodReport = attendanceReports.find(r => r.date === dayKey && r.type === 'EOD');
-      const hasApprovedLeave = leaves.some(l => 
+      const hasApprovedLeave = leaves.some(l =>
         l.requestedBy === emailToExport &&
         l.status === 'Approved' &&
         l.startDate <= dayKey &&
@@ -333,6 +335,18 @@ const RefundRequestTab = () => {
     setBranch(r.branch || '');
     setAccType(r.accType || 'Saving');
 
+    if (r.accType === 'UPI' || r.bankName === 'UPI') {
+      setPaymentMethod('UPI');
+      setUpiQrLink('');
+    } else if (r.accType === 'QR' || r.bankName === 'QR') {
+      setPaymentMethod('QR');
+      setUpiQrLink(r.branch !== 'N/A' ? r.branch : '');
+    } else if (r.accType === 'Card' || r.bankName?.startsWith('CARD') || r.ifsc === 'CARD') {
+      setPaymentMethod('Card');
+    } else {
+      setPaymentMethod('Bank');
+    }
+
     // Smooth scroll the tab container to the top
     if (containerRef.current) {
       containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
@@ -504,16 +518,46 @@ const RefundRequestTab = () => {
     // Filter out any empty installments before submitting
     const cleanedInstallments = installments.filter(inst => inst.amount && inst.dueDate);
 
+    let finalBankName = bankName;
+    let finalAccHolder = accHolder;
+    let finalIfsc = ifsc;
+    let finalAccNum = accNum;
+    let finalBranch = branch;
+    let finalAccType = accType;
+
+    if (paymentMethod === 'UPI') {
+      finalBankName = 'UPI';
+      finalAccHolder = accHolder;
+      finalIfsc = 'UPI';
+      finalAccNum = accNum;
+      finalBranch = 'N/A';
+      finalAccType = 'UPI';
+    } else if (paymentMethod === 'QR') {
+      finalBankName = 'QR';
+      finalAccHolder = accHolder;
+      finalIfsc = 'QR';
+      finalAccNum = 'QR Code';
+      finalBranch = upiQrLink || 'N/A';
+      finalAccType = 'QR';
+    } else if (paymentMethod === 'Card') {
+      finalBankName = bankName;
+      finalAccHolder = accHolder;
+      finalIfsc = 'CARD';
+      finalAccNum = accNum;
+      finalBranch = branch;
+      finalAccType = 'Card';
+    }
+
     const payload = {
       caseId: selectedCaseId,
       amount: totalAmount,
       summary,
-      bankName,
-      accHolder,
-      ifsc,
-      accNum,
-      branch,
-      accType,
+      bankName: finalBankName,
+      accHolder: finalAccHolder,
+      ifsc: finalIfsc,
+      accNum: finalAccNum,
+      branch: finalBranch,
+      accType: finalAccType,
       requestedByName: editingRefund ? editingRefund.requestedByName : (user?.fullName || ""),
       installments: cleanedInstallments,
       documentLink
@@ -546,6 +590,8 @@ const RefundRequestTab = () => {
       setAccNum('');
       setBranch('');
       setAccType('Saving');
+      setPaymentMethod('Bank');
+      setUpiQrLink('');
       fetchMyRefunds();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Submission failed');
@@ -604,7 +650,7 @@ const RefundRequestTab = () => {
         <>
           <div className="section-header flex flex-col items-start gap-4 mb-8 pt-4">
             <div>
-              <h2 className="text-2xl font-black text-text-primary tracking-tight uppercase">
+              <h2 className="text-3xl font-bold text-[#0b72b8] tracking-tight uppercase">
                 Request
               </h2>
             </div>
@@ -695,33 +741,121 @@ const RefundRequestTab = () => {
                     className="w-full bg-bg-input border-2 border-border rounded-xl p-6 text-sm font-medium text-text-primary outline-none focus:border-green focus:ring-4 focus:ring-green-soft transition-all shadow-inner resize-none italic placeholder:text-text-muted"
                   ></textarea>
                 </div>
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Bank Name</label>
-                  <input type="text" name="bankName" required value={bankName} onChange={(e) => setBankName(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="e.g. HDFC BANK" />
+                <div className="flex flex-col gap-3 md:col-span-3">
+                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Payment Method</label>
+                  <div className="flex items-center justify-start gap-3">
+                    {['Bank', 'UPI', 'Card', 'QR'].map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => {
+                          setPaymentMethod(method);
+                          setBankName('');
+                          setAccHolder('');
+                          setIfsc('');
+                          setAccNum('');
+                          setBranch('');
+                          setAccType('Saving');
+                          setUpiQrLink('');
+                        }}
+                        className={`px-5 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all border-2 cursor-pointer ${paymentMethod === method
+                          ? 'bg-green border-green text-white shadow-lg active:scale-95'
+                          : 'bg-bg-card border-border text-text-muted hover:text-text-primary hover:border-text-primary active:scale-95'
+                          }`}
+                      >
+                        {method}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Holder</label>
-                  <input type="text" name="accHolder" required value={accHolder} onChange={(e) => setAccHolder(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="FULL NAME" />
-                </div>
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">IFSC Code</label>
-                  <input type="text" name="ifsc" required value={ifsc} onChange={(e) => setIfsc(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-[0.2em] placeholder:text-text-muted" placeholder="" />
-                </div>
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Number</label>
-                  <input type="text" name="accNum" required value={accNum} onChange={(e) => setAccNum(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner tracking-[0.1em] placeholder:text-text-muted" placeholder="" />
-                </div>
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Branch Location</label>
-                  <input type="text" name="branch" required value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-gray text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="CITY" />
-                </div>
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Type</label>
-                  <select name="accType" value={accType} onChange={(e) => setAccType(e.target.value)} required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest">
-                    <option value="Saving" className="bg-bg-secondary">Saving Account</option>
-                    <option value="Current" className="bg-bg-secondary">Current Account</option>
-                  </select>
-                </div>
+
+                {paymentMethod === 'Bank' && (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Bank Name</label>
+                      <input type="text" name="bankName" required value={bankName} onChange={(e) => setBankName(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="e.g. HDFC BANK" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Holder</label>
+                      <input type="text" name="accHolder" required value={accHolder} onChange={(e) => setAccHolder(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="FULL NAME" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">IFSC Code</label>
+                      <input type="text" name="ifsc" required value={ifsc} onChange={(e) => setIfsc(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-[0.2em] placeholder:text-text-muted" placeholder="" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Number</label>
+                      <input type="text" name="accNum" required value={accNum} onChange={(e) => setAccNum(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner tracking-[0.1em] placeholder:text-text-muted" placeholder="" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Branch Location</label>
+                      <input type="text" name="branch" required value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-gray text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="CITY" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Type</label>
+                      <select name="accType" value={accType} onChange={(e) => setAccType(e.target.value)} required className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest">
+                        <option value="Saving" className="bg-bg-secondary">Saving Account</option>
+                        <option value="Current" className="bg-bg-secondary">Current Account</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                {paymentMethod === 'UPI' && (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">UPI ID</label>
+                      <input type="text" name="accNum" required value={accNum} onChange={(e) => setAccNum(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner placeholder:text-text-muted" placeholder="e.g. name@okbank" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Holder Name</label>
+                      <input type="text" name="accHolder" required value={accHolder} onChange={(e) => setAccHolder(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="FULL NAME" />
+                    </div>
+                  </>
+                )}
+
+                {paymentMethod === 'QR' && (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Account Holder Name</label>
+                      <input type="text" name="accHolder" required value={accHolder} onChange={(e) => setAccHolder(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="FULL NAME" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Upload QR Code</label>
+                      <FileUpload
+                        onUploadSuccess={setUpiQrLink}
+                        label="Upload QR Code"
+                        compact={true}
+                      />
+                      {upiQrLink && (
+                        <div className="mt-1 text-[9px] font-bold text-accent truncate">
+                          Current QR: <a href={upiQrLink} target="_blank" rel="noopener noreferrer" className="underline">View QR Code</a>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {paymentMethod === 'Card' && (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Card Number</label>
+                      <input type="text" name="accNum" required value={accNum} onChange={(e) => setAccNum(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner placeholder:text-text-muted" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Card Holder Name</label>
+                      <input type="text" name="accHolder" required value={accHolder} onChange={(e) => setAccHolder(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="FULL NAME" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Card Network / Type</label>
+                      <input type="text" name="bankName" required value={bankName} onChange={(e) => setBankName(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted" placeholder="e.g. Visa, Mastercard, RuPay" />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Expiry Date</label>
+                      <input type="text" name="branch" required value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green transition-all shadow-inner placeholder:text-text-muted" placeholder="MM/YY" />
+                    </div>
+                  </>
+                )}
 
 
 
@@ -810,6 +944,8 @@ const RefundRequestTab = () => {
                         setAccNum('');
                         setBranch('');
                         setAccType('Saving');
+                        setPaymentMethod('Bank');
+                        setUpiQrLink('');
                       }}
                       className="w-full sm:w-auto bg-bg-card hover:bg-bg-card-hover text-text-primary border-2 border-border font-black py-4 px-12 rounded-2xl transition-all text-xs uppercase tracking-[0.2em] active:scale-95"
                     >
@@ -905,256 +1041,255 @@ const RefundRequestTab = () => {
               </form>
 
               {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
-                  <div className="mt-12 border-t-2 border-border pt-10">
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
-                        <ClipboardList size={22} />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
-                          Leave Request Approvals
-                        </h3>
-                        <p className="text-[10px] text-text-muted font-bold mt-0.5">Approve or reject pending employee leave requests</p>
-                      </div>
+                <div className="mt-12 border-t-2 border-border pt-10">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
+                      <ClipboardList size={22} />
                     </div>
+                    <div>
+                      <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
+                        Leave Request Approvals
+                      </h3>
+                      <p className="text-[10px] text-text-muted font-bold mt-0.5">Approve or reject pending employee leave requests</p>
+                    </div>
+                  </div>
 
-                    {leaves.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12 animate-zoom-in">
-                        {leaves.map((l) => (
-                          <div key={l._id} className="bg-bg-input/10 border-2 border-border rounded-3xl p-6 flex flex-col gap-4 relative group hover:border-purple/50 transition-all">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Requested By</span>
-                                <span className="text-xs font-black text-text-primary mt-0.5 block">{l.requestedByName || l.requestedBy}</span>
-                                <span className="text-[9px] font-bold text-text-muted block">{l.requestedBy}</span>
-                              </div>
-                              <span className={`status-badge text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${
-                                l.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                                l.status === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                  {leaves.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12 animate-zoom-in">
+                      {leaves.map((l) => (
+                        <div key={l._id} className="bg-bg-input/10 border-2 border-border rounded-3xl p-6 flex flex-col gap-4 relative group hover:border-purple/50 transition-all">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Requested By</span>
+                              <span className="text-xs font-black text-text-primary mt-0.5 block">{l.requestedByName || l.requestedBy}</span>
+                              <span className="text-[9px] font-bold text-text-muted block">{l.requestedBy}</span>
+                            </div>
+                            <span className={`status-badge text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${l.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                              l.status === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
                                 'bg-orange-500/10 text-orange-500 border-orange-500/20'
                               }`}>
-                                {l.status}
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 bg-bg-card p-3 rounded-2xl border border-border/60">
-                              <div>
-                                <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">Leave Type</span>
-                                <span className="text-xs font-bold text-text-primary">{l.leaveType}</span>
-                              </div>
-                              <div>
-                                <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">Duration</span>
-                                <span className="text-xs font-bold text-text-primary">{l.startDate} to {l.endDate}</span>
-                              </div>
-                            </div>
-
-                            <div>
-                              <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Reason</span>
-                              <p className="text-xs font-medium text-text-secondary leading-relaxed mt-0.5">{l.reason || 'No reason provided'}</p>
-                            </div>
-
-                            {l.emergencyContact && (
-                              <div>
-                                <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Emergency Contact</span>
-                                <span className="text-xs font-bold text-text-primary mt-0.5 block">{l.emergencyContact}</span>
-                              </div>
-                            )}
-
-                            {l.status === 'Pending Review' && (
-                              <div className="flex gap-3 mt-2 pt-4 border-t border-border/40">
-                                <button
-                                  type="button"
-                                  onClick={() => handleLeaveStatusUpdate(l._id, 'Approved')}
-                                  className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider border-2 border-emerald-500 text-emerald-500 bg-emerald-500/5 rounded-xl cursor-pointer hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1 font-black"
-                                >
-                                  <CheckCircle size={12} /> Approve
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleLeaveStatusUpdate(l._id, 'Rejected')}
-                                  className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider border-2 border-rose-500 text-rose-500 bg-rose-500/5 rounded-xl cursor-pointer hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center gap-1 font-black"
-                                >
-                                  <X size={12} /> Reject
-                                </button>
-                              </div>
-                            )}
+                              {l.status}
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-xs text-text-muted font-bold uppercase border-2 border-dashed border-border rounded-3xl mb-12">
-                        No leave requests found.
-                      </div>
-                    )}
-                  </div>
+
+                          <div className="grid grid-cols-2 gap-4 bg-bg-card p-3 rounded-2xl border border-border/60">
+                            <div>
+                              <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">Leave Type</span>
+                              <span className="text-xs font-bold text-text-primary">{l.leaveType}</span>
+                            </div>
+                            <div>
+                              <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">Duration</span>
+                              <span className="text-xs font-bold text-text-primary">{l.startDate} to {l.endDate}</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Reason</span>
+                            <p className="text-xs font-medium text-text-secondary leading-relaxed mt-0.5">{l.reason || 'No reason provided'}</p>
+                          </div>
+
+                          {l.emergencyContact && (
+                            <div>
+                              <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Emergency Contact</span>
+                              <span className="text-xs font-bold text-text-primary mt-0.5 block">{l.emergencyContact}</span>
+                            </div>
+                          )}
+
+                          {l.status === 'Pending Review' && (
+                            <div className="flex gap-3 mt-2 pt-4 border-t border-border/40">
+                              <button
+                                type="button"
+                                onClick={() => handleLeaveStatusUpdate(l._id, 'Approved')}
+                                className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider border-2 border-emerald-500 text-emerald-500 bg-emerald-500/5 rounded-xl cursor-pointer hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1 font-black"
+                              >
+                                <CheckCircle size={12} /> Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleLeaveStatusUpdate(l._id, 'Rejected')}
+                                className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider border-2 border-rose-500 text-rose-500 bg-rose-500/5 rounded-xl cursor-pointer hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center gap-1 font-black"
+                              >
+                                <X size={12} /> Reject
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-xs text-text-muted font-bold uppercase border-2 border-dashed border-border rounded-3xl mb-12">
+                      No leave requests found.
+                    </div>
+                  )}
+                </div>
               )}
 
-                  <div className="mt-12 border-t border-border pt-10">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
-                        <CalendarDays size={22} />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
-                          User Attendance Calendar
-                        </h3>
-                      </div>
+              <div className="mt-12 border-t border-border pt-10">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
+                      <CalendarDays size={22} />
                     </div>
-
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                      {/* User Selection */}
-                      {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) ? (
-                        <div className="flex flex-col gap-1.5 min-w-[250px]">
-                          <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Select User</span>
-                          <select
-                            className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[42px] cursor-pointer"
-                            value={selectedUserEmail}
-                            onChange={(e) => setSelectedUserEmail(e.target.value)}
-                          >
-                            {allUsers.map((u) => (
-                              <option key={u.email} value={u.email}>
-                                {u.fullName || u.name} ({u.role})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-1.5 min-w-[200px]">
-                          <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">User</span>
-                          <span className="text-sm font-bold text-text-primary h-[42px] flex items-center bg-bg-input/30 px-4 rounded-xl border border-border/40 select-none">
-                            {user?.fullName || user?.name || selectedUserEmail}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Month Navigation */}
-                      <div className="flex items-center gap-3 self-end h-[42px] mt-auto">
-                        <button
-                          type="button"
-                          onClick={handlePrevMonth}
-                          className="p-2 border-2 border-border rounded-xl text-text-primary hover:bg-bg-input hover:border-accent transition-all cursor-pointer flex items-center justify-center"
-                        >
-                          <ChevronRight size={18} className="rotate-180" />
-                        </button>
-                        <span className="text-sm font-black text-text-primary min-w-[140px] text-center select-none capitalize">
-                          {calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleNextMonth}
-                          className="p-2 border-2 border-border rounded-xl text-text-primary hover:bg-bg-input hover:border-accent transition-all cursor-pointer flex items-center justify-center"
-                        >
-                          <ChevronRight size={18} />
-                        </button>
-                      </div>
-
-                      {/* Export Excel Button */}
-                      <button
-                        type="button"
-                        onClick={handleExportAttendance}
-                        className="flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all h-[42px] self-end mt-auto bg-accent hover:bg-accent/80 text-white shadow-md active:scale-95 cursor-pointer border border-accent/20"
-                      >
-                        <Download size={14} /> Export Excel
-                      </button>
+                    <div>
+                      <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
+                        User Attendance Calendar
+                      </h3>
                     </div>
                   </div>
 
-                  {/* Calendar Grid */}
-                  <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-6 overflow-x-auto">
-                    <div className="min-w-[650px] md:min-w-0">
-                      {/* Days Header */}
-                      <div className="grid grid-cols-7 gap-2 mb-3 text-center border-b border-border pb-3">
-                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                          <div key={day} className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">
-                            {day}
-                          </div>
-                        ))}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                    {/* User Selection */}
+                    {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) ? (
+                      <div className="flex flex-col gap-1.5 min-w-[250px]">
+                        <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Select User</span>
+                        <select
+                          className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[42px] cursor-pointer"
+                          value={selectedUserEmail}
+                          onChange={(e) => setSelectedUserEmail(e.target.value)}
+                        >
+                          {allUsers.map((u) => (
+                            <option key={u.email} value={u.email}>
+                              {u.fullName || u.name} ({u.role})
+                            </option>
+                          ))}
+                        </select>
                       </div>
+                    ) : (
+                      <div className="flex flex-col gap-1.5 min-w-[200px]">
+                        <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">User</span>
+                        <span className="text-sm font-bold text-text-primary h-[42px] flex items-center bg-bg-input/30 px-4 rounded-xl border border-border/40 select-none">
+                          {user?.fullName || user?.name || selectedUserEmail}
+                        </span>
+                      </div>
+                    )}
 
-                      {/* Days Grid */}
-                      <div className="grid grid-cols-7 gap-2.5">
-                        {(() => {
-                          const days = getCalendarDays();
-                          const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
-                          const todayKey = todayIST.toISOString().split('T')[0];
+                    {/* Month Navigation */}
+                    <div className="flex items-center gap-3 self-end h-[42px] mt-auto">
+                      <button
+                        type="button"
+                        onClick={handlePrevMonth}
+                        className="p-2 border-2 border-border rounded-xl text-text-primary hover:bg-bg-input hover:border-accent transition-all cursor-pointer flex items-center justify-center"
+                      >
+                        <ChevronRight size={18} className="rotate-180" />
+                      </button>
+                      <span className="text-sm font-black text-text-primary min-w-[140px] text-center select-none capitalize">
+                        {calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleNextMonth}
+                        className="p-2 border-2 border-border rounded-xl text-text-primary hover:bg-bg-input hover:border-accent transition-all cursor-pointer flex items-center justify-center"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
 
-                          return days.map((day, idx) => {
-                            if (!day) {
-                              return <div key={`empty-${idx}`} className="bg-bg-input/20 rounded-xl min-h-[90px] border border-transparent" />;
-                            }
+                    {/* Export Excel Button */}
+                    <button
+                      type="button"
+                      onClick={handleExportAttendance}
+                      className="flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all h-[42px] self-end mt-auto bg-accent hover:bg-accent/80 text-white shadow-md active:scale-95 cursor-pointer border border-accent/20"
+                    >
+                      <Download size={14} /> Export Excel
+                    </button>
+                  </div>
+                </div>
 
-                            const isSunday = day.getDay() === 0;
-                            const yearStr = day.getFullYear();
-                            const monthStr = String(day.getMonth() + 1).padStart(2, '0');
-                            const dateStr = String(day.getDate()).padStart(2, '0');
-                            const dayKey = `${yearStr}-${monthStr}-${dateStr}`;
+                {/* Calendar Grid */}
+                <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-6 overflow-x-auto">
+                  <div className="min-w-[650px] md:min-w-0">
+                    {/* Days Header */}
+                    <div className="grid grid-cols-7 gap-2 mb-3 text-center border-b border-border pb-3">
+                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                        <div key={day} className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
 
-                            const hasSod = attendanceReports.some(r => r.date === dayKey && r.type === 'SOD');
-                            const hasApprovedLeave = leaves.some(l => 
-                              l.requestedBy === selectedUserEmail &&
-                              l.status === 'Approved' &&
-                              l.startDate <= dayKey &&
-                              dayKey <= l.endDate
-                            );
+                    {/* Days Grid */}
+                    <div className="grid grid-cols-7 gap-2.5">
+                      {(() => {
+                        const days = getCalendarDays();
+                        const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+                        const todayKey = todayIST.toISOString().split('T')[0];
 
-                            let status = 'Absent';
-                            if (isSunday) {
-                              status = 'Sunday';
-                            } else if (hasApprovedLeave) {
-                              status = 'Leave';
-                            } else if (hasSod) {
-                              status = 'Present';
-                            } else if (dayKey > todayKey) {
-                              status = 'Future';
-                            }
+                        return days.map((day, idx) => {
+                          if (!day) {
+                            return <div key={`empty-${idx}`} className="bg-bg-input/20 rounded-xl min-h-[90px] border border-transparent" />;
+                          }
 
-                            return (
-                              <div
-                                key={dayKey}
-                                className={`flex flex-col justify-between p-3 rounded-xl border-2 min-h-[90px] transition-all hover:scale-[1.02] ${dayKey === todayKey ? 'border-accent bg-accent/5' : 'border-border bg-bg-input/10'
-                                  }`}
-                              >
-                                <span className="text-xs font-black text-text-primary self-end select-none">
-                                  {day.getDate()}
-                                </span>
+                          const isSunday = day.getDay() === 0;
+                          const yearStr = day.getFullYear();
+                          const monthStr = String(day.getMonth() + 1).padStart(2, '0');
+                          const dateStr = String(day.getDate()).padStart(2, '0');
+                          const dayKey = `${yearStr}-${monthStr}-${dateStr}`;
 
-                                <div className="mt-2">
-                                  {status === 'Sunday' && (
-                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg w-full justify-center border border-blue-500/20 uppercase tracking-wider">
-                                      Off Day
-                                    </span>
-                                  )}
-                                  {status === 'Leave' && (
-                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg w-full justify-center border border-purple-500/20 uppercase tracking-wider">
-                                      Leave
-                                    </span>
-                                  )}
-                                  {status === 'Present' && (
-                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg w-full justify-center border border-emerald-500/20 uppercase tracking-wider">
-                                      Present
-                                    </span>
-                                  )}
-                                  {status === 'Absent' && (
-                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-rose-500 bg-rose-500/10 px-2 py-1 rounded-lg w-full justify-center border border-rose-500/20 uppercase tracking-wider">
-                                      Absent
-                                    </span>
-                                  )}
-                                  {status === 'Future' && (
-                                    <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-text-muted/60 bg-bg-input px-2 py-1 rounded-lg w-full justify-center border border-border uppercase tracking-wider select-none">
-                                      Scheduled
-                                    </span>
-                                  )}
-                                </div>
+                          const hasSod = attendanceReports.some(r => r.date === dayKey && r.type === 'SOD');
+                          const hasApprovedLeave = leaves.some(l =>
+                            l.requestedBy === selectedUserEmail &&
+                            l.status === 'Approved' &&
+                            l.startDate <= dayKey &&
+                            dayKey <= l.endDate
+                          );
+
+                          let status = 'Absent';
+                          if (isSunday) {
+                            status = 'Sunday';
+                          } else if (hasApprovedLeave) {
+                            status = 'Leave';
+                          } else if (hasSod) {
+                            status = 'Present';
+                          } else if (dayKey > todayKey) {
+                            status = 'Future';
+                          }
+
+                          return (
+                            <div
+                              key={dayKey}
+                              className={`flex flex-col justify-between p-3 rounded-xl border-2 min-h-[90px] transition-all hover:scale-[1.02] ${dayKey === todayKey ? 'border-accent bg-accent/5' : 'border-border bg-bg-input/10'
+                                }`}
+                            >
+                              <span className="text-xs font-black text-text-primary self-end select-none">
+                                {day.getDate()}
+                              </span>
+
+                              <div className="mt-2">
+                                {status === 'Sunday' && (
+                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg w-full justify-center border border-blue-500/20 uppercase tracking-wider">
+                                    Off Day
+                                  </span>
+                                )}
+                                {status === 'Leave' && (
+                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg w-full justify-center border border-purple-500/20 uppercase tracking-wider">
+                                    Leave
+                                  </span>
+                                )}
+                                {status === 'Present' && (
+                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg w-full justify-center border border-emerald-500/20 uppercase tracking-wider">
+                                    Present
+                                  </span>
+                                )}
+                                {status === 'Absent' && (
+                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-rose-500 bg-rose-500/10 px-2 py-1 rounded-lg w-full justify-center border border-rose-500/20 uppercase tracking-wider">
+                                    Absent
+                                  </span>
+                                )}
+                                {status === 'Future' && (
+                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-text-muted/60 bg-bg-input px-2 py-1 rounded-lg w-full justify-center border border-border uppercase tracking-wider select-none">
+                                    Scheduled
+                                  </span>
+                                )}
                               </div>
-                            );
-                          });
-                        })()}
-                      </div>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 </div>
-            )
+              </div>
+              )
             </div>
           )}
         </>

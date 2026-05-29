@@ -106,8 +106,8 @@ const PendingRefundsTab = () => {
                   if (g.requests.length === 1) {
                     const r = g.requests[0];
                     return (
-                      <tr key={r._id} className="hover:bg-bg-input/40 transition-all bg-bg-card font-bold select-none">
-                        <td className="px-4 py-5 text-text-muted font-bold">—</td>
+                      <tr key={r._id} onClick={() => { setSelectedRefund(r); setIsDetailOpen(true); }} className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none">
+                        <td className="px-4 py-5 text-text-muted font-bold">{r.timestamp ? new Date(r.timestamp).toLocaleDateString('en-IN') : '—'}</td>
                         <td className="px-4 py-5">
                           <div className="flex flex-col items-start gap-1">
                             <span className="bg-accent-soft text-accent px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-accent-soft">{g.caseId}</span>
@@ -143,9 +143,9 @@ const PendingRefundsTab = () => {
                         <td className="px-4 py-5 text-center"><span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">{isExpanded ? 'Hide Details' : 'Show Requests'}</span></td>
                       </tr>
                       {isExpanded && g.requests.map((r, idx) => (
-                        <tr key={r._id} className="bg-bg-input/20 hover:bg-bg-input/35 transition-all border-l-4 border-accent">
+                        <tr key={r._id} onClick={() => { setSelectedRefund(r); setIsDetailOpen(true); }} className="bg-bg-input/20 hover:bg-bg-input/35 cursor-pointer transition-all border-l-4 border-accent">
                           <td className="px-4 py-5 text-text-muted font-bold italic pl-8">Request #{idx + 1} — {new Date(r.timestamp).toLocaleDateString('en-IN')}</td>
-                          <td className="px-4 py-5"><button onClick={e => { e.stopPropagation(); setSelectedRefund(r); setIsDetailOpen(true); }} className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all">View Details 🔍</button></td>
+                          <td className="px-4 py-5" onClick={e => e.stopPropagation()}><button onClick={e => { e.stopPropagation(); setSelectedRefund(r); setIsDetailOpen(true); }} className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-accent-soft hover:bg-accent hover:text-white transition-all">View Details 🔍</button></td>
                           <td className="px-4 py-5 text-center"><span className="text-base font-black text-green tracking-tight">₹{Number(r.amount).toLocaleString('en-IN')}</span></td>
                           <td className="px-4 py-5 font-black text-text-secondary uppercase text-[10px] tracking-wider">{r.requestedByName || r.requestedBy}</td>
                           <td className="px-4 py-5 text-center" onClick={e => e.stopPropagation()}>

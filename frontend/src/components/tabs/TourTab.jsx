@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import FilePreviewModal from '../shared/FilePreviewModal';
 import api from '../../api/axios';
 import {
   Plane,
@@ -45,6 +46,8 @@ const POPULAR_CITIES = [
 export default function TourTab({ user }) {
   const isAdmin = user?.role === 'Admin' || user?.role === 'Super Admin' || user?.role === 'SuperAdmin';
   const [activeTab, setActiveTab] = useState('request');
+  const [previewFileUrl, setPreviewFileUrl] = useState(null);
+  const [previewFileName, setPreviewFileName] = useState('');
   const [toastMsg, setToastMsg] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [dbRequests, setDbRequests] = useState([]);
@@ -547,7 +550,7 @@ export default function TourTab({ user }) {
 
       await api.put(`/tours/reimbursement/${reimLink}`, payload);
       triggerToast(isDraft ? 'Reimbursement draft saved successfully!' : 'Reimbursement claim submitted successfully!');
-      
+
       if (!isDraft) {
         setReimLink('');
         setActualDeparture('');
@@ -1563,16 +1566,18 @@ export default function TourTab({ user }) {
                             )}
                             {file.name}
                             {!file.uploading && file.url && (
-                              <a
-                                href={file.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                View
-                              </a>
-                            )}
+                               <button
+                                 type="button"
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   setPreviewFileUrl(file.url);
+                                   setPreviewFileName(file.name || 'Pre-Travel Document');
+                                 }}
+                                 className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
+                               >
+                                 View
+                               </button>
+                             )}
                             <button
                               type="button"
                               onClick={(event) => {
@@ -1662,15 +1667,17 @@ export default function TourTab({ user }) {
                                 const name = parts[0];
                                 const url = parts[1] || parts[0];
                                 return (
-                                  <a
+                                  <button
                                     key={docIdx}
-                                    href={url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[9px] font-black text-accent hover:underline lowercase tracking-normal"
+                                    type="button"
+                                    onClick={() => {
+                                      setPreviewFileUrl(url);
+                                      setPreviewFileName(name || 'Pre-Travel Document');
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[9px] font-black text-accent hover:underline lowercase tracking-normal text-left"
                                   >
                                     {name}
-                                  </a>
+                                  </button>
                                 );
                               })}
                             </div>
@@ -1683,15 +1690,17 @@ export default function TourTab({ user }) {
                                 const name = parts[0];
                                 const url = parts[1] || parts[0];
                                 return (
-                                  <a
+                                  <button
                                     key={docIdx}
-                                    href={url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[9px] font-black text-emerald-600 hover:underline lowercase tracking-normal"
+                                    type="button"
+                                    onClick={() => {
+                                      setPreviewFileUrl(url);
+                                      setPreviewFileName(name || 'Receipt/Bill');
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[9px] font-black text-emerald-600 hover:underline lowercase tracking-normal text-left"
                                   >
                                     {name}
-                                  </a>
+                                  </button>
                                 );
                               })}
                             </div>
@@ -2004,16 +2013,18 @@ export default function TourTab({ user }) {
                         )}
                         {file.name}
                         {!file.uploading && file.url && (
-                          <a
-                            href={file.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            View
-                          </a>
-                        )}
+                               <button
+                                 type="button"
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   setPreviewFileUrl(file.url);
+                                   setPreviewFileName(file.name || 'Pre-Travel Document');
+                                 }}
+                                 className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
+                               >
+                                 View
+                               </button>
+                             )}
                         <button
                           type="button"
                           onClick={(event) => {
@@ -2141,17 +2152,19 @@ export default function TourTab({ user }) {
                                 name = docStr.split('/').pop();
                               }
                               return (
-                                <a
-                                  key={idx}
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 bg-bg-card border border-border px-2.5 py-1 rounded-lg text-[9px] font-black text-accent hover:underline uppercase tracking-wider"
-                                >
-                                  <FileCheck size={10} className="text-emerald-500" />
-                                  {name}
-                                </a>
-                              );
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => {
+                                      setPreviewFileUrl(url);
+                                      setPreviewFileName(name || 'Receipt/Bill');
+                                    }}
+                                    className="inline-flex items-center gap-1 bg-bg-card border border-border px-2.5 py-1 rounded-lg text-[9px] font-black text-accent hover:underline uppercase tracking-wider text-left"
+                                  >
+                                    <FileCheck size={10} className="text-emerald-500" />
+                                    {name}
+                                  </button>
+                                );
                             })}
                           </div>
                         )}
@@ -2548,7 +2561,7 @@ export default function TourTab({ user }) {
               {[
                 { icon: Clock, title: 'Advance request timeline', desc: 'Travel requests must be submitted minimum 3 working days before departure. Advance up to 80% of estimated cost will be released 2 days before travel.' },
                 { icon: Receipt, title: 'Reimbursement deadline', desc: 'All claims with original bills must be submitted within 7 calendar days of return. Late claims require HOD approval and may be declined.' },
-                { icon: Car, title: 'Own vehicle reimbursement', desc: 'Reimbursed at ₹8/km for two-wheelers and ₹12/km for four-wheelers. Fuel receipts not required; odometer reading is mandatory.' },
+                { icon: Car, title: 'Own vehicle reimbursement', desc: 'Reimbursed at ₹10/km. Fuel receipts not required; odometer reading is mandatory.' },
                 { icon: Home, title: 'Accommodation', desc: 'Hotel stays must be in approved hotels or guest houses. Personal accommodation with relatives is reimbursed at 50% of the applicable hotel limit.' },
                 { icon: Wrench, title: 'Miscellaneous limit', desc: 'Capped at ₹500 (L3), ₹800 (L2), ₹1,500 (L1) per trip. Receipts required for any single expense above ₹100.' },
                 { icon: X, title: 'Non-reimbursable items', desc: 'Personal entertainment, alcohol, minibar, laundry (trips under 3 nights), personal phone calls, fines / penalties, and costs due to personal negligence are not reimbursable.' },
@@ -2576,6 +2589,12 @@ export default function TourTab({ user }) {
           </div>
         )}
       </div>
+      <FilePreviewModal
+        isOpen={!!previewFileUrl}
+        onClose={() => setPreviewFileUrl(null)}
+        fileUrl={previewFileUrl}
+        fileName={previewFileName}
+      />
     </div>
   );
 }
