@@ -57,8 +57,9 @@ router.post('/login', async (req, res) => {
 
   try {
     const { email, password } = req.body;
-    const normalizedEmail = email ? email.trim().toLowerCase() : '';
-    const user = await User.findOne({ email: normalizedEmail });
+    const normalizedEmail = email ? email.trim() : '';
+    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -133,8 +134,9 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
     // Support both keys for maximum compatibility
     const finalName = fullName || name || "New User";
 
-    const normalizedEmail = email ? email.trim().toLowerCase() : '';
-    const existing = await User.findOne({ email: normalizedEmail });
+    const normalizedEmail = email ? email.trim() : '';
+    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const existing = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
     if (existing) return res.status(400).json({ error: 'User already exists' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -281,8 +283,9 @@ router.post('/change-password', verifyToken, async (req, res) => {
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
-    const normalizedEmail = email ? email.trim().toLowerCase() : '';
-    const user = await User.findOne({ email: normalizedEmail });
+    const normalizedEmail = email ? email.trim() : '';
+    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
     if (!user) return res.status(404).json({ error: 'User with this email not found' });
 
     // Generate a secure temporary password
