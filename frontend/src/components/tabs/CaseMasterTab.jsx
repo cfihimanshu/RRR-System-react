@@ -201,16 +201,22 @@ const CaseMasterTab = () => {
   const [colFilterSearch, setColFilterSearch] = useState('');  // search text in dropdown
   const [colSortConfig, setColSortConfig] = useState({ key: null, direction: null }); // { key, direction }
   const [tempColFilters, setTempColFilters] = useState([]);    // temp selection list for open dropdown
+  const [colFilterPos, setColFilterPos] = useState({ top: 0, left: 0 }); // screen position of dropdown
 
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleOpenColFilter = (colKey, uniqueVals) => {
+  const handleOpenColFilter = (colKey, uniqueVals, e) => {
     if (openColFilter === colKey) {
       setOpenColFilter(null);
       setTempColFilters([]);
     } else {
+      // Capture button position for fixed-position dropdown
+      if (e?.currentTarget) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        setColFilterPos({ top: rect.bottom + 6, left: rect.left });
+      }
       setOpenColFilter(colKey);
       setColFilterSearch('');
       if (columnFilters[colKey] && columnFilters[colKey].length > 0) {
@@ -485,7 +491,7 @@ const CaseMasterTab = () => {
       const s = normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy);
       if (s && s !== '—') statuses.add(s);
     });
-    
+
     const orderMap = {
       'Assigned': 0,
       'Analysis': 1,
@@ -497,13 +503,13 @@ const CaseMasterTab = () => {
     return ['All Status', ...Array.from(statuses).sort((a, b) => {
       const indexA = orderMap[a];
       const indexB = orderMap[b];
-      
+
       if (indexA !== undefined && indexB !== undefined) {
         return indexA - indexB;
       }
       if (indexA !== undefined) return -1;
       if (indexB !== undefined) return 1;
-      
+
       return a.localeCompare(b);
     })];
   }, [cases]);
@@ -968,6 +974,12 @@ const CaseMasterTab = () => {
       setAppliedFilters(prev => ({ ...prev, refundStatus: rfArray }));
       setTempFilters(prev => ({ ...prev, refundStatus: rfArray }));
     }
+    if (location.state?.assigneeFilter) {
+      const af = location.state.assigneeFilter;
+      const afArray = Array.isArray(af) ? af : [af];
+      setAppliedFilters(prev => ({ ...prev, assignee: afArray }));
+      setTempFilters(prev => ({ ...prev, assignee: afArray }));
+    }
 
     // Clear state after applying so it doesn't persist on refresh
     if (location.state) {
@@ -1033,18 +1045,28 @@ const CaseMasterTab = () => {
   const handleExportExcel = () => {
     if (filteredCases.length === 0) return toast.error('No data to export');
 
-    const headers = ['Case ID', 'Created', 'Company', 'Client', 'Type of Complaint', 'Amount Received', 'Priority', 'Status', 'Assigned To'];
-    const data = filteredCases.map(c => ({
-      'Case ID': c.caseId,
-      'Created': c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '',
-      'Company': c.companyName,
-      'Client': c.clientName,
-      'Type of Complaint': c.typeOfComplaint || '-',
-      'Amount Received': c.totalAmtPaid || '0',
-      'Priority': c.priority,
-      'Status': normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy),
-      'Assigned To': c.assignedTo || c.initiatedBy || ''
-    }));
+    const headers = ['Case ID', 'Created', 'Company', 'Client', 'Type of Complaint', 'Amount Received', 'Priority', 'Status', 'Refund', 'Assigned To'];
+    const data = filteredCases.map(c => {
+      const cRef = refundsList.find(r => r.caseId === c.caseId);
+      let refundVal = 'No Refund';
+      if (cRef) {
+        const isPaid = cRef.transactionId && (cRef.installments || []).length <= 1;
+        refundVal = (cRef.status === 'Paid' || isPaid) ? 'Paid' : 'Pending';
+      }
+
+      return {
+        'Case ID': c.caseId,
+        'Created': c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '',
+        'Company': c.companyName,
+        'Client': c.clientName,
+        'Type of Complaint': c.typeOfComplaint || '-',
+        'Amount Received': c.totalAmtPaid || '0',
+        'Priority': c.priority,
+        'Status': normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy),
+        'Refund': refundVal,
+        'Assigned To': c.assignedTo || c.initiatedBy || ''
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -1557,10 +1579,29 @@ const CaseMasterTab = () => {
 
 
   const handleViewCase = async (c) => {
+    if (user?.role?.toLowerCase().trim() === 'operation admin') {
+      const assignedName = (c.assignedTo || '').trim().toLowerCase();
+      const myName = (user?.fullName || user?.name || '').trim().toLowerCase();
+      const myEmail = (user?.email || '').trim().toLowerCase();
+      if (assignedName !== myName && assignedName !== myEmail) {
+        toast.error("Access Denied: This case is not assigned to you.");
+        return;
+      }
+    }
     try {
       // Fetch fresh case data from backend for this specific case
       const freshRes = await api.get(`/cases/${c.caseId}`);
       const caseToUse = freshRes.data || c;
+
+      if (user?.role?.toLowerCase().trim() === 'operation admin') {
+        const assignedName = (caseToUse.assignedTo || '').trim().toLowerCase();
+        const myName = (user?.fullName || user?.name || '').trim().toLowerCase();
+        const myEmail = (user?.email || '').trim().toLowerCase();
+        if (assignedName !== myName && assignedName !== myEmail) {
+          toast.error("Access Denied: This case is not assigned to you.");
+          return;
+        }
+      }
 
       setViewCase(caseToUse);
       setActiveDetailTab('Case Study');
@@ -1585,9 +1626,9 @@ const CaseMasterTab = () => {
         engagementNote: caseToUse.engagementNote || '',
         caseSummary: caseToUse.caseSummary || caseToUse.summary || '',
         clientAllegation: caseToUse.clientAllegation || caseToUse.allegation || '',
-        totalAmtPaid: caseToUse.totalAmtPaid || caseToUse.amountPaid || '',
-        totalMouValue: caseToUse.totalMouValue || caseToUse.mouValue || '',
-        amtInDispute: caseToUse.amtInDispute || caseToUse.disputeAmount || '',
+        totalAmtPaid: (caseToUse.totalAmtPaid !== undefined && caseToUse.totalAmtPaid !== null && caseToUse.totalAmtPaid !== '') ? caseToUse.totalAmtPaid : ((caseToUse.amountPaid !== undefined && caseToUse.amountPaid !== null && caseToUse.amountPaid !== '') ? caseToUse.amountPaid : ''),
+        totalMouValue: (caseToUse.totalMouValue !== undefined && caseToUse.totalMouValue !== null && caseToUse.totalMouValue !== '') ? caseToUse.totalMouValue : ((caseToUse.mouValue !== undefined && caseToUse.mouValue !== null && caseToUse.mouValue !== '') ? caseToUse.mouValue : ''),
+        amtInDispute: (caseToUse.amtInDispute !== undefined && caseToUse.amtInDispute !== null && caseToUse.amtInDispute !== '') ? caseToUse.amtInDispute : ((caseToUse.disputeAmount !== undefined && caseToUse.disputeAmount !== null && caseToUse.disputeAmount !== '') ? caseToUse.disputeAmount : ''),
         dateOfLastPayment: formatDateForInput(caseToUse.dateOfLastPayment || ''),
         refundedAmount: caseToUse.refundedAmount || 0,
         savedAmount: caseToUse.savedAmount || 0,
@@ -1686,9 +1727,9 @@ const CaseMasterTab = () => {
 
     setFormData(prev => ({
       ...prev,
-      totalAmtPaid: totalPaid || '',
-      totalMouValue: totalMou || '',
-      amtInDispute: dispute || ''
+      totalAmtPaid: totalPaid === 0 ? 0 : (totalPaid || ''),
+      totalMouValue: totalMou === 0 ? 0 : (totalMou || ''),
+      amtInDispute: dispute === 0 ? 0 : (dispute || '')
     }));
   }, [services, viewCase]);
 
@@ -1773,11 +1814,11 @@ const CaseMasterTab = () => {
 
 
     const newValue = beforeText + replacement + afterText;
-    const targetKey = 
+    const targetKey =
       formType === 'communication' && fieldName === 'commSummary' ? 'summary' :
-      formType === 'document' && fieldName === 'mouRemarks' ? 'remarks' :
-      formType === 'progress' && fieldName === 'progressSummary' ? 'summary' :
-      fieldName;
+        formType === 'document' && fieldName === 'mouRemarks' ? 'remarks' :
+          formType === 'progress' && fieldName === 'progressSummary' ? 'summary' :
+            fieldName;
 
     if (formType === 'communication') {
       setCommFormData(prev => ({ ...prev, [targetKey]: newValue }));
@@ -1928,9 +1969,9 @@ const CaseMasterTab = () => {
           engagementNote: updatedCase.engagementNote || '',
           caseSummary: updatedCase.caseSummary || updatedCase.summary || '',
           clientAllegation: updatedCase.clientAllegation || updatedCase.allegation || '',
-          totalAmtPaid: updatedCase.totalAmtPaid || updatedCase.amountPaid || '',
-          totalMouValue: updatedCase.totalMouValue || updatedCase.mouValue || '',
-          amtInDispute: updatedCase.amtInDispute || updatedCase.disputeAmount || '',
+          totalAmtPaid: (updatedCase.totalAmtPaid !== undefined && updatedCase.totalAmtPaid !== null && updatedCase.totalAmtPaid !== '') ? updatedCase.totalAmtPaid : ((updatedCase.amountPaid !== undefined && updatedCase.amountPaid !== null && updatedCase.amountPaid !== '') ? updatedCase.amountPaid : ''),
+          totalMouValue: (updatedCase.totalMouValue !== undefined && updatedCase.totalMouValue !== null && updatedCase.totalMouValue !== '') ? updatedCase.totalMouValue : ((updatedCase.mouValue !== undefined && updatedCase.mouValue !== null && updatedCase.mouValue !== '') ? updatedCase.mouValue : ''),
+          amtInDispute: (updatedCase.amtInDispute !== undefined && updatedCase.amtInDispute !== null && updatedCase.amtInDispute !== '') ? updatedCase.amtInDispute : ((updatedCase.disputeAmount !== undefined && updatedCase.disputeAmount !== null && updatedCase.disputeAmount !== '') ? updatedCase.disputeAmount : ''),
           dateOfLastPayment: formatDateForInput(updatedCase.dateOfLastPayment || ''),
           refundedAmount: updatedCase.refundedAmount || 0,
           savedAmount: updatedCase.savedAmount || 0,
@@ -3313,7 +3354,7 @@ const CaseMasterTab = () => {
                   }}
                 >
                   <option value="">Bulk Assign Mode...</option>
-                  {opsUsers.filter(u => u.role?.toLowerCase() === 'operations' || u.role?.toLowerCase() === 'admin').map(u => (
+                  {opsUsers.filter(u => ['operations', 'admin', 'operation admin'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`bulk-${u._id || u.email}`} value={u.fullName}>Assign: {u.fullName}</option>
                   ))}
                 </select>
@@ -3834,15 +3875,15 @@ const CaseMasterTab = () => {
                   <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-6">
                     <div>
                       <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Total Amount Paid (₹)</label>
-                      <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black h-12`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
+                      <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black h-12`} name="totalAmtPaid" value={(formData.totalAmtPaid !== undefined && formData.totalAmtPaid !== null && formData.totalAmtPaid !== '') ? formData.totalAmtPaid : ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
                     </div>
                     <div>
                       <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Total MOU Value (₹)</label>
-                      <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black h-12`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
+                      <input type="text" className={`${inputClass} !bg-bg-secondary !border-dashed font-black h-12`} name="totalMouValue" value={(formData.totalMouValue !== undefined && formData.totalMouValue !== null && formData.totalMouValue !== '') ? formData.totalMouValue : ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
                     </div>
                     <div>
                       <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Amount In Dispute (₹)</label>
-                      <input type="text" className={`${inputClass} bg-blue-soft font-black text-blue border-blue-soft h-12`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
+                      <input type="text" className={`${inputClass} bg-blue-soft font-black text-blue border-blue-soft h-12`} name="amtInDispute" value={(formData.amtInDispute !== undefined && formData.amtInDispute !== null && formData.amtInDispute !== '') ? formData.amtInDispute : ''} readOnly placeholder="Auto calculated" disabled={!isEditing} />
                     </div>
                     <div>
                       <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Refunded Amount (₹)</label>
@@ -5039,7 +5080,7 @@ const CaseMasterTab = () => {
                         className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent uppercase tracking-widest"
                       >
                         <option value="">-- NO ESCALATION --</option>
-                        {opsUsers.filter(u => ['operations', 'legal'].includes(u.role?.toLowerCase())).map(u => (
+                        {opsUsers.filter(u => ['operations', 'legal', 'operation admin'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                           <option key={`escalate-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                         ))}
                       </select>
@@ -5357,7 +5398,7 @@ const CaseMasterTab = () => {
                           {col.key && (
                             <button
                               type="button"
-                              onClick={e => { e.stopPropagation(); handleOpenColFilter(col.key, uniqueVals); }}
+                              onClick={e => { e.stopPropagation(); handleOpenColFilter(col.key, uniqueVals, e); }}
                               className={`p-0.5 rounded transition-all ${isActive || isSorted ? 'text-accent bg-accent/15 scale-110 font-bold' : 'text-text-muted hover:text-accent'}`}
                               title={`Sort & Filter by ${col.label}`}
                             >
@@ -5369,7 +5410,8 @@ const CaseMasterTab = () => {
                         {/* Excel/Google Sheets style filter panel */}
                         {col.key && openColFilter === col.key && (
                           <div
-                            className="absolute top-full left-0 mt-2 z-[9999] bg-bg-card border-2 border-border rounded-2xl shadow-2xl w-[260px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 text-left font-sans text-xs"
+                            className="fixed z-[50000] bg-bg-card border-2 border-border rounded-2xl shadow-2xl w-[260px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 text-left font-sans text-xs"
+                            style={{ top: colFilterPos.top, left: Math.min(colFilterPos.left, window.innerWidth - 280) }}
                             onClick={e => e.stopPropagation()}
                           >
                             {/* Sorting Actions */}
@@ -5759,7 +5801,7 @@ const CaseRow = memo(({
               >
                 <option value="">Assign</option>
                 {['admin', 'super admin'].includes(user?.role?.toLowerCase())
-                  ? opsUsers.filter(u => u.role?.toLowerCase() === 'operations' || u.role?.toLowerCase() === 'admin').map(u => (
+                  ? opsUsers.filter(u => ['operations', 'admin', 'operation admin'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                   ))
                   : (user?.fullName && (

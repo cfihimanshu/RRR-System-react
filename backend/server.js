@@ -517,6 +517,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         activeNameRegex = /__non_existent_user__/i;
         ownershipQuery = { assignedTo: '__non_existent_user__' };
       }
+    } else if (['operation admin', 'operation admin'].includes(req.user.role?.toLowerCase().trim())) {
+      ownershipQuery = { assignedTo: myNameRegex };
     } else if (req.user.role !== 'Admin') {
       ownershipQuery = {
         $or: [
@@ -1355,14 +1357,16 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       lastEods.forEach(e => { eodMap[`${e.userEmail}_${e.date}`] = e; });
 
       allNonAdmins.forEach(user => {
+        const isExempt = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user.role);
+
         const hasSod = reportsToday.some(r => r.type === 'SOD' && (r.userEmail === user.email || r.userName === user.fullName));
         const hasReport48h = reportsLast48Hrs.some(r => r.userEmail === user.email || r.userName === user.fullName);
 
-        if (!hasSod) missingSodUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
+        if (!hasSod && !isExempt) missingSodUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
         if (!hasReport48h) missingNoUpdateUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
 
         const lastSod = sodMap[user.email];
-        if (lastSod) {
+        if (lastSod && !isExempt) {
           const lastEod = eodMap[`${user.email}_${lastSod.date}`];
           if (!lastEod) missingEodUsers.push({ name: user.fullName || user.name || user.email, email: user.email, role: user.role });
         }

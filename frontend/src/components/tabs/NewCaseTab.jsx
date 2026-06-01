@@ -151,9 +151,9 @@ const NewCaseTab = () => {
           engagementNote: editCase.engagementNote || data.engagementNote || '',
           caseSummary: editCase.caseSummary || editCase.summary || '',
           clientAllegation: editCase.clientAllegation || editCase.allegation || '',
-          totalAmtPaid: editCase.totalAmtPaid || editCase.amountPaid || '',
-          totalMouValue: editCase.totalMouValue || editCase.mouValue || '',
-          amtInDispute: editCase.amtInDispute || editCase.disputeAmount || '',
+          totalAmtPaid: (editCase.totalAmtPaid !== undefined && editCase.totalAmtPaid !== null && editCase.totalAmtPaid !== '') ? editCase.totalAmtPaid : ((editCase.amountPaid !== undefined && editCase.amountPaid !== null && editCase.amountPaid !== '') ? editCase.amountPaid : ''),
+          totalMouValue: (editCase.totalMouValue !== undefined && editCase.totalMouValue !== null && editCase.totalMouValue !== '') ? editCase.totalMouValue : ((editCase.mouValue !== undefined && editCase.mouValue !== null && editCase.mouValue !== '') ? editCase.mouValue : ''),
+          amtInDispute: (editCase.amtInDispute !== undefined && editCase.amtInDispute !== null && editCase.amtInDispute !== '') ? editCase.amtInDispute : ((editCase.disputeAmount !== undefined && editCase.disputeAmount !== null && editCase.disputeAmount !== '') ? editCase.disputeAmount : ''),
           dateOfLastPayment: formatDateForInput(editCase.dateOfLastPayment || ''),
           dueDate: formatDateForInput(editCase.dueDate || ''),
           initiatedBy: editCase.initiatedBy || editCase.initiator || '',
@@ -287,9 +287,9 @@ const NewCaseTab = () => {
 
     setFormData(prev => ({
       ...prev,
-      totalAmtPaid: totalPaid || '',
-      totalMouValue: totalMou || '',
-      amtInDispute: dispute || ''
+      totalAmtPaid: totalPaid === 0 ? 0 : (totalPaid || ''),
+      totalMouValue: totalMou === 0 ? 0 : (totalMou || ''),
+      amtInDispute: dispute === 0 ? 0 : (dispute || '')
     }));
 
     // Also update engagement note if MOU value changes
@@ -919,7 +919,7 @@ const NewCaseTab = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
               <div>
                 <label className={labelClass}>Total Amount Paid (₹)</label>
-                <input type="text" className={`${inputClass} h-12 !bg-bg-secondary !border-dashed font-black`} name="totalAmtPaid" value={formData.totalAmtPaid || ''} readOnly placeholder="Auto calculated" />
+                <input type="text" className={`${inputClass} h-12 !bg-bg-secondary !border-dashed font-black`} name="totalAmtPaid" value={(formData.totalAmtPaid !== undefined && formData.totalAmtPaid !== null && formData.totalAmtPaid !== '') ? formData.totalAmtPaid : ''} readOnly placeholder="Auto calculated" />
               </div>
               {/* <div>
                 <label className={labelClass}>MOU Signed?</label>
@@ -930,11 +930,11 @@ const NewCaseTab = () => {
               </div> */}
               <div>
                 <label className={labelClass}>Total MOU Value (₹)</label>
-                <input type="text" className={`${inputClass} h-12 !bg-bg-secondary !border-dashed font-black`} name="totalMouValue" value={formData.totalMouValue || ''} readOnly placeholder="Auto calculated" />
+                <input type="text" className={`${inputClass} h-12 !bg-bg-secondary !border-dashed font-black`} name="totalMouValue" value={(formData.totalMouValue !== undefined && formData.totalMouValue !== null && formData.totalMouValue !== '') ? formData.totalMouValue : ''} readOnly placeholder="Auto calculated" />
               </div>
               <div>
                 <label className={labelClass}>Amount In Dispute (₹)</label>
-                <input type="text" className={`${inputClass} h-12 bg-blue-soft font-black text-blue border-blue-soft`} name="amtInDispute" value={formData.amtInDispute || ''} readOnly placeholder="Auto calculated" />
+                <input type="text" className={`${inputClass} h-12 bg-blue-soft font-black text-blue border-blue-soft`} name="amtInDispute" value={(formData.amtInDispute !== undefined && formData.amtInDispute !== null && formData.amtInDispute !== '') ? formData.amtInDispute : ''} readOnly placeholder="Auto calculated" />
               </div>
               <div>
                 <label className={labelClass}>Date of Last Payment</label>
@@ -1177,7 +1177,7 @@ const NewCaseTab = () => {
                     {/* Only show Operations users in dropdown for Admin. For other roles (e.g. Operations), only show their own name. */}
                     {user?.role?.toLowerCase() !== 'staff' && (
                       ['admin', 'super admin', 'superadmin'].includes(user?.role?.toLowerCase())
-                        ? userList.filter(u => u.role?.toLowerCase() === 'operations' || u.role?.toLowerCase() === 'admin').map(u => (
+                        ? userList.filter(u => ['operations', 'admin', 'operation admin'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                             <option key={u.email} value={u.fullName}>{u.fullName}</option>
                           ))
                         : (user?.fullName && (

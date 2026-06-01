@@ -1,7 +1,7 @@
 export const TAB_ACCESS = {
-  "dashboard":            ["Admin", "Operations", "Staff", "Accountant", "Super Admin", "SuperAdmin", "Reviewer"],
+  "dashboard":            ["Admin", "Operations", "Staff", "Accountant", "Super Admin", "SuperAdmin", "Reviewer", "Operation Admin", "operation admin"],
   "new-case":             ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin"],
-  "case-master":          ["Admin", "Operations", "Reviewer", "Super Admin", "SuperAdmin"],
+  "case-master":          ["Admin", "Operations", "Reviewer", "Super Admin", "SuperAdmin", "Operation Admin", "operation admin"],
   "history":              ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin"],
   "action-log":           ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin"],
   "comm-log":             ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin"],
@@ -13,9 +13,9 @@ export const TAB_ACCESS = {
   "accountant-dashboard": ["Admin", "Accountant", "Super Admin", "SuperAdmin"],
   "legal-dashboard":      ["Legal", "Super Admin", "SuperAdmin"],
   "agreement-gen":        ["Operations", "Super Admin", "SuperAdmin"],
-  "my-task":              ["Admin", "Operations", "Staff", "Accountant", "Legal", "Super Admin", "SuperAdmin"],
+  "my-task":              ["Admin", "Operations", "Staff", "Accountant", "Legal", "Super Admin", "SuperAdmin", "Operation Admin", "operation admin"],
   "sod-eod-reports":      ["Admin", "Operations", "Staff", "Accountant", "Super Admin", "SuperAdmin"],
-  "work-report":          ["Admin", "Operations", "Legal", "Super Admin", "SuperAdmin"],
+  "work-report":          ["Admin", "Operations", "Legal", "Super Admin", "SuperAdmin", "Operation Admin", "operation admin"],
   "refund-request":       ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin"],
   "pending-refunds":      ["Admin", "Super Admin", "SuperAdmin"]
 };

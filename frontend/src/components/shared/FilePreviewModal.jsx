@@ -9,12 +9,12 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     const urlParts = fileUrl.split('?')[0].split('/');
     const lastPart = urlParts[urlParts.length - 1];
     const urlExt = (lastPart.split('.').pop() || '').toLowerCase();
-    
+
     const knownExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
     if (knownExtensions.includes(urlExt)) {
       return urlExt;
     }
-    
+
     // Fallback to fileName extension if URL doesn't have a standard extension (e.g. ImageKit uploads)
     if (fileName) {
       const nameExt = (fileName.split('.').pop() || '').toLowerCase();
@@ -39,7 +39,7 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[50000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
@@ -63,13 +63,13 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
             >
               <ExternalLink size={11} /> Open Original
             </a>
-            <a
+            {/* <a
               href={fileUrl}
               download={fileName}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-input border border-border text-text-secondary hover:bg-bg-input/60 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all"
             >
               <Download size={11} /> Download
-            </a>
+            </a> */}
             <button
               onClick={onClose}
               className="p-2 rounded-lg bg-bg-input hover:bg-red-soft text-text-muted hover:text-red border border-border transition-all"

@@ -347,7 +347,7 @@ const CaseStudyTab = ({ caseData = null }) => {
             <tbody>
               {totalPaid > 0 && <tr><td className={labelClass}>Total Amount Paid by Client</td><td className={`${valueClass} font-black text-gray-950`}>Rs. {totalPaid.toLocaleString('en-IN')}/-</td></tr>}
 
-              {totalMou > 0 && <tr><td className={labelClass}>Total MOU Amount</td><td className={valueClass}>Rs. {totalMou.toLocaleString('en-IN')}/-</td></tr>}
+              {totalMou !== undefined && totalMou !== null && <tr><td className={labelClass}>Total MOU Amount</td><td className={valueClass}>Rs. {totalMou.toLocaleString('en-IN')}/-</td></tr>}
               {data?.amtInDispute !== undefined && data?.amtInDispute !== null && data?.amtInDispute !== '' && (
                 <tr>
                   <td className={labelClass}>Amount In Dispute</td>
@@ -807,7 +807,12 @@ const CaseStudyTab = ({ caseData = null }) => {
             )}
           </>
         )}
-
+        <FilePreviewModal
+          isOpen={!!previewFileUrl}
+          onClose={() => setPreviewFileUrl(null)}
+          fileUrl={previewFileUrl}
+          fileName={previewFileName}
+        />
       </div>
     );
   }

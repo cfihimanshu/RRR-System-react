@@ -150,7 +150,8 @@ async function buildCaseQuery(req) {
     req.user.role !== 'Admin' &&
     req.user.role !== 'Reviewer' &&
     req.user.role !== 'Super Admin' &&
-    req.user.role !== 'SuperAdmin'
+    req.user.role !== 'SuperAdmin' &&
+    !['operation admin', 'operation admin'].includes(req.user.role?.toLowerCase().trim())
   ) {
     const User = require('../models/User');
     const dbUser = await User.findById(req.user.id).lean();

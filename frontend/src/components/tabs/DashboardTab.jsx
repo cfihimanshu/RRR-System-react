@@ -119,6 +119,14 @@ const DashboardTab = () => {
   const isExemptFromSodEod = ['admin', 'super admin', 'superadmin', 'accountant', 'reviewer'].includes(user?.role?.toLowerCase().trim());
   const navigate = useNavigate();
   const location = useLocation();
+  const isOperationAdmin = user?.role?.toLowerCase().trim() === 'operation admin';
+  // Helper: navigate to case-master, auto-adding assigneeFilter for Operation Admin
+  const navigateCases = (extraState = {}) => {
+    const state = isOperationAdmin
+      ? { ...extraState, assigneeFilter: user?.fullName }
+      : extraState;
+    navigate('/case-master', Object.keys(state).length > 0 ? { state } : undefined);
+  };
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -2014,7 +2022,7 @@ const DashboardTab = () => {
             {/* Main Cards (Left) */}
             <div className="lg:col-span-6 grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
               {/* Card 1: Total Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master')}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases()}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
@@ -2028,7 +2036,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 2: Active Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ statusFilter: 'Active' })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-green-soft rounded-lg text-green">
@@ -2042,7 +2050,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 3: High Risk Cases */}
-              <div className="bg-white rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-red-soft/30" onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}>
+              <div className="bg-white rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-red-soft/30" onClick={() => navigateCases({ priorityFilter: 'High' })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-red-soft rounded-lg text-red">
@@ -2056,7 +2064,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 4: Critical Priority */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Critical' } })}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ priorityFilter: 'Critical' })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-bg-input rounded-lg text-red">
@@ -2070,7 +2078,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 5: Closure Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { statusFilter: 'Closure' } })}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ statusFilter: 'Closure' })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-green-soft rounded-lg text-green">
@@ -2084,7 +2092,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 6: Medium Priority */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Medium' } })}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ priorityFilter: 'Medium' })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-bg-input rounded-lg text-yellow-600">
@@ -2098,7 +2106,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 7: Low Priority */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { priorityFilter: 'Low' } })}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ priorityFilter: 'Low' })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-bg-input rounded-lg text-green">
@@ -2112,7 +2120,7 @@ const DashboardTab = () => {
               </div>
 
               {/* Card 8: Settlement Stage Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigate('/case-master', { state: { statusFilter: 'Settlement' } })}>
+              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ statusFilter: 'Settlement' })}>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="p-1.5 bg-bg-input rounded-lg text-blue">
