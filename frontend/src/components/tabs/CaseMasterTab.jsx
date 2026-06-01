@@ -471,7 +471,7 @@ const CaseMasterTab = () => {
   const [linkedCases, setLinkedCases] = useState([]);
 
   const sourceOptions = useMemo(() => {
-    const unique = new Set();
+    const unique = new Set(["Email", "Call", "Office Visit", "Social Media", "Toll Free", "Notice", "Odoo"]);
     cases.forEach((c) => {
       const value = c.sourceOfComplaint?.trim();
       if (value) unique.add(value);
@@ -3589,6 +3589,7 @@ const CaseMasterTab = () => {
                         <option value="Social Media">Social Media</option>
                         <option value="Toll Free">Toll Free</option>
                         <option value="Notice">Notice</option>
+                        <option value="Odoo">Odoo</option>
                       </select>
                     </div>
                     <div>

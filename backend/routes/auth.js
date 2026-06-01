@@ -297,7 +297,7 @@ router.put('/users/:id/role', verifyToken, roleGuard(['Admin']), async (req, res
   try {
     const { id } = req.params;
     const { role } = req.body;
-    if (!['Admin', 'Operations', 'Staff', 'Reviewer', 'Accountant', 'Legal', 'Super Admin', 'SuperAdmin'].includes(role)) {
+    if (!['Admin', 'Operations', 'Staff', 'Reviewer', 'Accountant', 'Legal', 'Super Admin', 'SuperAdmin', 'Operation Admin', 'operation admin'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role selected' });
     }
 

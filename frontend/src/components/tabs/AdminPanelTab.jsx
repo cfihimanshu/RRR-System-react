@@ -295,6 +295,7 @@ const AdminPanelTab = () => {
                     <option value="Super Admin">Super Admin</option>
                     <option value="Admin">Admin</option>
                     <option value="Operations">Operations</option>
+                    <option value="Operation Admin">Operation Admin</option>
                     <option value="Reviewer">Reviewer</option>
                     <option value="Accountant">Accountant</option>
                     <option value="Staff">Staff</option>
@@ -365,9 +366,11 @@ const AdminPanelTab = () => {
                               <option value="Super Admin">Super Admin</option>
                               <option value="Admin">Admin</option>
                               <option value="Operations">Operations</option>
+                              <option value="Operation Admin">Operation Admin</option>
                               <option value="Reviewer">Reviewer</option>
                               <option value="Accountant">Accountant</option>
                               <option value="Staff">Staff</option>
+                              <option value="Legal">Legal</option>
                             </select>
                           </td>
                           <td className="px-4 py-3 text-right">

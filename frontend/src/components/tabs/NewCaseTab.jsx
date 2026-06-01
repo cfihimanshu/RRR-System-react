@@ -651,6 +651,7 @@ const NewCaseTab = () => {
                 <option value="Social Media">Social Media</option>
                 <option value="Toll Free">Toll Free</option>
                 <option value="Notice">Notice</option>
+                <option value="Odoo">Odoo</option>
               </select>
             </div>
             <div>
