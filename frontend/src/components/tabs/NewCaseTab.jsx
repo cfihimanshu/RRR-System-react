@@ -1189,7 +1189,7 @@ const NewCaseTab = () => {
                   <label className={labelClass}>Accountable</label>
                   <select className={inputClass} name="accountable" value={formData.accountable || ''} onChange={handleChange}>
                     <option value="">-- Select --</option>
-                    {userList.filter(u => u.role?.toLowerCase() !== 'admin').map(u => (
+                    {userList.filter(u => !['admin', 'super admin', 'superadmin'].includes(u.role?.toLowerCase())).map(u => (
                       <option key={u.email} value={u.fullName}>{u.fullName} ({u.role})</option>
                     ))}
                   </select>

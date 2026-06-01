@@ -42,6 +42,7 @@ import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import SearchableSelect from '../shared/SearchableSelect';
 import CaseStudyTab from './CaseStudyTab';
+import FilePreviewModal from '../shared/FilePreviewModal';
 import {
   Building2,
   Wrench,
@@ -239,6 +240,8 @@ const CaseMasterTab = () => {
 
   const [caseComms, setCaseComms] = useState([]);
   const [caseDocs, setCaseDocs] = useState([]);
+  const [previewFileUrl, setPreviewFileUrl] = useState(null);
+  const [previewFileName, setPreviewFileName] = useState('');
   const [commFormData, setCommFormData] = useState({
     direction: 'Incoming',
     mode: 'Call',
@@ -329,7 +332,6 @@ const CaseMasterTab = () => {
   const [availableStates, setAvailableStates] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilterType, setActiveFilterType] = useState('Status');
-  const [expandedNumber, setExpandedNumber] = useState(null);
   const [columnFilters, setColumnFilters] = useState({});       // { colKey: [val1, val2] }
   const [expandedCustomFields, setExpandedCustomFields] = useState({});
 
@@ -483,7 +485,27 @@ const CaseMasterTab = () => {
       const s = normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy);
       if (s && s !== '—') statuses.add(s);
     });
-    return ['All Status', ...Array.from(statuses).sort()];
+    
+    const orderMap = {
+      'Assigned': 0,
+      'Analysis': 1,
+      'Negotiation': 2,
+      'Settlement': 3,
+      'Closure': 4
+    };
+
+    return ['All Status', ...Array.from(statuses).sort((a, b) => {
+      const indexA = orderMap[a];
+      const indexB = orderMap[b];
+      
+      if (indexA !== undefined && indexB !== undefined) {
+        return indexA - indexB;
+      }
+      if (indexA !== undefined) return -1;
+      if (indexB !== undefined) return 1;
+      
+      return a.localeCompare(b);
+    })];
   }, [cases]);
 
   const uniquePriorities = useMemo(() => {
@@ -498,57 +520,28 @@ const CaseMasterTab = () => {
     const seen = new Set();
     const list = [];
 
-    // 1. Add all registered users from opsUsers
+    // Helper map of user fullName to role from opsUsers
+    const userRoles = {};
     opsUsers.forEach(u => {
       if (u.fullName) {
-        const name = u.fullName.trim();
-        const lower = name.toLowerCase();
-        const roleLower = (u.role || '').toLowerCase().trim();
-        if (
-          roleLower === 'super admin' ||
-          roleLower === 'superadmin' ||
-          roleLower === 'staff' ||
-          lower === 'super admin' ||
-          lower === 'superadmin' ||
-          lower === 'staff'
-        ) {
-          return;
-        }
-        if (!seen.has(lower)) {
-          seen.add(lower);
-          list.push({ _id: u._id || `user-${name}`, fullName: name });
-        }
+        userRoles[u.fullName.trim().toLowerCase()] = (u.role || '').toLowerCase().trim();
       }
     });
 
-    // 2. Add all unique assignees/initiators from loaded cases
+    // Add unique assignees/initiators who actually have cases
     cases.forEach(c => {
       const a = c.assignedTo || c.initiatedBy;
       if (a && a !== '—') {
         const name = a.trim();
         const lower = name.toLowerCase();
 
-        // Exclude if name itself is super admin/staff
-        if (
-          lower === 'super admin' ||
-          lower === 'superadmin' ||
-          lower === 'staff'
-        ) {
-          return;
-        }
+        // Exclude system/null strings
+        if (lower === 'system' || lower === 'null' || lower === 'undefined' || lower === '') return;
 
-        // Find if this user exists in opsUsers, check their role
-        const matchUser = opsUsers.find(u => u.fullName && u.fullName.trim().toLowerCase() === lower);
-        if (matchUser) {
-          const roleLower = (matchUser.role || '').toLowerCase().trim();
-          if (
-            roleLower === 'super admin' ||
-            roleLower === 'superadmin' ||
-            roleLower === 'staff'
-          ) {
-            return;
-          }
-        }
+        // Exclude if role or name is super admin or staff
+        const role = userRoles[lower];
+        if (role === 'super admin' || role === 'superadmin' || role === 'staff') return;
+        if (lower === 'super admin' || lower === 'superadmin' || lower === 'staff') return;
 
         if (!seen.has(lower)) {
           seen.add(lower);
@@ -1049,7 +1042,7 @@ const CaseMasterTab = () => {
       'Type of Complaint': c.typeOfComplaint || '-',
       'Amount Received': c.totalAmtPaid || '0',
       'Priority': c.priority,
-      'Status': c.currentStatus || c.status || 'Active',
+      'Status': normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy),
       'Assigned To': c.assignedTo || c.initiatedBy || ''
     }));
 
@@ -3172,73 +3165,32 @@ const CaseMasterTab = () => {
                               ) : (
                                 filteredNumbersList.map((item, idx) => {
                                   const isChecked = tempFilters.selectedCaseNumbers?.includes(item.value) || false;
-                                  const isExpanded = expandedNumber === item.value;
-                                  const matchedCase = cases.find(c => c.caseId === item.caseId);
                                   return (
-                                    <div key={idx} className="flex flex-col p-2 hover:bg-bg-input rounded-xl transition-all">
-                                      <div className="flex items-start gap-3 w-full">
-                                        <input
-                                          type="checkbox"
-                                          id={`chk-${idx}`}
-                                          checked={isChecked}
-                                          onChange={() => {
-                                            setTempFilters(prev => {
-                                              const currentSelected = prev.selectedCaseNumbers || [];
-                                              const newSelected = currentSelected.includes(item.value)
-                                                ? currentSelected.filter(v => v !== item.value)
-                                                : [...currentSelected, item.value];
-                                              return { ...prev, selectedCaseNumbers: newSelected };
-                                            });
-                                            if (!isChecked) {
-                                              setExpandedNumber(item.value);
-                                            }
-                                          }}
-                                          className="w-4 h-4 mt-0.5 text-accent border-border focus:ring-accent bg-bg-input rounded cursor-pointer"
-                                        />
-                                        <div
-                                          className="flex flex-col flex-1 cursor-pointer select-none"
-                                          onClick={() => setExpandedNumber(isExpanded ? null : item.value)}
-                                        >
-                                          <span className={`text-sm font-bold flex items-center gap-1.5 ${isChecked ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}>
-                                            {item.value}
-                                            <span className="text-[10px] text-text-muted font-normal bg-bg-secondary px-1.5 py-0.5 rounded uppercase">{item.type}</span>
-                                          </span>
-                                          <span className="text-[11px] text-text-muted mt-0.5 font-semibold flex items-center justify-between">
-                                            <span>Case ID: {item.caseId}</span>
-                                            <span className="text-[10px] text-accent hover:underline font-bold uppercase tracking-wider">{isExpanded ? 'Hide Details' : 'Show Details'}</span>
-                                          </span>
-                                        </div>
+                                    <label key={idx} className="flex items-start gap-3 p-2.5 hover:bg-bg-input rounded-xl transition-all cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          setTempFilters(prev => {
+                                            const currentSelected = prev.selectedCaseNumbers || [];
+                                            const newSelected = currentSelected.includes(item.value)
+                                              ? currentSelected.filter(v => v !== item.value)
+                                              : [...currentSelected, item.value];
+                                            return { ...prev, selectedCaseNumbers: newSelected };
+                                          });
+                                        }}
+                                        className="w-4 h-4 mt-0.5 text-accent border-border focus:ring-accent bg-bg-input rounded cursor-pointer"
+                                      />
+                                      <div className="flex flex-col flex-1">
+                                        <span className={`text-sm font-bold flex items-center gap-1.5 ${isChecked ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}>
+                                          {item.value}
+                                          <span className="text-[10px] text-text-muted font-normal bg-bg-secondary px-1.5 py-0.5 rounded uppercase">{item.type}</span>
+                                        </span>
+                                        <span className="text-[11px] text-text-muted mt-0.5 font-semibold">
+                                          Case ID: {item.caseId}
+                                        </span>
                                       </div>
-
-                                      {isExpanded && matchedCase && (
-                                        <div className="mt-2 ml-7 p-3 bg-bg-card rounded-xl border border-border/80 text-xs space-y-1.5 animate-in slide-in-from-top-1 duration-150 shadow-inner">
-                                          <div className="flex justify-between gap-2">
-                                            <span className="text-text-muted">Client:</span>
-                                            <span className="font-bold text-text-primary text-right">{matchedCase.clientName || '—'}</span>
-                                          </div>
-                                          <div className="flex justify-between gap-2">
-                                            <span className="text-text-muted">Company:</span>
-                                            <span className="font-bold text-text-primary text-right">{matchedCase.companyName || '—'}</span>
-                                          </div>
-                                          <div className="flex justify-between gap-2">
-                                            <span className="text-text-muted">Type:</span>
-                                            <span className="font-bold text-text-primary text-right">{matchedCase.typeOfComplaint || '—'}</span>
-                                          </div>
-                                          <div className="flex justify-between gap-2">
-                                            <span className="text-text-muted">Amount:</span>
-                                            <span className="font-bold text-green-500 text-right">₹{matchedCase.totalAmtPaid ? Number(matchedCase.totalAmtPaid).toLocaleString('en-IN') : '0'}</span>
-                                          </div>
-                                          <div className="flex justify-between gap-2">
-                                            <span className="text-text-muted">Status:</span>
-                                            <span className="font-black uppercase tracking-wider text-accent text-right">{normalizeStatus(matchedCase.currentStatus || matchedCase.status, matchedCase.assignedTo, matchedCase.initiatedBy)}</span>
-                                          </div>
-                                          <div className="flex justify-between gap-2">
-                                            <span className="text-text-muted">Assigned:</span>
-                                            <span className="font-bold text-text-primary text-right">{matchedCase.assignedTo || matchedCase.initiatedBy || '—'}</span>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
+                                    </label>
                                   );
                                 })
                               )}
@@ -4299,9 +4251,16 @@ const CaseMasterTab = () => {
                           {commFormData.fileLink && (
                             <div className="text-[10px] font-black text-accent mt-1 flex items-center gap-2">
                               <span>Current Attachment:</span>
-                              <a href={commFormData.fileLink} target="_blank" rel="noreferrer" className="underline truncate max-w-[200px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPreviewFileUrl(commFormData.fileLink);
+                                  setPreviewFileName(commFormData.fileLink.split('/').pop());
+                                }}
+                                className="underline truncate max-w-[200px] text-left hover:text-accent-hover"
+                              >
                                 {commFormData.fileLink.split('/').pop()}
-                              </a>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -4382,9 +4341,17 @@ const CaseMasterTab = () => {
                                       </button>
                                     )}
                                     {comm.fileLink ? (
-                                      <a href={comm.fileLink} target="_blank" rel="noreferrer" className="text-accent hover:text-white bg-accent/10 hover:bg-accent p-1.5 rounded-md transition-all flex items-center gap-1" title="View Attachment">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setPreviewFileUrl(comm.fileLink);
+                                          setPreviewFileName(comm.summary || 'Attachment');
+                                        }}
+                                        className="text-accent hover:text-white bg-accent/10 hover:bg-accent p-1.5 rounded-md transition-all flex items-center gap-1 active:scale-95"
+                                        title="View Attachment"
+                                      >
                                         <Paperclip size={10} /> <span className="text-[8px] font-bold">VIEW FILE</span>
-                                      </a>
+                                      </button>
                                     ) : (
                                       <div className="w-1 h-1 bg-accent rounded-full" />
                                     )}
@@ -4461,9 +4428,17 @@ const CaseMasterTab = () => {
                         {mouFormData.fileLink && (
                           <div className="text-[10px] font-black text-accent mt-1 flex items-center gap-2">
                             <span>Current File:</span>
-                            <a href={mouFormData.fileLink} target="_blank" rel="noreferrer" className="underline truncate max-w-[200px]" title={mouFormData.fileLink}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPreviewFileUrl(mouFormData.fileLink);
+                                setPreviewFileName(mouFormData.fileLink.split('/').pop());
+                              }}
+                              className="underline truncate max-w-[200px] text-left hover:text-accent-hover"
+                              title={mouFormData.fileLink}
+                            >
                               {mouFormData.fileLink.split('/').pop()}
-                            </a>
+                            </button>
                           </div>
                         )}
                       </div>
@@ -4680,15 +4655,17 @@ const CaseMasterTab = () => {
                                   </td>
                                   <td className="px-4 py-4 text-right pr-6">
                                     <div className="flex gap-2 justify-end">
-                                      <a
-                                        href={doc.fileLink}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="bg-accent-soft hover:bg-accent text-accent hover:text-white p-2 rounded-lg transition-all inline-flex items-center justify-center"
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setPreviewFileUrl(doc.fileLink);
+                                          setPreviewFileName(doc.fileLink?.split('/').pop() || doc.fileSummary || 'Document');
+                                        }}
+                                        className="bg-accent-soft hover:bg-accent text-accent hover:text-white p-2 rounded-lg transition-all inline-flex items-center justify-center active:scale-95"
                                         title="View Document"
                                       >
                                         <Eye size={12} />
-                                      </a>
+                                      </button>
                                       {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
                                         <button
                                           type="button"
@@ -5615,7 +5592,12 @@ const CaseMasterTab = () => {
           )}
         </div>
       )}
-
+      <FilePreviewModal
+        isOpen={!!previewFileUrl}
+        onClose={() => setPreviewFileUrl(null)}
+        fileUrl={previewFileUrl}
+        fileName={previewFileName}
+      />
     </div>
   );
 };

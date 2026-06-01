@@ -886,7 +886,8 @@ export default function TourTab({ user }) {
         <div className="sys-header flex items-center justify-between gap-4 px-6 py-5 border-b border-border bg-bg-card">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center">
-              <Plane size={20} className="text-white" />
+              {/* <Plane size={20} className="text-white" /> */}
+              <Train size={20} className="text-white" />
             </div>
             <div>
               <div className="text-xs font-black text-text-primary uppercase tracking-[0.2em]">
@@ -1566,18 +1567,18 @@ export default function TourTab({ user }) {
                             )}
                             {file.name}
                             {!file.uploading && file.url && (
-                               <button
-                                 type="button"
-                                 onClick={(e) => {
-                                   e.stopPropagation();
-                                   setPreviewFileUrl(file.url);
-                                   setPreviewFileName(file.name || 'Pre-Travel Document');
-                                 }}
-                                 className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
-                               >
-                                 View
-                               </button>
-                             )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewFileUrl(file.url);
+                                  setPreviewFileName(file.name || 'Pre-Travel Document');
+                                }}
+                                className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
+                              >
+                                View
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={(event) => {
@@ -2013,18 +2014,18 @@ export default function TourTab({ user }) {
                         )}
                         {file.name}
                         {!file.uploading && file.url && (
-                               <button
-                                 type="button"
-                                 onClick={(e) => {
-                                   e.stopPropagation();
-                                   setPreviewFileUrl(file.url);
-                                   setPreviewFileName(file.name || 'Pre-Travel Document');
-                                 }}
-                                 className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
-                               >
-                                 View
-                               </button>
-                             )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewFileUrl(file.url);
+                              setPreviewFileName(file.name || 'Pre-Travel Document');
+                            }}
+                            className="ml-1.5 text-accent hover:underline lowercase tracking-normal font-bold"
+                          >
+                            View
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={(event) => {
@@ -2099,11 +2100,10 @@ export default function TourTab({ user }) {
                           </div>
                           <div>
                             <span className="text-[10px] font-black text-text-muted uppercase tracking-wider block">Status</span>
-                            <span className={`status-badge text-[8px] sm:text-[9px] font-black px-2.5 py-0.5 rounded-lg border uppercase tracking-wider select-none ${
-                              req.reimbursementStatus === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                              req.reimbursementStatus === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
-                              'bg-orange-500/10 text-orange-500 border-orange-500/20'
-                            }`}>
+                            <span className={`status-badge text-[8px] sm:text-[9px] font-black px-2.5 py-0.5 rounded-lg border uppercase tracking-wider select-none ${req.reimbursementStatus === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                req.reimbursementStatus === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                                  'bg-orange-500/10 text-orange-500 border-orange-500/20'
+                              }`}>
                               {req.reimbursementStatus}
                             </span>
                           </div>
@@ -2152,19 +2152,19 @@ export default function TourTab({ user }) {
                                 name = docStr.split('/').pop();
                               }
                               return (
-                                  <button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => {
-                                      setPreviewFileUrl(url);
-                                      setPreviewFileName(name || 'Receipt/Bill');
-                                    }}
-                                    className="inline-flex items-center gap-1 bg-bg-card border border-border px-2.5 py-1 rounded-lg text-[9px] font-black text-accent hover:underline uppercase tracking-wider text-left"
-                                  >
-                                    <FileCheck size={10} className="text-emerald-500" />
-                                    {name}
-                                  </button>
-                                );
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => {
+                                    setPreviewFileUrl(url);
+                                    setPreviewFileName(name || 'Receipt/Bill');
+                                  }}
+                                  className="inline-flex items-center gap-1 bg-bg-card border border-border px-2.5 py-1 rounded-lg text-[9px] font-black text-accent hover:underline uppercase tracking-wider text-left"
+                                >
+                                  <FileCheck size={10} className="text-emerald-500" />
+                                  {name}
+                                </button>
+                              );
                             })}
                           </div>
                         )}

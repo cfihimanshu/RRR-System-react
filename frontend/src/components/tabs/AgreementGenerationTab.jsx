@@ -3,6 +3,8 @@ import { FileText, List, Plus, RefreshCw, Trash2, Download, Eye, ClipboardList, 
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
+import { pdf } from '@react-pdf/renderer';
+import AgreementTemplate from '../../templates/agreementTemplate.jsx';
 
 const AgreementGenerationTab = () => {
   const { user } = useContext(AuthContext);
@@ -182,7 +184,26 @@ const AgreementGenerationTab = () => {
         templateId: formData.templateId || ''
       };
 
-      const response = await api.post('/agreements/generate', templateData, {
+      // 1. Generate PDF on client side using @react-pdf/renderer
+      const doc = <AgreementTemplate data={templateData} />;
+      const asPdf = pdf([]);
+      asPdf.updateContainer(doc);
+      const generatedBlob = await asPdf.toBlob();
+
+      // 2. Convert generated Blob to Base64 string
+      const reader = new FileReader();
+      const pdfBase64 = await new Promise((resolve) => {
+        reader.onloadend = () => {
+          resolve(reader.result.split(',')[1]);
+        };
+        reader.readAsDataURL(generatedBlob);
+      });
+
+      // 3. Post to backend to save record and fetch backend-managed file stream
+      const response = await api.post('/agreements/generate', {
+        ...templateData,
+        pdfBase64
+      }, {
         responseType: 'blob'
       });
 

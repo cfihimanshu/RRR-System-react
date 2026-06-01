@@ -134,16 +134,21 @@ const MyTaskTab = () => {
       // Exclude logged in user email from general list to avoid duplicates
       opsUsers = opsUsers.filter(u => u.email !== user?.email);
 
-      // Ensure current user is always in the list for assignment
-      if (user?.fullName && !opsUsers.some(u => u.fullName === user.fullName)) {
+      // Exclude Admin and Super Admin roles
+      opsUsers = opsUsers.filter(u => u.role !== 'Admin' && u.role !== 'Super Admin' && u.role !== 'SuperAdmin');
+
+      // Ensure current user is always in the list for assignment if not admin/super admin
+      if (user?.fullName && !['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && !opsUsers.some(u => u.fullName === user.fullName)) {
         opsUsers = [{ _id: 'current-user', fullName: user.fullName, role: user.role }, ...opsUsers];
       }
 
       setUsers(opsUsers);
     } catch (err) {
       console.error('Failed to fetch users:', err);
-      if (user?.fullName) {
+      if (user?.fullName && !['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)) {
         setUsers([{ _id: 'current-user', fullName: user.fullName, role: user.role }]);
+      } else {
+        setUsers([]);
       }
     }
   };

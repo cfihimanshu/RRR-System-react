@@ -4,12 +4,15 @@ import toast from 'react-hot-toast';
 import FileUpload from '../shared/FileUpload';
 import { AuthContext } from '../../context/AuthContext';
 import SearchableCaseSelect from '../shared/SearchableCaseSelect';
+import FilePreviewModal from '../shared/FilePreviewModal';
 
 const DocIndexTab = () => {
   const [cases, setCases] = useState([]);
   const [docs, setDocs] = useState([]);
   const [selectedCase, setSelectedCase] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [previewFileUrl, setPreviewFileUrl] = useState(null);
+  const [previewFileName, setPreviewFileName] = useState('');
   const { user } = useContext(AuthContext);
 
   const [formData, setFormData] = useState({
@@ -213,9 +216,16 @@ const DocIndexTab = () => {
                       </td>
                       <td className="px-4 py-4 text-center align-top">
                         {d.fileLink ? (
-                          <a href={d.fileLink} target="_blank" rel="noreferrer" className="text-text-primary hover:text-white font-black text-[9px] uppercase tracking-widest bg-bg-input hover:bg-accent px-3 py-1.5 rounded-lg border border-border transition-all shadow-sm inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewFileUrl(d.fileLink);
+                              setPreviewFileName(d.fileSummary || d.docType || 'Document');
+                            }}
+                            className="text-text-primary hover:text-white font-black text-[9px] uppercase tracking-widest bg-bg-input hover:bg-accent px-3 py-1.5 rounded-lg border border-border transition-all shadow-sm inline-flex items-center gap-1 active:scale-95"
+                          >
                             🔗 View
-                          </a>
+                          </button>
                         ) : '-'}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-text-secondary align-top font-bold uppercase tracking-wider text-[10px]">{d.uploadedBy || '-'}</td>
@@ -228,6 +238,12 @@ const DocIndexTab = () => {
         </div>
       </div>
 
+      <FilePreviewModal
+        isOpen={!!previewFileUrl}
+        onClose={() => setPreviewFileUrl(null)}
+        fileUrl={previewFileUrl}
+        fileName={previewFileName}
+      />
     </div>
   );
 };

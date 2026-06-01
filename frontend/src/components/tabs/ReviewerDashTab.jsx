@@ -266,16 +266,16 @@ const ReviewerDashTab = () => {
                       <td className="px-6 py-5 text-center" onClick={(e) => e.stopPropagation()}>
                         {r.documentLink ? (
                           <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewFileUrl(r.documentLink);
-                                setPreviewFileName('Supporting Document');
-                              }}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm text-left"
-                            >
-                              <Eye size={12} /> View Doc
-                            </button>
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewFileUrl(r.documentLink);
+                              setPreviewFileName('Supporting Document');
+                            }}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 text-accent rounded-xl text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-sm text-left"
+                          >
+                            <Eye size={12} /> View
+                          </button>
                         ) : (
                           <span className="text-[9px] text-text-muted font-bold">—</span>
                         )}
@@ -378,9 +378,9 @@ const ReviewerDashTab = () => {
                                 setPreviewFileUrl(r.documentLink);
                                 setPreviewFileName('Supporting Document');
                               }}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm text-left"
+                              className="inline-flex items-center gap-1.5 px-4 py-2 text-accent rounded-xl text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-sm text-left"
                             >
-                              <Eye size={12} /> View Doc
+                              <Eye size={12} /> View
                             </button>
                           ) : (
                             <span className="text-[9px] text-text-muted font-bold">—</span>

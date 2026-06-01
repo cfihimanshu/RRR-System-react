@@ -116,6 +116,7 @@ const DashboardTab = () => {
   const [activePeriod, setActivePeriod] = useState('7 Days');
   const [allUsers, setAllUsers] = useState([]);
   const { user } = useContext(AuthContext);
+  const isExemptFromSodEod = ['admin', 'super admin', 'superadmin', 'accountant', 'reviewer'].includes(user?.role?.toLowerCase().trim());
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -391,7 +392,7 @@ const DashboardTab = () => {
   };
 
   const checkSodStatus = async (reportList) => {
-    if (['Admin', 'Super Admin', 'SuperAdmin', 'Accountant'].includes(user?.role)) return;
+    if (isExemptFromSodEod) return;
     try {
       const today = getTodayDateStr();
       const list = reportList || await fetchTodayReports();
@@ -404,7 +405,7 @@ const DashboardTab = () => {
 
       setHasSodToday(!!todaysSod);
 
-      if (!todaysSod && !['Admin', 'Super Admin', 'SuperAdmin', 'Accountant'].includes(user?.role)) {
+      if (!todaysSod && !isExemptFromSodEod) {
         setTimeout(() => {
           openReportModal('SOD');
         }, 800);
@@ -507,7 +508,7 @@ const DashboardTab = () => {
   }, [user?.email]);
 
   const openReportModal = async (type) => {
-    if (type === 'EOD' && user?.role !== 'Admin' && !hasSodToday) {
+    if (type === 'EOD' && !isExemptFromSodEod && !hasSodToday) {
       toast.error('Please fill your SOD report first for today!', {
         icon: '⚠️',
         style: { borderRadius: '15px', fontWeight: 'bold' }
@@ -740,7 +741,7 @@ const DashboardTab = () => {
     const fetchUsers = async () => {
       try {
         const res = await api.get('/users');
-        setAllUsers(res.data.filter(u => u.role !== 'Admin'));
+        setAllUsers(res.data.filter(u => u.role !== 'Admin' && u.role !== 'Super Admin' && u.role !== 'SuperAdmin'));
       } catch (err) {
         console.error(err);
       }
@@ -928,12 +929,12 @@ const DashboardTab = () => {
         </div>
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full lg:w-auto">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
-            {!hasSodToday && !['Admin', 'Super Admin', 'SuperAdmin', 'Accountant'].includes(user?.role) && (
+            {!hasSodToday && !isExemptFromSodEod && (
               <div className="flex items-center justify-center gap-2 px-6 py-3 bg-red text-white border-none rounded-2xl text-[11px] font-black uppercase tracking-widest animate-bounce shadow-xl shadow-red-900/40">
                 <AlertTriangle size={16} /> Pending SOD Submission
               </div>
             )}
-            {!['Admin', 'Super Admin', 'SuperAdmin', 'Accountant'].includes(user?.role) && (
+            {!isExemptFromSodEod && (
               <div className="grid grid-cols-2 sm:flex items-center gap-3 w-full sm:w-auto">
                 <button
                   onClick={() => openReportModal('SOD')}
@@ -1092,7 +1093,7 @@ const DashboardTab = () => {
                 </h2>
                 <p className="text-[10px] opacity-80 font-black uppercase tracking-[0.2em] mt-2">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
               </div>
-              {!(reportType === 'SOD' && !hasSodToday && user?.role !== 'Admin') && (
+              {!(reportType === 'SOD' && !hasSodToday && !isExemptFromSodEod) && (
                 <button onClick={() => setIsReportModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2.5 rounded-xl transition-all text-white">
                   <X size={24} />
                 </button>
@@ -1473,7 +1474,7 @@ const DashboardTab = () => {
               )}
 
               <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 pt-10 border-t-2 border-border">
-                {!(reportType === 'SOD' && !hasSodToday && user?.role !== 'Admin') && (
+                {!(reportType === 'SOD' && !hasSodToday && !isExemptFromSodEod) && (
                   <button
                     type="button"
                     onClick={() => setIsReportModalOpen(false)}

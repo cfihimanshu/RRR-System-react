@@ -7,57 +7,62 @@ const Agreement = require('../models/Agreement');
 router.post('/generate', verifyToken, async (req, res) => {
   try {
     const data = req.body;
-    const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
+    let pdfBase64 = data.pdfBase64;
 
-    if (!appsScriptUrl) {
-      return res.status(500).json({
-        error: 'Google Apps Script URL is not configured in backend .env'
+    if (!pdfBase64) {
+      const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
+
+      if (!appsScriptUrl) {
+        return res.status(500).json({
+          error: 'Google Apps Script URL is not configured in backend .env'
+        });
+      }
+
+      console.log(`[AGREEMENT] Calling Google Apps Script Web App for PDF generation...`);
+      
+      const response = await fetch(appsScriptUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
       });
-    }
 
-    console.log(`[AGREEMENT] Calling Google Apps Script Web App for PDF generation...`);
-    
-    const response = await fetch(appsScriptUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
+      const rawText = await response.text();
 
-    // Read raw text first — Apps Script can return HTML error pages even with status 200
-    const rawText = await response.text();
+      if (!response.ok || rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html')) {
+        const match = rawText.match(/monospace[^>]*>([^<]+)/);
+        const scriptError = match ? match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&') : `HTTP ${response.status}`;
+        console.error(`[AGREEMENT] Apps Script returned HTML error page: ${scriptError}`);
+        return res.status(500).json({ error: `Google Apps Script Error: ${scriptError}` });
+      }
 
-    if (!response.ok || rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html')) {
-      // Try to extract the actual error message from the HTML error page
-      const match = rawText.match(/monospace[^>]*>([^<]+)/);
-      const scriptError = match ? match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&') : `HTTP ${response.status}`;
-      console.error(`[AGREEMENT] Apps Script returned HTML error page: ${scriptError}`);
-      return res.status(500).json({ error: `Google Apps Script Error: ${scriptError}` });
-    }
+      let result;
+      try {
+        result = JSON.parse(rawText);
+      } catch (parseErr) {
+        console.error(`[AGREEMENT] Failed to parse Apps Script response as JSON: ${rawText.substring(0, 200)}`);
+        return res.status(500).json({ error: 'Apps Script returned an unexpected response. Check the script for errors.' });
+      }
 
-    let result;
-    try {
-      result = JSON.parse(rawText);
-    } catch (parseErr) {
-      console.error(`[AGREEMENT] Failed to parse Apps Script response as JSON: ${rawText.substring(0, 200)}`);
-      return res.status(500).json({ error: 'Apps Script returned an unexpected response. Check the script for errors.' });
-    }
+      if (result.error) {
+        console.error(`[AGREEMENT] Apps Script Error: ${result.error}`);
+        return res.status(500).json({ error: result.error });
+      }
 
-    if (result.error) {
-      console.error(`[AGREEMENT] Apps Script Error: ${result.error}`);
-      return res.status(500).json({ error: result.error });
-    }
+      if (!result.pdf) {
+        console.error(`[AGREEMENT] PDF data missing from Apps Script response`);
+        return res.status(500).json({ error: 'PDF data missing from Apps Script response' });
+      }
 
-    if (!result.pdf) {
-      console.error(`[AGREEMENT] PDF data missing from Apps Script response`);
-      return res.status(500).json({ error: 'PDF data missing from Apps Script response' });
+      pdfBase64 = result.pdf;
     }
 
     // Save agreement record in DB
+    let agreementId;
     try {
       const mongoose = require('mongoose');
-      const agreementId = new mongoose.Types.ObjectId();
+      agreementId = new mongoose.Types.ObjectId();
       await Agreement.create({
         _id: agreementId,
         generatedBy: req.user.email,
@@ -74,16 +79,16 @@ router.post('/generate', verifyToken, async (req, res) => {
         firstPartySignatory: data.FirstPartyName || '',
         secondPartySignatory: data.SecondPartyName || '',
         templateId: data.templateId || '',
-        pdfBase64: result.pdf || '',
+        pdfBase64: pdfBase64,
         pdfUrl: `/api/agreements/download/${agreementId}`
       });
     } catch (saveErr) {
       console.error('[AGREEMENT] Failed to save agreement record:', saveErr.message);
-      // Don't fail the PDF response even if DB save fails
+      return res.status(500).json({ error: 'Failed to save agreement record' });
     }
 
-    const buffer = Buffer.from(result.pdf, 'base64');
-    console.log('[AGREEMENT] PDF generated successfully via Apps Script.');
+    const buffer = Buffer.from(pdfBase64, 'base64');
+    console.log('[AGREEMENT] PDF saved and served successfully.');
 
     res.set({
       'Content-Disposition': 'attachment; filename="Agreement.pdf"',

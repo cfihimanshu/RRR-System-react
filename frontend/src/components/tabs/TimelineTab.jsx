@@ -25,7 +25,14 @@ const TimelineTab = () => {
     api.get('/cases/summary').then(res => setCases(res.data)).catch(console.error).finally(() => setFetchingCases(false));
     
     if (user?.role === 'Admin') {
-      api.get('/auth/users').then(res => setUsers(res.data)).catch(console.error);
+      api.get('/auth/users')
+        .then(res => {
+          const filtered = (res.data || []).filter(
+            u => u.role !== 'Admin' && u.role !== 'Super Admin' && u.role !== 'SuperAdmin'
+          );
+          setUsers(filtered);
+        })
+        .catch(console.error);
     }
   }, [user]);
 

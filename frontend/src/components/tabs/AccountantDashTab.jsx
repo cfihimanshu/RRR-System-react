@@ -19,6 +19,7 @@ const AccountantDashTab = () => {
   const { user } = useContext(AuthContext);
   const [previewFileUrl, setPreviewFileUrl] = useState(null);
   const [previewFileName, setPreviewFileName] = useState('');
+  const [isEditMode, setIsEditMode] = useState(false);
 
 
   const [expandedCases, setExpandedCases] = useState({});
@@ -70,8 +71,8 @@ const AccountantDashTab = () => {
   }, [refunds, activeTab]);
 
   const handlePayInstallment = async () => {
-    if (!instPaymentData.transactionId || !instPaymentData.paymentDate || !instPaymentData.paymentProof) {
-      return toast.error('Please fill all details and upload payment proof');
+    if (!instPaymentData.paymentDate || !instPaymentData.paymentProof) {
+      return toast.error('Please select payment date and upload payment proof');
     }
     try {
       const updatedInstallments = (selectedRefund.installments || []).map((inst, idx) => {
@@ -111,8 +112,8 @@ const AccountantDashTab = () => {
   };
 
   const handleMarkPaid = async () => {
-    if (!instPaymentData.transactionId || !instPaymentData.paymentDate || !instPaymentData.paymentProof) {
-      return toast.error('Please fill all details and upload payment proof');
+    if (!instPaymentData.paymentDate || !instPaymentData.paymentProof) {
+      return toast.error('Please select payment date and upload payment proof');
     }
     try {
       const updatedInstallments = (selectedRefund.installments || []).map(inst => ({
@@ -138,6 +139,48 @@ const AccountantDashTab = () => {
       fetchRefunds();
     } catch (err) {
       toast.error('Failed to mark as paid');
+    }
+  };
+
+  const handleSaveEditPayout = async () => {
+    if (!instPaymentData.paymentDate || !instPaymentData.paymentProof) {
+      return toast.error('Please select payment date and upload payment proof');
+    }
+    try {
+      if (selectedInstIndex === -1) {
+        // Single payout edit
+        await api.put(`/refunds/${selectedRefund._id}`, {
+          transactionId: instPaymentData.transactionId,
+          paymentDate: instPaymentData.paymentDate,
+          paymentProof: instPaymentData.paymentProof
+        });
+      } else {
+        // Installment payout edit
+        const updatedInstallments = (selectedRefund.installments || []).map((inst, idx) => {
+          if (idx === selectedInstIndex) {
+            return {
+              ...inst,
+              transactionId: instPaymentData.transactionId,
+              paymentDate: instPaymentData.paymentDate,
+              paymentProof: instPaymentData.paymentProof
+            };
+          }
+          return inst;
+        });
+
+        await api.put(`/refunds/${selectedRefund._id}`, {
+          installments: updatedInstallments
+        });
+      }
+
+      toast.success('Payout details updated successfully');
+      setModalOpen(false);
+      setIsEditMode(false);
+      setSelectedInstIndex(null);
+      setInstPaymentData({ transactionId: '', paymentDate: '', paymentProof: '' });
+      fetchRefunds();
+    } catch (err) {
+      toast.error('Failed to update payout details');
     }
   };
 
@@ -346,7 +389,7 @@ const AccountantDashTab = () => {
         </div>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => { setModalOpen(false); setSelectedInstIndex(null); }} title="Payout Details">
+      <Modal isOpen={isModalOpen} onClose={() => { setModalOpen(false); setSelectedInstIndex(null); setIsEditMode(false); }} title="Payout Details">
         <div className="p-4 flex flex-col gap-6">
           {selectedRefund && (
             <>
@@ -375,9 +418,9 @@ const AccountantDashTab = () => {
                           setPreviewFileUrl(selectedRefund.documentLink);
                           setPreviewFileName('Supporting Document');
                         }}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm whitespace-nowrap"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-accent-hover transition-all active:scale-95 shadow-sm whitespace-nowrap"
                       >
-                        <Eye size={13} /> View Document
+                        <Eye size={13} /> View
                       </button>
                     </div>
                   )}
@@ -431,9 +474,9 @@ const AccountantDashTab = () => {
                                           setPreviewFileUrl(proofUrl);
                                           setPreviewFileName('Payment Proof');
                                         }}
-                                        className="inline-flex items-center gap-1 bg-accent/10 hover:bg-accent text-accent hover:text-white text-[8px] font-black py-1 px-2.5 rounded-lg transition-all text-left"
+                                        className="inline-flex items-center gap-1 text-accent text-[8px] font-black py-1 px-2.5 rounded-lg transition-all text-left"
                                       >
-                                        <Eye size={10} /> View Document
+                                        <Eye size={10} /> View
                                       </button>
                                     ) : (
                                       <span className="text-[9px] text-text-muted font-bold">—</span>
@@ -441,7 +484,26 @@ const AccountantDashTab = () => {
                                   </td>
                                   <td className="px-4 py-3 text-right">
                                     {isInstPaid ? (
-                                      <span className="text-[9px] font-bold text-text-muted">Settled ✅</span>
+                                      <div className="flex flex-col items-end gap-1">
+                                        <span className="text-[9px] font-bold text-text-muted">Settled ✅</span>
+                                        {['Accountant', 'Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedInstIndex(i);
+                                              setIsEditMode(true);
+                                              setInstPaymentData({
+                                                transactionId: inst.transactionId || selectedRefund.transactionId || '',
+                                                paymentDate: inst.paymentDate || selectedRefund.paymentDate || new Date().toISOString().split('T')[0],
+                                                paymentProof: inst.paymentProof || selectedRefund.paymentProof || ''
+                                              });
+                                            }}
+                                            className="text-accent hover:text-accent-hover text-[8px] font-black uppercase tracking-wider underline cursor-pointer"
+                                          >
+                                            Edit Payout
+                                          </button>
+                                        )}
+                                      </div>
                                     ) : selectedRefund.status?.toLowerCase() === 'rejected' ? (
                                       <span className="text-[9px] font-bold text-red-500">Rejected ❌</span>
                                     ) : (
@@ -478,9 +540,9 @@ const AccountantDashTab = () => {
                                       setPreviewFileUrl(selectedRefund.paymentProof);
                                       setPreviewFileName('Payment Proof');
                                     }}
-                                    className="inline-flex items-center gap-1 bg-accent/10 hover:bg-accent text-accent hover:text-white text-[8px] font-black py-1 px-2.5 rounded-lg transition-all text-left"
+                                    className="inline-flex items-center gap-1  text-accent hover:text-white text-[8px] font-black py-1 px-2.5 rounded-lg transition-all text-left"
                                   >
-                                    <Eye size={10} /> View Document
+                                    <Eye size={10} /> View
                                   </button>
                                 ) : (
                                   <span className="text-[9px] text-text-muted font-bold">—</span>
@@ -488,7 +550,26 @@ const AccountantDashTab = () => {
                               </td>
                               <td className="px-4 py-4 text-right">
                                 {selectedRefund.status === 'Paid' ? (
-                                  <span className="text-[9px] font-bold text-text-muted">Settled ✅</span>
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-[9px] font-bold text-text-muted">Settled ✅</span>
+                                    {['Accountant', 'Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedInstIndex(-1);
+                                          setIsEditMode(true);
+                                          setInstPaymentData({
+                                            transactionId: selectedRefund.transactionId || '',
+                                            paymentDate: selectedRefund.paymentDate || new Date().toISOString().split('T')[0],
+                                            paymentProof: selectedRefund.paymentProof || ''
+                                          });
+                                        }}
+                                        className="text-accent hover:text-accent-hover text-[8px] font-black uppercase tracking-wider underline cursor-pointer"
+                                      >
+                                        Edit Payout
+                                      </button>
+                                    )}
+                                  </div>
                                 ) : selectedRefund.status === 'Rejected' ? (
                                   <span className="text-[9px] font-bold text-red-500">Rejected ❌</span>
                                 ) : (
@@ -520,7 +601,9 @@ const AccountantDashTab = () => {
                 <div className="flex flex-col gap-6 animate-in zoom-in-95 duration-200">
                   <div className="bg-bg-input p-4 rounded-2xl border border-border/80 flex justify-between items-center">
                     <div>
-                      <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-0.5">Settle Target</p>
+                      <p className="text-[9px] text-text-muted font-black uppercase tracking-widest mb-0.5 font-bold">
+                        {isEditMode ? 'Edit Target' : 'Settle Target'}
+                      </p>
                       <h4 className="text-sm font-black text-text-primary uppercase tracking-tight">
                         {selectedInstIndex === -1 ? 'Single Payout' : `Installment #${selectedInstIndex + 1}`}
                       </h4>
@@ -541,7 +624,6 @@ const AccountantDashTab = () => {
                       placeholder="Ex: 123456789012"
                       value={instPaymentData.transactionId}
                       onChange={e => setInstPaymentData({ ...instPaymentData, transactionId: e.target.value })}
-                      required
                     />
                   </div>
 
@@ -584,13 +666,13 @@ const AccountantDashTab = () => {
                   <div className="flex gap-4 mt-2">
                     <button
                       className="flex-1 bg-green hover:bg-green-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-green-900/20 transition-all text-xs uppercase tracking-widest active:scale-95"
-                      onClick={selectedInstIndex === -1 ? handleMarkPaid : handlePayInstallment}
+                      onClick={isEditMode ? handleSaveEditPayout : (selectedInstIndex === -1 ? handleMarkPaid : handlePayInstallment)}
                     >
-                      Submit Payment✅
+                      {isEditMode ? 'Save Changes 💾' : 'Submit Payment✅'}
                     </button>
                     <button
                       className="flex-1 bg-bg-input hover:bg-bg-card-hover text-text-secondary border-2 border-border font-black py-4 rounded-2xl transition-all text-xs uppercase tracking-widest active:scale-95"
-                      onClick={() => { setSelectedInstIndex(null); setInstPaymentData({ transactionId: '', paymentDate: '', paymentProof: '' }); }}
+                      onClick={() => { setSelectedInstIndex(null); setIsEditMode(false); setInstPaymentData({ transactionId: '', paymentDate: '', paymentProof: '' }); }}
                     >
                       Cancel
                     </button>

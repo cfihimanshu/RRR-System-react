@@ -4,6 +4,7 @@ import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import SearchableCaseSelect from '../shared/SearchableCaseSelect';
 import TabLoader from '../shared/TabLoader';
+import FilePreviewModal from '../shared/FilePreviewModal';
 import {
   FileText,
   RefreshCcw,
@@ -28,6 +29,8 @@ const CaseStudyTab = ({ caseData = null }) => {
   const [selectedCase, setSelectedCase] = useState('');
   const [generatedCase, setGeneratedCase] = useState(null);
   const [showMobilePreview, setShowMobilePreview] = useState(false);
+  const [previewFileUrl, setPreviewFileUrl] = useState(null);
+  const [previewFileName, setPreviewFileName] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [fetchingCases, setFetchingCases] = useState(true);
@@ -712,12 +715,13 @@ const CaseStudyTab = ({ caseData = null }) => {
                     ) : (
                       <div className="grid grid-cols-1 gap-4">
                         {docs.map((doc, idx) => (
-                          <a
+                          <div
                             key={idx}
-                            href={doc.fileLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between p-5 bg-bg-card border-2 border-border rounded-2xl hover:border-accent/50 transition-all group"
+                            onClick={() => {
+                              setPreviewFileUrl(doc.fileLink);
+                              setPreviewFileName(doc.fileSummary || doc.docType || doc.docId);
+                            }}
+                            className="flex items-center justify-between p-5 bg-bg-card border-2 border-border rounded-2xl hover:border-accent/50 transition-all group cursor-pointer"
                           >
                             <div className="flex items-center gap-4">
                               <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-accent group-hover:bg-accent group-hover:text-white transition-all">
@@ -729,7 +733,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                               </div>
                             </div>
                             <Eye size={16} className="text-text-muted group-hover:text-accent transition-all" />
-                          </a>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -780,14 +784,16 @@ const CaseStudyTab = ({ caseData = null }) => {
                                 </div>
                               </div>
                               {comm.fileLink && (
-                                <a
-                                  href={comm.fileLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="bg-accent text-white px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-accent-hover transition-all"
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPreviewFileUrl(comm.fileLink);
+                                    setPreviewFileName(comm.summary || 'Attached File');
+                                  }}
+                                  className="bg-accent text-white px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-accent-hover transition-all active:scale-95"
                                 >
                                   <Eye size={12} /> VIEW FILE
-                                </a>
+                                </button>
                               )}
                             </div>
                             <p className="text-[11px] text-text-secondary italic leading-relaxed">"{comm.summary}"</p>
@@ -942,12 +948,13 @@ const CaseStudyTab = ({ caseData = null }) => {
               ) : (
                 <div className="grid grid-cols-1 gap-4">
                   {docs.map((doc, idx) => (
-                    <a
+                    <div
                       key={idx}
-                      href={doc.fileLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between p-5 bg-bg-card border-2 border-border rounded-2xl hover:border-accent/50 transition-all group"
+                      onClick={() => {
+                        setPreviewFileUrl(doc.fileLink);
+                        setPreviewFileName(doc.fileSummary || doc.docType || doc.docId);
+                      }}
+                      className="flex items-center justify-between p-5 bg-bg-card border-2 border-border rounded-2xl hover:border-accent/50 transition-all group cursor-pointer"
                     >
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-accent group-hover:bg-accent group-hover:text-white transition-all">
@@ -959,7 +966,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                         </div>
                       </div>
                       <Eye size={16} className="text-text-muted group-hover:text-accent transition-all" />
-                    </a>
+                    </div>
                   ))}
                 </div>
               )}
@@ -998,12 +1005,13 @@ const CaseStudyTab = ({ caseData = null }) => {
               ) : (
                 <div className="grid grid-cols-1 gap-4">
                   {comms.filter(c => c.fileLink).map((comm, idx) => (
-                    <a
+                    <div
                       key={idx}
-                      href={comm.fileLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between p-5 bg-bg-card border-2 border-border rounded-2xl hover:border-accent/50 transition-all group"
+                      onClick={() => {
+                        setPreviewFileUrl(comm.fileLink);
+                        setPreviewFileName(comm.summary || 'Attached File');
+                      }}
+                      className="flex items-center justify-between p-5 bg-bg-card border-2 border-border rounded-2xl hover:border-accent/50 transition-all group cursor-pointer"
                     >
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-accent group-hover:bg-accent group-hover:text-white transition-all">
@@ -1015,7 +1023,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                         </div>
                       </div>
                       <Eye size={16} className="text-text-muted group-hover:text-accent transition-all flex-shrink-0" />
-                    </a>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1026,6 +1034,12 @@ const CaseStudyTab = ({ caseData = null }) => {
           </div>
         </div>
       )}
+      <FilePreviewModal
+        isOpen={!!previewFileUrl}
+        onClose={() => setPreviewFileUrl(null)}
+        fileUrl={previewFileUrl}
+        fileName={previewFileName}
+      />
     </div>
   );
 };

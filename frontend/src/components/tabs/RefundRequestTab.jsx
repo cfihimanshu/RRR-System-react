@@ -26,6 +26,7 @@ import {
 import { useLocation } from 'react-router-dom';
 import TourTab from './TourTab';
 import * as XLSX from 'xlsx';
+import FilePreviewModal from '../shared/FilePreviewModal';
 
 const RefundRequestTab = () => {
   const location = useLocation();
@@ -38,6 +39,8 @@ const RefundRequestTab = () => {
   const [myRefunds, setMyRefunds] = useState([]);
   const [selectedRefund, setSelectedRefund] = useState(null);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
+  const [previewFileUrl, setPreviewFileUrl] = useState(null);
+  const [previewFileName, setPreviewFileName] = useState('');
   const { user } = useContext(AuthContext);
 
   const [expandedCases, setExpandedCases] = useState({});
@@ -725,7 +728,7 @@ const RefundRequestTab = () => {
                   />
                   {documentLink && (
                     <div className="mt-1 text-[9px] font-bold text-accent truncate">
-                      Current: <a href={documentLink} target="_blank" rel="noopener noreferrer" className="underline">View Document</a>
+                      Current: <button type="button" onClick={() => { setPreviewFileUrl(documentLink); setPreviewFileName('Supporting Document'); }} className="underline text-left hover:text-accent-hover">View Document</button>
                     </div>
                   )}
                 </div>
@@ -829,7 +832,7 @@ const RefundRequestTab = () => {
                       />
                       {upiQrLink && (
                         <div className="mt-1 text-[9px] font-bold text-accent truncate">
-                          Current QR: <a href={upiQrLink} target="_blank" rel="noopener noreferrer" className="underline">View QR Code</a>
+                          Current QR: <button type="button" onClick={() => { setPreviewFileUrl(upiQrLink); setPreviewFileName('QR Code'); }} className="underline text-left hover:text-accent-hover">View QR Code</button>
                         </div>
                       )}
                     </div>
@@ -1669,14 +1672,16 @@ const RefundRequestTab = () => {
                                     </div>
                                     {instProof && (
                                       <div className="col-span-2 mt-1">
-                                        <a
-                                          href={instProof}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-accent hover:underline"
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setPreviewFileUrl(instProof);
+                                            setPreviewFileName(`Installment ${idx + 1} Proof`);
+                                          }}
+                                          className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-accent hover:underline active:scale-95"
                                         >
                                           <Eye size={10} /> View Proof Document
-                                        </a>
+                                        </button>
                                       </div>
                                     )}
                                   </div>
@@ -1720,14 +1725,16 @@ const RefundRequestTab = () => {
                               </div>
                               {proofDoc && (
                                 <div className="pt-1.5">
-                                  <a
-                                    href={proofDoc}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-soft text-green hover:bg-green hover:text-white border border-green-soft rounded-lg text-[9px] font-black uppercase tracking-wider transition-all"
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setPreviewFileUrl(proofDoc);
+                                      setPreviewFileName('Payment Proof Document');
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-soft text-green hover:bg-green hover:text-white border border-green-soft rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95"
                                   >
                                     <Eye size={12} /> View Payment Proof Document
-                                  </a>
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -1749,19 +1756,27 @@ const RefundRequestTab = () => {
 
               {/* Document */}
               {selectedRefund.documentLink && (
-                <a
-                  href={selectedRefund.documentLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewFileUrl(selectedRefund.documentLink);
+                    setPreviewFileName(selectedRefund.reason || 'Supporting Document');
+                  }}
                   className="flex items-center justify-center gap-2 w-full py-3 bg-accent/10 hover:bg-accent text-accent hover:text-white border-2 border-accent/20 hover:border-accent rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
                 >
                   <Eye size={14} /> View Supporting Document
-                </a>
+                </button>
               )}
             </div>
           </div>
         </div>
       )}
+      <FilePreviewModal
+        isOpen={!!previewFileUrl}
+        onClose={() => setPreviewFileUrl(null)}
+        fileUrl={previewFileUrl}
+        fileName={previewFileName}
+      />
     </div>
   );
 };
