@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
 import { pdf } from '@react-pdf/renderer';
-import AgreementTemplate from '../../templates/AgreementTemplate.jsx';
+import AgreementTemplate from '../../templates/agreementTemplate.jsx';
 
 const AgreementGenerationTab = () => {
   const { user } = useContext(AuthContext);
