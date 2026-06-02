@@ -745,13 +745,44 @@ const CaseMasterTab = () => {
   const fullHistory = useMemo(() => {
     if (!viewCase) return [];
 
+    const getDocUploadDate = (doc) => {
+      if (doc.uploadDate) return doc.uploadDate;
+      if (doc.createdAt) return doc.createdAt;
+      
+      // Parse timestamp from fileLink prefix if available
+      if (doc.fileLink) {
+        const filename = doc.fileLink.split('/').pop() || '';
+        const match = filename.match(/^(\d{13})_/);
+        if (match) {
+          const ts = parseInt(match[1]);
+          if (!isNaN(ts)) {
+            return new Date(ts).toISOString();
+          }
+        }
+      }
+
+      // Fallback to MongoDB ObjectID timestamp
+      if (doc._id && typeof doc._id === 'string' && doc._id.length === 24) {
+        try {
+          const timestamp = parseInt(doc._id.substring(0, 8), 16) * 1000;
+          if (!isNaN(timestamp)) {
+            return new Date(timestamp).toISOString();
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      return viewCase?.createdAt || viewCase?.createdDate || new Date().toISOString();
+    };
+
     const commTypes = ['Call', 'WhatsApp', 'Email', 'Meeting', 'SMS', 'Legal Notice'];
 
     const events = [
       // 1. Core Timeline Logs (Backend tracks Comms, Progress, Actions here)
       ...timelineLogs.map(log => ({
         id: log._id || `tl-${log.createdAt}`,
-        date: log.eventDate || log.createdAt || new Date().toISOString(),
+        date: log.eventDate || log.createdAt || viewCase?.createdAt || viewCase?.createdDate || new Date().toISOString(),
         type: log.eventType?.toLowerCase().includes('document') ? 'DOCUMENT' :
           commTypes.includes(log.eventType) ? 'COMMUNICATION' :
             (log.eventType?.toLowerCase().includes('status') || log.eventType?.toLowerCase().includes('stage') || log.eventType === 'Progress Update') ? 'PROGRESS' :
@@ -767,7 +798,7 @@ const CaseMasterTab = () => {
       // 2. Document Indexing (Documents are tracked in a separate collection without timeline entries)
       ...caseDocs.map(doc => ({
         id: doc._id,
-        date: doc.uploadDate || doc.createdAt || new Date().toISOString(),
+        date: getDocUploadDate(doc),
         type: 'DOCUMENT',
         action: `Document Indexed: ${doc.docType || 'Unknown'}`,
         details: `File: ${doc.fileLink?.split('/').pop() || 'Untitled'}${doc.remarks ? ` - ${doc.remarks}` : ''}`,

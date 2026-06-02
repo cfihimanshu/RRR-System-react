@@ -18,7 +18,8 @@ router.post('/', verifyToken, async (req, res) => {
   try {
     const existingCount = await Document.countDocuments({ caseId: req.body.caseId });
     const docId = `DOC-${req.body.caseId}-${String(existingCount + 1).padStart(3, '0')}`;
-    const doc = new Document({ ...req.body, docId });
+    const uploader = req.user.fullName || req.user.email || 'System';
+    const doc = new Document({ ...req.body, docId, uploadedBy: uploader });
     await doc.save();
     
     await AuditLog.create({
