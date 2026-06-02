@@ -643,7 +643,7 @@ router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations']), asyn
   }
 });
 
-router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async (req, res) => {
+router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin']), async (req, res) => {
   try {
     const caseId = req.params.caseId;
 
@@ -652,7 +652,12 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']),
 
     // Ownership check: Admin and Operations can update anything. 
     // Staff/Others can only update if assigned to them.
-    const canUpdate = req.user.role === 'Admin' || req.user.role === 'Operations' || existingCase.assignedTo === req.user.fullName;
+    const assignedName = (existingCase.assignedTo || '').trim().toLowerCase();
+    const myName = (req.user.fullName || req.user.name || '').trim().toLowerCase();
+    const myEmail = (req.user.email || '').trim().toLowerCase();
+    const canUpdate = req.user.role === 'Admin' || 
+                      req.user.role === 'Operations' || 
+                      (assignedName !== '' && (assignedName === myName || assignedName === myEmail));
 
     if (!canUpdate) {
       return res.status(403).json({ error: 'You do not have permission to update this case' });

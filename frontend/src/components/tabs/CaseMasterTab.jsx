@@ -476,6 +476,21 @@ const CaseMasterTab = () => {
 
   const [linkedCases, setLinkedCases] = useState([]);
 
+  const canEditCase = useMemo(() => {
+    if (!user || !viewCase) return false;
+    const role = user.role;
+    if (role === 'Admin' || role === 'Super Admin' || role === 'SuperAdmin' || role === 'Operations') {
+      return true;
+    }
+    const assignedName = (viewCase.assignedTo || '').trim().toLowerCase();
+    const myName = (user.fullName || user.name || '').trim().toLowerCase();
+    const myEmail = (user.email || '').trim().toLowerCase();
+    if (['Staff', 'Operation Admin', 'operation admin'].includes(role)) {
+      return assignedName !== '' && (assignedName === myName || assignedName === myEmail);
+    }
+    return false;
+  }, [user, viewCase]);
+
   const sourceOptions = useMemo(() => {
     const unique = new Set(["Email", "Call", "Office Visit", "Social Media", "Toll Free", "Notice", "Odoo"]);
     cases.forEach((c) => {
@@ -3487,7 +3502,7 @@ const CaseMasterTab = () => {
                 </div>
               </div>
               <div className="flex gap-3">
-                {!isEditing && activeDetailTab === 'Case Details' && (
+                {!isEditing && activeDetailTab === 'Case Details' && canEditCase && (
                   <button
                     onClick={() => setIsEditing(true)}
                     className="bg-accent text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-900/20 active:scale-95 flex items-center gap-2"
