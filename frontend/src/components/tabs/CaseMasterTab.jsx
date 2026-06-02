@@ -5303,7 +5303,7 @@ const CaseMasterTab = () => {
                               <td className="px-6 py-4 text-[11px] font-bold text-text-primary uppercase tracking-tight">
                                 {log.action}
                               </td>
-                              <td className="px-6 py-4 text-[10px] text-text-secondary leading-relaxed max-w-md">
+                              <td className="px-6 py-4 text-[10px] text-text-secondary leading-relaxed max-w-md break-all">
                                 {log.changes ? (
                                   <div className="space-y-2">
                                     <div
