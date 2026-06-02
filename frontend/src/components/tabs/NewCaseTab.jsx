@@ -6,6 +6,7 @@ import FileUpload from '../shared/FileUpload';
 import SearchableSelect from '../shared/SearchableSelect';
 import Modal from '../shared/Modal';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { State, City } from 'country-state-city';
 import {
   Building2,
   Wrench,
@@ -41,16 +42,6 @@ const initialService = {
   bda: '',
   department: 'Operations'
 };
-
-const indianStates = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
-  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh",
-  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
-  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh",
-  "Uttarakhand", "West Bengal", "Andaman and Nicobar Islands", "Chandigarh",
-  "Dadra and Nagar Haveli and Daman and Diu", "Lakshadweep", "Delhi", "Puducherry",
-  "Ladakh", "Jammu and Kashmir"
-];
 
 const initialFormData = {
   companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
@@ -128,6 +119,28 @@ const NewCaseTab = () => {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateCase, setDuplicateCase] = useState(null);
   const [visibleSteps, setVisibleSteps] = useState(1);
+
+  const [availableStates, setAvailableStates] = useState([]);
+  const [availableCities, setAvailableCities] = useState([]);
+
+  useEffect(() => {
+    const states = State.getStatesOfCountry('IN').map(state => state.name);
+    setAvailableStates(states);
+  }, []);
+
+  useEffect(() => {
+    if (formData.state) {
+      const stateObj = State.getStatesOfCountry('IN').find(s => s.name === formData.state);
+      if (stateObj) {
+        const cities = City.getCitiesOfState('IN', stateObj.isoCode).map(city => city.name);
+        setAvailableCities(cities);
+      } else {
+        setAvailableCities([]);
+      }
+    } else {
+      setAvailableCities([]);
+    }
+  }, [formData.state]);
 
   useEffect(() => {
     if (editCase) {
@@ -409,6 +422,10 @@ const NewCaseTab = () => {
 
     if (name === 'assignedTo') {
       updates.assignedTo = value?.toLowerCase() === 'staff' ? '' : value;
+    }
+
+    if (name === 'state') {
+      updates.city = '';
     }
 
     // Inline Validations
@@ -881,7 +898,7 @@ const NewCaseTab = () => {
                 <label className={labelClass}>State</label>
                 <SearchableSelect
                   name="state"
-                  options={indianStates}
+                  options={availableStates}
                   value={formData.state}
                   onChange={handleChange}
                   placeholder="Search state..."
@@ -892,7 +909,15 @@ const NewCaseTab = () => {
                 <>
                   <div>
                     <label className={labelClass}>City</label>
-                    <input type="text" className={`${inputClass} h-12`} name="city" value={formData.city || ''} onChange={handleChange} placeholder="Enter city" />
+                    <SearchableSelect
+                      name="city"
+                      options={availableCities}
+                      value={formData.city || ''}
+                      onChange={handleChange}
+                      placeholder={formData.state ? "Search city..." : "Select state first"}
+                      className="!bg-bg-input !border-border h-12"
+                      disabled={!formData.state}
+                    />
                   </div>
                   <div>
                     <label className={labelClass}>Pincode</label>

@@ -87,7 +87,16 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
               </div>
             ))
           ) : (
-            <div className="px-5 py-4 text-[10px] text-text-muted italic font-black uppercase tracking-widest">No matches</div>
+            searchTerm && isTyping ? (
+              <div
+                className="px-5 py-3.5 hover:bg-bg-input cursor-pointer text-xs font-black text-accent uppercase tracking-widest transition-colors"
+                onClick={() => handleSelect(searchTerm)}
+              >
+                + Add "{searchTerm}" Manually
+              </div>
+            ) : (
+              <div className="px-5 py-4 text-[10px] text-text-muted italic font-black uppercase tracking-widest">No matches</div>
+            )
           )}
         </div>
       )}
