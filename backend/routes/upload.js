@@ -12,7 +12,22 @@ const imagekit = new ImageKit({
   urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT
 });
 
-// Use memory storage for multer
+// Endpoint for frontend to get ImageKit auth parameters for direct upload
+router.get('/auth', verifyToken, (req, res) => {
+  try {
+    const authenticationParameters = imagekit.helper.getAuthenticationParameters();
+    res.json({
+      ...authenticationParameters,
+      publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+      urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT
+    });
+  } catch (error) {
+    console.error('ImageKit Auth Error:', error);
+    res.status(500).json({ error: 'Failed to generate auth parameters' });
+  }
+});
+
+// Legacy upload via backend (kept for backward compatibility or smaller files)
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
@@ -25,7 +40,6 @@ router.post('/', verifyToken, upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // In @imagekit/nodejs v7+, upload is under .files.upload
     const response = await imagekit.files.upload({
       file: req.file.buffer.toString('base64'),
       fileName: `${Date.now()}_${req.file.originalname}`,

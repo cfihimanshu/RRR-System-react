@@ -13,25 +13,53 @@ const FileUpload = ({ onUploadSuccess, label = "Drag & drop or click to upload f
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error('File exceeds 20MB limit');
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error('File exceeds 100MB limit');
       return;
     }
 
     setFileName(file.name);
-    const formData = new FormData();
-    formData.append('file', file);
-
     setUploading(true);
+
     try {
-      const res = await api.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      // 1. Get Auth Params
+      const authRes = await api.get('/upload/auth');
+      const { token, expire, signature, publicKey } = authRes.data;
+
+      if (!token || !publicKey) {
+        throw new Error('Failed to retrieve upload parameters');
+      }
+
+      // 2. Upload directly to ImageKit
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('publicKey', publicKey);
+      formData.append('signature', signature);
+      formData.append('expire', expire);
+      formData.append('token', token);
+      formData.append('fileName', `${Date.now()}_${file.name}`);
+      formData.append('folder', 'rrr_engine');
+      formData.append('useUniqueFileName', 'true');
+
+      const uploadRes = await fetch('https://upload.imagekit.io/api/v1/files/upload', {
+        method: 'POST',
+        body: formData,
       });
-      setFileUrl(res.data.url);
-      onUploadSuccess(res.data.url);
+
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json();
+        throw new Error(errorData.message || 'ImageKit direct upload failed');
+      }
+
+      const uploadData = await uploadRes.json();
+      const fileUrl = uploadData.url;
+
+      setFileUrl(fileUrl);
+      onUploadSuccess(fileUrl);
       toast.success('File uploaded successfully');
     } catch (err) {
-      toast.error('File upload failed');
+      console.error('Upload error:', err);
+      toast.error(err.message || 'File upload failed');
     } finally {
       setUploading(false);
     }

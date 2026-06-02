@@ -10,7 +10,7 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     const lastPart = urlParts[urlParts.length - 1];
     const urlExt = (lastPart.split('.').pop() || '').toLowerCase();
 
-    const knownExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+    const knownExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'mp4', 'webm', 'mov', 'mp3', 'wav', 'm4a', 'ogg'];
     if (knownExtensions.includes(urlExt)) {
       return urlExt;
     }
@@ -27,12 +27,14 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
 
   const ext = getExtension();
   const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext);
+  const isVideo = ['mp4', 'webm', 'mov', 'ogg'].includes(ext);
+  const isAudio = ['mp3', 'wav', 'm4a', 'ogg'].includes(ext);
   const isPdf = ext === 'pdf';
   const isLocalUrl = fileUrl.includes('localhost') || fileUrl.includes('127.0.0.1') || fileUrl.startsWith('/');
-  const needsGoogleDocs = !isImage && !isPdf;
+  const needsGoogleDocs = !isImage && !isPdf && !isVideo && !isAudio;
 
   const getPreviewUrl = () => {
-    if (isImage || isPdf) return fileUrl;
+    if (isImage || isPdf || isVideo || isAudio) return fileUrl;
     // Always use Google Docs Viewer for Office Documents
     return `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
   };
@@ -87,6 +89,22 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
                 src={fileUrl}
                 alt={fileName}
                 className="max-w-full max-h-full object-contain rounded-xl shadow-lg"
+              />
+            </div>
+          ) : isVideo ? (
+            <div className="w-full h-full flex items-center justify-center p-6 bg-black">
+              <video
+                src={fileUrl}
+                controls
+                className="w-full h-full max-h-full rounded-xl shadow-lg object-contain"
+              />
+            </div>
+          ) : isAudio ? (
+            <div className="w-full h-full flex items-center justify-center p-6 bg-bg-card">
+              <audio
+                src={fileUrl}
+                controls
+                className="w-full max-w-lg"
               />
             </div>
           ) : isLocalUrl && needsGoogleDocs ? (
