@@ -1,6 +1,6 @@
 export const TAB_ACCESS = {
   "dashboard":            ["Admin", "Operations", "Staff", "Accountant", "Super Admin", "SuperAdmin", "Reviewer", "Operation Admin", "operation admin"],
-  "new-case":             ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin"],
+  "new-case":             ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin", "Operation Admin", "operation admin"],
   "case-master":          ["Admin", "Operations", "Reviewer", "Super Admin", "SuperAdmin", "Operation Admin", "operation admin"],
   "history":              ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin"],
   "action-log":           ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin"],

@@ -420,7 +420,7 @@ router.get('/:caseId', verifyToken, async (req, res) => {
   }
 });
 
-router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async (req, res) => {
+router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin']), async (req, res) => {
   try {
     const clientMobile = req.body.clientMobile?.trim();
     const clientName = req.body.clientName?.trim();
@@ -661,6 +661,11 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', '
 
     if (!canUpdate) {
       return res.status(403).json({ error: 'You do not have permission to update this case' });
+    }
+
+    if (existingCase.currentStatus === 'Closure') {
+      req.body.currentStatus = 'Closure';
+      req.body.progressPercentage = 100;
     }
 
     const isAssigning = req.body.assignedTo && req.body.assignedTo !== existingCase.assignedTo;
