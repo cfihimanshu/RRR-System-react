@@ -13,7 +13,8 @@ router.get('/', verifyToken, async (req, res) => {
     const { caseId } = req.query;
     if (!caseId) return res.status(400).json({ error: 'caseId is required' });
 
-    let progressDoc = await Progress.findOne({ caseId });
+    let progressDocs = await Progress.find({ caseId }).sort({ createdAt: -1 });
+    let progressDoc = progressDocs.length > 0 ? progressDocs[0] : null;
 
     // If no logs exist, create an initial one automatically
     if (!progressDoc) {
@@ -40,13 +41,57 @@ router.get('/', verifyToken, async (req, res) => {
             ],
             updates: [initialLog]
           });
+          progressDocs = [progressDoc];
         }
       } catch (err) {
         console.error('Error auto-initializing progress:', err);
       }
     }
 
-    const logs = progressDoc ? (progressDoc.updates || []) : [];
+    let logs = [];
+    
+    // Combine ALL documents (both legacy top-level and new updates arrays)
+    for (const doc of progressDocs) {
+      if (doc.updates && doc.updates.length > 0) {
+        logs.push(...doc.updates);
+      } 
+      
+      // Also add top-level legacy fields if summary exists
+      if (doc.summary) {
+        logs.push({
+          _id: doc._id,
+          stage: doc.stage,
+          percentage: doc.percentage,
+          summary: doc.summary,
+          nextAction: doc.nextAction,
+          blockers: doc.blockers,
+          followUpDate: doc.followUpDate,
+          escalateTo: doc.escalateTo,
+          refundedAmount: doc.refundedAmount,
+          savedAmount: doc.savedAmount,
+          attachment: doc.attachment,
+          updatedBy: doc.updatedBy,
+          createdAt: doc.createdAt || doc.updatedAt || new Date()
+        });
+      }
+    }
+
+    // Deduplicate logs based on time (down to the minute) and summary text
+    const uniqueLogsMap = new Map();
+    for (const log of logs) {
+      const logObj = log.toObject ? log.toObject() : log;
+      const dateToUse = logObj.createdAt || logObj.uploadDate;
+      const timeStr = dateToUse ? new Date(dateToUse).toISOString().substring(0, 16) : 'unknown-time';
+      const summaryPrefix = logObj.summary ? logObj.summary.trim().substring(0, 30) : '';
+      const key = `${timeStr}-${summaryPrefix}`;
+      
+      if (!uniqueLogsMap.has(key)) {
+        uniqueLogsMap.set(key, logObj);
+      }
+    }
+    
+    logs = Array.from(uniqueLogsMap.values());
+
     // Sort updates by createdAt descending
     logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
@@ -57,20 +102,23 @@ router.get('/', verifyToken, async (req, res) => {
       const logObj = log.toObject ? log.toObject() : log;
       if (!logObj.nextAction) {
         // Try to find matching timeline event with a larger window (5 mins)
-        const timelineEvent = await Timeline.findOne({
-          caseId: caseId,
-          $or: [
-            { 'metadata.nextAction': { $exists: true, $ne: '' } },
-            { 'metadata.recommendedNextSteps': { $exists: true, $ne: '' } }
-          ],
-          createdAt: { 
-            $gte: new Date(new Date(log.createdAt).getTime() - 300000), 
-            $lte: new Date(new Date(log.createdAt).getTime() + 300000) 
+        const dateToUse = log.createdAt || log.uploadDate;
+        if (dateToUse) {
+          const timelineEvent = await Timeline.findOne({
+            caseId: caseId,
+            $or: [
+              { 'metadata.nextAction': { $exists: true, $ne: '' } },
+              { 'metadata.recommendedNextSteps': { $exists: true, $ne: '' } }
+            ],
+            createdAt: { 
+              $gte: new Date(new Date(dateToUse).getTime() - 300000), 
+              $lte: new Date(new Date(dateToUse).getTime() + 300000) 
+            }
+          }).lean();
+          
+          if (timelineEvent && timelineEvent.metadata) {
+            logObj.nextAction = timelineEvent.metadata.nextAction || timelineEvent.metadata.recommendedNextSteps;
           }
-        }).lean();
-        
-        if (timelineEvent && timelineEvent.metadata) {
-          logObj.nextAction = timelineEvent.metadata.nextAction || timelineEvent.metadata.recommendedNextSteps;
         }
         
         // Fallback for latest log or initial logs
@@ -112,7 +160,7 @@ router.post('/', verifyToken, async (req, res) => {
       createdAt: new Date()
     };
 
-    let progressDoc = await Progress.findOne({ caseId });
+    let progressDoc = await Progress.findOne({ caseId }).sort({ createdAt: -1 });
     if (progressDoc && stage) {
       const stages = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
       const currentStage = progressDoc.stage || 'Case Logged';
@@ -155,6 +203,27 @@ router.post('/', verifyToken, async (req, res) => {
       progressDoc.updatedBy = updatedBy || progressDoc.updatedBy;
       if (checklist) {
         progressDoc.checklist = checklist;
+      }
+
+      if (!progressDoc.updates || progressDoc.updates.length === 0) {
+        if (progressDoc.summary) {
+          progressDoc.updates = [{
+            stage: progressDoc.stage,
+            percentage: progressDoc.percentage,
+            summary: progressDoc.summary,
+            nextAction: progressDoc.nextAction,
+            blockers: progressDoc.blockers,
+            followUpDate: progressDoc.followUpDate,
+            escalateTo: progressDoc.escalateTo,
+            refundedAmount: progressDoc.refundedAmount,
+            savedAmount: progressDoc.savedAmount,
+            attachment: progressDoc.attachment,
+            updatedBy: progressDoc.updatedBy,
+            createdAt: progressDoc.createdAt || progressDoc.updatedAt || new Date()
+          }];
+        } else {
+          progressDoc.updates = [];
+        }
       }
       progressDoc.updates.push(newLog);
     }

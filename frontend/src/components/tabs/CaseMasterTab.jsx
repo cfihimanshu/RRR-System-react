@@ -58,7 +58,8 @@ import {
   PlusCircle,
   Archive,
   MoreVertical,
-  RefreshCw
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -210,6 +211,12 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   const [colSortConfig, setColSortConfig] = useState({ key: null, direction: null }); // { key, direction }
   const [tempColFilters, setTempColFilters] = useState([]);    // temp selection list for open dropdown
   const [colFilterPos, setColFilterPos] = useState({ top: 0, left: 0 }); // screen position of dropdown
+
+  // AI Summary State
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [showAIPromptModal, setShowAIPromptModal] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiTargetField, setAiTargetField] = useState('caseSummary');
 
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
@@ -1550,6 +1557,42 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       return valB - valA;
     });
   }
+
+  const handleGenerateAISummary = async () => {
+    try {
+      setIsGeneratingSummary(true);
+      
+      const payload = {
+        customPrompt: aiPrompt,
+        targetField: aiTargetField
+      };
+      
+      if (viewCase?.caseId) {
+        payload.caseId = viewCase.caseId;
+      } else {
+        payload.tempCaseData = formData;
+      }
+
+      const res = await api.post('/ai/generate-summary', payload);
+      
+      if (res.data.success) {
+        setFormData(prev => ({
+          ...prev,
+          [aiTargetField]: prev[aiTargetField] ? prev[aiTargetField] + '\n\n' + res.data.summary : res.data.summary
+        }));
+        toast.success('Generated successfully!');
+        setShowAIPromptModal(false);
+        setAiPrompt('');
+      } else {
+        toast.error(res.data.error || 'Failed to generate summary');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(error.response?.data?.error || 'Failed to generate summary');
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
 
   const hasActiveFilters = !!(
     searchTerm ||
@@ -4074,7 +4117,22 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                   <div className="grid grid-cols-1 gap-6 mb-8">
                     {/* Case Summary */}
                     <div>
-                      <label className={`${labelClass} after:content-['*'] after:text-red`}>Case Summary</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className={`${labelClass} mb-0 after:content-['*'] after:text-red`}>Case Summary</label>
+                        {isEditing && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAiTargetField('caseSummary');
+                              setShowAIPromptModal(true);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent text-[10px] font-black uppercase tracking-widest rounded-lg transition-all"
+                          >
+                            <Sparkles size={14} />
+                            Generate with AI
+                          </button>
+                        )}
+                      </div>
                       {/* Formatting Toolbar – always visible, clickable only when editing */}
                       <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
                         <button
@@ -4126,7 +4184,22 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
 
                     {/* Client's Main Allegation */}
                     <div>
-                      <label className={labelClass}>Client's Dispute</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className={`${labelClass} mb-0`}>Client's Dispute</label>
+                        {isEditing && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAiTargetField('clientAllegation');
+                              setShowAIPromptModal(true);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent text-[10px] font-black uppercase tracking-widest rounded-lg transition-all"
+                          >
+                            <Sparkles size={14} />
+                            Generate with AI
+                          </button>
+                        )}
+                      </div>
                       {/* Formatting Toolbar */}
                       <div className="flex items-center bg-bg-card border border-border rounded-t-xl px-3 py-2 gap-0 overflow-x-auto scrollbar-none">
                         <button
@@ -5812,6 +5885,53 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
         fileUrl={previewFileUrl}
         fileName={previewFileName}
       />
+
+      {/* AI Prompt Modal */}
+      <Modal isOpen={showAIPromptModal} onClose={() => !isGeneratingSummary && setShowAIPromptModal(false)} title={`✨ Generate ${aiTargetField === 'caseSummary' ? 'Case Summary' : "Client's Dispute"}`}>
+        <div className="p-6">
+          <p className="text-sm text-text-secondary mb-4">
+            Our AI will read the case details, recent history, communications, and documents to draft a professional text for you.
+          </p>
+          <div className="mb-6">
+            <label className="block text-[10px] font-black uppercase tracking-widest text-text-secondary mb-2">
+              Custom Instructions (Optional)
+            </label>
+            <textarea
+              className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-3 text-sm text-text-primary focus:border-accent outline-none min-h-[100px] resize-y placeholder:text-text-muted"
+              placeholder="E.g., Focus specifically on the pending payment issue and the recent police threat."
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              disabled={isGeneratingSummary}
+            />
+          </div>
+          <div className="flex gap-4">
+            <button
+              onClick={handleGenerateAISummary}
+              disabled={isGeneratingSummary}
+              className="flex-1 bg-accent hover:bg-accent-hover disabled:bg-accent/50 text-white font-black py-3 px-4 rounded-xl uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+            >
+              {isGeneratingSummary ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={16} />
+                  Generate
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setShowAIPromptModal(false)}
+              disabled={isGeneratingSummary}
+              className="flex-1 bg-bg-input hover:bg-bg-card text-text-primary border border-border font-black py-3 px-4 rounded-xl uppercase tracking-widest text-xs transition-all"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

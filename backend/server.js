@@ -216,6 +216,7 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/case-study', require('./routes/caseStudy'));
 app.use('/api/tours', require('./routes/tours'));
 app.use('/api/leaves', require('./routes/leaves'));
+app.use('/api/ai', require('./routes/ai'));
 
 const CITY_COORDS = {
   delhi: { lat: 28.6139, lon: 77.2090 },

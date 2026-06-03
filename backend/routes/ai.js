@@ -23,7 +23,7 @@ const getGeminiModel = () => {
   const genAI = new GoogleGenerativeAI(key);
 
   return genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash-latest',
+    model: 'gemini-flash-latest',
     generationConfig: {
       temperature: 0.3,
       maxOutputTokens: 1200,
@@ -240,6 +240,96 @@ ${caseContext}
     return res.status(500).json({
       success: false,
       error: error.message || 'AI case insights failed',
+    });
+  }
+});
+
+router.post('/generate-summary', verifyToken, async (req, res) => {
+  try {
+    const { caseId, customPrompt, tempCaseData, targetField = 'caseSummary' } = req.body;
+
+    if (!caseId && !tempCaseData) {
+      return res.status(400).json({ success: false, error: 'caseId or tempCaseData is required' });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ success: false, error: 'Gemini API key is not configured.' });
+    }
+
+    let caseData = tempCaseData;
+    let historyEntries = [];
+    let comms = [];
+    let limitedProgressLogs = [];
+    let documents = [];
+
+    if (caseId) {
+      caseData = await Case.findOne({ caseId });
+      if (!caseData) return res.status(404).json({ success: false, error: 'Case not found' });
+
+      const [historyData, commsData, progressDoc, docsData] = await Promise.all([
+        History.find({ caseId }).sort({ timestamp: 1 }).limit(20),
+        Communication.find({ caseId }).sort({ dateTime: -1 }).limit(20),
+        Progress.findOne({ caseId }).lean(),
+        Document.find({ caseId }).sort({ uploadDate: -1 }).limit(20),
+      ]);
+      
+      historyEntries = historyData;
+      comms = commsData;
+      documents = docsData;
+
+      const progressLogs = progressDoc ? (progressDoc.updates || []) : [];
+      progressLogs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      limitedProgressLogs = progressLogs.slice(0, 20);
+    }
+
+    const caseContext = buildCaseContext(
+      caseData,
+      historyEntries,
+      comms,
+      limitedProgressLogs,
+      documents
+    );
+
+    const prompt = `
+You are an expert legal and operational case analyst.
+${targetField === 'clientAllegation' 
+  ? `Your task is to write a highly professional, concise, and accurate summary of the "Client's Dispute / Main Allegation" based on the provided case data.`
+  : `Your task is to write a highly professional, concise, and accurate "Case Summary" based on the provided case data.`
+}
+The text should be ready to be pasted directly into a plain text official case narrative field.
+Do not include greetings, sign-offs, or conversational text. Just provide the summary text.
+IMPORTANT: Do NOT use any Markdown formatting. Do not use asterisks (**) for bolding, or hashes (#) for headers. Use plain text only, with standard line breaks for paragraphs.
+
+${customPrompt ? `The user has provided a specific instruction for this summary: "${customPrompt}"` : ''}
+
+Case context:
+${caseContext}
+`;
+
+    const model = getGeminiModel();
+    // For this we just need plain text, not JSON
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY.trim());
+    const simpleModel = genAI.getGenerativeModel({
+      model: 'gemini-flash-latest',
+      generationConfig: {
+        temperature: 0.5,
+        maxOutputTokens: 800,
+      },
+    });
+
+    const result = await simpleModel.generateContent(prompt);
+    const text = result.response.text();
+
+    return res.status(200).json({
+      success: true,
+      summary: text.trim()
+    });
+
+  } catch (error) {
+    console.error('AI generate summary error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'AI generate summary failed',
     });
   }
 });
