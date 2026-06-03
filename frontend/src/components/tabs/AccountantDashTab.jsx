@@ -20,6 +20,7 @@ const AccountantDashTab = () => {
   const [previewFileUrl, setPreviewFileUrl] = useState(null);
   const [previewFileName, setPreviewFileName] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
 
   const [expandedCases, setExpandedCases] = useState({});
@@ -63,12 +64,27 @@ const AccountantDashTab = () => {
   const filteredRefunds = React.useMemo(() => {
     return refunds.filter(r => {
       const statusLower = r.status?.toLowerCase();
-      if (activeTab === 'pending') return statusLower === 'pending payment';
-      if (activeTab === 'paid') return statusLower === 'paid';
-      if (activeTab === 'rejected') return statusLower === 'rejected';
-      return false;
+      
+      let statusMatch = false;
+      if (activeTab === 'pending') statusMatch = statusLower === 'pending payment';
+      else if (activeTab === 'paid') statusMatch = statusLower === 'paid';
+      else if (activeTab === 'rejected') statusMatch = statusLower === 'rejected';
+
+      if (!statusMatch) return false;
+
+      let searchMatch = true;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        searchMatch = 
+          (r.caseId && r.caseId.toLowerCase().includes(q)) ||
+          (r.companyName && r.companyName.toLowerCase().includes(q)) ||
+          (r.requestedByName && r.requestedByName.toLowerCase().includes(q)) ||
+          (r.requestedBy && r.requestedBy.toLowerCase().includes(q));
+      }
+
+      return searchMatch;
     });
-  }, [refunds, activeTab]);
+  }, [refunds, activeTab, searchQuery]);
 
   const handlePayInstallment = async () => {
     if (!instPaymentData.paymentDate || !instPaymentData.paymentProof) {
@@ -226,12 +242,22 @@ const AccountantDashTab = () => {
       </div>
 
       <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border overflow-hidden mb-8">
-        <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
-          <div className={`w-1.5 h-6 rounded-full ${activeTab === 'pending' ? 'bg-orange-500' : 'bg-green'
-            }`} />
-          <h3 className="text-sm font-black text-text-primary uppercase tracking-widest">
-            {activeTab === 'pending' ? 'Pending Payments' : 'Settled Payments'}
-          </h3>
+        <div className="p-6 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-bg-card">
+          <div className="flex items-center gap-3">
+            <div className={`w-1.5 h-6 rounded-full ${activeTab === 'pending' ? 'bg-orange-500' : 'bg-green'}`} />
+            <h3 className="text-sm font-black text-text-primary uppercase tracking-widest">
+              {activeTab === 'pending' ? 'Pending Payments' : 'Settled Payments'}
+            </h3>
+          </div>
+          <div className="w-full sm:w-auto">
+            <input
+              type="text"
+              placeholder="Search by Case ID, Company..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full sm:w-[300px] bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-[10px] font-black text-text-primary outline-none focus:border-green transition-all"
+            />
+          </div>
         </div>
         <div className="table-wrap overflow-x-auto scrollbar-thin">
           <table className="w-full text-left border-collapse min-w-[900px]">
@@ -263,7 +289,7 @@ const AccountantDashTab = () => {
                 if (g.requests.length === 1) {
                   const r = g.requests[0];
                   return (
-                    <tr key={r._id} className="hover:bg-bg-input/40 transition-all bg-bg-card font-bold select-none">
+                    <tr key={r._id} className="hover:bg-bg-input/40 transition-all bg-bg-card font-bold">
                       <td className="px-4 py-5 align-top flex flex-col items-start gap-2">
                         <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border border-accent-soft">
                           {g.caseId}
@@ -313,7 +339,7 @@ const AccountantDashTab = () => {
                     {/* Parent Case Row */}
                     <tr
                       onClick={() => toggleCaseExpand(g.caseId)}
-                      className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold select-none"
+                      className="hover:bg-bg-input/40 cursor-pointer transition-all bg-bg-card font-bold"
                     >
                       <td className="px-4 py-5 align-top flex flex-col items-start gap-2">
                         <span className="bg-accent-soft text-accent px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border border-accent-soft">

@@ -31,6 +31,7 @@ import FilePreviewModal from '../shared/FilePreviewModal';
 const RefundRequestTab = () => {
   const location = useLocation();
   const [statusFilter, setStatusFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
   const [userCases, setUserCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
@@ -640,11 +641,24 @@ const RefundRequestTab = () => {
   const showRequesterColumn = user?.role === 'Admin' || user?.role === 'Super Admin' || user?.role === 'SuperAdmin';
 
   const filteredRefunds = myRefunds.filter(r => {
-    if (statusFilter === 'All') return true;
-    if (statusFilter === 'Paid') return r.status === 'Paid';
-    if (statusFilter === 'Rejected') return r.status === 'Rejected';
-    if (statusFilter === 'Pending') return !['Paid', 'Rejected'].includes(r.status);
-    return true;
+    // Status Filter
+    let statusMatch = true;
+    if (statusFilter === 'Paid') statusMatch = r.status === 'Paid';
+    else if (statusFilter === 'Rejected') statusMatch = r.status === 'Rejected';
+    else if (statusFilter === 'Pending') statusMatch = !['Paid', 'Rejected'].includes(r.status);
+
+    // Search Filter
+    let searchMatch = true;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      searchMatch = 
+        (r.caseId && r.caseId.toLowerCase().includes(q)) ||
+        (r.companyName && r.companyName.toLowerCase().includes(q)) ||
+        (r.requestedByName && r.requestedByName.toLowerCase().includes(q)) ||
+        (r.requestedBy && r.requestedBy.toLowerCase().includes(q));
+    }
+
+    return statusMatch && searchMatch;
   });
 
   return (
@@ -1309,18 +1323,27 @@ const RefundRequestTab = () => {
                 {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) ? 'Refund Requests' : 'Submitted Requests'}
               </h3>
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-[10px] font-black text-text-muted uppercase tracking-widest">Status Filter:</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-[10px] font-black uppercase text-text-primary outline-none focus:border-green transition-all"
-              >
-                <option value="All">All Status</option>
-                <option value="Paid">Paid</option>
-                <option value="Rejected">Rejected</option>
-                <option value="Pending">Pending</option>
-              </select>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <input
+                type="text"
+                placeholder="Search by Case ID, Company..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-[10px] font-black text-text-primary outline-none focus:border-green transition-all min-w-[200px]"
+              />
+              <div className="flex items-center gap-2">
+                <label className="text-[10px] font-black text-text-muted uppercase tracking-widest">Status Filter:</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-[10px] font-black uppercase text-text-primary outline-none focus:border-green transition-all"
+                >
+                  <option value="All">All Status</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Rejected">Rejected</option>
+                  <option value="Pending">Pending</option>
+                </select>
+              </div>
             </div>
           </div>
 

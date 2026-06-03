@@ -33,10 +33,14 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
   const isLocalUrl = fileUrl.includes('localhost') || fileUrl.includes('127.0.0.1') || fileUrl.startsWith('/');
   const needsGoogleDocs = !isImage && !isPdf && !isVideo && !isAudio;
 
+  const safeFileUrl = (isVideo && fileUrl.includes('ik.imagekit.io'))
+    ? (fileUrl.includes('?') ? `${fileUrl}&tr=orig-true` : `${fileUrl}?tr=orig-true`)
+    : fileUrl;
+
   const getPreviewUrl = () => {
-    if (isImage || isPdf || isVideo || isAudio) return fileUrl;
+    if (isImage || isPdf || isVideo || isAudio) return safeFileUrl;
     // Always use Google Docs Viewer for Office Documents
-    return `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(safeFileUrl)}&embedded=true`;
   };
 
   return (
@@ -58,7 +62,7 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <a
-              href={fileUrl}
+              href={safeFileUrl}
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-soft text-accent hover:bg-accent hover:text-white text-[9px] font-black uppercase tracking-widest rounded-lg border border-accent-soft transition-all"
@@ -66,7 +70,7 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
               <ExternalLink size={11} /> Open Original
             </a>
             {/* <a
-              href={fileUrl}
+              href={safeFileUrl}
               download={fileName}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-input border border-border text-text-secondary hover:bg-bg-input/60 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all"
             >
@@ -86,7 +90,7 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
           {isImage ? (
             <div className="w-full h-full flex items-center justify-center p-6 overflow-auto">
               <img
-                src={fileUrl}
+                src={safeFileUrl}
                 alt={fileName}
                 className="max-w-full max-h-full object-contain rounded-xl shadow-lg"
               />
@@ -94,7 +98,7 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
           ) : isVideo ? (
             <div className="w-full h-full flex items-center justify-center p-6 bg-black">
               <video
-                src={fileUrl}
+                src={safeFileUrl}
                 controls
                 className="w-full h-full max-h-full rounded-xl shadow-lg object-contain"
               />
@@ -102,7 +106,7 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
           ) : isAudio ? (
             <div className="w-full h-full flex items-center justify-center p-6 bg-bg-card">
               <audio
-                src={fileUrl}
+                src={safeFileUrl}
                 controls
                 className="w-full max-w-lg"
               />
@@ -120,14 +124,14 @@ const FilePreviewModal = ({ isOpen, onClose, fileUrl, fileName }) => {
                 </p>
                 <div className="flex items-center gap-3 w-full mt-4">
                   <a
-                    href={fileUrl}
+                    href={safeFileUrl}
                     download={fileName}
                     className="flex-1 py-3 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 text-center"
                   >
                     Download File
                   </a>
                   <a
-                    href={fileUrl}
+                    href={safeFileUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="flex-1 py-3 bg-bg-input hover:bg-bg-input/60 border border-border text-text-secondary text-[10px] font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 text-center"
