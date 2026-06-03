@@ -213,6 +213,13 @@ async function buildCaseQuery(req) {
     query.caseId = { $in: commsWithDemand };
   }
 
+  // Handle archived cases filter
+  if (req.query.isArchived === 'true') {
+    query.isArchived = true;
+  } else if (req.query.isArchived === 'false') {
+    query.isArchived = { $ne: true };
+  }
+
   return query;
 }
 
@@ -322,6 +329,13 @@ router.get('/', verifyToken, async (req, res) => {
       ? await Case.estimatedDocumentCount()
       : await Case.countDocuments(query);
 
+    let archivedCount = 0;
+    if (req.query.isArchived === 'false') {
+      const archivedQuery = { ...query };
+      archivedQuery.isArchived = true;
+      archivedCount = await Case.countDocuments(archivedQuery);
+    }
+
     const cases = await Case.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -331,6 +345,7 @@ router.get('/', verifyToken, async (req, res) => {
     res.json({
       cases,
       total,
+      archivedCount,
       page,
       pages: Math.ceil(total / limit)
     });

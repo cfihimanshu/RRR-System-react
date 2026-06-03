@@ -331,9 +331,10 @@ const CaseStudyTab = ({ caseData = null }) => {
                     </td>
                   </tr>
                 )}
-                {data?.mouSigned && <tr><td className={labelClass}>MOU Signed</td><td className={valueClass}>{data.mouSigned}</td></tr>}
+                {(s.mouSigned || data?.mouSigned) && <tr><td className={labelClass}>MOU Signed</td><td className={valueClass}>{s.mouSigned || data?.mouSigned}</td></tr>}
                 {s.signedMouAmount && <tr><td className={labelClass}>MOU Signed Amount</td><td className={valueClass}>Rs. {Number(s.signedMouAmount).toLocaleString('en-IN')}/-</td></tr>}
                 {s.bda && <tr><td className={labelClass}>Business Development Associate</td><td className={valueClass}>{s.bda}</td></tr>}
+                {s.department && <tr><td className={labelClass}>Department</td><td className={valueClass}>{s.department}</td></tr>}
                 {s.serviceAmount && <tr><td className={labelClass}>Amount Paid</td><td className={`${valueClass} font-bold text-gray-950`}>Rs. {Number(s.serviceAmount).toLocaleString('en-IN')}/-</td></tr>}
               </tbody>
             </table>

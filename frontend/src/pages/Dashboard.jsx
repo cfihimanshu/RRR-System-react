@@ -13,6 +13,7 @@ const DashboardTab = React.lazy(() => import('../components/tabs/DashboardTab'))
 const SuperAdminDashTab = React.lazy(() => import('../components/tabs/SuperAdminDashTab'));
 const NewCaseTab = React.lazy(() => import('../components/tabs/NewCaseTab'));
 const CaseMasterTab = React.lazy(() => import('../components/tabs/CaseMasterTab'));
+const ArchivedCasesTab = React.lazy(() => import('../components/tabs/ArchivedCasesTab'));
 const HistoryTab = React.lazy(() => import('../components/tabs/HistoryTab'));
 const ActionLogTab = React.lazy(() => import('../components/tabs/ActionLogTab'));
 const CommLogTab = React.lazy(() => import('../components/tabs/CommLogTab'));
@@ -113,6 +114,10 @@ const Dashboard = () => {
             
             <Route path="/case-master" element={
               <ProtectedRoute id="case-master"><CaseMasterTab /></ProtectedRoute>
+            } />
+
+            <Route path="/archived-cases" element={
+              <ProtectedRoute id="archived-cases"><ArchivedCasesTab /></ProtectedRoute>
             } />
             
             <Route path="/history" element={

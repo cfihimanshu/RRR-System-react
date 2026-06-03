@@ -49,6 +49,8 @@ const caseSchema = new mongoose.Schema({
   caseStudyGeneratedAt: String,
   assignedTo: String,
   progressPercentage: { type: Number, default: 0 },
+  compliancePending: { type: Boolean, default: false },
+  isArchived: { type: Boolean, default: false },
   refundedAmount: Number,
   savedAmount: Number,
   // Case Study Template Fields

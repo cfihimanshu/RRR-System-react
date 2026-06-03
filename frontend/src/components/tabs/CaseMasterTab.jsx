@@ -43,6 +43,7 @@ import 'react-calendar/dist/Calendar.css';
 import SearchableSelect from '../shared/SearchableSelect';
 import CaseStudyTab from './CaseStudyTab';
 import FilePreviewModal from '../shared/FilePreviewModal';
+import Modal from '../shared/Modal';
 import {
   Building2,
   Wrench,
@@ -53,7 +54,11 @@ import {
   CheckCircle,
   PhoneIncoming,
   MessageCircle,
-  Video
+  Video,
+  PlusCircle,
+  Archive,
+  MoreVertical,
+  RefreshCw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -179,11 +184,12 @@ const filterableFields = [
 ];
 
 // Modernized Case Master with Integrated Detail View
-const CaseMasterTab = () => {
+const CaseMasterTab = ({ isArchiveMode = false }) => {
   const [cases, setCases] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [archivedCount, setArchivedCount] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -197,6 +203,8 @@ const CaseMasterTab = () => {
   const [timelineLogs, setTimelineLogs] = useState([]);
   const [expandedRows, setExpandedRows] = useState({});
   const [refundsList, setRefundsList] = useState([]);
+  const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
+  const [compliancePendingChecked, setCompliancePendingChecked] = useState(false);
   const [openColFilter, setOpenColFilter] = useState(null);    // which col dropdown is open
   const [colFilterSearch, setColFilterSearch] = useState('');  // search text in dropdown
   const [colSortConfig, setColSortConfig] = useState({ key: null, direction: null }); // { key, direction }
@@ -874,8 +882,8 @@ const CaseMasterTab = () => {
 
       const limit = 1000;
       const url = hasDemand
-        ? `/cases?hasDemand=true&page=${pageNum}&limit=${limit}`
-        : `/cases?page=${pageNum}&limit=${limit}`;
+        ? `/cases?hasDemand=true&page=${pageNum}&limit=${limit}&isArchived=${isArchiveMode}`
+        : `/cases?page=${pageNum}&limit=${limit}&isArchived=${isArchiveMode}`;
 
       const res = await api.get(url);
 
@@ -887,6 +895,7 @@ const CaseMasterTab = () => {
         }
         setTotalPages(res.data.pages || 1);
         setTotalCount(res.data.total || 0);
+        setArchivedCount(res.data.archivedCount || 0);
       } else {
         const data = Array.isArray(res.data) ? res.data : [];
         setCases(data);
@@ -1200,6 +1209,13 @@ const CaseMasterTab = () => {
   }, [uniqueCaseNumbersList, tempFilters.caseNumbers, tempFilters.showNumberTypes]);
 
   const filteredCases = cases.filter(c => {
+    // Archive mode filter
+    if (isArchiveMode) {
+      if (!c.isArchived) return false;
+    } else {
+      if (c.isArchived) return false;
+    }
+
     // Reviewer filter: only show cases that are in "Pending Review" status in refunds
     if (user?.role === 'Reviewer') {
       const pendingCaseIds = refundsList
@@ -2064,15 +2080,20 @@ const CaseMasterTab = () => {
     }
   };
 
-  const handleMarkResolved = async () => {
-    if (!window.confirm('Are you sure you want to mark this case as resolved?')) return;
+  const handleMarkResolved = () => {
+    setCompliancePendingChecked(false);
+    setIsResolveModalOpen(true);
+  };
 
+  const confirmResolveCase = async () => {
     const loadingToast = toast.loading('Marking case as resolved...');
     try {
       // 1. Update Case status
       await api.put(`/cases/${viewCase.caseId}`, {
         currentStatus: 'Closure',
-        progressPercentage: 100
+        progressPercentage: 100,
+        compliancePending: compliancePendingChecked,
+        isArchived: !compliancePendingChecked
       });
 
       // 2. Log in progress history
@@ -2080,11 +2101,12 @@ const CaseMasterTab = () => {
         caseId: viewCase.caseId,
         stage: 'Closure',
         percentage: 100,
-        summary: 'Case marked as resolved manually by user.',
+        summary: `Case marked as resolved manually by user. ${compliancePendingChecked ? '(Compliance Pending)' : '(Archived)'}`,
         updatedBy: user?.fullName || user?.email
       });
 
       toast.success('Case marked as resolved', { id: loadingToast });
+      setIsResolveModalOpen(false);
       try {
         const channel = new BroadcastChannel('case_updates');
         channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
@@ -2092,11 +2114,68 @@ const CaseMasterTab = () => {
       } catch (e) { }
       fetchCases();
       // Update local view
-      setViewCase(prev => ({ ...prev, currentStatus: 'Closure', progressPercentage: 100 }));
+      setViewCase(prev => ({ 
+        ...prev, 
+        currentStatus: 'Closure', 
+        progressPercentage: 100,
+        compliancePending: compliancePendingChecked,
+        isArchived: !compliancePendingChecked
+      }));
       setIsResolvedDisplay(true);
       setClosureReady(false);
     } catch (err) {
       toast.error('Failed to resolve case', { id: loadingToast });
+    }
+  };
+
+  const handleQuickArchive = async (c, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to instantly archive case ${c.caseId}?`)) return;
+
+    const loadingToast = toast.loading('Archiving case...');
+    try {
+      await api.put(`/cases/${c.caseId}`, {
+        compliancePending: false,
+        isArchived: true
+      });
+
+      await api.post('/progress', {
+        caseId: c.caseId,
+        stage: c.currentStatus || 'Archived',
+        percentage: c.progressPercentage || 0,
+        summary: 'Case archived and assignment removed.',
+        updatedBy: user?.fullName || user?.email
+      });
+
+      toast.success('Case archived successfully', { id: loadingToast });
+      fetchCases();
+    } catch (err) {
+      toast.error('Failed to archive case', { id: loadingToast });
+    }
+  };
+
+  const handleUnarchive = async (c, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to unarchive case ${c.caseId}?`)) return;
+
+    const loadingToast = toast.loading('Unarchiving case...');
+    try {
+      await api.put(`/cases/${c.caseId}`, {
+        isArchived: false
+      });
+
+      await api.post('/progress', {
+        caseId: c.caseId,
+        stage: c.currentStatus || 'Unarchived',
+        percentage: c.progressPercentage || 0,
+        summary: 'Case unarchived.',
+        updatedBy: user?.fullName || user?.email
+      });
+
+      toast.success('Case unarchived successfully', { id: loadingToast });
+      fetchCases();
+    } catch (err) {
+      toast.error('Failed to unarchive case', { id: loadingToast });
     }
   };
 
@@ -2640,11 +2719,11 @@ const CaseMasterTab = () => {
           {/* Header Area */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 bg-bg-secondary p-6 rounded-2xl shadow-sm border border-border">
             <div>
-              <h2 className="text-2xl font-black text-text-primary tracking-tight uppercase">My Cases</h2>
+              <h2 className="text-2xl font-black text-text-primary tracking-tight uppercase">{isArchiveMode ? 'Archived Cases' : 'My Cases'}</h2>
 
             </div>
             <div className="flex flex-wrap gap-2 md:gap-3 mt-4 md:mt-0 w-full md:w-auto">
-              {(user?.role === 'Admin' || user?.role === 'Super Admin') && (
+              {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin') && (
                 <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
                   <button className={`w-full bg-purple text-white font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest ${importing ? 'opacity-70 cursor-wait' : 'hover:bg-purple-600 active:scale-95'}`} disabled={importing}>
                     {importing ? '⏳ IMPORTING...' : <><UploadCloud size={16} /> IMPORT</>}
@@ -2660,21 +2739,23 @@ const CaseMasterTab = () => {
                 </div>
               )}
 
-              {(user?.role === 'Admin' || user?.role === 'Super Admin') && (
+              {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin') && (
                 <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
                   <button onClick={handleExportExcel} className="w-full bg-bg-card hover:bg-bg-input text-text-primary border-2 border-border font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95">
                     <FileDown size={16} /> Export
                   </button>
                 </div>
               )}
-              <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
-                <button
-                  onClick={() => navigate('/new-case')}
-                  className="w-full bg-accent text-white font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest hover:bg-accent-hover active:scale-95"
-                >
-                  <Plus size={16} /> New Case
-                </button>
-              </div>
+              {!isArchiveMode && (
+                <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
+                  <button
+                    onClick={() => navigate('/new-case')}
+                    className="w-full bg-accent text-white font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest hover:bg-accent-hover active:scale-95"
+                  >
+                    <Plus size={16} /> New Case
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -3387,7 +3468,7 @@ const CaseMasterTab = () => {
               )}
             </div>
 
-            {(user?.role === 'Admin' || user?.role === 'Super Admin') && (
+            {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin') && (
               <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full md:w-auto md:ml-auto">
                 <select
                   className={`border-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-widest outline-none shadow-sm min-w-[200px] transition-all ${bulkAssignUser ? 'border-accent bg-accent-soft text-accent' : 'border-border bg-bg-card text-text-secondary'}`}
@@ -3423,9 +3504,15 @@ const CaseMasterTab = () => {
               <Inbox size={14} className="opacity-70" />
               <span className="text-[10px] font-black uppercase tracking-[0.15em]">Total Cases:</span>
               <span className="text-sm font-black tabular-nums">
-                {user?.role === 'Reviewer' || hasActiveFilters ? filteredCases.length : totalCount}
+                {user?.role === 'Reviewer' || hasActiveFilters ? filteredCases.length : (totalCount + archivedCount)}
               </span>
             </div>
+
+            {!isArchiveMode && archivedCount > 0 && !hasActiveFilters && (
+              <div className="flex items-center gap-2 bg-text-muted/10 text-text-secondary px-4 py-2.5 rounded-2xl border border-border shadow-sm animate-in fade-in slide-in-from-left-4 duration-500">
+                <span className="text-[10px] font-black uppercase tracking-widest">Active: {totalCount} | Archived: {archivedCount}</span>
+              </div>
+            )}
 
             {searchTerm && (
               <div className="flex items-center gap-2 bg-text-primary/5 text-text-muted px-4 py-2.5 rounded-2xl border border-border animate-in fade-in slide-in-from-left-4 duration-500">
@@ -3488,8 +3575,8 @@ const CaseMasterTab = () => {
                     {viewCase.typeOfComplaint || 'Payment Dispute'} — {viewCase.companyName}
                   </h2>
                   {isResolvedDisplay ? (
-                    <div className="bg-green text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-900/20 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                      <CheckCircle size={14} strokeWidth={3} /> Resolved
+                    <div className={`text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap ${viewCase.compliancePending ? 'bg-orange-500 shadow-orange-900/20' : 'bg-green shadow-green-900/20'}`}>
+                      <CheckCircle size={14} strokeWidth={3} /> {viewCase.compliancePending ? 'Closure Marked - Compliance Pending' : 'Resolved'}
                     </div>
                   ) : closureReady ? (
                     <button
@@ -5648,6 +5735,8 @@ const CaseMasterTab = () => {
                         allDynamicAssignees={allDynamicAssignees}
                         handleAssign={handleAssign}
                         handleDeleteCase={handleDeleteCase}
+                        handleQuickArchive={handleQuickArchive}
+                        handleUnarchive={handleUnarchive}
                         user={user}
                         refundStatus={refundStatus}
                       />
@@ -5681,6 +5770,42 @@ const CaseMasterTab = () => {
           )}
         </div>
       )}
+      <Modal isOpen={isResolveModalOpen} onClose={() => setIsResolveModalOpen(false)} title="Confirm Case Resolution">
+        <div className="p-6 text-center">
+          <h3 className="text-xl font-black text-text-primary mb-4">Mark Case as Resolved?</h3>
+          <p className="text-sm text-text-muted mb-6">Are you sure you want to resolve this case? This will update the case status to Closure.</p>
+          
+          <div className="bg-bg-input p-4 rounded-xl border border-border flex items-center justify-start gap-3 mb-8 text-left cursor-pointer hover:bg-bg-card transition-all" onClick={() => setCompliancePendingChecked(!compliancePendingChecked)}>
+            <input 
+              type="checkbox" 
+              className="w-5 h-5 accent-accent cursor-pointer"
+              checked={compliancePendingChecked}
+              onChange={(e) => setCompliancePendingChecked(e.target.checked)}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div>
+              <div className="text-sm font-black text-text-primary">Closure but compliance pending</div>
+              <div className="text-[10px] text-text-muted font-bold mt-0.5">If unchecked, this case will be sent to the Archived module.</div>
+            </div>
+          </div>
+
+          <div className="flex gap-4">
+            <button 
+              className="flex-1 bg-green hover:bg-green-600 text-white font-black py-3 rounded-xl uppercase tracking-widest text-xs transition-all active:scale-95 shadow-md shadow-green-900/20"
+              onClick={confirmResolveCase}
+            >
+              Confirm Resolve
+            </button>
+            <button 
+              className="flex-1 bg-bg-input hover:bg-bg-card text-text-primary border border-border font-black py-3 rounded-xl uppercase tracking-widest text-xs transition-all active:scale-95"
+              onClick={() => setIsResolveModalOpen(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       <FilePreviewModal
         isOpen={!!previewFileUrl}
         onClose={() => setPreviewFileUrl(null)}
@@ -5705,9 +5830,28 @@ const CaseRow = memo(({
   allDynamicAssignees,
   handleAssign,
   handleDeleteCase,
+  handleQuickArchive,
+  handleUnarchive,
   user,
   refundStatus
 }) => {
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const menuRef = React.useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowActionMenu(false);
+      }
+    };
+    if (showActionMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showActionMenu]);
+
   const svcs = Array.isArray(c.servicesSold)
     ? c.servicesSold.slice(0, 3).map(s => s.serviceName).join(', ') + (c.servicesSold.length > 3 ? '...' : '')
     : (c.servicesSold || '-');
@@ -5807,38 +5951,60 @@ const CaseRow = memo(({
         ) : '-'}
       </td>
       <td className="px-3 py-5 text-center align-middle" onClick={(e) => e.stopPropagation()}>
-        <div className="flex flex-col items-center gap-2 w-[160px] mx-auto">
-          {/* Top Row: Action Icons */}
-          <div className="grid grid-cols-3 gap-2 w-full">
+        <div className="flex flex-col items-center gap-2 w-[160px] mx-auto relative" ref={menuRef}>
+          {/* Top Row: Action Menu Toggle */}
+          <div className="w-full flex justify-end relative">
             <button
-              onClick={() => handleViewCase(c)}
-              className="bg-blue-soft text-blue hover:bg-blue/20 p-2.5 rounded-xl border border-blue-soft transition-all shadow-sm flex items-center justify-center w-full"
-              title="View Profile"
+              onClick={(e) => { e.stopPropagation(); setShowActionMenu(!showActionMenu); }}
+              className="p-2 hover:bg-bg-input rounded-full transition-all text-text-muted hover:text-text-primary focus:outline-none"
             >
-              <Eye size={16} />
+              <MoreVertical size={20} />
             </button>
-            <button
-              onClick={() => navigate('/new-case', { state: { editCase: c } })}
-              className="bg-yellow-soft text-yellow hover:bg-yellow/20 p-2.5 rounded-xl border border-yellow-soft transition-all shadow-sm flex items-center justify-center w-full"
-              title="Edit Case"
-            >
-              <Edit3 size={16} />
-            </button>
-            {user?.role === 'Admin' || user?.role === 'Super Admin' ? (
-              <button
-                onClick={() => handleDeleteCase(c.caseId)}
-                className="bg-red-soft text-red hover:bg-red/20 p-2.5 rounded-xl border border-red-soft transition-all shadow-sm active:scale-95 flex items-center justify-center w-full"
-                title="Delete Case"
-              >
-                <Trash2 size={16} />
-              </button>
-            ) : (
-              <div className="w-full" /> // Placeholder to maintain grid
+
+            {/* Dropdown Menu */}
+            {showActionMenu && (
+              <div className="absolute right-0 top-10 bg-white shadow-xl border border-border rounded-xl w-48 py-2 z-50 flex flex-col items-start overflow-hidden animate-in fade-in zoom-in duration-150">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowActionMenu(false); handleViewCase(c); }}
+                  className="w-full text-left px-4 py-3 text-[10px] font-black text-text-primary hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3 uppercase tracking-widest border-b border-border/50"
+                >
+                  <Eye size={14} /> View Profile
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowActionMenu(false); navigate('/new-case', { state: { editCase: c } }); }}
+                  className="w-full text-left px-4 py-3 text-[10px] font-black text-text-primary hover:bg-yellow-50 hover:text-yellow-600 transition-colors flex items-center gap-3 uppercase tracking-widest border-b border-border/50"
+                >
+                  <Edit3 size={14} /> Edit Case
+                </button>
+                {!c.isArchived ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowActionMenu(false); handleQuickArchive(c, e); }}
+                    className="w-full text-left px-4 py-3 text-[10px] font-black text-text-primary hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center gap-3 uppercase tracking-widest border-b border-border/50"
+                  >
+                    <Archive size={14} /> Mark as Archived
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowActionMenu(false); handleUnarchive(c, e); }}
+                    className="w-full text-left px-4 py-3 text-[10px] font-black text-text-primary hover:bg-green-50 hover:text-green-600 transition-colors flex items-center gap-3 uppercase tracking-widest border-b border-border/50"
+                  >
+                    <RefreshCw size={14} /> Unarchive Case
+                  </button>
+                )}
+                {(user?.role === 'Admin' || user?.role === 'Super Admin') && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowActionMenu(false); handleDeleteCase(c.caseId); }}
+                    className="w-full text-left px-4 py-3 text-[10px] font-black text-red hover:bg-red-50 transition-colors flex items-center gap-3 uppercase tracking-widest"
+                  >
+                    <Trash2 size={14} /> Delete Case
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
           {/* Bottom Row: Assignment Section */}
-          {['Admin', 'Operations', 'Super Admin'].includes(user?.role) && (
+          {['Admin', 'Operations', 'Super Admin'].includes(user?.role) && !c.isArchived && (
             <div className="flex gap-2 w-full">
               <select
                 className="flex-1 bg-bg-input border-2 border-border rounded-xl text-[9px] px-2 py-2.5 outline-none focus:border-accent shadow-sm min-w-0 text-text-primary font-black uppercase tracking-widest cursor-pointer"
