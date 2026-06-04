@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const documentSchema = new mongoose.Schema({
   docId: String,
   caseId: String,
+  docDate: String,
   uploadDate: String,
   sourceForm: String,
   docType: String,
