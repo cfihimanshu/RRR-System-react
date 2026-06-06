@@ -506,7 +506,9 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
 
     const isLegalDashboard = req.query.isLegalDashboard === 'true' || req.user.role === 'Legal';
 
-    if (isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
+    if (req.user?.role?.toLowerCase().trim() === 'operation head') {
+      ownershipQuery = {};
+    } else if (isLegalDashboard && ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
       const legalUsers = await User.find({ role: 'Legal' }).lean();
       const legalNames = legalUsers.map(u => (u.fullName || u.name || '').trim()).filter(Boolean);
       legalEmails = legalUsers.map(u => (u.email || '').trim()).filter(Boolean);
@@ -555,7 +557,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
     const bypassEodCheck = dbUser?.bypassEodCheck || false;
     let isEodMissed = false;
 
-    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(req.user.role)) {
+    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(req.user.role)) {
       const Report = require('./models/Report');
       const nowForIST = new Date();
       const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
@@ -658,7 +660,8 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
         { $match: query },
         {
           $facet: {
-            basic: [
+              basic: [
+              ...(req.user?.role?.toLowerCase().trim() !== 'operation head' ? [{ $match: { sourceOfComplaint: { $not: /^\s*odoo\s*$/i } } }] : []),
               {
                 $group: {
                   _id: null,
@@ -697,6 +700,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
                   ]
                 }
               },
+              ...(req.user?.role?.toLowerCase().trim() !== 'operation head' ? [{ $match: { sourceOfComplaint: { $not: /^\s*odoo\s*$/i } } }] : []),
               { $count: "count" }
             ],
             caseTypeWise: [
@@ -1358,7 +1362,7 @@ app.get('/api/dashboard/stats', require('./middleware/auth').verifyToken, async 
       lastEods.forEach(e => { eodMap[`${e.userEmail}_${e.date}`] = e; });
 
       allNonAdmins.forEach(user => {
-        const isExempt = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user.role);
+        const isExempt = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(user.role);
 
         const hasSod = reportsToday.some(r => r.type === 'SOD' && (r.userEmail === user.email || r.userName === user.fullName));
         const hasReport48h = reportsLast48Hrs.some(r => r.userEmail === user.email || r.userName === user.fullName);

@@ -283,7 +283,7 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
 });
 
 // Get all users for assignment dropdown (Admin/Operations only)
-router.get('/users', verifyToken, roleGuard(['Admin', 'Operations', 'Legal']), async (req, res) => {
+router.get('/users', verifyToken, roleGuard(['Admin', 'Operations', 'Legal', 'Operation Review', 'Operation Head']), async (req, res) => {
   try {
     const users = await User.find({}, 'fullName email role canAccessRecords').sort({ fullName: 1 });
     res.json(users);
@@ -297,7 +297,7 @@ router.put('/users/:id/role', verifyToken, roleGuard(['Admin']), async (req, res
   try {
     const { id } = req.params;
     const { role } = req.body;
-    if (!['Admin', 'Operations', 'Staff', 'Reviewer', 'Accountant', 'Legal', 'Super Admin', 'SuperAdmin', 'Operation Admin', 'operation admin'].includes(role)) {
+    if (!['Admin', 'Operations', 'Staff', 'Reviewer', 'Accountant', 'Legal', 'Super Admin', 'SuperAdmin', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role selected' });
     }
 

@@ -60,7 +60,8 @@ import {
   MessageCircle,
   HelpCircle,
   ChevronUp,
-  Layers
+  Layers,
+  Download
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
@@ -105,6 +106,86 @@ const DashboardTab = () => {
   };
   const [teamFilter, setTeamFilter] = useState('all');
   const [userFilter, setUserFilter] = useState('');
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
+  const downloadWorkReport = async () => {
+    if (!userFilter) { toast.error('Please select a user from the filter first.'); return; }
+    setDownloadingReport(true);
+    try {
+      const XLSX = await import('xlsx');
+      // Fetch cases for selected user
+      const casesRes = await api.get(`/cases?userFilter=${encodeURIComponent(userFilter)}&limit=10000&isArchived=false`);
+      const cases = casesRes.data?.cases || casesRes.data || [];
+
+      // Fetch refunds
+      let refunds = [];
+      try {
+        const refundsRes = await api.get('/refunds');
+        refunds = refundsRes.data || [];
+      } catch (_) { }
+
+      const closureStatuses = ['Settled', 'settled', 'Settlement', 'Closure', 'closure', 'Resolved', 'resolved', 'Closed', 'closed', 'Done', 'Complete', 'Completed', 'NA'];
+
+      // Build case rows
+      const caseRows = cases.map(c => ({
+        'Case ID': c.caseId || '—',
+        'Client Name': c.clientName || '—',
+        'Status': c.currentStatus || '—',
+        'Priority': c.priority || '—',
+        'Source of Complaint': c.sourceOfComplaint || '—',
+        'Type of Complaint': c.typeOfComplaint || '—',
+        'Assigned To': c.assignedTo || '—',
+        'Amount Paid (₹)': c.totalAmtPaid || 0,
+        'Due Date': c.dueDate || '—',
+        'Created Date': c.createdDate || '—',
+      }));
+
+      // Summary stats
+      const totalCases = cases.length;
+      const closureCases = cases.filter(c => closureStatuses.includes(c.currentStatus)).length;
+      const totalAmountAssigned = cases.reduce((sum, c) => sum + (Number(c.totalAmtPaid) || 0), 0);
+
+      // Refund stats — match by assignedTo name
+      const userRefunds = refunds.filter(r => {
+        const assignedCase = cases.find(c => c.caseId === r.caseId);
+        return !!assignedCase;
+      });
+      const totalRefundAmount = userRefunds.reduce((sum, r) => sum + (Number(r.approvedAmount || r.requestedAmount) || 0), 0);
+
+      const summaryRows = [
+        { 'Metric': 'Selected User', 'Value': userFilter },
+        { 'Metric': 'Total Assigned Cases', 'Value': totalCases },
+        { 'Metric': 'Closure / Settled Cases', 'Value': closureCases },
+        { 'Metric': 'Total Case Amount (₹)', 'Value': totalAmountAssigned },
+        { 'Metric': 'Total Refund Amount (₹)', 'Value': totalRefundAmount },
+        { 'Metric': 'Report Generated At', 'Value': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) },
+      ];
+
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Summary
+      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      wsSummary['!cols'] = [{ wch: 30 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+      // Sheet 2: Case Details
+      const wsCases = XLSX.utils.json_to_sheet(caseRows);
+      wsCases['!cols'] = [
+        { wch: 16 }, { wch: 22 }, { wch: 16 }, { wch: 12 },
+        { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 14 }
+      ];
+      XLSX.utils.book_append_sheet(wb, wsCases, 'Case Details');
+
+      const fileName = `Work_Report_${userFilter.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast.success(`Work report downloaded for ${userFilter}`);
+    } catch (err) {
+      console.error('Work report download error:', err);
+      toast.error('Failed to generate work report.');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [perfStartDate, setPerfStartDate] = useState(() => {
@@ -116,7 +197,7 @@ const DashboardTab = () => {
   const [activePeriod, setActivePeriod] = useState('7 Days');
   const [allUsers, setAllUsers] = useState([]);
   const { user } = useContext(AuthContext);
-  const isExemptFromSodEod = ['admin', 'super admin', 'superadmin', 'accountant', 'reviewer'].includes(user?.role?.toLowerCase().trim());
+  const isExemptFromSodEod = ['admin', 'super admin', 'superadmin', 'accountant', 'reviewer', 'operation head', 'operation review'].includes(user?.role?.toLowerCase().trim());
   const navigate = useNavigate();
   const location = useLocation();
   const isOperationAdmin = user?.role?.toLowerCase().trim() === 'operation admin';
@@ -967,7 +1048,7 @@ const DashboardTab = () => {
               </div>
             )}
             {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
-              <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                 <button
                   onClick={triggerDueAlerts}
                   disabled={triggeringAlerts}
@@ -1510,1371 +1591,1371 @@ const DashboardTab = () => {
         <>
           {/* War Room Overview */}
           <div className="mb-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <div className="flex items-center gap-4">
-            <h2 className="text-xl font-black text-text-primary uppercase tracking-tight">Overview</h2>
-          </div>
-          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-            {user?.role === 'Admin' && (
-              <select
-                value={userFilter}
-                onChange={(e) => setUserFilter(e.target.value)}
-                className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none w-full sm:w-auto"
-              >
-                <option value="">All Users</option>
-                {allUsers.map(u => (
-                  <option key={u._id} value={u.fullName || u.name}>{u.fullName || u.name}</option>
-                ))}
-              </select>
-            )}
-            {user?.role === 'Admin' && (
-              <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none min-w-0 flex-1"
-                />
-                <span className="text-text-muted font-black text-[10px] sm:text-xs">TO</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none min-w-0 flex-1"
-                />
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+              <div className="flex items-center gap-4">
+                <h2 className="text-xl font-black text-text-primary uppercase tracking-tight">Overview</h2>
               </div>
-            )}
-          </div>
-        </div>
-
-        {user?.role === 'Operations' ? (
-          <>
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
-              {/* TYPE OF THREAT - SUMMARY (Left, Wide) */}
-              <div className="xl:col-span-8 2xl:col-span-9 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">TYPE OF THREAT – SUMMARY</div>
-                <div className="grid grid-cols-2 md:grid-cols-3 2xl:flex 2xl:justify-between 2xl:items-start gap-4">
-                  {[
-                    { label: '1930 Cyber Complaint', type: '1930 Cyber Complaint', color: 'text-blue', bg: 'bg-blue-soft', icon: ShieldAlert },
-                    { label: 'Consumer Complaint', type: 'Consumer Complaint', color: 'text-green', bg: 'bg-green-soft', icon: Users },
-                    { label: 'Legal Notice', type: 'Legal Notice', color: 'text-purple', bg: 'bg-purple-soft', icon: Scale },
-                    { label: 'Demand Pressure', type: 'Demand Pressure', color: 'text-orange', bg: 'bg-orange-soft', icon: AlertTriangle },
-                    { label: 'Social Media', type: 'Social Media', color: 'text-cyan', bg: 'bg-cyan-soft', icon: MessageCircle },
-                    { label: 'NA (Non-Agreement)', type: 'NA Non Agreement', color: 'text-yellow', bg: 'bg-yellow-soft', icon: HelpCircle },
-                  ].map((item, index) => {
-                    const dbItem = stats?.caseTypeWiseData?.find(c => c.caseType === item.type) || { count: 0, totalAmount: 0 };
-                    const IconComponent = item.icon;
-                    return (
-                      <div
-                        key={index}
-                        className="flex flex-col flex-1 min-w-[100px] 2xl:border-r border-border last:border-r-0 2xl:pr-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-2 2xl:p-0"
-                        onClick={() => navigate('/case-master', { state: { typeFilter: item.type } })}
-                      >
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className={`p-1 ${item.bg} rounded ${item.color}`}>
-                            <IconComponent size={12} />
-                          </div>
-                          <div className={`text-[9px] font-black uppercase tracking-tight ${item.color}`} title={item.label}>{item.label}</div>
-                        </div>
-                        <div className="text-xl font-black text-text-primary tracking-tight">{dbItem.count}</div>
-                        <div className="text-[9px] font-bold text-text-muted mt-0.5">₹{Number(dbItem.totalAmount || 0).toLocaleString('en-IN')}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* MY KEY NUMBERS (TODAY) (Right, Narrow) */}
-              <div className="xl:col-span-4 2xl:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY KEY NUMBERS (TODAY)</div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 h-full items-center">
-                  <div className="text-center cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}>
-                    <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Active Cases</div>
-                    <div className="text-xl font-black text-text-primary mt-2">{stats?.openCases || 0}</div>
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                {user?.role === 'Admin' && (
+                  <select
+                    value={userFilter}
+                    onChange={(e) => setUserFilter(e.target.value)}
+                    className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none w-full sm:w-auto"
+                  >
+                    <option value="">All Users</option>
+                    {allUsers.map(u => (
+                      <option key={u._id} value={u.fullName || u.name}>{u.fullName || u.name}</option>
+                    ))}
+                  </select>
+                )}
+                {user?.role === 'Admin' && (
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none min-w-0 flex-1"
+                    />
+                    <span className="text-text-muted font-black text-[10px] sm:text-xs">TO</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none min-w-0 flex-1"
+                    />
                   </div>
-                  <div className="text-center sm:border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
-                    <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Follow Ups</div>
-                    <div className="text-xl font-black text-text-primary mt-2">{stats?.timeBoundActions?.dueToday || 0}</div>
-                  </div>
-                  <div className="text-center border-t sm:border-t-0 sm:border-l border-border pt-2 sm:pt-0 sm:pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task')}>
-                    <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Pending Actions</div>
-                    <div className="text-xl font-black text-text-primary mt-2">{stats?.pendingTasksCount || 0}</div>
-                  </div>
-                  <div className="text-center border-t sm:border-t-0 sm:border-l border-border pt-2 sm:pt-0 sm:pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
-                    <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Overdue</div>
-                    <div className="text-xl font-black text-red mt-2">{stats?.overdue || 0}</div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
-            {/* NEW GRID FOR TASKS & PERFORMANCE */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8 mt-6">
-              {/* Upcoming / Due Cases (My Cases) */}
-              <div className="xl:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 min-w-0 overflow-hidden flex flex-col justify-between">
-                <div>
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Upcoming / Due Cases (My Cases)</div>
-                    <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl w-full sm:w-auto overflow-x-auto scrollbar-none">
+            {user?.role === 'Operations' ? (
+              <>
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
+                  {/* TYPE OF THREAT - SUMMARY (Left, Wide) */}
+                  <div className="xl:col-span-8 2xl:col-span-9 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">TYPE OF THREAT – SUMMARY</div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 2xl:flex 2xl:justify-between 2xl:items-start gap-4">
                       {[
-                        { key: 'overdue', label: 'Overdue' },
-                        { key: 'today', label: 'Today' },
-                        { key: 'thisWeek', label: 'This Week' },
-                        { key: 'thisMonth', label: 'This Month' }
-                      ].map((tab) => {
-                        const count = getFilteredDueCases(tab.key).length;
+                        { label: '1930 Cyber Complaint', type: '1930 Cyber Complaint', color: 'text-blue', bg: 'bg-blue-soft', icon: ShieldAlert },
+                        { label: 'Consumer Complaint', type: 'Consumer Complaint', color: 'text-green', bg: 'bg-green-soft', icon: Users },
+                        { label: 'Legal Notice', type: 'Legal Notice', color: 'text-purple', bg: 'bg-purple-soft', icon: Scale },
+                        { label: 'Demand Pressure', type: 'Demand Pressure', color: 'text-orange', bg: 'bg-orange-soft', icon: AlertTriangle },
+                        { label: 'Social Media', type: 'Social Media', color: 'text-cyan', bg: 'bg-cyan-soft', icon: MessageCircle },
+                        { label: 'NA (Non-Agreement)', type: 'NA Non Agreement', color: 'text-yellow', bg: 'bg-yellow-soft', icon: HelpCircle },
+                      ].map((item, index) => {
+                        const dbItem = stats?.caseTypeWiseData?.find(c => c.caseType === item.type) || { count: 0, totalAmount: 0 };
+                        const IconComponent = item.icon;
                         return (
-                          <button
-                            key={tab.key}
-                            onClick={() => setDueCasesTab(tab.key)}
-                            className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-initial ${dueCasesTab === tab.key ? 'bg-blue text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                          <div
+                            key={index}
+                            className="flex flex-col flex-1 min-w-[100px] 2xl:border-r border-border last:border-r-0 2xl:pr-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-2 2xl:p-0"
+                            onClick={() => navigate('/case-master', { state: { typeFilter: item.type } })}
                           >
-                            <span>{tab.label}</span>
-                            <span className={`px-1.5 py-0.2 rounded-md text-[8px] font-bold ${dueCasesTab === tab.key ? 'bg-white/20 text-white' : 'bg-bg-input text-text-secondary'}`}>{count}</span>
-                          </button>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <div className={`p-1 ${item.bg} rounded ${item.color}`}>
+                                <IconComponent size={12} />
+                              </div>
+                              <div className={`text-[9px] font-black uppercase tracking-tight ${item.color}`} title={item.label}>{item.label}</div>
+                            </div>
+                            <div className="text-xl font-black text-text-primary tracking-tight">{dbItem.count}</div>
+                            <div className="text-[9px] font-bold text-text-muted mt-0.5">₹{Number(dbItem.totalAmount || 0).toLocaleString('en-IN')}</div>
+                          </div>
                         );
                       })}
                     </div>
                   </div>
 
-                  <div className="max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
-                    {getFilteredDueCases(dueCasesTab).length > 0 ? (
-                      <div className="table-wrap overflow-x-auto scrollbar-thin">
-                        <table className="w-full text-left border-collapse min-w-[500px]">
-                          <thead>
-                            <tr className="bg-bg-secondary text-text-primary text-[8px] font-black tracking-[0.2em] uppercase border-b border-border/30 sticky top-0 z-10">
-                              <th className="px-4 py-2.5 text-blue-500">Case ID</th>
-                              <th className="px-4 py-2.5 text-indigo-500">Company</th>
-                              <th className="px-4 py-2.5 text-emerald-500">Complaint</th>
-                              <th className="px-4 py-2.5 text-accent text-center">Assigned To</th>
-                              <th className="px-4 py-2.5 text-orange text-right">Due Date</th>
-                            </tr>
-                          </thead>
-                          <tbody className="text-[10px] text-text-secondary divide-y divide-border/20">
-                            {getFilteredDueCases(dueCasesTab).map((c, index) => (
-                              <tr
-                                key={index}
-                                onClick={() => setSelectedDueCaseDetails(c)}
-                                className="hover:bg-bg-input/50 transition-all cursor-pointer group border-b border-border/10 last:border-0"
+                  {/* MY KEY NUMBERS (TODAY) (Right, Narrow) */}
+                  <div className="xl:col-span-4 2xl:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY KEY NUMBERS (TODAY)</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 h-full items-center">
+                      <div className="text-center cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}>
+                        <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Active Cases</div>
+                        <div className="text-xl font-black text-text-primary mt-2">{stats?.openCases || 0}</div>
+                      </div>
+                      <div className="text-center sm:border-l border-border pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
+                        <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Follow Ups</div>
+                        <div className="text-xl font-black text-text-primary mt-2">{stats?.timeBoundActions?.dueToday || 0}</div>
+                      </div>
+                      <div className="text-center border-t sm:border-t-0 sm:border-l border-border pt-2 sm:pt-0 sm:pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task')}>
+                        <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Pending Actions</div>
+                        <div className="text-xl font-black text-text-primary mt-2">{stats?.pendingTasksCount || 0}</div>
+                      </div>
+                      <div className="text-center border-t sm:border-t-0 sm:border-l border-border pt-2 sm:pt-0 sm:pl-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
+                        <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Overdue</div>
+                        <div className="text-xl font-black text-red mt-2">{stats?.overdue || 0}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* NEW GRID FOR TASKS & PERFORMANCE */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8 mt-6">
+                  {/* Upcoming / Due Cases (My Cases) */}
+                  <div className="xl:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 min-w-0 overflow-hidden flex flex-col justify-between">
+                    <div>
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Upcoming / Due Cases (My Cases)</div>
+                        <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl w-full sm:w-auto overflow-x-auto scrollbar-none">
+                          {[
+                            { key: 'overdue', label: 'Overdue' },
+                            { key: 'today', label: 'Today' },
+                            { key: 'thisWeek', label: 'This Week' },
+                            { key: 'thisMonth', label: 'This Month' }
+                          ].map((tab) => {
+                            const count = getFilteredDueCases(tab.key).length;
+                            return (
+                              <button
+                                key={tab.key}
+                                onClick={() => setDueCasesTab(tab.key)}
+                                className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-initial ${dueCasesTab === tab.key ? 'bg-blue text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
                               >
-                                <td className="px-4 py-3 font-black text-blue group-hover:underline">
-                                  {c.caseId}
-                                </td>
-                                <td className="px-4 py-3 font-black text-text-primary uppercase tracking-tight truncate max-w-[120px]" title={c.companyName}>
-                                  {c.companyName || '—'}
-                                </td>
-                                <td className="px-4 py-3 font-bold text-text-secondary truncate max-w-[150px]" title={c.typeOfComplaint}>
-                                  {c.typeOfComplaint}
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className="inline-block px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest bg-accent-soft text-accent border border-accent-soft/30 truncate max-w-[110px]" title={c.assignedTo || 'Unassigned'}>
-                                    👤 {c.assignedTo || 'Unassigned'}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-right font-black text-orange">
-                                  {c.dueDate ? new Date(c.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
-                                </td>
-                              </tr>
+                                <span>{tab.label}</span>
+                                <span className={`px-1.5 py-0.2 rounded-md text-[8px] font-bold ${dueCasesTab === tab.key ? 'bg-white/20 text-white' : 'bg-bg-input text-text-secondary'}`}>{count}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                        {getFilteredDueCases(dueCasesTab).length > 0 ? (
+                          <div className="table-wrap overflow-x-auto scrollbar-thin">
+                            <table className="w-full text-left border-collapse min-w-[500px]">
+                              <thead>
+                                <tr className="bg-bg-secondary text-text-primary text-[8px] font-black tracking-[0.2em] uppercase border-b border-border/30 sticky top-0 z-10">
+                                  <th className="px-4 py-2.5 text-blue-500">Case ID</th>
+                                  <th className="px-4 py-2.5 text-indigo-500">Company</th>
+                                  <th className="px-4 py-2.5 text-emerald-500">Complaint</th>
+                                  <th className="px-4 py-2.5 text-accent text-center">Assigned To</th>
+                                  <th className="px-4 py-2.5 text-orange text-right">Due Date</th>
+                                </tr>
+                              </thead>
+                              <tbody className="text-[10px] text-text-secondary divide-y divide-border/20">
+                                {getFilteredDueCases(dueCasesTab).map((c, index) => (
+                                  <tr
+                                    key={index}
+                                    onClick={() => setSelectedDueCaseDetails(c)}
+                                    className="hover:bg-bg-input/50 transition-all cursor-pointer group border-b border-border/10 last:border-0"
+                                  >
+                                    <td className="px-4 py-3 font-black text-blue group-hover:underline">
+                                      {c.caseId}
+                                    </td>
+                                    <td className="px-4 py-3 font-black text-text-primary uppercase tracking-tight truncate max-w-[120px]" title={c.companyName}>
+                                      {c.companyName || '—'}
+                                    </td>
+                                    <td className="px-4 py-3 font-bold text-text-secondary truncate max-w-[150px]" title={c.typeOfComplaint}>
+                                      {c.typeOfComplaint}
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      <span className="inline-block px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest bg-accent-soft text-accent border border-accent-soft/30 truncate max-w-[110px]" title={c.assignedTo || 'Unassigned'}>
+                                        👤 {c.assignedTo || 'Unassigned'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-black text-orange">
+                                      {c.dueDate ? new Date(c.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="text-center py-10 animate-enter">
+                            <Clock size={24} className="text-text-muted mx-auto mb-2 opacity-50" />
+                            <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">
+                              No {dueCasesTab === 'overdue' ? 'overdue cases' : `cases due ${dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}`}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MY PERFORMANCE & REFUND STATS */}
+                  <div className="xl:col-span-4 flex flex-col gap-6">
+                    {/* MY PERFORMANCE */}
+                    <div className="bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 flex flex-col justify-between flex-1">
+                      <div>
+                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2 mb-4">
+                          <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Performance</div>
+                          <div className="flex flex-wrap gap-1">
+                            {['7 Days', '1 Month', '3 Months'].map((label, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  setActivePeriod(label);
+                                  const end = new Date();
+                                  const start = new Date();
+                                  if (label === '7 Days') start.setDate(end.getDate() - 7);
+                                  else if (label === '1 Month') start.setMonth(end.getMonth() - 1);
+                                  else if (label === '3 Months') start.setMonth(end.getMonth() - 3);
+                                  setPerfStartDate(start.toISOString().split('T')[0]);
+                                  setPerfEndDate(end.toISOString().split('T')[0]);
+                                }}
+                                className={`px-2 py-1 text-[8px] font-black uppercase rounded ${activePeriod === label ? 'bg-blue-600 text-white' : 'bg-bg-secondary text-text-muted hover:bg-bg-secondary/50 transition-colors'}`}
+                              >
+                                {label}
+                              </button>
                             ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="text-center py-10 animate-enter">
-                        <Clock size={24} className="text-text-muted mx-auto mb-2 opacity-50" />
-                        <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">
-                          No {dueCasesTab === 'overdue' ? 'overdue cases' : `cases due ${dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}`}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <div className="text-[9px] font-black text-text-muted uppercase mb-1">Client Communication</div>
+                            <div className="text-xl font-black text-green">{stats?.myPerformance?.totalCommunications || 0}</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-black text-text-muted uppercase mb-1">Cases Settled</div>
+                            <div className="text-xl font-black text-green">{stats?.myPerformance?.casesResolved || 0}</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-black text-text-muted uppercase mb-1">NA Cases</div>
+                            <div className="text-xl font-black text-red">{stats?.myPerformance?.naCases || 0}</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-black text-text-muted uppercase mb-1">Overdue Cases</div>
+                            <div className="text-xl font-black text-red">{stats?.myPerformance?.overdueCases || 0}</div>
+                          </div>
                         </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+                    </div>
 
-              {/* MY PERFORMANCE & REFUND STATS */}
-              <div className="xl:col-span-4 flex flex-col gap-6">
-                {/* MY PERFORMANCE */}
-                <div className="bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50 flex flex-col justify-between flex-1">
-                  <div>
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2 mb-4">
-                      <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Performance</div>
-                      <div className="flex flex-wrap gap-1">
-                        {['7 Days', '1 Month', '3 Months'].map((label, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => {
-                              setActivePeriod(label);
-                              const end = new Date();
-                              const start = new Date();
-                              if (label === '7 Days') start.setDate(end.getDate() - 7);
-                              else if (label === '1 Month') start.setMonth(end.getMonth() - 1);
-                              else if (label === '3 Months') start.setMonth(end.getMonth() - 3);
-                              setPerfStartDate(start.toISOString().split('T')[0]);
-                              setPerfEndDate(end.toISOString().split('T')[0]);
-                            }}
-                            className={`px-2 py-1 text-[8px] font-black uppercase rounded ${activePeriod === label ? 'bg-blue-600 text-white' : 'bg-bg-secondary text-text-muted hover:bg-bg-secondary/50 transition-colors'}`}
-                          >
-                            {label}
-                          </button>
-                        ))}
+                    {/* MY REFUND STATS */}
+                    <div className="bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Refund Requests</div>
+                        <div className="p-1.5 bg-green-soft rounded-lg text-green">
+                          <IndianRupee size={14} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="bg-bg-secondary p-3 rounded-xl border border-border/30 cursor-pointer hover:bg-bg-secondary/70 transition-all" onClick={() => navigate('/refund-request', { state: { activeRequestType: 'Settlement', filter: 'All' } })}>
+                          <div className="text-[8px] font-black text-text-muted uppercase mb-1">Total Filled</div>
+                          <div className="text-lg font-black text-text-primary mt-1">{myRefunds.length}</div>
+                        </div>
+                        <div className="bg-green-soft/30 p-3 rounded-xl border border-green-soft/40 cursor-pointer hover:bg-green-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { activeRequestType: 'Settlement', filter: 'Paid' } })}>
+                          <div className="text-[8px] font-black text-green uppercase mb-1">Approved</div>
+                          <div className="text-lg font-black text-green mt-1">{myRefunds.filter(r => r.status === 'Paid').length}</div>
+                        </div>
+                        <div className="bg-red-soft/30 p-3 rounded-xl border border-red-soft/40 cursor-pointer hover:bg-red-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { activeRequestType: 'Settlement', filter: 'Rejected' } })}>
+                          <div className="text-[8px] font-black text-red uppercase mb-1">Rejected</div>
+                          <div className="text-lg font-black text-red mt-1">{myRefunds.filter(r => r.status === 'Rejected').length}</div>
+                        </div>
                       </div>
                     </div>
+                  </div>
+                </div>
+                {/* Top Urgent Cases Section */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
+                  {/* MY CASES OVERVIEW */}
+                  <div className="xl:col-span-4 bg-bg-card rounded-2xl p-5 border border-border/50">
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">My Cases Overview</div>
+                    <div className="flex flex-col items-center justify-center h-full">
+                      <div className="w-full h-32 mb-4 relative">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={[
+                                { name: 'Active', value: stats?.openCases || 0 },
+                                { name: 'Resolved', value: stats?.settledCases || 0 },
+                                { name: 'NA Cases', value: stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0 },
+                                { name: 'Consumer Complaint', value: stats?.caseTypeWiseData?.find(c => c.caseType === 'Consumer Complaint')?.count || 0 }
+                              ].filter(d => d.value > 0)}
+                              innerRadius={35}
+                              outerRadius={50}
+                              paddingAngle={2}
+                              dataKey="value"
+                              isAnimationActive={false}
+                            >
+                              <Cell fill="#3B82F6" />
+                              <Cell fill="#10B981" />
+                              <Cell fill="#F59E0B" />
+                              <Cell fill="#8B5CF6" />
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <div className="text-lg font-black text-text-primary">{stats?.totalCases || 0}</div>
+                          <div className="text-[8px] font-black text-text-muted uppercase">Total</div>
+                        </div>
+                      </div>
+                      <div className="space-y-2 w-full">
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                            <span>Active</span>
+                          </div>
+                          <span>{stats?.openCases || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                            <span>Resolved</span>
+                          </div>
+                          <span>{stats?.settledCases || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                            <span>NA Cases</span>
+                          </div>
+                          <span>{stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-text-secondary">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                            <span>Consumer Complaint</span>
+                          </div>
+                          <span>{stats?.caseTypeWiseData?.find(c => c.caseType === 'Consumer Complaint')?.count || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MY TASKS – SOD TO EOD */}
+                  <div className="xl:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY TASKS – SOD TO EOD</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* SOD SUBMISSION */}
+                      <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
+                              <Zap size={16} />
+                            </div>
+                            <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">SOD Submission</div>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                              <span className="truncate">Daily Checklist</span>
+                              <span className="font-black whitespace-nowrap">{stats?.timeBoundActions?.completedTasksToday || 0} / {stats?.timeBoundActions?.totalTasksToday || 0}</span>
+                            </div>
+                            <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                              <span className="truncate">Priority Cases Plan</span>
+                              <span className="font-black whitespace-nowrap">{stats?.closedCriticalCases || 0} / {stats?.totalCriticalCases || 0}</span>
+                            </div>
+                            <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                              <span className="truncate">Yesterday's EOD</span>
+                              <span className="font-black whitespace-nowrap">{stats?.yesterdayEodFilled ? 'Filled' : 'Pending'}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                          <span className="text-text-muted">SOD Submitted At</span>
+                          <span className={stats?.todaySod ? "text-green" : "text-red"}>
+                            {stats?.todaySod ? new Date(stats.todaySod.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* WORK TASK SUBMISSION */}
+                      <div className="bg-bg-card rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
+                              <ClipboardList size={16} />
+                            </div>
+                            <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Work Task Submission</div>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                              <span className="truncate">Case Updates</span>
+                              <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday || 0}</span>
+                            </div>
+                            <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                              <span className="truncate">Client Comms</span>
+                              <span className="font-black whitespace-nowrap">{stats?.communicationsToday || 0}</span>
+                            </div>
+                            <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                              <span className="truncate">Doc Uploads</span>
+                              <span className="font-black whitespace-nowrap">{stats?.documentsUploadedToday || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                          <span className="text-text-muted">Last Submission</span>
+                          <span className="text-blue">
+                            {stats?.lastTimeline ? new Date(stats.lastTimeline.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'No Activity'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* EOD SUBMISSION */}
+                      <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="p-1.5 bg-purple-soft rounded-lg text-purple">
+                              <Clock size={16} />
+                            </div>
+                            <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">EOD Submission</div>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                              <span className="truncate">Daily Case Summary</span>
+                              <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday > 0 ? '1 / 1' : '0 / 1'}</span>
+                            </div>
+                            <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                              <span className="truncate">Calls & Meetings</span>
+                              <span className="font-black whitespace-nowrap">{stats?.communicationsToday > 0 ? '1 / 1' : '0 / 1'}</span>
+                            </div>
+                            <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
+                              <span className="truncate">Next Day Plan</span>
+                              <span className="font-black whitespace-nowrap">{stats?.todayEod ? '1 / 1' : '0 / 1'}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                          <span className="text-text-muted">EOD Due By</span>
+                          <span className="text-purple">08:00 PM</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Time Bound Actions & Schedule Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+                  {/* TIME BOUND ACTIONS */}
+                  <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Time Bound Actions</div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-[9px] font-black text-text-muted uppercase mb-1">Client Communication</div>
-                        <div className="text-xl font-black text-green">{stats?.myPerformance?.totalCommunications || 0}</div>
+                      <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
+                        <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Today</div>
+                        <div className="text-2xl font-black text-red">{stats?.timeBoundActions?.dueToday || 0}</div>
                       </div>
-                      <div>
-                        <div className="text-[9px] font-black text-text-muted uppercase mb-1">Cases Settled</div>
-                        <div className="text-xl font-black text-green">{stats?.myPerformance?.casesResolved || 0}</div>
+                      <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}>
+                        <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Within 24 Hrs</div>
+                        <div className="text-2xl font-black text-orange">{stats?.timeBoundActions?.dueWithin24h || 0}</div>
                       </div>
-                      <div>
-                        <div className="text-[9px] font-black text-text-muted uppercase mb-1">NA Cases</div>
-                        <div className="text-xl font-black text-red">{stats?.myPerformance?.naCases || 0}</div>
+                      <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}>
+                        <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Within 48 Hrs</div>
+                        <div className="text-2xl font-black text-yellow">{stats?.timeBoundActions?.dueWithin48h || 0}</div>
                       </div>
-                      <div>
-                        <div className="text-[9px] font-black text-text-muted uppercase mb-1">Overdue Cases</div>
-                        <div className="text-xl font-black text-red">{stats?.myPerformance?.overdueCases || 0}</div>
+                      <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
+                        <div className="text-[10px] font-black text-text-muted uppercase mb-1">Overdue</div>
+                        <div className="text-2xl font-black text-red">{stats?.timeBoundActions?.overdue || 0}</div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* MY REFUND STATS */}
-                <div className="bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
-                  <div className="flex justify-between items-center mb-4">
-                    <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">My Refund Requests</div>
-                    <div className="p-1.5 bg-green-soft rounded-lg text-green">
-                      <IndianRupee size={14} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div className="bg-bg-secondary p-3 rounded-xl border border-border/30 cursor-pointer hover:bg-bg-secondary/70 transition-all" onClick={() => navigate('/refund-request', { state: { activeRequestType: 'Settlement', filter: 'All' } })}>
-                      <div className="text-[8px] font-black text-text-muted uppercase mb-1">Total Filled</div>
-                      <div className="text-lg font-black text-text-primary mt-1">{myRefunds.length}</div>
-                    </div>
-                    <div className="bg-green-soft/30 p-3 rounded-xl border border-green-soft/40 cursor-pointer hover:bg-green-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { activeRequestType: 'Settlement', filter: 'Paid' } })}>
-                      <div className="text-[8px] font-black text-green uppercase mb-1">Approved</div>
-                      <div className="text-lg font-black text-green mt-1">{myRefunds.filter(r => r.status === 'Paid').length}</div>
-                    </div>
-                    <div className="bg-red-soft/30 p-3 rounded-xl border border-red-soft/40 cursor-pointer hover:bg-red-soft/50 transition-all" onClick={() => navigate('/refund-request', { state: { activeRequestType: 'Settlement', filter: 'Rejected' } })}>
-                      <div className="text-[8px] font-black text-red uppercase mb-1">Rejected</div>
-                      <div className="text-lg font-black text-red mt-1">{myRefunds.filter(r => r.status === 'Rejected').length}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Top Urgent Cases Section */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
-              {/* MY CASES OVERVIEW */}
-              <div className="xl:col-span-4 bg-bg-card rounded-2xl p-5 border border-border/50">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">My Cases Overview</div>
-                <div className="flex flex-col items-center justify-center h-full">
-                  <div className="w-full h-32 mb-4 relative">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: 'Active', value: stats?.openCases || 0 },
-                            { name: 'Resolved', value: stats?.settledCases || 0 },
-                            { name: 'NA Cases', value: stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0 },
-                            { name: 'Consumer Complaint', value: stats?.caseTypeWiseData?.find(c => c.caseType === 'Consumer Complaint')?.count || 0 }
-                          ].filter(d => d.value > 0)}
-                          innerRadius={35}
-                          outerRadius={50}
-                          paddingAngle={2}
-                          dataKey="value"
-                          isAnimationActive={false}
-                        >
-                          <Cell fill="#3B82F6" />
-                          <Cell fill="#10B981" />
-                          <Cell fill="#F59E0B" />
-                          <Cell fill="#8B5CF6" />
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <div className="text-lg font-black text-text-primary">{stats?.totalCases || 0}</div>
-                      <div className="text-[8px] font-black text-text-muted uppercase">Total</div>
-                    </div>
-                  </div>
-                  <div className="space-y-2 w-full">
-                    <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        <span>Active</span>
-                      </div>
-                      <span>{stats?.openCases || 0}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                        <span>Resolved</span>
-                      </div>
-                      <span>{stats?.settledCases || 0}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                        <span>NA Cases</span>
-                      </div>
-                      <span>{stats?.caseTypeWiseData?.find(c => c.caseType === 'FIR')?.count || 0}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px] font-bold text-text-secondary">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                        <span>Consumer Complaint</span>
-                      </div>
-                      <span>{stats?.caseTypeWiseData?.find(c => c.caseType === 'Consumer Complaint')?.count || 0}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* MY TASKS – SOD TO EOD */}
-              <div className="xl:col-span-8 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY TASKS – SOD TO EOD</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* SOD SUBMISSION */}
-                  <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
-                    <div>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
-                          <Zap size={16} />
-                        </div>
-                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">SOD Submission</div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Daily Checklist</span>
-                          <span className="font-black whitespace-nowrap">{stats?.timeBoundActions?.completedTasksToday || 0} / {stats?.timeBoundActions?.totalTasksToday || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Priority Cases Plan</span>
-                          <span className="font-black whitespace-nowrap">{stats?.closedCriticalCases || 0} / {stats?.totalCriticalCases || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Yesterday's EOD</span>
-                          <span className="font-black whitespace-nowrap">{stats?.yesterdayEodFilled ? 'Filled' : 'Pending'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                      <span className="text-text-muted">SOD Submitted At</span>
-                      <span className={stats?.todaySod ? "text-green" : "text-red"}>
-                        {stats?.todaySod ? new Date(stats.todaySod.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Pending'}
-                      </span>
                     </div>
                   </div>
 
-                  {/* WORK TASK SUBMISSION */}
-                  <div className="bg-bg-card rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
-                    <div>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
-                          <ClipboardList size={16} />
+                  {/* TODAY'S SCHEDULE */}
+                  <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Today's Schedule</div>
+                    <div className="space-y-4">
+                      {myTodayTasks.slice(0, 5).map((t, idx) => (
+                        <div key={idx} className="flex items-center gap-3 text-[11px] font-bold text-text-primary">
+                          <div className="text-text-muted w-16">{t.startTime || '10:00 AM'}</div>
+                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                          <div className="flex-1">
+                            <div>{t.title || t.taskName}</div>
+                            <div className="text-[9px] text-text-muted">{t.clientName || 'N/A'}</div>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${t.status === 'Completed' ? 'bg-green-soft text-green' : 'bg-blue-soft text-blue'}`}>
+                            {t.status}
+                          </span>
                         </div>
-                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Work Task Submission</div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Case Updates</span>
-                          <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Client Comms</span>
-                          <span className="font-black whitespace-nowrap">{stats?.communicationsToday || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Doc Uploads</span>
-                          <span className="font-black whitespace-nowrap">{stats?.documentsUploadedToday || 0}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                      <span className="text-text-muted">Last Submission</span>
-                      <span className="text-blue">
-                        {stats?.lastTimeline ? new Date(stats.lastTimeline.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'No Activity'}
-                      </span>
+                      ))}
+                      {myTodayTasks.length === 0 && (
+                        <div className="text-[10px] font-black text-text-muted text-center py-4 uppercase tracking-widest">No tasks for today</div>
+                      )}
                     </div>
                   </div>
 
-                  {/* EOD SUBMISSION */}
-                  <div className="bg-bg-secondary rounded-2xl p-4 shadow-sm border border-border/50 flex flex-col justify-between">
-                    <div>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="p-1.5 bg-purple-soft rounded-lg text-purple">
-                          <Clock size={16} />
-                        </div>
-                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">EOD Submission</div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Daily Case Summary</span>
-                          <span className="font-black whitespace-nowrap">{stats?.progressUpdatesToday > 0 ? '1 / 1' : '0 / 1'}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Calls & Meetings</span>
-                          <span className="font-black whitespace-nowrap">{stats?.communicationsToday > 0 ? '1 / 1' : '0 / 1'}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] font-bold text-text-secondary gap-2">
-                          <span className="truncate">Next Day Plan</span>
-                          <span className="font-black whitespace-nowrap">{stats?.todayEod ? '1 / 1' : '0 / 1'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                      <span className="text-text-muted">EOD Due By</span>
-                      <span className="text-purple">08:00 PM</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Time Bound Actions & Schedule Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-              {/* TIME BOUND ACTIONS */}
-              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Time Bound Actions</div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
-                    <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Today</div>
-                    <div className="text-2xl font-black text-red">{stats?.timeBoundActions?.dueToday || 0}</div>
-                  </div>
-                  <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}>
-                    <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Within 24 Hrs</div>
-                    <div className="text-2xl font-black text-orange">{stats?.timeBoundActions?.dueWithin24h || 0}</div>
-                  </div>
-                  <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}>
-                    <div className="text-[10px] font-black text-text-muted uppercase mb-1">Due Within 48 Hrs</div>
-                    <div className="text-2xl font-black text-yellow">{stats?.timeBoundActions?.dueWithin48h || 0}</div>
-                  </div>
-                  <div className="bg-bg-secondary p-4 rounded-xl text-center cursor-pointer hover:bg-bg-secondary/80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
-                    <div className="text-[10px] font-black text-text-muted uppercase mb-1">Overdue</div>
-                    <div className="text-2xl font-black text-red">{stats?.timeBoundActions?.overdue || 0}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* TODAY'S SCHEDULE */}
-              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Today's Schedule</div>
-                <div className="space-y-4">
-                  {myTodayTasks.slice(0, 5).map((t, idx) => (
-                    <div key={idx} className="flex items-center gap-3 text-[11px] font-bold text-text-primary">
-                      <div className="text-text-muted w-16">{t.startTime || '10:00 AM'}</div>
-                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      <div className="flex-1">
-                        <div>{t.title || t.taskName}</div>
-                        <div className="text-[9px] text-text-muted">{t.clientName || 'N/A'}</div>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${t.status === 'Completed' ? 'bg-green-soft text-green' : 'bg-blue-soft text-blue'}`}>
-                        {t.status}
-                      </span>
-                    </div>
-                  ))}
-                  {myTodayTasks.length === 0 && (
-                    <div className="text-[10px] font-black text-text-muted text-center py-4 uppercase tracking-widest">No tasks for today</div>
-                  )}
-                </div>
-              </div>
-
-              {/* QUICK ACTIONS */}
-              <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Quick Actions</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => { navigate('/work-report') }}
-                    className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
-                  >
-                    <Activity size={16} className="text-orange mb-1" />
-                    <span className="text-[9px] font-black uppercase text-text-primary">Work Report</span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/my-task')}
-                    className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
-                  >
-                    <FolderPlus size={16} className="text-purple mb-1" />
-                    <span className="text-[9px] font-black uppercase text-text-primary">Work Task</span>
-                  </button>
-                  {/* <button
+                  {/* QUICK ACTIONS */}
+                  <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">Quick Actions</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => { navigate('/work-report') }}
+                        className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
+                      >
+                        <Activity size={16} className="text-orange mb-1" />
+                        <span className="text-[9px] font-black uppercase text-text-primary">Work Report</span>
+                      </button>
+                      <button
+                        onClick={() => navigate('/my-task')}
+                        className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
+                      >
+                        <FolderPlus size={16} className="text-purple mb-1" />
+                        <span className="text-[9px] font-black uppercase text-text-primary">Work Task</span>
+                      </button>
+                      {/* <button
                     onClick={() => { setReportType('EOD'); setIsReportModalOpen(true); }}
                     className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
                   >
                     <FileUp size={16} className="text-indigo mb-1" />
                     <span className="text-[9px] font-black uppercase text-text-primary">EOD Submission</span>
                   </button> */}
-                  <button
-                    onClick={() => navigate('/case-master')}
-                    className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
-                  >
-                    <Activity size={16} className="text-green mb-1" />
-                    <span className="text-[9px] font-black uppercase text-text-primary">Case Update</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-            {/* Main Cards (Left) */}
-            <div className="lg:col-span-6 grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
-              {/* Card 1: Total Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases()}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
-                      <FolderOpen size={16} />
+                      <button
+                        onClick={() => navigate('/case-master')}
+                        className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
+                      >
+                        <Activity size={16} className="text-green mb-1" />
+                        <span className="text-[9px] font-black uppercase text-text-primary">Case Update</span>
+                      </button>
                     </div>
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Total Cases</div>
                   </div>
-                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.totalCases || 0}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.totalAmountPaid || 0).toLocaleString('en-IN')}</div>
                 </div>
-              </div>
-
-              {/* Card 2: Active Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ statusFilter: 'Active' })}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-green-soft rounded-lg text-green">
-                      <Activity size={16} />
+              </>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+                {/* Main Cards (Left) */}
+                <div className="lg:col-span-6 grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+                  {/* Card 1: Total Cases */}
+                  <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases()}>
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
+                          <FolderOpen size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Total Cases</div>
+                      </div>
+                      <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.totalCases || 0}</div>
+                      <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.totalAmountPaid || 0).toLocaleString('en-IN')}</div>
                     </div>
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Cases</div>
                   </div>
-                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.openCases || 0}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.openCasesAmount || 0).toLocaleString('en-IN')}</div>
-                </div>
-              </div>
 
-              {/* Card 3: High Risk Cases */}
-              <div className="bg-white rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-red-soft/30" onClick={() => navigateCases({ priorityFilter: 'High' })}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-red-soft rounded-lg text-red">
-                      <AlertTriangle size={16} />
+                  {/* Card 2: Active Cases */}
+                  <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ statusFilter: 'Active' })}>
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 bg-green-soft rounded-lg text-green">
+                          <Activity size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Cases</div>
+                      </div>
+                      <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.openCases || 0}</div>
+                      <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.openCasesAmount || 0).toLocaleString('en-IN')}</div>
                     </div>
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">High Risk</div>
                   </div>
-                  <div className="text-3xl font-black text-red tracking-tight">{stats?.highPriority || 0}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.highPriorityAmount || 0).toLocaleString('en-IN')}</div>
-                </div>
-              </div>
 
-              {/* Card 4: Critical Priority */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ priorityFilter: 'Critical' })}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-bg-input rounded-lg text-red">
-                      <AlertCircle size={16} />
+                  {/* Card 3: High Risk Cases */}
+                  <div className="bg-white rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-red-soft/30" onClick={() => navigateCases({ priorityFilter: 'High' })}>
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 bg-red-soft rounded-lg text-red">
+                          <AlertTriangle size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">High Risk</div>
+                      </div>
+                      <div className="text-3xl font-black text-red tracking-tight">{stats?.highPriority || 0}</div>
+                      <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.highPriorityAmount || 0).toLocaleString('en-IN')}</div>
                     </div>
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Critical</div>
                   </div>
-                  <div className="text-3xl font-black text-red tracking-tight">{stats?.criticalPriority || 0}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.criticalPriorityAmount || 0).toLocaleString('en-IN')}</div>
-                </div>
-              </div>
 
-              {/* Card 5: Closure Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ statusFilter: 'Closure' })}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-green-soft rounded-lg text-green">
-                      <CheckCircle size={16} />
+                  {/* Card 4: Critical Priority */}
+                  <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ priorityFilter: 'Critical' })}>
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 bg-bg-input rounded-lg text-red">
+                          <AlertCircle size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Critical</div>
+                      </div>
+                      <div className="text-3xl font-black text-red tracking-tight">{stats?.criticalPriority || 0}</div>
+                      <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.criticalPriorityAmount || 0).toLocaleString('en-IN')}</div>
                     </div>
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Closure Cases</div>
                   </div>
-                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.closedCases || 0}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.closedAmount || 0).toLocaleString('en-IN')}</div>
-                </div>
-              </div>
 
-              {/* Card 6: Medium Priority */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ priorityFilter: 'Medium' })}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-bg-input rounded-lg text-yellow-600">
-                      <Clock size={16} />
+                  {/* Card 5: Closure Cases */}
+                  <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ statusFilter: 'Closure' })}>
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 bg-green-soft rounded-lg text-green">
+                          <CheckCircle size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Closure Cases</div>
+                      </div>
+                      <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.closedCases || 0}</div>
+                      <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.closedAmount || 0).toLocaleString('en-IN')}</div>
                     </div>
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Medium</div>
                   </div>
-                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.mediumPriority || 0}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.mediumPriorityAmount || 0).toLocaleString('en-IN')}</div>
-                </div>
-              </div>
 
-              {/* Card 7: Low Priority */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ priorityFilter: 'Low' })}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-bg-input rounded-lg text-green">
-                      <Folder size={16} />
+                  {/* Card 6: Medium Priority */}
+                  <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ priorityFilter: 'Medium' })}>
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 bg-bg-input rounded-lg text-yellow-600">
+                          <Clock size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Medium</div>
+                      </div>
+                      <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.mediumPriority || 0}</div>
+                      <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.mediumPriorityAmount || 0).toLocaleString('en-IN')}</div>
                     </div>
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Low</div>
                   </div>
-                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.lowPriority || 0}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.lowPriorityAmount || 0).toLocaleString('en-IN')}</div>
-                </div>
-              </div>
 
-              {/* Card 8: Settlement Stage Cases */}
-              <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ statusFilter: 'Settlement' })}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-bg-input rounded-lg text-blue">
-                      <Receipt size={16} />
+                  {/* Card 7: Low Priority */}
+                  <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ priorityFilter: 'Low' })}>
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 bg-bg-input rounded-lg text-green">
+                          <Folder size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Low</div>
+                      </div>
+                      <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.lowPriority || 0}</div>
+                      <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.lowPriorityAmount || 0).toLocaleString('en-IN')}</div>
                     </div>
-                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Settlement</div>
                   </div>
-                  <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.settledCases || 0}</div>
-                  <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.settledAmount || 0).toLocaleString('en-IN')}</div>
-                </div>
-              </div>
-            </div>
 
-            {/* Due Cases (Right Side, Col Span 6) */}
-            <div className="lg:col-span-6 bg-bg-card rounded-2xl p-5 shadow-sm min-w-0 overflow-hidden flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-center mb-5">
-                  <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Upcoming / Due Cases</div>
-                  <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl overflow-x-auto scrollbar-none">
+                  {/* Card 8: Settlement Stage Cases */}
+                  <div className="bg-bg-card rounded-2xl p-5 flex flex-col transition-all shadow-sm cursor-pointer hover:bg-bg-card-hover" onClick={() => navigateCases({ statusFilter: 'Settlement' })}>
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 bg-bg-input rounded-lg text-blue">
+                          <Receipt size={16} />
+                        </div>
+                        <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Settlement</div>
+                      </div>
+                      <div className="text-3xl font-black text-text-primary tracking-tight">{stats?.settledCases || 0}</div>
+                      <div className="text-xs font-bold text-text-muted mt-1">₹{Number(stats?.settledAmount || 0).toLocaleString('en-IN')}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Due Cases (Right Side, Col Span 6) */}
+                <div className="lg:col-span-6 bg-bg-card rounded-2xl p-5 shadow-sm min-w-0 overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center mb-5">
+                      <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Upcoming / Due Cases</div>
+                      <div className="flex gap-1 bg-bg-secondary p-1 rounded-xl overflow-x-auto scrollbar-none">
+                        {[
+                          { key: 'overdue', label: 'Overdue' },
+                          { key: 'today', label: 'Today' },
+                          { key: 'thisWeek', label: 'This Week' },
+                          { key: 'thisMonth', label: 'This Month' }
+                        ].map((tab) => {
+                          const count = getFilteredDueCases(tab.key).length;
+                          return (
+                            <button
+                              key={tab.key}
+                              onClick={() => setDueCasesTab(tab.key)}
+                              className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all flex items-center gap-1.5 ${dueCasesTab === tab.key ? 'bg-blue text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                            >
+                              <span>{tab.label}</span>
+                              <span className={`px-1.5 py-0.2 rounded-md text-[8px] font-bold ${dueCasesTab === tab.key ? 'bg-white/20 text-white' : 'bg-bg-input text-text-secondary'}`}>{count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                      {getFilteredDueCases(dueCasesTab).length > 0 ? (
+                        <div className="table-wrap overflow-x-auto scrollbar-thin">
+                          <table className="w-full text-left border-collapse min-w-[500px]">
+                            <thead>
+                              <tr className="bg-bg-secondary text-text-primary text-[8px] font-black tracking-[0.2em] uppercase border-b border-border/30 sticky top-0 z-10">
+                                <th className="px-4 py-2.5 text-blue-500">Case ID</th>
+                                <th className="px-4 py-2.5 text-indigo-500">Company</th>
+                                <th className="px-4 py-2.5 text-emerald-500">Complaint</th>
+                                <th className="px-4 py-2.5 text-accent text-center">Assignee</th>
+                                <th className="px-4 py-2.5 text-orange text-right">Due Date</th>
+                              </tr>
+                            </thead>
+                            <tbody className="text-[10px] text-text-secondary divide-y divide-border/20">
+                              {getFilteredDueCases(dueCasesTab).map((c, index) => (
+                                <tr
+                                  key={index}
+                                  onClick={() => setSelectedDueCaseDetails(c)}
+                                  className="hover:bg-bg-input/50 transition-all cursor-pointer group border-b border-border/10 last:border-0"
+                                >
+                                  <td className="px-4 py-3 font-black text-blue group-hover:underline">
+                                    {c.caseId}
+                                  </td>
+                                  <td className="px-4 py-3 font-black text-text-primary uppercase tracking-tight truncate max-w-[120px]" title={c.companyName}>
+                                    {c.companyName || '—'}
+                                  </td>
+                                  <td className="px-4 py-3 font-bold text-text-secondary truncate max-w-[150px]" title={c.typeOfComplaint}>
+                                    {c.typeOfComplaint}
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className="inline-block px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest bg-accent-soft text-accent border border-accent-soft/30 truncate max-w-[110px]" title={c.assignedTo || 'Unassigned'}>
+                                      👤 {c.assignedTo || 'Unassigned'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-black text-orange">
+                                    {c.dueDate ? new Date(c.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-10 animate-enter">
+                          <Clock size={24} className="text-text-muted mx-auto mb-2 opacity-50" />
+                          <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">
+                            No {dueCasesTab === 'overdue' ? 'overdue cases' : `cases due ${dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}`}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Type of Complaint (Below) */}
+                <div className="lg:col-span-12 bg-bg-card rounded-2xl p-5 shadow-sm">
+                  <div className="flex justify-between items-center mb-5">
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Type of Complaint</div>
+                  </div>
+                  <div className="flex overflow-x-auto gap-4 pb-2">
                     {[
-                      { key: 'overdue', label: 'Overdue' },
-                      { key: 'today', label: 'Today' },
-                      { key: 'thisWeek', label: 'This Week' },
-                      { key: 'thisMonth', label: 'This Month' }
-                    ].map((tab) => {
-                      const count = getFilteredDueCases(tab.key).length;
+                      'Legal Notice',
+                      '1930 Cyber Complaint',
+                      'Consumer Complaint',
+                      'Criminal Complaint/FIR',
+                      'Civil Case',
+                      'Social Media',
+                      'General Query',
+                      'NA Non Agreement',
+                      'Demand Pressure',
+                      'Bank Hold'
+                    ].map((typeName, index) => {
+                      const item = stats?.caseTypeWiseData?.find(d => d.caseType === typeName) || { caseType: typeName, count: 0, totalAmount: 0 };
+                      const percentage = ((item.count / (stats?.totalCases || 1)) * 100).toFixed(2);
+                      const colors = [
+                        { bg: 'bg-blue-soft', text: 'text-blue' },
+                        { bg: 'bg-green-soft', text: 'text-green' },
+                        { bg: 'bg-purple-soft', text: 'text-purple' },
+                        { bg: 'bg-orange-soft', text: 'text-orange' },
+                        { bg: 'bg-cyan-soft', text: 'text-cyan' },
+                        { bg: 'bg-yellow-soft', text: 'text-yellow' },
+                      ];
+                      const icons = [ShieldAlert, FileText, Gavel, AlertTriangle, MessageCircle, HelpCircle];
+                      const color = colors[index % colors.length];
+                      const IconComponent = icons[index % icons.length];
+
                       return (
-                        <button
-                          key={tab.key}
-                          onClick={() => setDueCasesTab(tab.key)}
-                          className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all flex items-center gap-1.5 ${dueCasesTab === tab.key ? 'bg-blue text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                        <div
+                          key={index}
+                          className="flex flex-col p-4 bg-bg-secondary/50 rounded-xl border border-border/50 cursor-pointer hover:bg-bg-secondary/80 transition-all min-w-[160px] flex-shrink-0"
+                          onClick={() => navigate('/case-master', { state: { typeFilter: item.caseType } })}
                         >
-                          <span>{tab.label}</span>
-                          <span className={`px-1.5 py-0.2 rounded-md text-[8px] font-bold ${dueCasesTab === tab.key ? 'bg-white/20 text-white' : 'bg-bg-input text-text-secondary'}`}>{count}</span>
-                        </button>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={`p-1 ${color.bg} rounded ${color.text}`}>
+                              <IconComponent size={12} />
+                            </div>
+                            <div className="text-[10px] font-black text-text-primary uppercase tracking-tight" title={item.caseType}>{item.caseType}</div>
+                          </div>
+                          <div className="text-xl font-black text-text-primary tracking-tight">{item.count}</div>
+                          <div className="text-[10px] font-bold text-text-muted mt-0.5">₹{Number(item.totalAmount || 0).toLocaleString('en-IN')}</div>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
 
-                <div className="max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
-                  {getFilteredDueCases(dueCasesTab).length > 0 ? (
-                    <div className="table-wrap overflow-x-auto scrollbar-thin">
-                      <table className="w-full text-left border-collapse min-w-[500px]">
-                        <thead>
-                          <tr className="bg-bg-secondary text-text-primary text-[8px] font-black tracking-[0.2em] uppercase border-b border-border/30 sticky top-0 z-10">
-                            <th className="px-4 py-2.5 text-blue-500">Case ID</th>
-                            <th className="px-4 py-2.5 text-indigo-500">Company</th>
-                            <th className="px-4 py-2.5 text-emerald-500">Complaint</th>
-                            <th className="px-4 py-2.5 text-accent text-center">Assignee</th>
-                            <th className="px-4 py-2.5 text-orange text-right">Due Date</th>
-                          </tr>
-                        </thead>
-                        <tbody className="text-[10px] text-text-secondary divide-y divide-border/20">
-                          {getFilteredDueCases(dueCasesTab).map((c, index) => (
-                            <tr
-                              key={index}
-                              onClick={() => setSelectedDueCaseDetails(c)}
-                              className="hover:bg-bg-input/50 transition-all cursor-pointer group border-b border-border/10 last:border-0"
-                            >
-                              <td className="px-4 py-3 font-black text-blue group-hover:underline">
-                                {c.caseId}
-                              </td>
-                              <td className="px-4 py-3 font-black text-text-primary uppercase tracking-tight truncate max-w-[120px]" title={c.companyName}>
-                                {c.companyName || '—'}
-                              </td>
-                              <td className="px-4 py-3 font-bold text-text-secondary truncate max-w-[150px]" title={c.typeOfComplaint}>
-                                {c.typeOfComplaint}
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <span className="inline-block px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest bg-accent-soft text-accent border border-accent-soft/30 truncate max-w-[110px]" title={c.assignedTo || 'Unassigned'}>
-                                  👤 {c.assignedTo || 'Unassigned'}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-right font-black text-orange">
-                                {c.dueDate ? new Date(c.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+
+              </div>
+            )}
+          </div>
+
+          {/* Refund Provisions & Stats Section */}
+          {(user?.role === 'Admin' || user?.role === 'Accountant') && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+              {/* Refund Provisions (Left) */}
+              <div
+                onClick={() => {
+                  setReportPeriodFilter('All');
+                  setReportStatusFilter('Pending');
+                  setIsRefundReportModalOpen(true);
+                  setExpandedRefundIds({});
+                  setReportStartDate('');
+                  setReportEndDate('');
+                  fetchRefundReportData();
+                }}
+                className="lg:col-span-5 bg-bg-card hover:bg-bg-input border-2 border-transparent hover:border-accent/40 rounded-2xl p-5 shadow-sm cursor-pointer transition-all active:scale-[0.99] group"
+              >
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4 flex justify-between items-center group-hover:text-accent transition-all">
+                  <span>Refund Provisions (Approved)</span>
+                  <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-4px] group-hover:translate-x-0 text-accent" />
+                </div>
+                <div className="grid grid-cols-4 gap-4">
+                  <div
+                    className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const getLocalDateString = (d) => {
+                        const offset = d.getTimezoneOffset();
+                        const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+                        return localDate.toISOString().split('T')[0];
+                      };
+                      const todayStr = getLocalDateString(new Date());
+                      setReportPeriodFilter('Today');
+                      setReportStatusFilter('Pending');
+                      setIsRefundReportModalOpen(true);
+                      setExpandedRefundIds({});
+                      setReportStartDate(todayStr);
+                      setReportEndDate(todayStr);
+                      fetchRefundReportData();
+                    }}
+                  >
+                    <div className="text-[10px] font-black text-text-primary uppercase mb-2">Today</div>
+                    <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
+                      <span>No.</span>
+                      <span>Amt.</span>
                     </div>
-                  ) : (
-                    <div className="text-center py-10 animate-enter">
-                      <Clock size={24} className="text-text-muted mx-auto mb-2 opacity-50" />
-                      <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">
-                        No {dueCasesTab === 'overdue' ? 'overdue cases' : `cases due ${dueCasesTab === 'today' ? 'today' : dueCasesTab === 'thisWeek' ? 'this week' : 'this month'}`}
-                      </div>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-lg font-black text-text-primary">{stats?.provisions?.today?.count || 0}</span>
+                      <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.today?.amount || 0).toLocaleString('en-IN')}</span>
                     </div>
-                  )}
+                  </div>
+                  <div
+                    className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const getLocalDateString = (d) => {
+                        const offset = d.getTimezoneOffset();
+                        const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+                        return localDate.toISOString().split('T')[0];
+                      };
+                      const now = new Date();
+                      const day = now.getDay();
+                      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+                      const startOfWeek = new Date(now);
+                      startOfWeek.setDate(diff);
+                      const startOfWeekStr = getLocalDateString(startOfWeek);
+                      const endOfWeek = new Date(startOfWeek);
+                      endOfWeek.setDate(endOfWeek.getDate() + 6);
+                      const endOfWeekStr = getLocalDateString(endOfWeek);
+
+                      setReportPeriodFilter('This Week');
+                      setReportStatusFilter('Pending');
+                      setIsRefundReportModalOpen(true);
+                      setExpandedRefundIds({});
+                      setReportStartDate(startOfWeekStr);
+                      setReportEndDate(endOfWeekStr);
+                      fetchRefundReportData();
+                    }}
+                  >
+                    <div className="text-[10px] font-black text-text-primary uppercase mb-2">This Week</div>
+                    <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
+                      <span>No.</span>
+                      <span>Amt.</span>
+                    </div>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-lg font-black text-text-primary">{stats?.provisions?.thisWeek?.count || 0}</span>
+                      <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.thisWeek?.amount || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                  <div
+                    className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const getLocalDateString = (d) => {
+                        const offset = d.getTimezoneOffset();
+                        const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+                        return localDate.toISOString().split('T')[0];
+                      };
+                      const now = new Date();
+                      const startOfMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+                      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                      const endOfMonthStr = getLocalDateString(endOfMonth);
+
+                      setReportPeriodFilter('This Month');
+                      setReportStatusFilter('Pending');
+                      setIsRefundReportModalOpen(true);
+                      setExpandedRefundIds({});
+                      setReportStartDate(startOfMonthStr);
+                      setReportEndDate(endOfMonthStr);
+                      fetchRefundReportData();
+                    }}
+                  >
+                    <div className="text-[10px] font-black text-text-primary uppercase mb-2">This Month</div>
+                    <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
+                      <span>No.</span>
+                      <span>Amt.</span>
+                    </div>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-lg font-black text-text-primary">{stats?.provisions?.thisMonth?.count || 0}</span>
+                      <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.thisMonth?.amount || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  <div
+                    className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const getLocalDateString = (d) => {
+                        const offset = d.getTimezoneOffset();
+                        const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+                        return localDate.toISOString().split('T')[0];
+                      };
+                      const now = new Date();
+                      const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+                      const startStr = getLocalDateString(startOfNextMonth);
+                      const endOfNext6Months = new Date(now.getFullYear(), now.getMonth() + 7, 0);
+                      const endOfNext6MonthsStr = getLocalDateString(endOfNext6Months);
+
+                      setReportPeriodFilter('Next 6 Months');
+                      setReportStatusFilter('Pending');
+                      setIsRefundReportModalOpen(true);
+                      setExpandedRefundIds({});
+                      setReportStartDate(startStr);
+                      setReportEndDate(endOfNext6MonthsStr);
+                      fetchRefundReportData();
+                    }}
+                  >
+                    <div className="text-[10px] font-black text-text-primary uppercase mb-2">Next 6 Months</div>
+                    <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
+                      <span>No.</span>
+                      <span>Amt.</span>
+                    </div>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-lg font-black text-text-primary">{stats?.provisions?.next6Months?.count || 0}</span>
+                      <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.next6Months?.amount || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Type of Complaint (Below) */}
-            <div className="lg:col-span-12 bg-bg-card rounded-2xl p-5 shadow-sm">
+              {/* 4 Small Cards (Right) */}
+              <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {/* Amount Paid */}
+                <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+                  <div className="flex justify-between items-start">
+                    <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
+                      <IndianRupee size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Amount Paid</div>
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-lg font-black text-text-primary">₹ {Number(stats?.totalRefundAmount || 0).toLocaleString('en-IN')}</div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => {
+                    setReportPeriodFilter('All');
+                    setReportStatusFilter('All');
+                    setIsRefundReportModalOpen(true);
+                    setExpandedRefundIds({});
+                    setReportStartDate('');
+                    setReportEndDate('');
+                    fetchRefundReportData();
+                  }}>
+                    View Details <ArrowRight size={12} />
+                  </div>
+                </div>
+
+                {/* Overdue Callbacks */}
+                <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+                  <div className="flex justify-between items-start">
+                    <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
+                      <Clock size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Overdue</div>
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-lg font-black text-text-primary">{stats?.overdue || 0}</div>
+                    <div className="text-[10px] font-bold text-text-muted mt-0.5">Due for Follow-up</div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
+                    View Details <ArrowRight size={12} />
+                  </div>
+                </div>
+
+                {/* Pending Approvals */}
+                <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+                  <div className="flex justify-between items-start">
+                    <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
+                      <ShieldCheck size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Pending Approvals</div>
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-lg font-black text-text-primary">₹ {Number(stats?.pendingApprovals || 0).toLocaleString('en-IN')}</div>
+                    <div className="text-[10px] font-bold text-text-muted mt-0.5">Awaiting Action</div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/admin-panel#refund-actions')}>
+                    View Details <ArrowRight size={12} />
+                  </div>
+                </div>
+
+                {/* Linked By Cases */}
+                <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+                  <div className="flex justify-between items-start">
+                    <div className="p-1.5 bg-accent/10 rounded-lg text-accent">
+                      <FileText size={16} />
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Linked By</div>
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-lg font-black text-text-primary">{stats?.linkedByCount || 0}</div>
+                    <div className="text-[10px] font-bold text-text-muted mt-0.5">Linked Cases</div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master', { state: { linkedOnly: true } })}>
+                    View Details <ArrowRight size={12} />
+                  </div>
+                </div>
+
+                {/* Live Escalations */}
+
+              </div>
+            </div>
+          )}
+
+          {/* Threat Trends Section */}
+          {user?.role === 'Admin' && (
+            <div className="bg-bg-card rounded-2xl p-5 shadow-sm mb-8 min-w-0 overflow-hidden">
               <div className="flex justify-between items-center mb-5">
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Type of Complaint</div>
-              </div>
-              <div className="flex overflow-x-auto gap-4 pb-2">
-                {[
-                  'Legal Notice',
-                  '1930 Cyber Complaint',
-                  'Consumer Complaint',
-                  'Criminal Complaint/FIR',
-                  'Civil Case',
-                  'Social Media',
-                  'General Query',
-                  'NA Non Agreement',
-                  'Demand Pressure',
-                  'Bank Hold'
-                ].map((typeName, index) => {
-                  const item = stats?.caseTypeWiseData?.find(d => d.caseType === typeName) || { caseType: typeName, count: 0, totalAmount: 0 };
-                  const percentage = ((item.count / (stats?.totalCases || 1)) * 100).toFixed(2);
-                  const colors = [
-                    { bg: 'bg-blue-soft', text: 'text-blue' },
-                    { bg: 'bg-green-soft', text: 'text-green' },
-                    { bg: 'bg-purple-soft', text: 'text-purple' },
-                    { bg: 'bg-orange-soft', text: 'text-orange' },
-                    { bg: 'bg-cyan-soft', text: 'text-cyan' },
-                    { bg: 'bg-yellow-soft', text: 'text-yellow' },
-                  ];
-                  const icons = [ShieldAlert, FileText, Gavel, AlertTriangle, MessageCircle, HelpCircle];
-                  const color = colors[index % colors.length];
-                  const IconComponent = icons[index % icons.length];
-
-                  return (
-                    <div
-                      key={index}
-                      className="flex flex-col p-4 bg-bg-secondary/50 rounded-xl border border-border/50 cursor-pointer hover:bg-bg-secondary/80 transition-all min-w-[160px] flex-shrink-0"
-                      onClick={() => navigate('/case-master', { state: { typeFilter: item.caseType } })}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className={`p-1 ${color.bg} rounded ${color.text}`}>
-                          <IconComponent size={12} />
-                        </div>
-                        <div className="text-[10px] font-black text-text-primary uppercase tracking-tight" title={item.caseType}>{item.caseType}</div>
-                      </div>
-                      <div className="text-xl font-black text-text-primary tracking-tight">{item.count}</div>
-                      <div className="text-[10px] font-bold text-text-muted mt-0.5">₹{Number(item.totalAmount || 0).toLocaleString('en-IN')}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-
-          </div>
-        )}
-      </div>
-
-      {/* Refund Provisions & Stats Section */}
-      {(user?.role === 'Admin' || user?.role === 'Accountant') && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-          {/* Refund Provisions (Left) */}
-          <div
-            onClick={() => {
-              setReportPeriodFilter('All');
-              setReportStatusFilter('Pending');
-              setIsRefundReportModalOpen(true);
-              setExpandedRefundIds({});
-              setReportStartDate('');
-              setReportEndDate('');
-              fetchRefundReportData();
-            }}
-            className="lg:col-span-5 bg-bg-card hover:bg-bg-input border-2 border-transparent hover:border-accent/40 rounded-2xl p-5 shadow-sm cursor-pointer transition-all active:scale-[0.99] group"
-          >
-            <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4 flex justify-between items-center group-hover:text-accent transition-all">
-              <span>Refund Provisions (Approved)</span>
-              <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-4px] group-hover:translate-x-0 text-accent" />
-            </div>
-            <div className="grid grid-cols-4 gap-4">
-              <div
-                className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const getLocalDateString = (d) => {
-                    const offset = d.getTimezoneOffset();
-                    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-                    return localDate.toISOString().split('T')[0];
-                  };
-                  const todayStr = getLocalDateString(new Date());
-                  setReportPeriodFilter('Today');
-                  setReportStatusFilter('Pending');
-                  setIsRefundReportModalOpen(true);
-                  setExpandedRefundIds({});
-                  setReportStartDate(todayStr);
-                  setReportEndDate(todayStr);
-                  fetchRefundReportData();
-                }}
-              >
-                <div className="text-[10px] font-black text-text-primary uppercase mb-2">Today</div>
-                <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
-                  <span>No.</span>
-                  <span>Amt.</span>
-                </div>
-                <div className="flex justify-between items-baseline">
-                  <span className="text-lg font-black text-text-primary">{stats?.provisions?.today?.count || 0}</span>
-                  <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.today?.amount || 0).toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-              <div
-                className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const getLocalDateString = (d) => {
-                    const offset = d.getTimezoneOffset();
-                    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-                    return localDate.toISOString().split('T')[0];
-                  };
-                  const now = new Date();
-                  const day = now.getDay();
-                  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-                  const startOfWeek = new Date(now);
-                  startOfWeek.setDate(diff);
-                  const startOfWeekStr = getLocalDateString(startOfWeek);
-                  const endOfWeek = new Date(startOfWeek);
-                  endOfWeek.setDate(endOfWeek.getDate() + 6);
-                  const endOfWeekStr = getLocalDateString(endOfWeek);
-
-                  setReportPeriodFilter('This Week');
-                  setReportStatusFilter('Pending');
-                  setIsRefundReportModalOpen(true);
-                  setExpandedRefundIds({});
-                  setReportStartDate(startOfWeekStr);
-                  setReportEndDate(endOfWeekStr);
-                  fetchRefundReportData();
-                }}
-              >
-                <div className="text-[10px] font-black text-text-primary uppercase mb-2">This Week</div>
-                <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
-                  <span>No.</span>
-                  <span>Amt.</span>
-                </div>
-                <div className="flex justify-between items-baseline">
-                  <span className="text-lg font-black text-text-primary">{stats?.provisions?.thisWeek?.count || 0}</span>
-                  <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.thisWeek?.amount || 0).toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-              <div
-                className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const getLocalDateString = (d) => {
-                    const offset = d.getTimezoneOffset();
-                    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-                    return localDate.toISOString().split('T')[0];
-                  };
-                  const now = new Date();
-                  const startOfMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-                  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-                  const endOfMonthStr = getLocalDateString(endOfMonth);
-
-                  setReportPeriodFilter('This Month');
-                  setReportStatusFilter('Pending');
-                  setIsRefundReportModalOpen(true);
-                  setExpandedRefundIds({});
-                  setReportStartDate(startOfMonthStr);
-                  setReportEndDate(endOfMonthStr);
-                  fetchRefundReportData();
-                }}
-              >
-                <div className="text-[10px] font-black text-text-primary uppercase mb-2">This Month</div>
-                <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
-                  <span>No.</span>
-                  <span>Amt.</span>
-                </div>
-                <div className="flex justify-between items-baseline">
-                  <span className="text-lg font-black text-text-primary">{stats?.provisions?.thisMonth?.count || 0}</span>
-                  <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.thisMonth?.amount || 0).toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-
-              <div
-                className="border-r border-border last:border-r-0 pr-2 last:pr-0 hover:bg-bg-secondary/60 p-1.5 rounded-lg transition-all"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const getLocalDateString = (d) => {
-                    const offset = d.getTimezoneOffset();
-                    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-                    return localDate.toISOString().split('T')[0];
-                  };
-                  const now = new Date();
-                  const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-                  const startStr = getLocalDateString(startOfNextMonth);
-                  const endOfNext6Months = new Date(now.getFullYear(), now.getMonth() + 7, 0);
-                  const endOfNext6MonthsStr = getLocalDateString(endOfNext6Months);
-
-                  setReportPeriodFilter('Next 6 Months');
-                  setReportStatusFilter('Pending');
-                  setIsRefundReportModalOpen(true);
-                  setExpandedRefundIds({});
-                  setReportStartDate(startStr);
-                  setReportEndDate(endOfNext6MonthsStr);
-                  fetchRefundReportData();
-                }}
-              >
-                <div className="text-[10px] font-black text-text-primary uppercase mb-2">Next 6 Months</div>
-                <div className="flex justify-between text-[8px] font-bold text-text-muted mb-1">
-                  <span>No.</span>
-                  <span>Amt.</span>
-                </div>
-                <div className="flex justify-between items-baseline">
-                  <span className="text-lg font-black text-text-primary">{stats?.provisions?.next6Months?.count || 0}</span>
-                  <span className="text-[10px] font-black text-text-primary">₹ {Number(stats?.provisions?.next6Months?.amount || 0).toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 4 Small Cards (Right) */}
-          <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {/* Amount Paid */}
-            <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
-                  <IndianRupee size={16} />
-                </div>
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Amount Paid</div>
-              </div>
-              <div className="mt-2">
-                <div className="text-lg font-black text-text-primary">₹ {Number(stats?.totalRefundAmount || 0).toLocaleString('en-IN')}</div>
-              </div>
-              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => {
-                setReportPeriodFilter('All');
-                setReportStatusFilter('All');
-                setIsRefundReportModalOpen(true);
-                setExpandedRefundIds({});
-                setReportStartDate('');
-                setReportEndDate('');
-                fetchRefundReportData();
-              }}>
-                View Details <ArrowRight size={12} />
-              </div>
-            </div>
-
-            {/* Overdue Callbacks */}
-            <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <div className="p-1.5 bg-orange-soft rounded-lg text-orange">
-                  <Clock size={16} />
-                </div>
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Overdue</div>
-              </div>
-              <div className="mt-2">
-                <div className="text-lg font-black text-text-primary">{stats?.overdue || 0}</div>
-                <div className="text-[10px] font-bold text-text-muted mt-0.5">Due for Follow-up</div>
-              </div>
-              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
-                View Details <ArrowRight size={12} />
-              </div>
-            </div>
-
-            {/* Pending Approvals */}
-            <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <div className="p-1.5 bg-blue-soft rounded-lg text-blue">
-                  <ShieldCheck size={16} />
-                </div>
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Pending Approvals</div>
-              </div>
-              <div className="mt-2">
-                <div className="text-lg font-black text-text-primary">₹ {Number(stats?.pendingApprovals || 0).toLocaleString('en-IN')}</div>
-                <div className="text-[10px] font-bold text-text-muted mt-0.5">Awaiting Action</div>
-              </div>
-              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/admin-panel#refund-actions')}>
-                View Details <ArrowRight size={12} />
-              </div>
-            </div>
-
-            {/* Linked By Cases */}
-            <div className="bg-bg-card rounded-2xl p-4 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <div className="p-1.5 bg-accent/10 rounded-lg text-accent">
-                  <FileText size={16} />
-                </div>
-                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest text-right">Linked By</div>
-              </div>
-              <div className="mt-2">
-                <div className="text-lg font-black text-text-primary">{stats?.linkedByCount || 0}</div>
-                <div className="text-[10px] font-bold text-text-muted mt-0.5">Linked Cases</div>
-              </div>
-              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master', { state: { linkedOnly: true } })}>
-                View Details <ArrowRight size={12} />
-              </div>
-            </div>
-
-            {/* Live Escalations */}
-
-          </div>
-        </div>
-      )}
-
-      {/* Threat Trends Section */}
-      {user?.role === 'Admin' && (
-        <div className="bg-bg-card rounded-2xl p-5 shadow-sm mb-8 min-w-0 overflow-hidden">
-          <div className="flex justify-between items-center mb-5">
-            <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Threat Trends (Last 30 Days)</div>
-            {/* <div className="text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest">
+                <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Threat Trends (Last 30 Days)</div>
+                {/* <div className="text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest">
             View Analytics <ArrowRight size={12} />
           </div> */}
-          </div>
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats?.threatTrendData || []} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="date" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{ background: '#1F2937', border: 'none', borderRadius: '8px', color: '#F3F4F6', fontSize: '12px' }}
-                  itemStyle={{ color: '#F3F4F6' }}
-                  labelStyle={{ color: '#9CA3AF', fontWeight: 'bold' }}
-                />
+              </div>
+              <div className="h-[280px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={stats?.threatTrendData || []} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                    <XAxis dataKey="date" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{ background: '#1F2937', border: 'none', borderRadius: '8px', color: '#F3F4F6', fontSize: '12px' }}
+                      itemStyle={{ color: '#F3F4F6' }}
+                      labelStyle={{ color: '#9CA3AF', fontWeight: 'bold' }}
+                    />
+                    {(stats?.threatTrendTypes || []).map((type, index) => {
+                      const colors = ['#0066FF', '#094e2bff', '#7C3AED', '#d1593bff', '#0a8585ff', '#915c0eff'];
+                      const color = colors[index % colors.length];
+                      return (
+                        <Line
+                          key={type}
+                          type="monotone"
+                          dataKey={type}
+                          stroke={color}
+                          strokeWidth={1.5}
+                          dot={false}
+                          activeDot={{ r: 3, strokeWidth: 0 }}
+                          isAnimationActive={false}
+                        />
+                      );
+                    })}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-2.5 justify-center mt-5 px-2 border-t border-border/30 pt-4">
                 {(stats?.threatTrendTypes || []).map((type, index) => {
                   const colors = ['#0066FF', '#094e2bff', '#7C3AED', '#d1593bff', '#0a8585ff', '#915c0eff'];
                   const color = colors[index % colors.length];
                   return (
-                    <Line
-                      key={type}
-                      type="monotone"
-                      dataKey={type}
-                      stroke={color}
-                      strokeWidth={1.5}
-                      dot={false}
-                      activeDot={{ r: 3, strokeWidth: 0 }}
-                      isAnimationActive={false}
-                    />
+                    <div key={type} className="flex items-center gap-1.5 text-[9px] font-black uppercase text-text-secondary tracking-wider">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                      <span>{type}</span>
+                    </div>
                   );
                 })}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-2.5 justify-center mt-5 px-2 border-t border-border/30 pt-4">
-            {(stats?.threatTrendTypes || []).map((type, index) => {
-              const colors = ['#0066FF', '#094e2bff', '#7C3AED', '#d1593bff', '#0a8585ff', '#915c0eff'];
-              const color = colors[index % colors.length];
-              return (
-                <div key={type} className="flex items-center gap-1.5 text-[9px] font-black uppercase text-text-secondary tracking-wider">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                  <span>{type}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+              </div>
+            </div>
+          )}
 
-      {user?.role === 'Admin' && (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
-            {/* Box 1: Staff Performance Analysis */}
-            <div className="lg:col-span-5 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/40 min-w-0 overflow-hidden">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">Staff Performance Analysis</div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { label: 'All Time', value: 'all' },
-                    { label: 'Last 7 Days', value: '7days' },
-                    { label: 'Last 1 Month', value: '1month' },
-                    { label: 'Last 3 Months', value: '3months' }
-                  ].map((item) => (
-                    <button
-                      key={item.value}
-                      className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${teamFilter === item.value ? 'bg-blue-600 text-white shadow-sm' : 'bg-bg-secondary text-text-muted hover:bg-bg-input'}`}
-                      onClick={() => setTeamFilter(item.value)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
+          {user?.role === 'Admin' && (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
+                {/* Box 1: Staff Performance Analysis */}
+                <div className="lg:col-span-5 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/40 min-w-0 overflow-hidden">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div className="text-[10px] font-black uppercase text-text-primary tracking-widest">Staff Performance Analysis</div>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: 'All Time', value: 'all' },
+                        { label: 'Last 7 Days', value: '7days' },
+                        { label: 'Last 1 Month', value: '1month' },
+                        { label: 'Last 3 Months', value: '3months' }
+                      ].map((item) => (
+                        <button
+                          key={item.value}
+                          className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${teamFilter === item.value ? 'bg-blue-600 text-white shadow-sm' : 'bg-bg-secondary text-text-muted hover:bg-bg-input'}`}
+                          onClick={() => setTeamFilter(item.value)}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
+                          <th className="py-2">Staff Name</th>
+                          <th className="py-2 text-center">Cases Assigned</th>
+                          <th className="py-2 text-center">Cases Closed</th>
+                          {/* <th className="py-2 text-center">Avg. Response Time</th> */}
+                          <th className="py-2 text-center">Overdue Cases</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[10px] font-bold text-text-primary">
+                        {(stats?.teamPerformance || []).slice(0, 5).map((member, index) => (
+                          <tr key={index} className="border-b border-border/50 last:border-b-0 hover:bg-bg-secondary/50">
+                            <td className="py-3 cursor-pointer hover:text-blue-600 hover:underline" onClick={() => navigate('/case-master', { state: { searchId: member.name } })}>{member.name}</td>
+                            <td className="py-3 text-center">{member.assigned}</td>
+                            <td className="py-3 text-center">{member.settled}</td>
+                            {/* <td className="py-3 text-center text-text-muted">{member.responseTime || 'N/A'}</td> */}
+                            <td className="py-3 text-center text-red-500">{member.pending}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Box 2: Time Bound Actions */}
+                <div className="lg:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Time Bound Actions</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
+                        <span className="text-[8px] font-black text-red-500 uppercase">Due Today</span>
+                        <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.dueToday || 0}</span>
+                      </div>
+                      <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}>
+                        <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 24 Hrs</span>
+                        <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin24h || 0}</span>
+                      </div>
+                      <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}>
+                        <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 48 Hrs</span>
+                        <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin48h || 0}</span>
+                      </div>
+                      <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
+                        <span className="text-[8px] font-black text-red-500 uppercase">Overdue</span>
+                        <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.overdue || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                    <div className="cursor-pointer hover:opacity-80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'completed_today' } })}>
+                      <span className="text-text-muted">Action Taken (Today)</span>
+                      <div className="text-lg font-black text-green-500 mt-1">{stats?.timeBoundActions?.actionTakenToday || 0}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/my-task')}>
+                    View All Actions <ArrowRight size={12} />
+                  </div>
+                </div>
+
+                {/* Box 3: Violations */}
+                <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Violations</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('SOD')}>
+                        <span className="text-[8px] font-black text-purple-500 uppercase">SOD Not Submitted</span>
+                        <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.sodNotSubmitted || 0}</span>
+                      </div>
+                      <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('EOD')}>
+                        <span className="text-[8px] font-black text-purple-500 uppercase">EOD Not Submitted</span>
+                        <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.eodNotSubmitted || 0}</span>
+                      </div>
+                      <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => openViolationsModal('48H')}>
+                        <span className="text-[8px] font-black text-orange-500 uppercase">No Update &gt; 48 Hrs</span>
+                        <span className="text-2xl font-black text-orange-500 mt-1">{stats?.violations?.noUpdate48Hrs || 0}</span>
+                      </div>
+                      <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => openViolationsModal('SLA')}>
+                        <span className="text-[8px] font-black text-red-500 uppercase">SLA Breached</span>
+                        <span className="text-2xl font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                    <div>
+                      <span className="text-text-muted">Total Violations</span>
+                      <div className="text-lg font-black text-red-500 mt-1">{(stats?.violations?.sodNotSubmitted || 0) + (stats?.violations?.eodNotSubmitted || 0) + (stats?.violations?.noUpdate48Hrs || 0) + (stats?.violations?.slaBreached || 0)}</div>
+                    </div>
+                    <div>
+                      <span className="text-text-muted">Critical Violations</span>
+                      <div className="text-lg font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/work-report')}>
+                    View All Violations <ArrowRight size={12} />
+                  </div>
                 </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
-                      <th className="py-2">Staff Name</th>
-                      <th className="py-2 text-center">Cases Assigned</th>
-                      <th className="py-2 text-center">Cases Closed</th>
-                      {/* <th className="py-2 text-center">Avg. Response Time</th> */}
-                      <th className="py-2 text-center">Overdue Cases</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-[10px] font-bold text-text-primary">
-                    {(stats?.teamPerformance || []).slice(0, 5).map((member, index) => (
-                      <tr key={index} className="border-b border-border/50 last:border-b-0 hover:bg-bg-secondary/50">
-                        <td className="py-3 cursor-pointer hover:text-blue-600 hover:underline" onClick={() => navigate('/case-master', { state: { searchId: member.name } })}>{member.name}</td>
-                        <td className="py-3 text-center">{member.assigned}</td>
-                        <td className="py-3 text-center">{member.settled}</td>
-                        {/* <td className="py-3 text-center text-text-muted">{member.responseTime || 'N/A'}</td> */}
-                        <td className="py-3 text-center text-red-500">{member.pending}</td>
+
+              {/* Active Users (Full Width below the three cards) */}
+              <div className="bg-bg-card rounded-2xl p-5 shadow-sm min-w-0 overflow-hidden mb-8 border border-border/40">
+                <div className="flex justify-between items-center mb-5">
+                  <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Users</div>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto overflow-x-auto pr-2 scrollbar-thin">
+                  <table className="w-full text-left text-[10px] font-bold uppercase tracking-widest text-text-secondary border-collapse">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="pb-2 text-text-muted">Name</th>
+                        <th className="pb-2 text-text-muted">SOD / EOD</th>
+                        <th className="pb-2 text-text-muted">Duration</th>
+                        <th className="pb-2 text-text-muted text-right">Status</th>
                       </tr>
+                    </thead>
+                    <tbody>
+                      {[...(stats?.activeUsers || [])].sort((a, b) => (a.status === 'Active' ? -1 : 1)).map((u, index) => (
+                        <tr key={index} className="border-b border-border/10 last:border-0 hover:bg-bg-secondary/20 transition-all">
+                          <td className="py-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-2.5 h-2.5 rounded-full ${u.status === 'Active' ? 'bg-green animate-pulse' : 'bg-text-muted'}`}></div>
+                              <div>
+                                <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{u.name}</div>
+                                <div className="text-[9px] font-bold text-text-muted mt-0.5 normal-case">{u.role}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3">
+                            {u.sodTime && (
+                              <div className="text-text-primary">SOD: {u.sodTime}</div>
+                            )}
+                            {u.eodTime && (
+                              <div className="text-text-muted mt-0.5">EOD: {u.eodTime}</div>
+                            )}
+                            {!u.sodTime && !u.eodTime && <span className="text-text-muted">—</span>}
+                          </td>
+                          <td className="py-3">
+                            <span className="text-text-primary font-mono">{u.duration || '—'}</span>
+                          </td>
+                          <td className="py-3 text-right">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${u.status === 'Active' ? 'bg-green-soft text-green' : 'bg-bg-input text-text-muted'}`}>
+                              {u.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {(!stats?.activeUsers || stats.activeUsers.length === 0) && (
+                    <div className="text-xs font-bold text-text-muted text-center py-4">No user data available</div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {user?.role === 'Admin' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
+              {/* Top Urgent Cases Table */}
+              <div className="lg:col-span-7 bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col h-auto lg:h-[60%]">
+                <div className="flex justify-between items-center mb-6 px-2">
+                  <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Top Urgent Cases</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
+                        <th className="py-2">Case ID</th>
+                        <th className="py-2">Client / Party</th>
+                        <th className="py-2">Type of Threat</th>
+                        <th className="py-2 text-right">Amount Paid</th>
+                        <th className="py-2 text-center">Last Activity</th>
+                        <th className="py-2 text-center">Status</th>
+                        <th className="py-2 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[10px] font-bold text-text-primary">
+                      {(stats?.highPriorityCases || []).slice(0, 5).map((item, index) => (
+                        <tr key={index} className="border-b border-border/50 last:border-b-0 hover:bg-bg-secondary/50">
+                          <td className="py-3 text-accent uppercase tracking-tighter">{item.caseId || item.caseid}</td>
+                          <td className="py-3">{item.clientName || item.companyName || '-'}</td>
+                          <td className="py-3">{item.typeOfComplaint || item.complaintType || 'N/A'}</td>
+                          <td className="py-3 text-right font-black text-emerald-600">₹{Number(item.totalAmtPaid || 0).toLocaleString('en-IN')}</td>
+                          <td className="py-3 text-center text-text-muted">{item.lastUpdateDate || '2 Hrs Ago'}</td>
+                          <td className="py-3 text-center">
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase font-black ${item.currentStatus === 'Escalated' ? 'bg-red-500/10 text-red-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                              {item.currentStatus || 'High Risk'}
+                            </span>
+                          </td>
+                          <td className="py-3 text-center">
+                            <button
+                              onClick={() => navigate('/case-master', { state: { searchId: item.caseId || item.caseid } })}
+                              className="text-blue hover:underline font-black text-[9px] uppercase tracking-widest"
+                            >
+                              View Case
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-4 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}>
+                  View All Urgent Cases <ArrowRight size={12} />
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="lg:col-span-5 flex flex-col gap-8">
+                {/* Quick Actions Card */}
+                <div className="bg-bg-card border-2 rounded-2xl p-6 shadow-sm flex flex-col">
+                  <div className="flex justify-between items-center mb-6 px-2">
+                    <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Quick Actions</h3>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[
+                      { icon: Plus, label: 'Add Case', path: '/new-case', color: 'text-blue bg-blue-500/10' },
+                      { icon: ListChecks, label: 'Create Task', path: '/my-task', color: 'text-purple bg-purple-500/10' },
+                      { icon: Activity, label: 'SOD Check', path: '/work-report', color: 'text-cyan bg-cyan-500/10' },
+                      { icon: BarChart, label: 'Reports & MIS', path: '/work-report', color: 'text-indigo bg-indigo-500/10' },
+                    ].map((btn, index) => (
+                      <div
+                        key={index}
+                        className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex flex-col items-center gap-2 cursor-pointer"
+                        onClick={() => btn.path !== '#' && navigate(btn.path)}
+                      >
+                        <div className={`p-2 rounded-lg ${btn.color.split(' ')[1]} ${btn.color.split(' ')[0]}`}>
+                          <btn.icon size={16} />
+                        </div>
+                        <span className="text-[8px] font-black uppercase tracking-wider text-text-primary text-center leading-tight">{btn.label}</span>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  </div>
+                </div>
 
-            {/* Box 2: Time Bound Actions */}
-            <div className="lg:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
-              <div>
-                <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Time Bound Actions</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'today' } })}>
-                    <span className="text-[8px] font-black text-red-500 uppercase">Due Today</span>
-                    <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.dueToday || 0}</span>
+                {/* Recent Activity Card */}
+                <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
+                  <div className="flex items-center gap-3 mb-6 px-2">
+                    <Clock size={18} className="text-blue" />
+                    <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Recent Activity</h3>
                   </div>
-                  <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '24h' } })}>
-                    <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 24 Hrs</span>
-                    <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin24h || 0}</span>
-                  </div>
-                  <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: '48h' } })}>
-                    <span className="text-[8px] font-black text-orange-500 uppercase">Due Within 48 Hrs</span>
-                    <span className="text-2xl font-black text-orange-500 mt-1">{stats?.timeBoundActions?.dueWithin48h || 0}</span>
-                  </div>
-                  <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'overdue' } })}>
-                    <span className="text-[8px] font-black text-red-500 uppercase">Overdue</span>
-                    <span className="text-2xl font-black text-red-500 mt-1">{stats?.timeBoundActions?.overdue || 0}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                <div className="cursor-pointer hover:opacity-80 transition-all" onClick={() => navigate('/my-task', { state: { taskFilter: 'completed_today' } })}>
-                  <span className="text-text-muted">Action Taken (Today)</span>
-                  <div className="text-lg font-black text-green-500 mt-1">{stats?.timeBoundActions?.actionTakenToday || 0}</div>
-                </div>
-              </div>
-              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/my-task')}>
-                View All Actions <ArrowRight size={12} />
-              </div>
-            </div>
+                  <div
+                    className="space-y-6 flex-1 overflow-y-auto scrollbar-thin max-h-[420px] pr-2"
+                    onScroll={handleActivityScroll}
+                  >
+                    {activities.length === 0 ? (
+                      <div className="text-center py-20 opacity-20">
+                        <Timer size={40} className="mx-auto mb-4" />
+                        <div className="text-[10px] font-black uppercase tracking-widest">Awaiting Pulse...</div>
+                      </div>
+                    ) : (
+                      activities.slice(0, visibleActivitiesCount).map((activity, idx) => (
+                        <div key={activity.id || idx} className="relative pl-6 before:absolute before:left-0 before:top-2 before:bottom-[-24px] before:w-[2px] last:before:hidden before:bg-border/50">
+                          <div className={`absolute left-[-5px] top-1.5 w-3 h-3 rounded-full z-10 border-2 border-bg-card shadow-[0_0_10px_rgba(0,0,0,0.5)] ${activity.color === 'green' ? 'bg-green shadow-[0_0_8px_rgba(34,197,94,0.4)]' :
+                            activity.color === 'red' ? 'bg-red shadow-[0_0_8px_rgba(239,68,68,0.4)]' :
+                              activity.color === 'purple' ? 'bg-purple shadow-[0_0_8px_rgba(168,85,247,0.4)]' :
+                                activity.color === 'orange' ? 'bg-accent shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-blue shadow-[0_0_8px_rgba(59,130,246,0.4)]'
+                            }`} />
 
-            {/* Box 3: Violations */}
-            <div className="lg:col-span-4 bg-bg-card rounded-2xl p-5 shadow-sm flex flex-col justify-between">
-              <div>
-                <div className="text-[10px] font-black uppercase text-text-primary tracking-widest mb-4">Violations</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('SOD')}>
-                    <span className="text-[8px] font-black text-purple-500 uppercase">SOD Not Submitted</span>
-                    <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.sodNotSubmitted || 0}</span>
-                  </div>
-                  <div className="bg-purple-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-purple-500/20 transition-all" onClick={() => openViolationsModal('EOD')}>
-                    <span className="text-[8px] font-black text-purple-500 uppercase">EOD Not Submitted</span>
-                    <span className="text-2xl font-black text-purple-500 mt-1">{stats?.violations?.eodNotSubmitted || 0}</span>
-                  </div>
-                  <div className="bg-orange-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-orange-500/20 transition-all" onClick={() => openViolationsModal('48H')}>
-                    <span className="text-[8px] font-black text-orange-500 uppercase">No Update &gt; 48 Hrs</span>
-                    <span className="text-2xl font-black text-orange-500 mt-1">{stats?.violations?.noUpdate48Hrs || 0}</span>
-                  </div>
-                  <div className="bg-red-500/10 p-3 rounded-xl flex flex-col items-center cursor-pointer bg-red-500/20 transition-all" onClick={() => openViolationsModal('SLA')}>
-                    <span className="text-[8px] font-black text-red-500 uppercase">SLA Breached</span>
-                    <span className="text-2xl font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                <div>
-                  <span className="text-text-muted">Total Violations</span>
-                  <div className="text-lg font-black text-red-500 mt-1">{(stats?.violations?.sodNotSubmitted || 0) + (stats?.violations?.eodNotSubmitted || 0) + (stats?.violations?.noUpdate48Hrs || 0) + (stats?.violations?.slaBreached || 0)}</div>
-                </div>
-                <div>
-                  <span className="text-text-muted">Critical Violations</span>
-                  <div className="text-lg font-black text-red-500 mt-1">{stats?.violations?.slaBreached || 0}</div>
-                </div>
-              </div>
-              <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/work-report')}>
-                View All Violations <ArrowRight size={12} />
-              </div>
-            </div>
-          </div>
+                          <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1 flex items-center justify-between">
+                            <span>{new Date(activity.date).toLocaleDateString() === new Date().toLocaleDateString() ? 'Today' : 'Earlier'} &nbsp;{new Date(activity.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span className="text-accent font-black tracking-widest">{activity.user}</span>
+                          </div>
 
-          {/* Active Users (Full Width below the three cards) */}
-          <div className="bg-bg-card rounded-2xl p-5 shadow-sm min-w-0 overflow-hidden mb-8 border border-border/40">
-            <div className="flex justify-between items-center mb-5">
-              <div className="text-[10px] font-black uppercase text-text-muted tracking-widest">Active Users</div>
-            </div>
-            <div className="max-h-[300px] overflow-y-auto overflow-x-auto pr-2 scrollbar-thin">
-              <table className="w-full text-left text-[10px] font-bold uppercase tracking-widest text-text-secondary border-collapse">
-                <thead>
-                  <tr className="border-b border-border/50">
-                    <th className="pb-2 text-text-muted">Name</th>
-                    <th className="pb-2 text-text-muted">SOD / EOD</th>
-                    <th className="pb-2 text-text-muted">Duration</th>
-                    <th className="pb-2 text-text-muted text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...(stats?.activeUsers || [])].sort((a, b) => (a.status === 'Active' ? -1 : 1)).map((u, index) => (
-                    <tr key={index} className="border-b border-border/10 last:border-0 hover:bg-bg-secondary/20 transition-all">
-                      <td className="py-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2.5 h-2.5 rounded-full ${u.status === 'Active' ? 'bg-green animate-pulse' : 'bg-text-muted'}`}></div>
-                          <div>
-                            <div className="text-[11px] font-black text-text-primary uppercase tracking-tight">{u.name}</div>
-                            <div className="text-[9px] font-bold text-text-muted mt-0.5 normal-case">{u.role}</div>
+                          <p className="text-[11px] font-bold text-text-secondary leading-snug mb-1">
+                            {activity.title.length > 80 ? activity.title.substring(0, 80) + '...' : activity.title}
+                          </p>
+                          <div className="text-[9px] font-black text-text-muted uppercase tracking-tight opacity-60 truncate">
+                            {activity.subtitle}
                           </div>
                         </div>
-                      </td>
-                      <td className="py-3">
-                        {u.sodTime && (
-                          <div className="text-text-primary">SOD: {u.sodTime}</div>
-                        )}
-                        {u.eodTime && (
-                          <div className="text-text-muted mt-0.5">EOD: {u.eodTime}</div>
-                        )}
-                        {!u.sodTime && !u.eodTime && <span className="text-text-muted">—</span>}
-                      </td>
-                      <td className="py-3">
-                        <span className="text-text-primary font-mono">{u.duration || '—'}</span>
-                      </td>
-                      <td className="py-3 text-right">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${u.status === 'Active' ? 'bg-green-soft text-green' : 'bg-bg-input text-text-muted'}`}>
-                          {u.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {(!stats?.activeUsers || stats.activeUsers.length === 0) && (
-                <div className="text-xs font-bold text-text-muted text-center py-4">No user data available</div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {user?.role === 'Admin' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 mt-8">
-          {/* Top Urgent Cases Table */}
-          <div className="lg:col-span-7 bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col h-auto lg:h-[60%]">
-            <div className="flex justify-between items-center mb-6 px-2">
-              <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Top Urgent Cases</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="text-text-muted text-[8px] font-black uppercase tracking-widest border-b border-border">
-                    <th className="py-2">Case ID</th>
-                    <th className="py-2">Client / Party</th>
-                    <th className="py-2">Type of Threat</th>
-                    <th className="py-2 text-right">Amount Paid</th>
-                    <th className="py-2 text-center">Last Activity</th>
-                    <th className="py-2 text-center">Status</th>
-                    <th className="py-2 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="text-[10px] font-bold text-text-primary">
-                  {(stats?.highPriorityCases || []).slice(0, 5).map((item, index) => (
-                    <tr key={index} className="border-b border-border/50 last:border-b-0 hover:bg-bg-secondary/50">
-                      <td className="py-3 text-accent uppercase tracking-tighter">{item.caseId || item.caseid}</td>
-                      <td className="py-3">{item.clientName || item.companyName || '-'}</td>
-                      <td className="py-3">{item.typeOfComplaint || item.complaintType || 'N/A'}</td>
-                      <td className="py-3 text-right font-black text-emerald-600">₹{Number(item.totalAmtPaid || 0).toLocaleString('en-IN')}</td>
-                      <td className="py-3 text-center text-text-muted">{item.lastUpdateDate || '2 Hrs Ago'}</td>
-                      <td className="py-3 text-center">
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase font-black ${item.currentStatus === 'Escalated' ? 'bg-red-500/10 text-red-500' : 'bg-orange-500/10 text-orange-500'}`}>
-                          {item.currentStatus || 'High Risk'}
-                        </span>
-                      </td>
-                      <td className="py-3 text-center">
-                        <button
-                          onClick={() => navigate('/case-master', { state: { searchId: item.caseId || item.caseid } })}
-                          className="text-blue hover:underline font-black text-[9px] uppercase tracking-widest"
-                        >
-                          View Case
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}>
-              View All Urgent Cases <ArrowRight size={12} />
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="lg:col-span-5 flex flex-col gap-8">
-            {/* Quick Actions Card */}
-            <div className="bg-bg-card border-2 rounded-2xl p-6 shadow-sm flex flex-col">
-              <div className="flex justify-between items-center mb-6 px-2">
-                <h3 className="text-[11px] font-black text-text-primary uppercase tracking-[0.2em]">Quick Actions</h3>
-              </div>
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  { icon: Plus, label: 'Add Case', path: '/new-case', color: 'text-blue bg-blue-500/10' },
-                  { icon: ListChecks, label: 'Create Task', path: '/my-task', color: 'text-purple bg-purple-500/10' },
-                  { icon: Activity, label: 'SOD Check', path: '/work-report', color: 'text-cyan bg-cyan-500/10' },
-                  { icon: BarChart, label: 'Reports & MIS', path: '/work-report', color: 'text-indigo bg-indigo-500/10' },
-                ].map((btn, index) => (
-                  <div
-                    key={index}
-                    className="bg-bg-secondary hover:bg-bg-input p-3 rounded-xl transition-all active:scale-95 flex flex-col items-center gap-2 cursor-pointer"
-                    onClick={() => btn.path !== '#' && navigate(btn.path)}
-                  >
-                    <div className={`p-2 rounded-lg ${btn.color.split(' ')[1]} ${btn.color.split(' ')[0]}`}>
-                      <btn.icon size={16} />
-                    </div>
-                    <span className="text-[8px] font-black uppercase tracking-wider text-text-primary text-center leading-tight">{btn.label}</span>
+                      ))
+                    )}
                   </div>
-                ))}
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Recent Activity Card */}
-            <div className="bg-bg-card border-2 border-border rounded-2xl p-6 shadow-sm flex flex-col">
-              <div className="flex items-center gap-3 mb-6 px-2">
-                <Clock size={18} className="text-blue" />
-                <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Recent Activity</h3>
-              </div>
-              <div
-                className="space-y-6 flex-1 overflow-y-auto scrollbar-thin max-h-[420px] pr-2"
-                onScroll={handleActivityScroll}
-              >
-                {activities.length === 0 ? (
-                  <div className="text-center py-20 opacity-20">
-                    <Timer size={40} className="mx-auto mb-4" />
-                    <div className="text-[10px] font-black uppercase tracking-widest">Awaiting Pulse...</div>
-                  </div>
-                ) : (
-                  activities.slice(0, visibleActivitiesCount).map((activity, idx) => (
-                    <div key={activity.id || idx} className="relative pl-6 before:absolute before:left-0 before:top-2 before:bottom-[-24px] before:w-[2px] last:before:hidden before:bg-border/50">
-                      <div className={`absolute left-[-5px] top-1.5 w-3 h-3 rounded-full z-10 border-2 border-bg-card shadow-[0_0_10px_rgba(0,0,0,0.5)] ${activity.color === 'green' ? 'bg-green shadow-[0_0_8px_rgba(34,197,94,0.4)]' :
-                        activity.color === 'red' ? 'bg-red shadow-[0_0_8px_rgba(239,68,68,0.4)]' :
-                          activity.color === 'purple' ? 'bg-purple shadow-[0_0_8px_rgba(168,85,247,0.4)]' :
-                            activity.color === 'orange' ? 'bg-accent shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-blue shadow-[0_0_8px_rgba(59,130,246,0.4)]'
-                        }`} />
-
-                      <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1 flex items-center justify-between">
-                        <span>{new Date(activity.date).toLocaleDateString() === new Date().toLocaleDateString() ? 'Today' : 'Earlier'} &nbsp;{new Date(activity.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
-                        <span className="text-accent font-black tracking-widest">{activity.user}</span>
-                      </div>
-
-                      <p className="text-[11px] font-bold text-text-secondary leading-snug mb-1">
-                        {activity.title.length > 80 ? activity.title.substring(0, 80) + '...' : activity.title}
-                      </p>
-                      <div className="text-[9px] font-black text-text-muted uppercase tracking-tight opacity-60 truncate">
-                        {activity.subtitle}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8 items-start">
-        {user?.role === 'Admin' ? (
-          <div className="lg:col-span-8 flex flex-col gap-8 self-stretch">
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-              {/* <div className="xl:col-span-7 bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8 items-start">
+            {user?.role === 'Admin' ? (
+              <div className="lg:col-span-8 flex flex-col gap-8 self-stretch">
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                  {/* <div className="xl:col-span-7 bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm">
                 <div className="px-6 py-4 border-b-2 border-border flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <BarChart size={18} className="text-blue" />
@@ -2933,8 +3014,8 @@ const DashboardTab = () => {
                 </div>
               </div> */}
 
-              {/* Legal Heat (Moved here and rearranged) */}
-              {/* <div className="xl:col-span-5 flex flex-col">
+                  {/* Legal Heat (Moved here and rearranged) */}
+                  {/* <div className="xl:col-span-5 flex flex-col">
                 <div className="flex items-center gap-3 mb-6 px-2">
                   <h3 className="text-[10px] font-black text-text-primary uppercase tracking-[0.2em]">LEGAL CASES</h3>
                 </div>
@@ -2965,14 +3046,129 @@ const DashboardTab = () => {
                   ))}
                 </div>
               </div> */}
-            </div>
+                </div>
 
-            {/* High Priority Cases Table */}
-            {user?.role !== 'Admin' && (
-              <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch mt-8">
+                {/* High Priority Cases Table */}
+                {user?.role !== 'Admin' && (
+                  <div className="bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch mt-8">
+                    <div className="px-8 py-6 border-b-2 border-border flex items-center gap-3">
+                      <AlertCircle size={20} className="text-red" />
+                      <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">High Priority Cases</h3>
+                    </div>
+                    <div className="table-wrap overflow-x-auto scrollbar-thin">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-bg-secondary text-text-primary text-[10px] font-semibold tracking-[0.2em] uppercase border-b border-border/30">
+                            <th className="px-6 py-4 text-indigo-500">Case ID</th>
+                            <th className="px-6 py-4 text-blue-500">Company Name</th>
+                            <th className="px-6 py-4 text-emerald-500">Client Details</th>
+                            <th className="px-6 py-4 text-orange-500 text-center">Priority </th>
+                            <th className="px-6 py-4 text-red-500 text-center"> Status </th>
+                            <th className="px-6 py-4 text-sky-500 text-right">Last Update</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
+                          {stats?.highPriorityCases?.slice(0, 5).map(c => (
+                            <tr
+                              key={c._id}
+                              className="hover:bg-bg-input/50 transition-all cursor-pointer group"
+                              onClick={() => navigate('/case-master', { state: { searchId: c.caseId || c.caseid } })}
+                            >
+                              <td className="px-6 py-5 font-black text-accent uppercase tracking-tighter">
+                                {c.caseId || c.caseid}
+                              </td>
+                              <td className="px-6 py-5 font-black text-blue-500 uppercase tracking-tight">
+                                {c.companyName || '-'}
+                              </td>
+                              <td className="px-6 py-5">
+                                <div className="font-black text-green-500 leading-tight">{c.clientName}</div>
+                                <div className="text-[10px] text-text-muted font-bold mt-1 tracking-wider">{c.clientMobile || '-'}</div>
+                              </td>
+                              <td className="px-6 py-5 text-center">
+                                <Badge status={c.priority} />
+                              </td>
+                              <td className="px-6 py-5 text-center">
+                                <Badge status={c.currentStatus} />
+                              </td>
+                              <td className="px-6 py-5 text-right text-text-muted font-bold italic opacity-60">
+                                {c.lastUpdateDate || '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+
+                    {stats?.highPriorityCases?.length > 5 && (
+                      <div className="bg-bg-secondary/50 p-4 border-t border-border flex justify-center">
+                        <button
+                          onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}
+                          className="px-6 py-2 bg-accent hover:bg-accent-hover text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm shadow-orange-900/10 active:scale-95"
+                        >
+                          View More <ArrowRight size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Source of Complaint Table */}
+                <div className="bg-bg-card border-2 border-border rounded-2xl w-full lg:w-[87%] mt-0 lg:mt-[-35%] overflow-hidden shadow-sm self-stretch">
+                  <div className="px-6 py-4 border-b-2 border-border flex items-center gap-2">
+                    <Target size={20} className="text-accent" />
+                    <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">Source of Complaint</h3>
+                  </div>
+                  <div className="table-wrap overflow-x-auto scrollbar-thin">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-bg-secondary text-text-primary text-[10px] font-semibold tracking-[0.2em] uppercase border-b border-border/30">
+                          <th className="px-4 py-2">Source</th>
+                          <th className="px-4 py-2 text-center">Count</th>
+                          <th className="px-4 py-2 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
+                        {stats?.sourceWiseData?.map((item, idx) => {
+                          let Icon = HelpCircle;
+                          let colorClass = 'text-blue-500';
+                          let bgClass = 'bg-blue-500/10';
+
+                          const sourceLower = item.source.toLowerCase();
+                          if (sourceLower.includes('email')) { Icon = Mail; colorClass = 'text-yellow-500'; bgClass = 'bg-yellow-500/10'; }
+                          else if (sourceLower.includes('call')) { Icon = PhoneIncoming; colorClass = 'text-orange-500'; bgClass = 'bg-orange-500/10'; }
+                          else if (sourceLower.includes('visit')) { Icon = Building2; colorClass = 'text-red-500'; bgClass = 'bg-red-500/10'; }
+                          else if (sourceLower.includes('toll')) { Icon = Phone; colorClass = 'text-pink-500'; bgClass = 'bg-pink-500/10'; }
+                          else if (sourceLower.includes('notice')) { Icon = FileText; colorClass = 'text-purple-500'; bgClass = 'bg-purple-500/10'; }
+                          else if (sourceLower.includes('social')) { Icon = MessageCircle; colorClass = 'text-green-500'; bgClass = 'bg-green-500/10'; }
+
+                          return (
+                            <tr key={idx} className="hover:bg-bg-input/50 transition-all cursor-pointer" onClick={() => navigate('/case-master', { state: { sourceFilter: item.source } })}>
+                              <td className="px-4 py-2 flex items-center gap-3">
+                                <div className={`p-2 rounded-lg ${bgClass} ${colorClass}`}>
+                                  <Icon size={16} />
+                                </div>
+                                <span className="font-black text-text-primary uppercase tracking-wider">{item.source}</span>
+                              </td>
+                              <td className="px-6 py-4 text-center font-black text-blue-600">
+                                {item.count}
+                              </td>
+                              <td className="px-6 py-4 text-right font-black text-emerald-600">
+                                ₹{Number(item.totalAmount || 0).toLocaleString('en-IN')}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : user?.role === 'Admin' ? (
+              <div className="lg:col-span-8 bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch">
                 <div className="px-8 py-6 border-b-2 border-border flex items-center gap-3">
-                  <AlertCircle size={20} className="text-red" />
-                  <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">High Priority Cases</h3>
+                  <History size={20} className="text-accent" />
+                  <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">Recent Cases</h3>
                 </div>
                 <div className="table-wrap overflow-x-auto scrollbar-thin">
                   <table className="w-full text-left border-collapse">
@@ -2987,7 +3183,7 @@ const DashboardTab = () => {
                       </tr>
                     </thead>
                     <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
-                      {stats?.highPriorityCases?.slice(0, 5).map(c => (
+                      {stats?.recentCases?.map(c => (
                         <tr
                           key={c._id}
                           className="hover:bg-bg-input/50 transition-all cursor-pointer group"
@@ -3017,192 +3213,77 @@ const DashboardTab = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            ) : null}
 
 
-                {stats?.highPriorityCases?.length > 5 && (
-                  <div className="bg-bg-secondary/50 p-4 border-t border-border flex justify-center">
-                    <button
-                      onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}
-                      className="px-6 py-2 bg-accent hover:bg-accent-hover text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm shadow-orange-900/10 active:scale-95"
-                    >
-                      View More <ArrowRight size={14} />
-                    </button>
+
+            {/* Live Activity Feed & Source Breakdown */}
+            <div className="lg:col-span-4 flex flex-col gap-8">
+
+
+
+
+              {/* Recent Activity moved to Quick Actions column */}
+
+            </div>
+          </div>
+
+
+          {/* Violations Popup Modal */}
+          {isViolationsModalOpen && (
+            <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsViolationsModalOpen(false)}>
+              <div className="bg-bg-card border-2 border-border rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+                <div className="p-6 flex items-center justify-between text-white bg-purple">
+                  <div>
+                    <h2 className="text-xl font-black flex items-center gap-3 uppercase tracking-tight">
+                      <AlertTriangle size={24} />
+                      {violationType === 'SLA' ? 'SLA Breached' : violationType === '48H' ? 'No Update > 48 Hrs' : `${violationType} Missing Users`}
+                    </h2>
+                    <p className="text-[10px] opacity-80 font-black uppercase tracking-[0.2em] mt-1">
+                      {violationType === 'SLA' || violationType === '48H' ? 'Users with no update for 48 hours' : `Users who have not submitted ${violationType} today`}
+                    </p>
                   </div>
-                )}
-              </div>
-            )}
+                  <button onClick={() => setIsViolationsModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all"><X size={20} /></button>
+                </div>
 
-            {/* Source of Complaint Table */}
-            <div className="bg-bg-card border-2 border-border rounded-2xl w-full lg:w-[87%] mt-0 lg:mt-[-35%] overflow-hidden shadow-sm self-stretch">
-              <div className="px-6 py-4 border-b-2 border-border flex items-center gap-2">
-                <Target size={20} className="text-accent" />
-                <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">Source of Complaint</h3>
-              </div>
-              <div className="table-wrap overflow-x-auto scrollbar-thin">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-bg-secondary text-text-primary text-[10px] font-semibold tracking-[0.2em] uppercase border-b border-border/30">
-                      <th className="px-4 py-2">Source</th>
-                      <th className="px-4 py-2 text-center">Count</th>
-                      <th className="px-4 py-2 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
-                    {stats?.sourceWiseData?.map((item, idx) => {
-                      let Icon = HelpCircle;
-                      let colorClass = 'text-blue-500';
-                      let bgClass = 'bg-blue-500/10';
+                <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 bg-bg-card">
+                  {(() => {
+                    const users = violationType === 'SOD' ? stats?.violations?.missingSodUsers :
+                      violationType === 'EOD' ? stats?.violations?.missingEodUsers :
+                        stats?.violations?.missingNoUpdateUsers;
 
-                      const sourceLower = item.source.toLowerCase();
-                      if (sourceLower.includes('email')) { Icon = Mail; colorClass = 'text-yellow-500'; bgClass = 'bg-yellow-500/10'; }
-                      else if (sourceLower.includes('call')) { Icon = PhoneIncoming; colorClass = 'text-orange-500'; bgClass = 'bg-orange-500/10'; }
-                      else if (sourceLower.includes('visit')) { Icon = Building2; colorClass = 'text-red-500'; bgClass = 'bg-red-500/10'; }
-                      else if (sourceLower.includes('toll')) { Icon = Phone; colorClass = 'text-pink-500'; bgClass = 'bg-pink-500/10'; }
-                      else if (sourceLower.includes('notice')) { Icon = FileText; colorClass = 'text-purple-500'; bgClass = 'bg-purple-500/10'; }
-                      else if (sourceLower.includes('social')) { Icon = MessageCircle; colorClass = 'text-green-500'; bgClass = 'bg-green-500/10'; }
-
+                    if (!users || users.length === 0) {
                       return (
-                        <tr key={idx} className="hover:bg-bg-input/50 transition-all cursor-pointer" onClick={() => navigate('/case-master', { state: { sourceFilter: item.source } })}>
-                          <td className="px-4 py-2 flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${bgClass} ${colorClass}`}>
-                              <Icon size={16} />
-                            </div>
-                            <span className="font-black text-text-primary uppercase tracking-wider">{item.source}</span>
-                          </td>
-                          <td className="px-6 py-4 text-center font-black text-blue-600">
-                            {item.count}
-                          </td>
-                          <td className="px-6 py-4 text-right font-black text-emerald-600">
-                            ₹{Number(item.totalAmount || 0).toLocaleString('en-IN')}
-                          </td>
-                        </tr>
+                        <div className="text-center py-12 opacity-50">
+                          <CheckCircle size={48} className="mx-auto mb-4 text-green" />
+                          <div className="text-sm font-black uppercase tracking-widest text-text-primary">All {violationType}s Submitted</div>
+                          <div className="text-[10px] font-bold text-text-muted uppercase mt-1">Great job team!</div>
+                        </div>
                       );
-                    })}
-                  </tbody>
-                </table>
+                    }
+
+                    return users.map((u, i) => (
+                      <div key={i} className="flex items-center justify-between p-4 bg-bg-input rounded-xl border border-border">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-purple/10 flex items-center justify-center text-purple font-black text-lg">
+                            {u.name ? u.name.charAt(0).toUpperCase() : '?'}
+                          </div>
+                          <div>
+                            <div className="text-sm font-black text-text-primary">{u.name}</div>
+                            <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">{u.email}</div>
+                          </div>
+                        </div>
+                        <div className="px-3 py-1.5 bg-red-soft text-red rounded-lg text-[9px] font-black uppercase tracking-widest">
+                          Missing {violationType}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
               </div>
             </div>
-          </div>
-        ) : user?.role === 'Admin' ? (
-          <div className="lg:col-span-8 bg-bg-card border-2 border-border rounded-2xl overflow-hidden shadow-sm self-stretch">
-            <div className="px-8 py-6 border-b-2 border-border flex items-center gap-3">
-              <History size={20} className="text-accent" />
-              <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">Recent Cases</h3>
-            </div>
-            <div className="table-wrap overflow-x-auto scrollbar-thin">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-bg-secondary text-text-primary text-[10px] font-semibold tracking-[0.2em] uppercase border-b border-border/30">
-                    <th className="px-6 py-4 text-indigo-500">Case ID</th>
-                    <th className="px-6 py-4 text-blue-500">Company Name</th>
-                    <th className="px-6 py-4 text-emerald-500">Client Details</th>
-                    <th className="px-6 py-4 text-orange-500 text-center">Priority </th>
-                    <th className="px-6 py-4 text-red-500 text-center"> Status </th>
-                    <th className="px-6 py-4 text-sky-500 text-right">Last Update</th>
-                  </tr>
-                </thead>
-                <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
-                  {stats?.recentCases?.map(c => (
-                    <tr
-                      key={c._id}
-                      className="hover:bg-bg-input/50 transition-all cursor-pointer group"
-                      onClick={() => navigate('/case-master', { state: { searchId: c.caseId || c.caseid } })}
-                    >
-                      <td className="px-6 py-5 font-black text-accent uppercase tracking-tighter">
-                        {c.caseId || c.caseid}
-                      </td>
-                      <td className="px-6 py-5 font-black text-blue-500 uppercase tracking-tight">
-                        {c.companyName || '-'}
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="font-black text-green-500 leading-tight">{c.clientName}</div>
-                        <div className="text-[10px] text-text-muted font-bold mt-1 tracking-wider">{c.clientMobile || '-'}</div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <Badge status={c.priority} />
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <Badge status={c.currentStatus} />
-                      </td>
-                      <td className="px-6 py-5 text-right text-text-muted font-bold italic opacity-60">
-                        {c.lastUpdateDate || '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
-
-
-
-        {/* Live Activity Feed & Source Breakdown */}
-        <div className="lg:col-span-4 flex flex-col gap-8">
-
-
-
-
-          {/* Recent Activity moved to Quick Actions column */}
-
-        </div>
-      </div>
-
-
-      {/* Violations Popup Modal */}
-      {isViolationsModalOpen && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsViolationsModalOpen(false)}>
-          <div className="bg-bg-card border-2 border-border rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
-            <div className="p-6 flex items-center justify-between text-white bg-purple">
-              <div>
-                <h2 className="text-xl font-black flex items-center gap-3 uppercase tracking-tight">
-                  <AlertTriangle size={24} />
-                  {violationType === 'SLA' ? 'SLA Breached' : violationType === '48H' ? 'No Update > 48 Hrs' : `${violationType} Missing Users`}
-                </h2>
-                <p className="text-[10px] opacity-80 font-black uppercase tracking-[0.2em] mt-1">
-                  {violationType === 'SLA' || violationType === '48H' ? 'Users with no update for 48 hours' : `Users who have not submitted ${violationType} today`}
-                </p>
-              </div>
-              <button onClick={() => setIsViolationsModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all"><X size={20} /></button>
-            </div>
-
-            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 bg-bg-card">
-              {(() => {
-                const users = violationType === 'SOD' ? stats?.violations?.missingSodUsers :
-                  violationType === 'EOD' ? stats?.violations?.missingEodUsers :
-                    stats?.violations?.missingNoUpdateUsers;
-
-                if (!users || users.length === 0) {
-                  return (
-                    <div className="text-center py-12 opacity-50">
-                      <CheckCircle size={48} className="mx-auto mb-4 text-green" />
-                      <div className="text-sm font-black uppercase tracking-widest text-text-primary">All {violationType}s Submitted</div>
-                      <div className="text-[10px] font-bold text-text-muted uppercase mt-1">Great job team!</div>
-                    </div>
-                  );
-                }
-
-                return users.map((u, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-bg-input rounded-xl border border-border">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-purple/10 flex items-center justify-center text-purple font-black text-lg">
-                        {u.name ? u.name.charAt(0).toUpperCase() : '?'}
-                      </div>
-                      <div>
-                        <div className="text-sm font-black text-text-primary">{u.name}</div>
-                        <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">{u.email}</div>
-                      </div>
-                    </div>
-                    <div className="px-3 py-1.5 bg-red-soft text-red rounded-lg text-[9px] font-black uppercase tracking-widest">
-                      Missing {violationType}
-                    </div>
-                  </div>
-                ));
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
+          )}
         </>
       )}
 

@@ -31,6 +31,7 @@ import { TAB_ACCESS } from '../config/tabAccess';
 
 const tabsConfig = [
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard },
+  { id: 'mis-report', label: 'MIS Report', path: '/mis-report', icon: BarChart },
   { id: 'new-case', label: 'New Case', path: '/new-case', icon: PlusCircle },
   { id: 'case-master', label: 'My Cases', path: '/case-master', icon: ListTodo },
   { id: 'archived-cases', label: 'Archived Cases', path: '/archived-cases', icon: Archive },

@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RRR System — Escalation MIS Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: #0D0D0D;
+  color: #E8E8E8;
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.page {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 28px 28px 64px;
+}
+
+/* ── HEADER ── */
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-icon {
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid #555;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.header-icon span {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid #888;
+  border-radius: 2px;
+  display: block;
+}
+
+.report-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #FFFFFF;
+  line-height: 1.2;
+}
+
+.report-sub {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.header-right {
+  text-align: right;
+}
+
+.header-right .date-val {
+  font-size: 13px;
+  color: #AAAAAA;
+}
+
+.header-right .refresh-note {
+  font-size: 11px;
+  color: #555;
+  margin-top: 2px;
+}
+
+/* ── SECTION LABEL ── */
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 14px;
+  margin-top: 36px;
+}
+
+.section-label:first-of-type { margin-top: 0; }
+
+/* ── METRICS ── */
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.metric {
+  background: #1A1A1A;
+  border: 1px solid #2A2A2A;
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+
+.metric .mlabel {
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.metric .mvalue {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  color: #FFFFFF;
+}
+
+.metric.info   .mvalue { color: #5B9FE8; }
+.metric.warn   .mvalue { color: #E8A84A; }
+.metric.danger .mvalue { color: #E85B5B; }
+.metric.success .mvalue { color: #4ACE8A; }
+
+.metric .msub {
+  font-size: 11px;
+  color: #555;
+  margin-top: 5px;
+}
+
+/* ── TABLES ── */
+.table-wrap {
+  border: 1px solid #222;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table thead tr {
+  background: #171717;
+}
+
+table th {
+  font-size: 11px;
+  font-weight: 500;
+  color: #777;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid #222;
+}
+
+table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid #1E1E1E;
+  color: #D8D8D8;
+  vertical-align: middle;
+}
+
+table tr:last-child td {
+  border-bottom: none;
+}
+
+table tbody tr:hover td {
+  background: #161616;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #AAAAAA;
+}
+
+/* ── BADGES ── */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge.open     { background: #1A2A3D; color: #5B9FE8; }
+.badge.pending  { background: #2E2210; color: #E8A84A; }
+.badge.critical { background: #2E1010; color: #E85B5B; }
+.badge.resolved { background: #0E2A1C; color: #4ACE8A; }
+.badge.high     { background: #2E1010; color: #E85B5B; }
+.badge.medium   { background: #2E2210; color: #E8A84A; }
+.badge.low      { background: #1A2A1A; color: #4ACE8A; }
+
+/* ── AVATAR ── */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: 8px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  letter-spacing: .02em;
+}
+
+.av-d { background: #2A2455; color: #9B8FE8; }
+.av-r { background: #0E2A20; color: #4ACE8A; }
+.av-a { background: #2E1A12; color: #E89060; }
+.av-s { background: #2A1E08; color: #E8C060; }
+
+.overdue {
+  color: #E85B5B;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.overdue-icon { font-size: 11px; }
+
+.today-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ACE8A;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* ── TABS ── */
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.tab {
+  padding: 7px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #2A2A2A;
+  background: #1A1A1A;
+  color: #888;
+  transition: all 0.15s;
+}
+
+.tab:hover { color: #CCC; border-color: #3A3A3A; }
+
+.tab.active {
+  background: #252525;
+  color: #FFFFFF;
+  border-color: #444;
+}
+
+/* ── ASSIGNEE PANEL ── */
+.assignee-panel {
+  display: none;
+  background: #1A1A1A;
+  border: 1px solid #2A2A2A;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.assignee-panel.visible { display: block; }
+
+.apanel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #222;
+}
+
+.av-lg {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.apanel-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #FFF;
+}
+
+.apanel-role {
+  font-size: 12px;
+  color: #666;
+  margin-top: 1px;
+}
+
+/* Stats grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: #222;
+  border-bottom: 1px solid #222;
+}
+
+.stat-box {
+  background: #1A1A1A;
+  padding: 14px 16px;
+}
+
+.stat-box .sl {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.stat-box .sv {
+  font-size: 18px;
+  font-weight: 600;
+  color: #FFF;
+}
+
+.stat-box.danger .sv { color: #E85B5B; }
+.stat-box.success .sv { color: #4ACE8A; }
+.stat-box.info .sv { color: #5B9FE8; }
+.stat-box.warn .sv { color: #E8A84A; }
+
+/* Target bar */
+.target-section {
+  padding: 16px 20px;
+  border-top: 1px solid #222;
+}
+
+.target-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.target-top .tlbl {
+  font-size: 11px;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.target-top .tpct {
+  font-size: 13px;
+  font-weight: 600;
+  color: #E8A84A;
+}
+
+.tbar-wrap {
+  height: 5px;
+  background: #2A2A2A;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.tbar {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.target-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #666;
+}
+
+.target-foot .tval { color: #D0D0D0; font-weight: 500; }
+.target-foot .tleft { color: #E85B5B; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="report-header">
+    <div class="header-left">
+      <div class="header-icon"><span></span></div>
+      <div>
+        <div class="report-title">RRR System — Escalation MIS Report</div>
+        <div class="report-sub">Admin Dashboard &nbsp;·&nbsp; Monthly Performance &amp; Case Tracker</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="date-val" id="reportDate"></div>
+      <div class="refresh-note">Auto-refreshed on load</div>
+    </div>
+  </div>
+
+  <!-- SECTION 1: METRICS -->
+  <div class="section-label">Total Active Cases</div>
+  <div class="metric-row">
+    <div class="metric info">
+      <div class="mlabel">Total active cases</div>
+      <div class="mvalue">24</div>
+      <div class="msub">Across all assignees</div>
+    </div>
+    <div class="metric warn">
+      <div class="mlabel">Pending / overdue</div>
+      <div class="mvalue">9</div>
+      <div class="msub">Requiring attention</div>
+    </div>
+    <div class="metric danger">
+      <div class="mlabel">Total amount at risk</div>
+      <div class="mvalue">₹18.4L</div>
+      <div class="msub">Linked to active cases</div>
+    </div>
+    <div class="metric success">
+      <div class="mlabel">Cases assigned today</div>
+      <div class="mvalue">6</div>
+      <div class="msub">New today</div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: ACTIVE CASES TABLE -->
+  <div class="section-label" style="margin-top:28px"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Assignee</th>
+          <th>Case ID</th>
+          <th>Company</th>
+          <th>Due Date</th>
+          <th>Amount (₹)</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="activeCasesBody"></tbody>
+    </table>
+  </div>
+
+  <!-- SECTION 3: TODAY'S ASSIGNED CASES -->
+  <div class="section-label">Today's Assigned Cases</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Assignee</th>
+          <th>Case ID</th>
+          <th>Company</th>
+          <th>Amount (₹)</th>
+          <th>Priority</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="todayCasesBody"></tbody>
+    </table>
+  </div>
+
+  <!-- SECTION 4: ASSIGNEE-WISE PERFORMANCE -->
+  <div class="section-label">Assignee-wise Performance</div>
+  <div class="tabs" id="assigneeTabs"></div>
+  <div id="assigneePanels"></div>
+
+</div>
+
+<script>
+const today = new Date();
+document.getElementById('reportDate').textContent =
+  today.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+const assignees = [
+  { name:'Divya',  initials:'DV', av:'av-d', target:500000, saved:312000, totalCases:14, totalAmt:820000, pendingCases:5, pendingAmt:325000, resolvedCases:9, resolvedAmt:495000, todayCases:3, todayAmt:95000, resolvedToday:1, resolvedTodayAmt:42000 },
+  { name:'Rohit',  initials:'RK', av:'av-r', target:450000, saved:280000, totalCases:12, totalAmt:740000, pendingCases:4, pendingAmt:290000, resolvedCases:8, resolvedAmt:450000, todayCases:2, todayAmt:68000, resolvedToday:2, resolvedTodayAmt:55000 },
+  { name:'Anita',  initials:'AS', av:'av-a', target:400000, saved:195000, totalCases:10, totalAmt:610000, pendingCases:3, pendingAmt:218000, resolvedCases:7, resolvedAmt:392000, todayCases:2, todayAmt:54000, resolvedToday:1, resolvedTodayAmt:30000 },
+  { name:'Suresh', initials:'SM', av:'av-s', target:380000, saved:241000, totalCases:11, totalAmt:670000, pendingCases:4, pendingAmt:260000, resolvedCases:7, resolvedAmt:410000, todayCases:3, todayAmt:78000, resolvedToday:0, resolvedTodayAmt:0 },
+];
+
+const activeCases = [
+  { assignee:'Divya',  av:'av-d', id:'ESC-1042', company:'Mahindra Finance', due:'2026-06-08', amt:85000,  status:'Open' },
+  { assignee:'Divya',  av:'av-d', id:'ESC-1048', company:'Bajaj Auto',        due:'2026-06-06', amt:42000,  status:'Critical' },
+  { assignee:'Divya',  av:'av-d', id:'ESC-1051', company:'HDFC Ltd',          due:'2026-06-10', amt:68000,  status:'Pending' },
+  { assignee:'Rohit',  av:'av-r', id:'ESC-1039', company:'Tata Motors',       due:'2026-06-07', amt:95000,  status:'Open' },
+  { assignee:'Rohit',  av:'av-r', id:'ESC-1044', company:"L&T Finance",       due:'2026-06-05', amt:55000,  status:'Critical' },
+  { assignee:'Anita',  av:'av-a', id:'ESC-1036', company:'SBI Cards',         due:'2026-06-09', amt:72000,  status:'Pending' },
+  { assignee:'Anita',  av:'av-a', id:'ESC-1055', company:'Kotak Bank',        due:'2026-06-11', amt:38000,  status:'Open' },
+  { assignee:'Suresh', av:'av-s', id:'ESC-1040', company:'ICICI Lombard',     due:'2026-06-06', amt:91000,  status:'Critical' },
+  { assignee:'Suresh', av:'av-s', id:'ESC-1047', company:'Aditya Birla',      due:'2026-06-12', amt:46000,  status:'Open' },
+];
+
+const todayCases = [
+  { assignee:'Divya',  av:'av-d', id:'ESC-1060', company:'Reliance Retail',  amt:45000, priority:'High',   status:'Open' },
+  { assignee:'Divya',  av:'av-d', id:'ESC-1061', company:'Hero FinCorp',     amt:28000, priority:'Medium', status:'Open' },
+  { assignee:'Rohit',  av:'av-r', id:'ESC-1062', company:'Cholamandalam',    amt:38000, priority:'High',   status:'Open' },
+  { assignee:'Anita',  av:'av-a', id:'ESC-1063', company:'Muthoot Finance',  amt:32000, priority:'Medium', status:'Open' },
+  { assignee:'Suresh', av:'av-s', id:'ESC-1064', company:'Shriram Finance',  amt:42000, priority:'High',   status:'Open' },
+  { assignee:'Suresh', av:'av-s', id:'ESC-1065', company:'Fullerton India',  amt:36000, priority:'Low',    status:'Open' },
+];
+
+const fmt = n => '₹' + n.toLocaleString('en-IN');
+const pct = (a,b) => b ? Math.round(a/b*100) : 0;
+
+const statusBadge = s => {
+  const m = { Open:'open', Pending:'pending', Critical:'critical', Resolved:'resolved' };
+  return `<span class="badge ${m[s]||'open'}">${s}</span>`;
+};
+const priBadge = p => {
+  const m = { High:'high', Medium:'medium', Low:'low' };
+  return `<span class="badge ${m[p]||''}">${p}</span>`;
+};
+const dueMark = d => {
+  const dd = new Date(d + 'T00:00:00');
+  const todayClean = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return dd <= todayClean
+    ? `<span class="overdue"><span class="overdue-icon">□</span>${d}</span>`
+    : `<span style="color:#AAAAAA">${d}</span>`;
+};
+const avHtml = (av, name) =>
+  `<span class="avatar ${av}">${name.slice(0,2).toUpperCase()}</span>`;
+
+// Active cases
+const tb1 = document.getElementById('activeCasesBody');
+activeCases.forEach(c => {
+  tb1.innerHTML += `<tr>
+    <td>${avHtml(c.av, c.assignee)}${c.assignee}</td>
+    <td><span class="mono">${c.id}</span></td>
+    <td>${c.company}</td>
+    <td>${dueMark(c.due)}</td>
+    <td style="font-weight:500">${fmt(c.amt)}</td>
+    <td>${statusBadge(c.status)}</td>
+  </tr>`;
+});
+
+// Today's cases
+const tb2 = document.getElementById('todayCasesBody');
+todayCases.forEach(c => {
+  tb2.innerHTML += `<tr>
+    <td>${avHtml(c.av, c.assignee)}${c.assignee}</td>
+    <td><span class="today-dot"></span><span class="mono">${c.id}</span></td>
+    <td>${c.company}</td>
+    <td style="font-weight:500">${fmt(c.amt)}</td>
+    <td>${priBadge(c.priority)}</td>
+    <td>${statusBadge(c.status)}</td>
+  </tr>`;
+});
+
+// Assignee tabs + panels
+const tabsEl = document.getElementById('assigneeTabs');
+const panelsEl = document.getElementById('assigneePanels');
+
+assignees.forEach((a, i) => {
+  const donePct = pct(a.saved, a.target);
+  const left = Math.max(0, a.target - a.saved);
+  const barColor = donePct >= 80 ? '#4ACE8A' : donePct >= 50 ? '#E8A84A' : '#E85B5B';
+
+  // Tab
+  const tab = document.createElement('button');
+  tab.className = 'tab' + (i === 0 ? ' active' : '');
+  tab.textContent = a.name;
+  tab.onclick = () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('.assignee-panel').forEach(p => p.classList.remove('visible'));
+    document.getElementById('panel-' + i).classList.add('visible');
+  };
+  tabsEl.appendChild(tab);
+
+  // Panel
+  const panel = document.createElement('div');
+  panel.className = 'assignee-panel' + (i === 0 ? ' visible' : '');
+  panel.id = 'panel-' + i;
+  panel.innerHTML = `
+    <div class="apanel-head">
+      <span class="av-lg ${a.av}">${a.initials}</span>
+      <div>
+        <div class="apanel-name">${a.name}</div>
+        <div class="apanel-role">Escalation Specialist</div>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-box info"><div class="sl">Total cases</div><div class="sv">${a.totalCases}</div></div>
+      <div class="stat-box info"><div class="sl">Total amount</div><div class="sv">${fmt(a.totalAmt)}</div></div>
+      <div class="stat-box danger"><div class="sl">Pending cases</div><div class="sv">${a.pendingCases}</div></div>
+      <div class="stat-box danger"><div class="sl">Pending amount</div><div class="sv">${fmt(a.pendingAmt)}</div></div>
+      <div class="stat-box success"><div class="sl">Resolved cases</div><div class="sv">${a.resolvedCases}</div></div>
+      <div class="stat-box success"><div class="sl">Amount saved</div><div class="sv">${fmt(a.resolvedAmt)}</div></div>
+      <div class="stat-box warn"><div class="sl">Assigned today</div><div class="sv">${a.todayCases}</div></div>
+      <div class="stat-box warn"><div class="sl">Today's amount</div><div class="sv">${fmt(a.todayAmt)}</div></div>
+      <div class="stat-box success"><div class="sl">Resolved today</div><div class="sv">${a.resolvedToday}</div></div>
+      <div class="stat-box success"><div class="sl">Resolved amt today</div><div class="sv">${fmt(a.resolvedTodayAmt)}</div></div>
+    </div>
+    <div class="target-section">
+      <div class="target-top">
+        <span class="tlbl">
+          <span style="display:inline-block;width:10px;height:10px;border:1.5px solid #555;border-radius:2px"></span>
+          Monthly target
+        </span>
+        <span class="tpct" style="color:${barColor}">${donePct}%</span>
+      </div>
+      <div class="tbar-wrap">
+        <div class="tbar" style="width:${donePct}%;background:${barColor}"></div>
+      </div>
+      <div class="target-foot">
+        <span>
+          <span style="display:inline-block;width:10px;height:10px;border:1.5px solid #555;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>
+          Monthly target: <span class="tval">&nbsp;${fmt(a.target)}</span>
+        </span>
+        <span>
+          <span style="display:inline-block;width:10px;height:10px;border:1.5px solid #555;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>
+          Target left: <span class="tleft">&nbsp;${fmt(left)}</span>
+        </span>
+      </div>
+    </div>
+  `;
+  panelsEl.appendChild(panel);
+});
+</script>
+</body>
+</html>

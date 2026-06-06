@@ -205,7 +205,7 @@ const LegalDashboardTab = () => {
 
 
   const checkSodStatus = async () => {
-    if (['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user?.role)) return;
+    if (['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(user?.role)) return;
     try {
       const d = new Date();
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -230,7 +230,7 @@ const LegalDashboardTab = () => {
         console.error('Failed to fetch report stats', e);
       }
 
-      if (!todaysSod && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user?.role)) {
+      if (!todaysSod && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(user?.role)) {
         setTimeout(() => {
           openReportModal('SOD');
         }, 800);
@@ -501,12 +501,12 @@ const LegalDashboardTab = () => {
         {/* SOD/EOD Action Buttons */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full lg:w-auto">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
-            {!hasSodToday && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user?.role) && (
+            {!hasSodToday && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(user?.role) && (
               <div className="flex items-center justify-center gap-2 px-6 py-3 bg-red text-white border-none rounded-2xl text-[11px] font-black uppercase tracking-widest animate-bounce shadow-xl shadow-red-900/40">
                 <AlertTriangle size={16} /> Pending SOD Submission
               </div>
             )}
-            {!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(user?.role) && (
+            {!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(user?.role) && (
               <div className="grid grid-cols-2 sm:flex items-center gap-3 w-full sm:w-auto">
                 <button
                   onClick={() => openReportModal('SOD')}
