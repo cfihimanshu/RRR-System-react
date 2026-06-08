@@ -49,15 +49,38 @@ router.get('/', verifyToken, async (req, res) => {
     }
 
     let logs = [];
+
+    // First, fetch Timeline events to act as a fallback/restore for corrupted or missing Progress updates
+    const timelineProgressEvents = await Timeline.find({
+      caseId: caseId,
+      eventType: 'Progress Update'
+    }).lean();
+
+    // Sort Timeline events older-first so they behave like the Progress array logic
+    timelineProgressEvents.sort((a, b) => new Date(a.eventDate || a.createdAt) - new Date(b.eventDate || b.createdAt));
+
+    for (const tEvent of timelineProgressEvents) {
+      logs.push({
+        _id: tEvent._id,
+        stage: tEvent.metadata?.stage,
+        percentage: tEvent.metadata?.percentage,
+        summary: tEvent.details,
+        nextAction: tEvent.metadata?.nextAction,
+        blockers: tEvent.metadata?.blockers,
+        followUpDate: tEvent.metadata?.followUpDate,
+        escalateTo: tEvent.metadata?.escalateTo,
+        attachment: tEvent.metadata?.attachment,
+        updatedBy: tEvent.source,
+        createdAt: tEvent.eventDate || tEvent.createdAt
+      });
+    }
     
     // Combine ALL documents (both legacy top-level and new updates arrays)
     for (const doc of progressDocs) {
       if (doc.updates && doc.updates.length > 0) {
         logs.push(...doc.updates);
-      } 
-      
-      // Also add top-level legacy fields if summary exists
-      if (doc.summary) {
+      } else if (doc.summary) {
+        // Also add top-level legacy fields if summary exists and there are no updates
         logs.push({
           _id: doc._id,
           stage: doc.stage,
@@ -76,18 +99,17 @@ router.get('/', verifyToken, async (req, res) => {
       }
     }
 
-    // Deduplicate logs based on time (down to the minute) and summary text
+    // Deduplicate logs based on full summary text and stage
     const uniqueLogsMap = new Map();
     for (const log of logs) {
       const logObj = log.toObject ? log.toObject() : log;
-      const dateToUse = logObj.createdAt || logObj.uploadDate;
-      const timeStr = dateToUse ? new Date(dateToUse).toISOString().substring(0, 16) : 'unknown-time';
-      const summaryPrefix = logObj.summary ? logObj.summary.trim().substring(0, 30) : '';
-      const key = `${timeStr}-${summaryPrefix}`;
+      const stageKey = logObj.stage || 'no-stage';
+      const summaryText = logObj.summary ? logObj.summary.trim() : 'no-summary';
+      const summaryKey = `${stageKey}-${summaryText}`;
       
-      if (!uniqueLogsMap.has(key)) {
-        uniqueLogsMap.set(key, logObj);
-      }
+      // If we already have a log with this exact summary and stage, we only keep the latest one
+      // Since logs array is chronologically older-first, we can just overwrite the map
+      uniqueLogsMap.set(summaryKey, logObj);
     }
     
     logs = Array.from(uniqueLogsMap.values());
@@ -190,6 +212,19 @@ router.post('/', verifyToken, async (req, res) => {
         updates: [newLog]
       });
     } else {
+      // Capture the old values before overwriting them
+      const oldStage = progressDoc.stage;
+      const oldPercentage = progressDoc.percentage;
+      const oldSummary = progressDoc.summary;
+      const oldNextAction = progressDoc.nextAction;
+      const oldBlockers = progressDoc.blockers;
+      const oldFollowUpDate = progressDoc.followUpDate;
+      const oldEscalateTo = progressDoc.escalateTo;
+      const oldRefundedAmount = progressDoc.refundedAmount;
+      const oldSavedAmount = progressDoc.savedAmount;
+      const oldAttachment = progressDoc.attachment;
+      const oldUpdatedBy = progressDoc.updatedBy;
+      
       progressDoc.stage = stage || progressDoc.stage;
       progressDoc.percentage = percentage !== undefined ? percentage : progressDoc.percentage;
       progressDoc.summary = summary || progressDoc.summary;
@@ -206,19 +241,19 @@ router.post('/', verifyToken, async (req, res) => {
       }
 
       if (!progressDoc.updates || progressDoc.updates.length === 0) {
-        if (progressDoc.summary) {
+        if (oldSummary) {
           progressDoc.updates = [{
-            stage: progressDoc.stage,
-            percentage: progressDoc.percentage,
-            summary: progressDoc.summary,
-            nextAction: progressDoc.nextAction,
-            blockers: progressDoc.blockers,
-            followUpDate: progressDoc.followUpDate,
-            escalateTo: progressDoc.escalateTo,
-            refundedAmount: progressDoc.refundedAmount,
-            savedAmount: progressDoc.savedAmount,
-            attachment: progressDoc.attachment,
-            updatedBy: progressDoc.updatedBy,
+            stage: oldStage,
+            percentage: oldPercentage,
+            summary: oldSummary,
+            nextAction: oldNextAction,
+            blockers: oldBlockers,
+            followUpDate: oldFollowUpDate,
+            escalateTo: oldEscalateTo,
+            refundedAmount: oldRefundedAmount,
+            savedAmount: oldSavedAmount,
+            attachment: oldAttachment,
+            updatedBy: oldUpdatedBy,
             createdAt: progressDoc.createdAt || progressDoc.updatedAt || new Date()
           }];
         } else {
