@@ -296,6 +296,8 @@ const AdminPanelTab = () => {
                     <option value="Admin">Admin</option>
                     <option value="Operations">Operations</option>
                     <option value="Operation Admin">Operation Admin</option>
+                    <option value="Operation Review">Operation Review</option>
+                    <option value="Operation Head">Operation Head</option>
                     <option value="Reviewer">Reviewer</option>
                     <option value="Accountant">Accountant</option>
                     <option value="Staff">Staff</option>
@@ -367,6 +369,8 @@ const AdminPanelTab = () => {
                               <option value="Admin">Admin</option>
                               <option value="Operations">Operations</option>
                               <option value="Operation Admin">Operation Admin</option>
+                              <option value="Operation Review">Operation Review</option>
+                              <option value="Operation Head">Operation Head</option>
                               <option value="Reviewer">Reviewer</option>
                               <option value="Accountant">Accountant</option>
                               <option value="Staff">Staff</option>

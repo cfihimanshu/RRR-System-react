@@ -778,7 +778,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     const getDocUploadDate = (doc) => {
       if (doc.uploadDate) return doc.uploadDate;
       if (doc.createdAt) return doc.createdAt;
-      
+
       // Parse timestamp from fileLink prefix if available
       if (doc.fileLink) {
         const filename = doc.fileLink.split('/').pop() || '';
@@ -1561,12 +1561,12 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   const handleGenerateAISummary = async () => {
     try {
       setIsGeneratingSummary(true);
-      
+
       const payload = {
         customPrompt: aiPrompt,
         targetField: aiTargetField
       };
-      
+
       if (viewCase?.caseId) {
         payload.caseId = viewCase.caseId;
       } else {
@@ -1574,7 +1574,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       }
 
       const res = await api.post('/ai/generate-summary', payload);
-      
+
       if (res.data.success) {
         setFormData(prev => ({
           ...prev,
@@ -2157,9 +2157,9 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       } catch (e) { }
       fetchCases();
       // Update local view
-      setViewCase(prev => ({ 
-        ...prev, 
-        currentStatus: 'Closure', 
+      setViewCase(prev => ({
+        ...prev,
+        currentStatus: 'Closure',
         progressPercentage: 100,
         compliancePending: compliancePendingChecked,
         isArchived: !compliancePendingChecked
@@ -3524,7 +3524,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                   }}
                 >
                   <option value="">Bulk Assign Mode...</option>
-                  {opsUsers.filter(u => ['operations', 'admin', 'operation admin'].includes(u.role?.toLowerCase()?.trim())).map(u => (
+                  {opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`bulk-${u._id || u.email}`} value={u.fullName}>Assign: {u.fullName}</option>
                   ))}
                 </select>
@@ -5286,7 +5286,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                         className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent uppercase tracking-widest"
                       >
                         <option value="">-- NO ESCALATION --</option>
-                        {opsUsers.filter(u => ['operations', 'legal', 'operation admin'].includes(u.role?.toLowerCase()?.trim())).map(u => (
+                        {opsUsers.filter(u => ['operations', 'legal', 'operation admin', 'operation review',].includes(u.role?.toLowerCase()?.trim())).map(u => (
                           <option key={`escalate-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                         ))}
                       </select>
@@ -5847,10 +5847,10 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
         <div className="p-6 text-center">
           <h3 className="text-xl font-black text-text-primary mb-4">Mark Case as Resolved?</h3>
           <p className="text-sm text-text-muted mb-6">Are you sure you want to resolve this case? This will update the case status to Closure.</p>
-          
+
           <div className="bg-bg-input p-4 rounded-xl border border-border flex items-center justify-start gap-3 mb-8 text-left cursor-pointer hover:bg-bg-card transition-all" onClick={() => setCompliancePendingChecked(!compliancePendingChecked)}>
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               className="w-5 h-5 accent-accent cursor-pointer"
               checked={compliancePendingChecked}
               onChange={(e) => setCompliancePendingChecked(e.target.checked)}
@@ -5863,13 +5863,13 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
           </div>
 
           <div className="flex gap-4">
-            <button 
+            <button
               className="flex-1 bg-green hover:bg-green-600 text-white font-black py-3 rounded-xl uppercase tracking-widest text-xs transition-all active:scale-95 shadow-md shadow-green-900/20"
               onClick={confirmResolveCase}
             >
               Confirm Resolve
             </button>
-            <button 
+            <button
               className="flex-1 bg-bg-input hover:bg-bg-card text-text-primary border border-border font-black py-3 rounded-xl uppercase tracking-widest text-xs transition-all active:scale-95"
               onClick={() => setIsResolveModalOpen(false)}
             >
@@ -6133,7 +6133,7 @@ const CaseRow = memo(({
               >
                 <option value="">Assign</option>
                 {['admin', 'super admin'].includes(user?.role?.toLowerCase())
-                  ? opsUsers.filter(u => ['operations', 'admin', 'operation admin'].includes(u.role?.toLowerCase()?.trim())).map(u => (
+                  ? opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                   ))
                   : (user?.fullName && (

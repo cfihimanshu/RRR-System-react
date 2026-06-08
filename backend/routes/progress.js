@@ -182,7 +182,7 @@ router.post('/', verifyToken, async (req, res) => {
       createdAt: new Date()
     };
 
-    let progressDoc = await Progress.findOne({ caseId }).sort({ createdAt: -1 });
+    let progressDoc = await Progress.findOne({ caseId });
     if (progressDoc && stage) {
       const stages = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
       const currentStage = progressDoc.stage || 'Case Logged';
@@ -194,24 +194,39 @@ router.post('/', verifyToken, async (req, res) => {
       }
     }
 
+    let isNewDoc = false;
     if (!progressDoc) {
-      progressDoc = new Progress({
-        caseId,
-        stage,
-        percentage,
-        summary,
-        nextAction,
-        blockers,
-        followUpDate,
-        escalateTo,
-        updatedBy,
-        checklist,
-        refundedAmount,
-        savedAmount,
-        attachment,
-        updates: [newLog]
-      });
-    } else {
+      // Try to create new doc; if duplicate key error occurs (race condition), fetch and update
+      try {
+        progressDoc = await Progress.create({
+          caseId,
+          stage,
+          percentage,
+          summary,
+          nextAction,
+          blockers,
+          followUpDate,
+          escalateTo,
+          updatedBy,
+          checklist,
+          refundedAmount,
+          savedAmount,
+          attachment,
+          updates: [newLog]
+        });
+        isNewDoc = true;
+      } catch (dupErr) {
+        if (dupErr.code === 11000) {
+          // Another request already created it — fetch and fall through to update
+          progressDoc = await Progress.findOne({ caseId });
+        } else {
+          throw dupErr;
+        }
+      }
+    }
+
+    // If progressDoc already existed (or was just fetched after duplicate), update it
+    if (!isNewDoc && progressDoc) {
       // Capture the old values before overwriting them
       const oldStage = progressDoc.stage;
       const oldPercentage = progressDoc.percentage;
@@ -261,9 +276,8 @@ router.post('/', verifyToken, async (req, res) => {
         }
       }
       progressDoc.updates.push(newLog);
+      await progressDoc.save();
     }
-
-    await progressDoc.save();
 
     // Create Document record if attachment is provided
     if (attachment) {

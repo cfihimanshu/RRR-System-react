@@ -5,7 +5,7 @@ const { verifyToken } = require('../middleware/auth');
 const { roleGuard } = require('../middleware/roleGuard');
 
 // Get all users (Filtered for Operations in frontend)
-router.get('/', verifyToken, roleGuard(['Admin', 'Operations', 'Legal']), async (req, res) => {
+router.get('/', verifyToken, roleGuard(['Admin', 'Operations', 'Legal', 'Operation Review', 'Operation Head']), async (req, res) => {
   try {
     const users = await User.find({}, 'fullName email role department').lean();
     res.set('Cache-Control', 'private, max-age=60');
@@ -101,6 +101,18 @@ router.post('/:email/grant-sod-access', verifyToken, roleGuard(['Admin']), async
       }
     );
     res.json({ message: `Access granted to ${email} to fill SOD today.` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update monthly target for a user
+router.put('/:userId/target', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmin', 'Operations', 'Operation Head']), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { monthlyTarget } = req.body;
+    const user = await User.findByIdAndUpdate(userId, { monthlyTarget }, { new: true });
+    res.json({ message: "Monthly target updated successfully", user });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

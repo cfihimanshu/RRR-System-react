@@ -119,7 +119,7 @@ const MyTaskTab = () => {
   };
 
   const fetchUsers = async () => {
-    const privilegedRoles = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'];
+    const privilegedRoles = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Review', 'Operation Head'];
     if (!privilegedRoles.includes(user?.role)) {
       if (user?.fullName) {
         setUsers([{ _id: 'current-user', fullName: user.fullName, role: user.role }]);

@@ -28,6 +28,7 @@ const AgreementGenerationTab = React.lazy(() => import('../components/tabs/Agree
 const MyTaskTab = React.lazy(() => import('../components/tabs/MyTaskTab'));
 const SodEodReportTab = React.lazy(() => import('../components/tabs/SodEodReportTab'));
 const WorkReportTab = React.lazy(() => import('../components/tabs/WorkReportTab'));
+const MisReportTab = React.lazy(() => import('../components/tabs/MisReportTab'));
 const RefundRequestTab = React.lazy(() => import('../components/tabs/RefundRequestTab'));
 const LegalDashboardTab = React.lazy(() => import('../components/tabs/LegalDashboardTab'));
 const PendingRefundsTab = React.lazy(() => import('../components/tabs/PendingRefundsTab'));
@@ -103,7 +104,7 @@ const Dashboard = () => {
             <Route path="/" element={
               user?.role === 'Legal'
                 ? <Navigate to="/legal-dashboard" replace />
-                : user?.role === 'Super Admin'
+                : (user?.role === 'Super Admin' || user?.role === 'SuperAdmin')
                 ? <SuperAdminDashTab />
                 : <DashboardTab />
             } />
@@ -171,6 +172,10 @@ const Dashboard = () => {
             
             <Route path="/work-report" element={
               <ProtectedRoute id="work-report"><WorkReportTab /></ProtectedRoute>
+            } />
+
+            <Route path="/mis-report" element={
+              <ProtectedRoute id="mis-report"><MisReportTab /></ProtectedRoute>
             } />
 
             <Route path="/refund-request" element={

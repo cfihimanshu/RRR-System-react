@@ -133,7 +133,9 @@ const buildNameRegex = (text) => {
 async function buildCaseQuery(req) {
   let query = {};
 
-  if (
+  if (req.user?.role?.toLowerCase().trim() === 'operation head') {
+    query = { sourceOfComplaint: { $regex: /^\s*odoo\s*$/i } };
+  } else if (
     (req.user.role === 'Admin' || req.user.role === 'Super Admin' || req.user.role === 'SuperAdmin') &&
     req.query.isLegalDashboard === 'true'
   ) {
@@ -263,7 +265,7 @@ router.post('/bulk/sync-ids', verifyToken, roleGuard(['Admin']), async (req, res
   }
 });
 
-router.post('/trigger-due-alerts', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmin', 'Operations']), async (req, res) => {
+router.post('/trigger-due-alerts', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmin', 'Operations', 'Operation Review', 'Operation Head']), async (req, res) => {
   try {
     const { runDueCaseAlerts } = require('../utils/scheduler');
     await runDueCaseAlerts();
@@ -435,7 +437,7 @@ router.get('/:caseId', verifyToken, async (req, res) => {
   }
 });
 
-router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin']), async (req, res) => {
+router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head']), async (req, res) => {
   try {
     const clientMobile = req.body.clientMobile?.trim();
     const clientName = req.body.clientName?.trim();
@@ -624,7 +626,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
   }
 });
 
-router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations']), async (req, res) => {
+router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations', 'Operation Review', 'Operation Head']), async (req, res) => {
   try {
     const { caseIds, assignedTo } = req.body;
     if (!caseIds || !caseIds.length || !assignedTo) {
@@ -658,7 +660,7 @@ router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations']), asyn
   }
 });
 
-router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin']), async (req, res) => {
+router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head']), async (req, res) => {
   try {
     const caseId = req.params.caseId;
 
@@ -786,19 +788,104 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', '
           console.warn('Assignee NOT found in database for name:', req.body.assignedTo);
         }
 
-        // 2. Notify Admin
+        // 2. Notify Admin (and Operation Heads if assignee is Operation Review)
+        const isOperationReviewAssignee = assignee && assignee.role?.toLowerCase().trim() === 'operation review';
+        const opHeads = isOperationReviewAssignee ? await User.find({ role: 'Operation Head' }) : [];
+        const opHeadEmails = opHeads.map(u => u.email).filter(Boolean);
+
         if (adminEmails) {
           const sub = `👤 Case Assignment Update: ${caseId}`;
           const html = `
             <div style="font-family: sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
               <h3 style="color: #333;">Case Assignment Notification</h3>
-              <p>Case <strong>${caseId}</strong> has been assigned to <strong>${req.body.assignedTo}</strong> by ${req.user.fullName}.</p>
+              <p>Case <strong>${caseId}</strong> has been assigned to <strong>${req.body.assignedTo}</strong> (Operation Review) by ${req.user.fullName}.</p>
               <p><strong>Client:</strong> ${updated.clientName}</p>
               <p><strong>Status:</strong> ${updated.currentStatus}</p>
+              <p><strong>Source of Complaint:</strong> ${updated.sourceOfComplaint || '—'}</p>
+              <p style="font-size:12px;color:#666;">Please monitor progress. A reminder will be sent if no update is made within 30 minutes.</p>
             </div>
           `;
           sendEmail(adminEmails, sub, '', html).catch(err => console.error('Admin Assignment Alert Error:', err));
           createNotification('Admin', 'Case Assignment Update', `Case ${caseId} has been assigned to ${req.body.assignedTo} by ${req.user.fullName}.`, 'Assignment', `/case-master?search=${caseId}`);
+        }
+
+        // 3. Notify Operation Heads if assignee is Operation Review
+        if (isOperationReviewAssignee && opHeadEmails.length > 0) {
+          const sub = `📋 [Operation Review Assigned] Case ${caseId} — Action Required`;
+          const html = `
+            <div style="font-family: sans-serif; padding: 20px; border: 2px solid #7c3aed; border-radius: 10px;">
+              <h3 style="color: #7c3aed;">Operation Review Case Assignment</h3>
+              <p>Hello Operation Head,</p>
+              <p>Case <strong>${caseId}</strong> has been assigned to <strong>${req.body.assignedTo}</strong> (Operation Review) by ${req.user.fullName}.</p>
+              <div style="background:#f5f3ff;padding:12px;border-radius:6px;margin:15px 0;">
+                <strong>Case ID:</strong> ${caseId}<br>
+                <strong>Client:</strong> ${updated.clientName || '—'}<br>
+                <strong>Type:</strong> ${updated.typeOfComplaint || '—'}<br>
+                <strong>Source:</strong> ${updated.sourceOfComplaint || '—'}<br>
+                <strong>Status:</strong> ${updated.currentStatus || '—'}
+              </div>
+              <p>A follow-up reminder will be sent if no update is recorded within <strong>30 minutes</strong>.</p>
+              <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="color:#7c3aed;font-weight:bold;">View Case</a></p>
+            </div>
+          `;
+          sendEmail(opHeadEmails.join(','), sub, '', html).catch(err => console.error('Operation Head Assignment Alert Error:', err));
+          opHeads.forEach(oh => createNotification(oh.email, 'Operation Review Case Assigned', `Case ${caseId} assigned to ${req.body.assignedTo} (Operation Review).`, 'Assignment', `/case-master?search=${caseId}`));
+        }
+
+        // 4. Schedule 30-minute reminder if assignee is Operation Review
+        if (isOperationReviewAssignee && assignee) {
+          const reminderCaseId = caseId;
+          const reminderAssigneeName = req.body.assignedTo;
+          const reminderAssigneeEmail = assignee.email;
+          const assignedAt = Date.now();
+
+          setTimeout(async () => {
+            try {
+              const Progress = require('../models/Progress');
+              const latestProgress = await Progress.findOne({ caseId: reminderCaseId }).lean();
+              const lastUpdated = latestProgress?.updatedAt ? new Date(latestProgress.updatedAt).getTime() : 0;
+
+              if (lastUpdated < assignedAt) {
+                // No update was made since assignment — send reminder
+                const reminderSub = `⏰ REMINDER: No Update on Case ${reminderCaseId} (30 min elapsed)`;
+                const reminderHtml = `
+                  <div style="font-family:sans-serif;padding:20px;border:2px solid #dc2626;border-radius:10px;">
+                    <h3 style="color:#dc2626;">⏰ 30-Minute Update Reminder</h3>
+                    <p>Case <strong>${reminderCaseId}</strong> was assigned to <strong>${reminderAssigneeName}</strong> (Operation Review) 30 minutes ago, but <strong>no progress update has been recorded yet</strong>.</p>
+                    <div style="background:#fef2f2;padding:12px;border-radius:6px;margin:15px 0;">
+                      <strong>Case ID:</strong> ${reminderCaseId}<br>
+                      <strong>Assignee:</strong> ${reminderAssigneeName} (Operation Review)<br>
+                      <strong>Assigned At:</strong> ${new Date(assignedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                    </div>
+                    <p>Please ensure <strong>${reminderAssigneeName}</strong> updates the case progress immediately.</p>
+                    <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${reminderCaseId}" style="color:#dc2626;font-weight:bold;">View & Update Case</a></p>
+                  </div>
+                `;
+
+                const adminUsers = await User.find({ role: 'Admin' });
+                const opHeadUsers = await User.find({ role: 'Operation Head' });
+                const reminderRecipients = [
+                  reminderAssigneeEmail,
+                  ...adminUsers.map(u => u.email),
+                  ...opHeadUsers.map(u => u.email)
+                ].filter(Boolean);
+                const uniqueRecipients = [...new Set(reminderRecipients)].join(',');
+
+                if (uniqueRecipients) {
+                  sendEmail(uniqueRecipients, reminderSub, '', reminderHtml)
+                    .then(() => console.log(`30-min reminder sent for case ${reminderCaseId} to: ${uniqueRecipients}`))
+                    .catch(err => console.error('30-min reminder email error:', err));
+                  createNotification('Admin', '⏰ Case Update Reminder', `No update on case ${reminderCaseId} (assigned to ${reminderAssigneeName}) after 30 minutes.`, 'Alert', `/case-master?search=${reminderCaseId}`);
+                }
+              } else {
+                console.log(`30-min check: Case ${reminderCaseId} already updated. No reminder needed.`);
+              }
+            } catch (reminderErr) {
+              console.error('Error in 30-min Operation Review reminder:', reminderErr);
+            }
+          }, 30 * 60 * 1000); // 30 minutes
+
+          console.log(`30-minute reminder scheduled for Operation Review case: ${reminderCaseId}`);
         }
 
         // Auto-create/update a Progress Log for the assignment if we auto-updated the status
@@ -995,7 +1082,7 @@ router.delete('/:caseId', verifyToken, roleGuard(['Admin']), async (req, res) =>
   }
 });
 
-router.post('/import', verifyToken, roleGuard(['Admin', 'Operations']), upload.single('file'), async (req, res) => {
+router.post('/import', verifyToken, roleGuard(['Admin', 'Operations', 'Operation Review', 'Operation Head']), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided' });
 

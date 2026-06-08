@@ -26,7 +26,7 @@ router.get('/', verifyToken, async (req, res) => {
       Notification.find({
         recipient: { $in: [userEmail, userRole, 'All'] }
       }).sort({ createdAt: -1 }).limit(limit).lean(),
-      !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(userRole)
+      !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(userRole)
         ? Report.findOne({ userEmail, type: 'SOD', date: today }).select('_id').lean()
         : Promise.resolve({ _id: 'admin-skip' }),
       userRole === 'Admin'
@@ -60,7 +60,7 @@ router.get('/', verifyToken, async (req, res) => {
       });
     }
 
-    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant'].includes(userRole) && !sodExists) {
+    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(userRole) && !sodExists) {
       systemNotifs.push({
         _id: 'sys-sod-pending',
         title: '🌅 SOD Pending',

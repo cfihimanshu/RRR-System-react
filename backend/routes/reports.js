@@ -147,7 +147,7 @@ router.post('/', verifyToken, async (req, res) => {
       userName: req.user.fullName
     };
 
-    const isExempt = ['admin', 'super admin', 'superadmin', 'reviewer', 'accountant'].includes(req.user.role?.toLowerCase().trim());
+    const isExempt = ['admin', 'super admin', 'superadmin', 'reviewer', 'accountant', 'operation head', 'operation review'].includes(req.user.role?.toLowerCase().trim());
 
     // Validation: Require GPS Selfie and Coordinates for SOD/EOD for non-exempt roles
     if ((reportData.type === 'SOD' || reportData.type === 'EOD') && !isExempt) {
@@ -251,6 +251,191 @@ router.get('/stats', verifyToken, async (req, res) => {
       workingHours: workingHours.toFixed(2),
       role: req.user.role
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/reports/mis — Escalation MIS Report data
+router.get('/mis', verifyToken, async (req, res) => {
+  try {
+    const completedStatuses = [
+      'Settled', 'settled', 'Settlement', 'settlement',
+      'Closure', 'closure', 'Resolution', 'resolution',
+      'Resolved', 'resolved', 'Done', 'done',
+      'Complete', 'complete', 'Completed', 'completed',
+      'Closed', 'closed', 'NA', 'na', 'Na', 'nA',
+      'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'
+    ];
+    
+    // Calculate today's date boundaries in IST
+    const nowForIST = new Date();
+    const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
+    const todayStr = istTime.toISOString().split('T')[0];
+    const startOfToday = new Date(`${todayStr}T00:00:00+05:30`);
+
+    const isOperationHead = req.user?.role?.toLowerCase().trim() === 'operation head';
+    const caseQuery = { isArchived: { $ne: true } };
+    if (!isOperationHead) {
+      caseQuery.sourceOfComplaint = { $not: /^\s*odoo\s*$/i };
+    }
+
+    // Fetch all cases matching the query
+    const allCases = await Case.find(caseQuery).lean();
+    
+    // Fetch all users
+    const allUsers = await User.find({}, 'fullName email role monthlyTarget').lean();
+
+    // 1. Overview metrics
+    let totalActiveCases = 0;
+    let totalActiveCasesAmount = 0;
+    let pendingOverdueCases = 0;
+    let pendingOverdueCasesAmount = 0;
+    let totalAmountAtRisk = 0;
+    let casesAssignedToday = 0;
+
+    const activeCasesList = [];
+    const todayCasesList = [];
+
+    // Helper to check if a case status is completed/resolved
+    const isCompleted = (status) => {
+      if (!status) return false;
+      return completedStatuses.includes(status.trim());
+    };
+
+    allCases.forEach(c => {
+      const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
+      const isCaseActive = !isCaseResolved;
+      const createdDate = c.createdAt ? new Date(c.createdAt) : null;
+      const isCreatedToday = createdDate && createdDate >= startOfToday;
+
+      if (isCaseActive) {
+        totalActiveCases++;
+        totalActiveCasesAmount += (c.totalAmtPaid || 0);
+        totalAmountAtRisk += (c.totalAmtPaid || 0);
+
+        // Check if overdue: dueDate is older than or equal to today
+        if (c.dueDate) {
+          const dueClean = c.dueDate.trim();
+          if (dueClean <= todayStr) {
+            pendingOverdueCases++;
+            pendingOverdueCasesAmount += (c.totalAmtPaid || 0);
+          }
+        } else {
+          // If no due date, count as requiring attention if it is active
+          pendingOverdueCases++;
+          pendingOverdueCasesAmount += (c.totalAmtPaid || 0);
+        }
+
+        activeCasesList.push({
+          assignee: c.assignedTo || 'Unassigned',
+          caseId: c.caseId,
+          companyName: c.companyName || '—',
+          dueDate: c.dueDate || '—',
+          totalAmtPaid: c.totalAmtPaid || 0,
+          currentStatus: c.currentStatus || 'New'
+        });
+      }
+
+      if (isCreatedToday) {
+        casesAssignedToday++;
+        todayCasesList.push({
+          assignee: c.assignedTo || 'Unassigned',
+          caseId: c.caseId,
+          companyName: c.companyName || '—',
+          totalAmtPaid: c.totalAmtPaid || 0,
+          priority: c.priority || 'Medium',
+          currentStatus: c.currentStatus || 'New'
+        });
+      }
+    });
+
+    // 2. Assignee performance calculations
+    const assigneeStatsMap = {};
+
+    allUsers.forEach(u => {
+      const key = u.fullName.trim().toLowerCase();
+      assigneeStatsMap[key] = {
+        userId: u._id,
+        name: u.fullName.trim(),
+        email: u.email,
+        role: u.role,
+        target: u.monthlyTarget || 500000,
+        saved: 0,
+        totalCases: 0,
+        totalAmt: 0,
+        pendingCases: 0,
+        pendingAmt: 0,
+        resolvedCases: 0,
+        resolvedAmt: 0,
+        todayCases: 0,
+        todayAmt: 0,
+        resolvedToday: 0,
+        resolvedTodayAmt: 0
+      };
+    });
+
+    allCases.forEach(c => {
+      const assigneeName = c.assignedTo;
+      if (!assigneeName) return;
+      
+      const key = assigneeName.trim().toLowerCase();
+      if (!assigneeStatsMap[key]) return;
+
+      const stats = assigneeStatsMap[key];
+      const amt = c.totalAmtPaid || 0;
+      const saved = c.savedAmount || c.refundedAmount || 0;
+      const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
+
+      const createdDate = c.createdAt ? new Date(c.createdAt) : null;
+      const isAssignedToday = createdDate && createdDate >= startOfToday;
+      
+      const updatedDate = c.updatedAt ? new Date(c.updatedAt) : null;
+      const isResolvedToday = isCaseResolved && updatedDate && updatedDate >= startOfToday;
+
+      stats.totalCases++;
+      stats.totalAmt += amt;
+
+      if (isCaseResolved) {
+        stats.resolvedCases++;
+        stats.resolvedAmt += saved;
+        stats.saved += saved; // progress towards target
+      } else {
+        stats.pendingCases++;
+        stats.pendingAmt += amt;
+      }
+
+      if (isAssignedToday) {
+        stats.todayCases++;
+        stats.todayAmt += amt;
+      }
+
+      if (isResolvedToday) {
+        stats.resolvedToday++;
+        stats.resolvedTodayAmt += saved;
+      }
+    });
+
+    const performanceList = Object.values(assigneeStatsMap).filter(stats => {
+      const isSpecialist = ['Operations', 'Staff', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head', 'Reviewer', 'Accountant'].includes(stats.role);
+      return stats.totalCases > 0 || isSpecialist;
+    });
+
+    res.json({
+      reportDate: todayStr,
+      metrics: {
+        totalActiveCases,
+        totalActiveCasesAmount,
+        pendingOverdueCases,
+        pendingOverdueCasesAmount,
+        totalAmountAtRisk,
+        casesAssignedToday
+      },
+      activeCases: activeCasesList,
+      todayCases: todayCasesList,
+      assigneePerformance: performanceList
+    });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

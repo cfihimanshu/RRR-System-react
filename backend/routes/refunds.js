@@ -13,7 +13,7 @@ const router = express.Router();
 router.get('/', verifyToken, async (req, res) => {
   try {
     let query = req.query.caseId ? { caseId: req.query.caseId } : {};
-    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operations'].includes(req.user.role) && !req.query.caseId) {
+    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operations', 'Operation Review', 'Operation Head'].includes(req.user.role) && !req.query.caseId) {
       query.requestedBy = req.user.email;
     }
 
@@ -137,7 +137,7 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
-router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff']), async (req, res) => {
+router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Review', 'Operation Head']), async (req, res) => {
   console.log("Incoming Refund Request Body:", JSON.stringify(req.body, null, 2));
   try {
     const { 
