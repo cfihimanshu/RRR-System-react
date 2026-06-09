@@ -1,7 +1,8 @@
 const cron = require('node-cron');
-const Action = require('../models/Action');
-const User = require('../models/User');
-const Case = require('../models/Case');
+const { Op } = require('sequelize');
+const Action = require('../sql_models/Action');
+const User = require('../sql_models/User');
+const Case = require('../sql_models/Case');
 const { sendEmail } = require('./mailer');
 const { createNotification } = require('./notificationHelper');
 
@@ -14,7 +15,11 @@ const runDueCaseAlerts = async () => {
     // ==========================================
     // SECTION 1: DAILY ACTION ALERTS
     // ==========================================
-    const allActions = await Action.find({ nextActionDate: { $exists: true, $ne: '' } });
+    const allActions = await Action.findAll({ 
+      where: { 
+        nextActionDate: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] } 
+      } 
+    });
     
     const overdue = [];
     const dueToday = [];
@@ -33,7 +38,7 @@ const runDueCaseAlerts = async () => {
     });
 
     if (overdue.length > 0 || dueToday.length > 0) {
-      const admins = await User.find({ role: 'Admin' });
+      const admins = await User.findAll({ where: { role: 'Admin' } });
       const adminEmails = admins.map(a => a.email);
 
       if (adminEmails.length > 0) {
@@ -71,16 +76,17 @@ const runDueCaseAlerts = async () => {
     // SECTION 2: DAILY CASE DUE DATE ALERTS [AUTOMATION]
     // ==========================================
     console.log('Running daily Case Due Date automation scan...');
-    const adminsList = await User.find({ role: 'Admin' });
+    const adminsList = await User.findAll({ where: { role: 'Admin' } });
     const adminEmailsStr = adminsList.map(a => a.email).join(',');
 
-    // Find all cases that are active/incomplete and have a due date OR a next action date
-    const activeCases = await Case.find({
-      $or: [
-        { dueDate: { $exists: true, $ne: '' } },
-        { nextActionDate: { $exists: true, $ne: '' } }
-      ],
-      currentStatus: { $nin: ['Settled', 'Closed', 'Closure', 'Resolved'] }
+    const activeCases = await Case.findAll({
+      where: {
+        [Op.or]: [
+          { dueDate: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] } },
+          { nextActionDate: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] } }
+        ],
+        currentStatus: { [Op.notIn]: ['Settled', 'Closed', 'Closure', 'Resolved'] }
+      }
     });
 
     const overdueCases = [];
@@ -122,26 +128,23 @@ const runDueCaseAlerts = async () => {
       const isAnyDue = isCaseDue || isActionDue;
 
       if (isAnyOverdue || isAnyDue) {
-        // Find Assignee user in DB to send them an email
         let assignee = null;
         if (caseItem.assignedTo && caseItem.assignedTo.trim() !== '') {
           try {
             assignee = await User.findOne({
-              fullName: { $regex: new RegExp(`^\\s*${caseItem.assignedTo.trim()}\\s*$`, 'i') }
+              where: { fullName: { [Op.like]: `%${caseItem.assignedTo.trim()}%` } }
             });
           } catch (err) {
             console.error('Error finding assignee user:', err);
           }
         }
 
-        // Build notification message and title
         let title = '';
         let message = '';
         let type = 'Warning';
         let emailSubject = '';
         let emailHtml = '';
 
-        // Determine date description
         let dateDesc = '';
         if (isCaseOverdue) {
           dateDesc = `Due Date (${caseItem.dueDate}) has passed`;
@@ -194,7 +197,6 @@ const runDueCaseAlerts = async () => {
           </div>
         `;
 
-        // Notify in-app: Both the Assignee and Admin
         const recipients = ['Admin'];
         if (assignee && assignee.email) {
           recipients.push(assignee.email);
@@ -204,30 +206,9 @@ const runDueCaseAlerts = async () => {
         } catch (notifErr) {
           console.error('Error creating notifications:', notifErr);
         }
-
-        // Notify via email: Both the Assignee and Admin
-        // NOTE: Disabled individual case alert emails to prevent spamming admins.
-        // We will send a consolidated summary instead or notify on user's first login of the day.
-        /*
-        const emailRecipientsList = [...adminsList.map(a => a.email)];
-        if (assignee && assignee.email) {
-          emailRecipientsList.push(assignee.email);
-        }
-        const uniqueEmailString = [...new Set(emailRecipientsList)].join(',');
-        
-        if (uniqueEmailString) {
-          try {
-            await sendEmail(uniqueEmailString, emailSubject, '', emailHtml);
-            console.log(`Alert email sent for case ${caseItem.caseId} to: ${uniqueEmailString}`);
-          } catch (mailErr) {
-            console.error(`Failed to send email alert for case ${caseItem.caseId}:`, mailErr);
-          }
-        }
-        */
       }
     }
 
-    // Send consolidated Case Due Dates summary email to all admins
     if ((overdueCases.length > 0 || dueTodayCases.length > 0) && adminEmailsStr) {
       try {
         const subject = `🚨 RRR System: Case Due Date Summary Alerts (${new Date().toLocaleDateString('en-IN')})`;
@@ -314,20 +295,19 @@ const sendUserOverdueAlerts = async (user) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const adminsList = await User.find({ role: 'Admin' });
+    const adminsList = await User.findAll({ where: { role: 'Admin' } });
     const adminEmails = adminsList.map(a => a.email);
 
-    // Query active cases
     let query = {
-      currentStatus: { $nin: ['Settled', 'Closed', 'Closure', 'Resolved'] }
+      currentStatus: { [Op.notIn]: ['Settled', 'Closed', 'Closure', 'Resolved'] }
     };
 
     const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user.role);
     if (!isAdmin) {
-      query.assignedTo = { $regex: new RegExp(`^\\s*${user.fullName.trim()}\\s*$`, 'i') };
+      query.assignedTo = { [Op.like]: `%${user.fullName.trim()}%` };
     }
 
-    const activeCases = await Case.find(query);
+    const activeCases = await Case.findAll({ where: query });
 
     const overdueCases = [];
     const dueTodayCases = [];
@@ -372,7 +352,6 @@ const sendUserOverdueAlerts = async (user) => {
       return;
     }
 
-    // Recipients: Logged in user + Admins
     const recipients = [user.email, ...adminEmails];
     const uniqueRecipients = [...new Set(recipients)].join(',');
 
@@ -453,13 +432,10 @@ const sendUserOverdueAlerts = async (user) => {
 };
 
 const initScheduler = () => {
-  // Run every morning at 9:00 AM
   cron.schedule('0 9 * * *', async () => {
     console.log('Running daily alert scheduler...');
     await runDueCaseAlerts();
   });
-
-  // Disabled initial startup scan to prevent flood of emails on server restarts
   console.log('Scheduler initialized (Startup scan disabled to avoid duplicate emails).');
 };
 

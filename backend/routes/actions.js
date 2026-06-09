@@ -1,14 +1,22 @@
 const express = require('express');
-const Action = require('../models/Action');
-const Timeline = require('../models/Timeline');
+const Action = require('../sql_models/Action');
+const Timeline = require('../sql_models/Timeline');
 const { verifyToken } = require('../middleware/auth');
 const router = express.Router();
 
 router.get('/', verifyToken, async (req, res) => {
   try {
     const query = req.query.caseId ? { caseId: req.query.caseId } : {};
-    const docs = await Action.find(query).sort({ dateTime: -1 });
-    res.json(docs);
+    const docs = await Action.findAll({
+      where: query,
+      order: [['dateTime', 'DESC']]
+    });
+    const formattedDocs = docs.map(d => {
+      const data = d.toJSON();
+      data._id = data.id;
+      return data;
+    });
+    res.json(formattedDocs);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -16,18 +24,16 @@ router.get('/', verifyToken, async (req, res) => {
 
 router.post('/', verifyToken, async (req, res) => {
   try {
-    const doc = new Action(req.body);
-    await doc.save();
+    const doc = await Action.create(req.body);
     
-    const timeline = new Timeline({
-        id: Date.now().toString(),
-        caseId: doc.caseId,
-        eventDate: doc.dateTime,
-        source: req.user.fullName || req.user.email || 'System',
-        eventType: doc.actionType,
-        summary: doc.remarks || doc.summary
+    await Timeline.create({
+      id: Date.now().toString() + Math.random().toString(36).substring(7),
+      caseId: doc.caseId,
+      eventDate: doc.dateTime,
+      source: req.user.fullName || req.user.email || 'System',
+      eventType: doc.actionType,
+      summary: doc.remarks || doc.summary
     });
-    await timeline.save();
 
     // Send Email Alert if Next Action Date is set
     if (doc.nextActionDate) {
@@ -57,7 +63,9 @@ router.post('/', verifyToken, async (req, res) => {
       }
     }
 
-    res.status(201).json(doc);
+    const responseDoc = doc.toJSON();
+    responseDoc._id = responseDoc.id;
+    res.status(201).json(responseDoc);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const Task = require('../models/Task');
-const Case = require('../models/Case');
+const { Op, Sequelize } = require('sequelize');
+const Task = require('../sql_models/Task');
+const Case = require('../sql_models/Case');
+const User = require('../sql_models/User');
 const { verifyToken } = require('../middleware/auth');
 const { createNotification } = require('../utils/notificationHelper');
-const User = require('../models/User');
 
 // Get all tasks - only from Task collection (no case merging)
 router.get('/', verifyToken, async (req, res) => {
@@ -14,28 +15,25 @@ router.get('/', verifyToken, async (req, res) => {
     let query = {};
     if (['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
       if (req.query.isLegalDashboard === 'true') {
-        const legalUsers = await User.find({ role: 'Legal' }).lean();
+        const legalUsers = await User.findAll({ where: { role: 'Legal' } });
         const legalNames = legalUsers.map(u => (u.fullName || u.name || '').trim()).filter(Boolean);
         const legalEmails = legalUsers.map(u => (u.email || '').trim()).filter(Boolean);
         if (legalNames.length > 0) {
-          const regexStr = legalNames.map(n => `^\\s*${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`).join('|');
-          query.$or = [
-            { assignee: new RegExp(regexStr, 'i') },
-            { createdBy: { $in: legalEmails } }
+          query[Op.or] = [
+            { assignee: { [Op.in]: legalNames } }, // Approximation, usually exact match is better for SQL
+            { createdBy: { [Op.in]: legalEmails } }
           ];
         } else {
           query.assignee = '__non_existent_user__';
         }
       } else if (assignee && assignee !== 'All Users' && assignee !== 'undefined') {
-        // Use \s* to ignore any leading/trailing spaces saved in the database
-        query.assignee = new RegExp(`^\\s*${assignee.trim()}\\s*$`, 'i');
+        query.assignee = { [Op.like]: `%${assignee.trim()}%` };
       }
     } else {
       // Non-admins see tasks assigned to them OR created by them
-      const esc = req.user.fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const nameRegex = new RegExp(`${esc}`, 'i');
-      query.$or = [
-        { assignee: nameRegex },
+      const nameRegex = `%${req.user.fullName}%`;
+      query[Op.or] = [
+        { assignee: { [Op.like]: nameRegex } },
         { createdBy: req.user.email }
       ];
     }
@@ -44,34 +42,35 @@ router.get('/', verifyToken, async (req, res) => {
       const dateObj = new Date(req.query.date);
       const start = new Date(dateObj.setHours(0, 0, 0, 0));
       const end = new Date(dateObj.setHours(23, 59, 59, 999));
-      query.updatedAt = { $gte: start, $lte: end };
+      query.updatedAt = { [Op.between]: [start, end] };
     }
 
     if (req.query.status_ne) {
-      query.status = { $ne: req.query.status_ne };
+      query.status = { [Op.ne]: req.query.status_ne };
     }
 
     if (req.query.status_nin) {
       const values = String(req.query.status_nin).split(',').map(v => v.trim()).filter(Boolean);
-      if (values.length) query.status = { $nin: values };
+      if (values.length) query.status = { [Op.notIn]: values };
     }
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 1000;
     const skip = (page - 1) * limit;
 
-    const total = await Task.countDocuments(query);
+    const total = await Task.count({ where: query });
 
-    const rawTasks = await Task.find(query)
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .select('taskId title priority assignee dueDate caseId details status reminderDateTime source notes createdBy createdAt updatedAt')
-      .lean();
+    const rawTasks = await Task.findAll({
+      where: query,
+      order: [['updatedAt', 'DESC']],
+      offset: skip,
+      limit: limit,
+      attributes: ['id', 'taskId', 'title', 'priority', 'assignee', 'dueDate', 'caseId', 'details', 'status', 'source', 'createdBy', 'createdAt', 'updatedAt']
+    });
 
     const caseIds = [...new Set(rawTasks.map(t => t.caseId).filter(Boolean))];
     const cases = caseIds.length
-      ? await Case.find({ caseId: { $in: caseIds } }, 'caseId companyName').lean()
+      ? await Case.findAll({ where: { caseId: { [Op.in]: caseIds } }, attributes: ['caseId', 'companyName'] })
       : [];
     const caseMap = {};
     cases.forEach(c => {
@@ -79,7 +78,8 @@ router.get('/', verifyToken, async (req, res) => {
     });
 
     const tasks = rawTasks.map(t => ({
-      ...t,
+      ...t.toJSON(),
+      _id: t.id, // For frontend compatibility
       companyName: caseMap[t.caseId] || ''
     }));
 
@@ -101,39 +101,38 @@ router.post('/', verifyToken, async (req, res) => {
     const linkedCaseId = req.body.caseId || '';
     const basePart = linkedCaseId || 'MAN';
     
-    // Count existing tasks to get a starting number
     let count = linkedCaseId
-      ? await Task.countDocuments({ caseId: linkedCaseId })
-      : await Task.countDocuments({ source: 'Manual' });
+      ? await Task.count({ where: { caseId: linkedCaseId } })
+      : await Task.count({ where: { source: 'Manual' } });
       
     let taskId = `TSK-${basePart}-${String(count + 1).padStart(3, '0')}`;
     
-    // Ensure taskId is unique by checking if it already exists
-    let exists = await Task.findOne({ taskId });
+    let exists = await Task.findOne({ where: { taskId } });
     while (exists) {
       count++;
       taskId = `TSK-${basePart}-${String(count + 1).padStart(3, '0')}`;
-      exists = await Task.findOne({ taskId });
+      exists = await Task.findOne({ where: { taskId } });
     }
-    const newTask = new Task({
+    const newTask = await Task.create({
       ...req.body,
       taskId,
       source: 'Manual',
       createdBy: req.user.email
     });
-    await newTask.save();
     
     // Notify Assignee
     try {
       const assigneeUser = await User.findOne({ 
-        fullName: { $regex: new RegExp(`^\\s*${req.body.assignee.trim()}\\s*$`, 'i') } 
+        where: { fullName: { [Op.like]: `%${req.body.assignee.trim()}%` } } 
       });
       if (assigneeUser) {
         createNotification(assigneeUser.email, 'New Task Assigned', `Task ${newTask.taskId}: ${newTask.title}`, 'Task', '/my-task');
       }
     } catch (e) { console.error('Task Notification Error:', e); }
 
-    res.status(201).json(newTask);
+    const responseObj = newTask.toJSON();
+    responseObj._id = newTask.id; // Frontend compatibility
+    res.status(201).json(responseObj);
   } catch (error) {
     console.error('Task Create Error:', error);
     res.status(500).json({ error: error.message });
@@ -145,12 +144,13 @@ router.put('/:id', verifyToken, async (req, res) => {
   try {
     const { status } = req.body;
     
-    // 1. Try updating as a manual Task
-    let updated = await Task.findByIdAndUpdate(
-      req.params.id, 
-      { ...req.body },
-      { new: true }
-    );
+    let updated = await Task.findByPk(req.params.id);
+    if (updated) {
+      await updated.update({ ...req.body });
+      const responseObj = updated.toJSON();
+      responseObj._id = updated.id;
+      return res.json(responseObj);
+    }
 
     // 2. If not found in Task, it might be a Case
     if (!updated) {
@@ -164,27 +164,20 @@ router.put('/:id', verifyToken, async (req, res) => {
         delete updatePayload.status;
       }
 
-      updated = await Case.findByIdAndUpdate(
-        req.params.id,
-        updatePayload,
-        { new: true }
-      );
+      updated = await Case.findByPk(req.params.id);
       
       if (updated) {
+        await updated.update(updatePayload);
         // Return in task-mapped format so frontend is happy
         return res.json({
-          _id: updated._id,
+          _id: updated.id,
           status: status, // The kanban status
           isCase: true
         });
       }
     }
 
-    if (!updated) {
-      return res.status(404).json({ error: 'Task or Case not found' });
-    }
-
-    res.json(updated);
+    return res.status(404).json({ error: 'Task or Case not found' });
   } catch (error) {
     console.error('Update Error:', error);
     res.status(500).json({ error: error.message });
@@ -194,10 +187,11 @@ router.put('/:id', verifyToken, async (req, res) => {
 // Delete task
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
-    const deletedTask = await Task.findByIdAndDelete(req.params.id);
+    const deletedTask = await Task.findByPk(req.params.id);
     if (!deletedTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
+    await deletedTask.destroy();
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
     console.error('Delete Error:', error);

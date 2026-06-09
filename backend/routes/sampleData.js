@@ -1,8 +1,8 @@
 const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
-const csv = require('csv-parser');
-const SampleData = require('../models/SampleData');
+const { Op } = require('sequelize');
+const SampleData = require('../sql_models/SampleData');
 const { verifyToken } = require('../middleware/auth');
 const router = express.Router();
 
@@ -10,7 +10,6 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 router.get('/', verifyToken, async (req, res) => {
   try {
-    // Only Admin or users with explicit access can see these records
     if (req.user.role !== 'Admin' && !req.user.canAccessRecords) {
       return res.status(403).json({ error: 'Access denied: You do not have permission to view these records.' });
     }
@@ -19,18 +18,22 @@ router.get('/', verifyToken, async (req, res) => {
     let query = {};
     if (search) {
       query = {
-        $or: [
-          { companyName: { $regex: search, $options: 'i' } },
-          { emailId: { $regex: search, $options: 'i' } },
-          { bde: { $regex: search, $options: 'i' } },
-          { contactPerson: { $regex: search, $options: 'i' } },
-          { contact: { $regex: search, $options: 'i' } },
-          { service: { $regex: search, $options: 'i' } },
-          { department: { $regex: search, $options: 'i' } }
+        [Op.or]: [
+          { companyName: { [Op.like]: `%${search}%` } },
+          { emailId: { [Op.like]: `%${search}%` } },
+          { bde: { [Op.like]: `%${search}%` } },
+          { contactPerson: { [Op.like]: `%${search}%` } },
+          { contact: { [Op.like]: `%${search}%` } },
+          { service: { [Op.like]: `%${search}%` } },
+          { department: { [Op.like]: `%${search}%` } }
         ]
       };
     }
-    const docs = await SampleData.find(query).sort({ _id: -1 }).limit(1000);
+    const docs = await SampleData.findAll({
+      where: query,
+      order: [['id', 'DESC']],
+      limit: 1000
+    });
     res.json(docs);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -51,7 +54,6 @@ router.post('/import', verifyToken, roleGuard(['Admin']), upload.single('file'),
     const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { cellDates: true });
 
     const results = data.map(row => {
-      // Helper to find key case-insensitively and trimmed
       const getVal = (possibleKeys, isDateField = false) => {
         const foundKey = Object.keys(row).find(k => 
           possibleKeys.includes(k.trim().toLowerCase())
@@ -59,13 +61,11 @@ router.post('/import', verifyToken, roleGuard(['Admin']), upload.single('file'),
         if (!foundKey) return '';
         const val = row[foundKey];
         
-        // Only treat as date if explicitly marked as a date field column
         if (isDateField) {
           if (val instanceof Date) {
             return val.toLocaleDateString('en-IN');
           }
           if (typeof val === 'number') {
-            // Convert Excel serial date to DD/MM/YYYY
             const date = new Date((val - 25569) * 86400 * 1000);
             return date.toLocaleDateString('en-IN');
           }
@@ -92,7 +92,7 @@ router.post('/import', verifyToken, roleGuard(['Admin']), upload.single('file'),
       };
     });
 
-    await SampleData.insertMany(results);
+    await SampleData.bulkCreate(results);
     res.status(201).json({ message: `Successfully imported ${results.length} records.` });
   } catch (error) {
     res.status(500).json({ error: error.message });

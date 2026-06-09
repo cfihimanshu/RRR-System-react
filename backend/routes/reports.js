@@ -1,10 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const Report = require('../models/Report');
-const Task = require('../models/Task');
-const Case = require('../models/Case');
+const { Op } = require('sequelize');
+const { sequelize } = require('../config/sequelize');
+
+const Report = require('../sql_models/Report');
+const Task = require('../sql_models/Task');
+const Case = require('../sql_models/Case');
+const User = require('../sql_models/User');
 const { verifyToken } = require('../middleware/auth');
-const User = require('../models/User');
 
 // Get all reports or user-specific reports
 router.get('/', verifyToken, async (req, res) => {
@@ -26,110 +29,61 @@ router.get('/', verifyToken, async (req, res) => {
     const limitNum = Math.min(parseInt(req.query.limit) || 50, 1000);
     const skipNum = (page - 1) * limitNum;
 
-    // Fast path for dashboard / SOD checks — skip expensive timeline+task lookups
     if (req.query.light === 'true') {
-      const [reports, total] = await Promise.all([
-        Report.find(matchQuery)
-          .sort({ createdAt: -1 })
-          .skip(skipNum)
-          .limit(limitNum)
-          .select('type userName userEmail date checkInTime checkOutTime workDuration completionStatus createdAt myTasksToday sodCaseIds sodTaskIds selfieUrl latitude longitude gpsAddress')
-          .lean(),
-        Report.countDocuments(matchQuery)
-      ]);
+      const reportsRaw = await Report.findAll({
+        where: matchQuery,
+        order: [['createdAt', 'DESC']],
+        offset: skipNum,
+        limit: limitNum
+      });
+      const reports = reportsRaw.map(r => {
+        const json = r.toJSON();
+        return {
+          ...json,
+          ...(json.data || {})
+        };
+      });
+      const total = await Report.count({ where: matchQuery });
+      
       res.set('Cache-Control', 'private, max-age=30');
       return res.json({ reports, total, page, pages: Math.ceil(total / limitNum) });
     }
 
-    const reports = await Report.aggregate([
-      { $match: matchQuery },
-      { $sort: { createdAt: -1 } },
-      { $skip: skipNum },
-      { $limit: limitNum },
-      {
-        $lookup: {
-          from: 'timelines',
-          let: { rDate: '$date', rUser: '$userName', rEmail: '$userEmail' },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $regexMatch: { input: '$eventDate', regex: { $concat: ['^', '$$rDate'] } } },
-                    { 
-                      $or: [
-                        { $eq: ['$source', '$$rUser'] },
-                        { $eq: ['$source', '$$rEmail'] }
-                      ]
-                    }
-                  ]
-                }
-              }
-            },
-            {
-              $group: {
-                _id: null,
-                commCount: {
-                  $sum: {
-                    $cond: [{ $in: ['$eventType', ['Call', 'Email', 'Whatsapp', 'Meeting']] }, 1, 0]
-                  }
-                },
-                docCount: {
-                  $sum: {
-                    $cond: [{ $eq: ['$eventType', 'Document Upload'] }, 1, 0]
-                  }
-                },
-                progressCount: {
-                  $sum: {
-                    $cond: [{ $eq: ['$eventType', 'Progress Update'] }, 1, 0]
-                  }
-                }
-              }
-            }
-          ],
-          as: 'activityCounts'
-        }
-      },
-      {
-        $lookup: {
-          from: 'tasks',
-          let: { rDate: '$date', rUser: '$userName' },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: [{ $dateToString: { format: "%Y-%m-%d", date: "$updatedAt" } }, "$$rDate"] },
-                    { $eq: ["$assignee", "$$rUser"] }
-                  ]
-                }
-              }
-            },
-            { $count: "count" }
-          ],
-          as: 'taskActivity'
-        }
-      },
-      {
-        $addFields: {
-          activityCounts: { $arrayElemAt: ['$activityCounts', 0] },
-          taskActivity: { $arrayElemAt: ['$taskActivity', 0] }
-        }
-      },
-      {
-        $addFields: {
-          commCount: { $ifNull: ['$activityCounts.commCount', 0] },
-          docCount: { $ifNull: ['$activityCounts.docCount', 0] },
-          progressCount: { $ifNull: ['$activityCounts.progressCount', 0] },
-          taskCount: { $ifNull: ['$taskActivity.count', 0] }
-        }
-      },
-      {
-        $project: {
-          activityCounts: 0
-        }
-      }
-    ]);
+    // Build WHERE clause for raw query
+    let whereFragments = [];
+    let replacements = { limit: limitNum, skip: skipNum };
+
+    if (matchQuery.userEmail) {
+      whereFragments.push('r.userEmail = :userEmail');
+      replacements.userEmail = matchQuery.userEmail;
+    }
+    if (matchQuery.date) {
+      whereFragments.push('r.date = :date');
+      replacements.date = matchQuery.date;
+    }
+    if (matchQuery.type) {
+      whereFragments.push('r.type = :type');
+      replacements.type = matchQuery.type;
+    }
+
+    const whereClauseString = whereFragments.length > 0 ? 'WHERE ' + whereFragments.join(' AND ') : '';
+
+    const rawQuery = `
+      SELECT r.*,
+             (SELECT COUNT(*) FROM timelines t WHERE t.eventDate LIKE CONCAT(r.date, '%') AND (t.source = r.userName OR t.source = r.userEmail) AND t.eventType IN ('Call', 'Email', 'Whatsapp', 'Meeting')) AS commCount,
+             (SELECT COUNT(*) FROM timelines t WHERE t.eventDate LIKE CONCAT(r.date, '%') AND (t.source = r.userName OR t.source = r.userEmail) AND t.eventType = 'Document Upload') AS docCount,
+             (SELECT COUNT(*) FROM timelines t WHERE t.eventDate LIKE CONCAT(r.date, '%') AND (t.source = r.userName OR t.source = r.userEmail) AND t.eventType = 'Progress Update') AS progressCount,
+             (SELECT COUNT(*) FROM tasks tk WHERE DATE(tk.updatedAt) = r.date AND tk.assignee = r.userName) AS taskCount
+      FROM reports r
+      ${whereClauseString}
+      ORDER BY r.createdAt DESC
+      LIMIT :limit OFFSET :skip
+    `;
+
+    const reports = await sequelize.query(rawQuery, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
 
     res.json(reports);
   } catch (error) {
@@ -149,7 +103,6 @@ router.post('/', verifyToken, async (req, res) => {
 
     const isExempt = ['admin', 'super admin', 'superadmin', 'reviewer', 'accountant', 'operation head', 'operation review'].includes(req.user.role?.toLowerCase().trim());
 
-    // Validation: Require GPS Selfie and Coordinates for SOD/EOD for non-exempt roles
     if ((reportData.type === 'SOD' || reportData.type === 'EOD') && !isExempt) {
       if (!reportData.selfieUrl) {
         return res.status(400).json({ error: 'GPS Selfie is required for SOD/EOD submission!' });
@@ -160,16 +113,21 @@ router.post('/', verifyToken, async (req, res) => {
     }
 
     if (reportData.type === 'SOD' && !isExempt) {
-      const User = require('../models/User');
-      const user = await User.findById(req.user.id).lean();
+      const user = await User.findByPk(req.user.id);
       if (!user?.bypassEodCheck) {
         const nowForIST = new Date();
         const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
         const todayStr = istTime.toISOString().split('T')[0];
         
-        const lastSod = await Report.findOne({ userEmail: req.user.email, type: 'SOD', date: { $lt: todayStr } }).sort({ date: -1 }).lean();
+        const lastSod = await Report.findOne({ 
+          where: { userEmail: req.user.email, type: 'SOD', date: { [Op.lt]: todayStr } },
+          order: [['date', 'DESC']]
+        });
+        
         if (lastSod) {
-          const lastEod = await Report.findOne({ userEmail: req.user.email, type: 'EOD', date: lastSod.date }).lean();
+          const lastEod = await Report.findOne({ 
+            where: { userEmail: req.user.email, type: 'EOD', date: lastSod.date }
+          });
           if (!lastEod) {
             return res.status(403).json({ error: 'You missed filling your EOD report on a previous day. Please contact Admin to grant you access to fill SOD.' });
           }
@@ -177,15 +135,13 @@ router.post('/', verifyToken, async (req, res) => {
       }
     }
 
-    const report = new Report(reportData);
-    await report.save();
+    const report = await Report.create(reportData);
 
-    // Reset bypassEodCheck if this was a SOD submission
     if (report.type === 'SOD') {
-      await User.findByIdAndUpdate(req.user.id, { 
-        bypassEodCheck: false,
-        sodAccessGrantedAt: ""
-      });
+      await User.update(
+        { bypassEodCheck: false, sodAccessGrantedAt: "" },
+        { where: { id: req.user.id } }
+      );
     }
 
     res.status(201).json(report);
@@ -211,27 +167,31 @@ router.get('/stats', verifyToken, async (req, res) => {
       caseQuery.assignedTo = req.user.fullName;
     }
 
-    const manualTasksCount = await Task.countDocuments(taskQuery);
-    const manualCompletedCount = await Task.countDocuments({ ...taskQuery, status: 'Completed' });
+    const manualTasksCount = await Task.count({ where: taskQuery });
+    const manualCompletedCount = await Task.count({ where: { ...taskQuery, status: 'Completed' } });
     
-    const totalCasesCount = await Case.countDocuments(caseQuery);
-    const settledCasesCount = await Case.countDocuments({ 
-      ...caseQuery, 
-      currentStatus: { $in: ['Settled', 'Settlement'] } 
+    const totalCasesCount = await Case.count({ where: caseQuery });
+    const settledCasesCount = await Case.count({ 
+      where: { ...caseQuery, currentStatus: { [Op.in]: ['Settled', 'Settlement'] } } 
     });
 
-    const closedCasesCount = await Case.countDocuments({ 
-      ...caseQuery, 
-      currentStatus: { $in: ['Closed', 'Closure'] } 
+    const closedCasesCount = await Case.count({ 
+      where: { ...caseQuery, currentStatus: { [Op.in]: ['Closed', 'Closure'] } } 
     });
 
-    const sodToday = await Report.countDocuments({ ...query, type: 'SOD', createdAt: { $gte: today } });
-    const eodToday = await Report.countDocuments({ ...query, type: 'EOD', createdAt: { $gte: today } });
+    const sodToday = await Report.count({ where: { ...query, type: 'SOD', createdAt: { [Op.gte]: today } } });
+    const eodToday = await Report.count({ where: { ...query, type: 'EOD', createdAt: { [Op.gte]: today } } });
 
     let workingHours = 0;
     if (!isAdmin) {
-      const firstSod = await Report.findOne({ ...query, type: 'SOD', createdAt: { $gte: today } }).sort({ createdAt: 1 }).lean();
-      const lastEod = await Report.findOne({ ...query, type: 'EOD', createdAt: { $gte: today } }).sort({ createdAt: -1 }).lean();
+      const firstSod = await Report.findOne({ 
+        where: { ...query, type: 'SOD', createdAt: { [Op.gte]: today } },
+        order: [['createdAt', 'ASC']]
+      });
+      const lastEod = await Report.findOne({ 
+        where: { ...query, type: 'EOD', createdAt: { [Op.gte]: today } },
+        order: [['createdAt', 'DESC']]
+      });
       
       if (firstSod) {
         const startTime = new Date(firstSod.createdAt);
@@ -268,25 +228,20 @@ router.get('/mis', verifyToken, async (req, res) => {
       'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'
     ];
     
-    // Calculate today's date boundaries in IST
     const nowForIST = new Date();
     const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
     const todayStr = istTime.toISOString().split('T')[0];
     const startOfToday = new Date(`${todayStr}T00:00:00+05:30`);
 
     const isOperationHead = req.user?.role?.toLowerCase().trim() === 'operation head';
-    const caseQuery = { isArchived: { $ne: true } };
+    const caseQuery = { isArchived: { [Op.not]: true } };
     if (!isOperationHead) {
-      caseQuery.sourceOfComplaint = { $not: /^\s*odoo\s*$/i };
+      caseQuery.sourceOfComplaint = { [Op.notLike]: '%odoo%' };
     }
 
-    // Fetch all cases matching the query
-    const allCases = await Case.find(caseQuery).lean();
-    
-    // Fetch all users
-    const allUsers = await User.find({}, 'fullName email role monthlyTarget').lean();
+    const allCases = await Case.findAll({ where: caseQuery });
+    const allUsers = await User.findAll({ attributes: ['id', 'fullName', 'email', 'role', 'monthlyTarget'] });
 
-    // 1. Overview metrics
     let totalActiveCases = 0;
     let totalActiveCasesAmount = 0;
     let pendingOverdueCases = 0;
@@ -297,7 +252,6 @@ router.get('/mis', verifyToken, async (req, res) => {
     const activeCasesList = [];
     const todayCasesList = [];
 
-    // Helper to check if a case status is completed/resolved
     const isCompleted = (status) => {
       if (!status) return false;
       return completedStatuses.includes(status.trim());
@@ -314,7 +268,6 @@ router.get('/mis', verifyToken, async (req, res) => {
         totalActiveCasesAmount += (c.totalAmtPaid || 0);
         totalAmountAtRisk += (c.totalAmtPaid || 0);
 
-        // Check if overdue: dueDate is older than or equal to today
         if (c.dueDate) {
           const dueClean = c.dueDate.trim();
           if (dueClean <= todayStr) {
@@ -322,7 +275,6 @@ router.get('/mis', verifyToken, async (req, res) => {
             pendingOverdueCasesAmount += (c.totalAmtPaid || 0);
           }
         } else {
-          // If no due date, count as requiring attention if it is active
           pendingOverdueCases++;
           pendingOverdueCasesAmount += (c.totalAmtPaid || 0);
         }
@@ -350,13 +302,12 @@ router.get('/mis', verifyToken, async (req, res) => {
       }
     });
 
-    // 2. Assignee performance calculations
     const assigneeStatsMap = {};
 
     allUsers.forEach(u => {
       const key = u.fullName.trim().toLowerCase();
       assigneeStatsMap[key] = {
-        userId: u._id,
+        userId: u.id,
         name: u.fullName.trim(),
         email: u.email,
         role: u.role,
@@ -399,7 +350,7 @@ router.get('/mis', verifyToken, async (req, res) => {
       if (isCaseResolved) {
         stats.resolvedCases++;
         stats.resolvedAmt += saved;
-        stats.saved += saved; // progress towards target
+        stats.saved += saved;
       } else {
         stats.pendingCases++;
         stats.pendingAmt += amt;

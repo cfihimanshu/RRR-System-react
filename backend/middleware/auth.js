@@ -8,8 +8,8 @@ const verifyToken = async (req, res, next) => {
     const tokenParts = token.split(' ');
     const decoded = jwt.verify(tokenParts[tokenParts.length - 1], process.env.JWT_SECRET);
     
-    const User = require('../models/User');
-    const user = await User.findById(decoded.id).select('passwordVersion').lean();
+    const User = require('../sql_models/User');
+    const user = await User.findByPk(decoded.id, { attributes: ['passwordVersion'] });
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -27,7 +27,7 @@ const verifyToken = async (req, res, next) => {
     }
     
     // Update lastSeen asynchronously
-    User.findByIdAndUpdate(decoded.id, { lastSeen: new Date() }).exec().catch(err => console.error('Failed to update lastSeen:', err));
+    User.update({ lastSeen: new Date() }, { where: { id: decoded.id } }).catch(err => console.error('Failed to update lastSeen:', err));
 
     next();
   } catch (err) {

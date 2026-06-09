@@ -1,5 +1,5 @@
 const express = require('express');
-const LeaveRequest = require('../models/LeaveRequest');
+const LeaveRequest = require('../sql_models/LeaveRequest');
 const { verifyToken } = require('../middleware/auth');
 const router = express.Router();
 
@@ -13,10 +13,11 @@ router.post('/', verifyToken, async (req, res) => {
     payload.timestamp = new Date().toISOString();
     payload.status = 'Pending Review';
 
-    const leave = new LeaveRequest(payload);
-    await leave.save();
+    const leave = await LeaveRequest.create(payload);
 
-    res.status(201).json(leave);
+    const data = leave.toJSON();
+    data._id = data.id;
+    res.status(201).json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -29,8 +30,16 @@ router.get('/', verifyToken, async (req, res) => {
     if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer'].includes(req.user.role)) {
       query.requestedBy = req.user.email;
     }
-    const list = await LeaveRequest.find(query).sort({ timestamp: -1 });
-    res.json(list);
+    const list = await LeaveRequest.findAll({
+      where: query,
+      order: [['timestamp', 'DESC']]
+    });
+    const formatted = list.map(l => {
+      const data = l.toJSON();
+      data._id = data.id;
+      return data;
+    });
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -47,15 +56,16 @@ router.put('/:id/status', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid status value' });
     }
 
-    const leave = await LeaveRequest.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
+    const leave = await LeaveRequest.findByPk(req.params.id);
     if (!leave) {
       return res.status(404).json({ error: 'Leave request not found' });
     }
-    res.json(leave);
+    
+    await leave.update({ status });
+
+    const data = leave.toJSON();
+    data._id = data.id;
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

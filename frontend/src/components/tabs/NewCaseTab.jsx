@@ -706,9 +706,9 @@ const NewCaseTab = () => {
               </div>
             )}
 
-            {formData.typeOfComplaint === '1930 Cyber Complaint' && (
+            {['1930 Cyber Complaint', 'Criminal Complaint/FIR'].includes(formData.typeOfComplaint) && (
               <div>
-                <label className={labelClass}>Acknowledgment Numbers</label>
+                <label className={labelClass}>Acknowledgment Numbers {formData.typeOfComplaint === 'Criminal Complaint/FIR' ? '(If Any)' : ''}</label>
                 {cyberAcks.map((ack, idx) => (
                   <div key={idx} className="flex gap-3 mb-3">
                     <input

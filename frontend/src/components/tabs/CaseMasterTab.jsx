@@ -36,7 +36,8 @@ import {
   AlignCenter,
   AlignRight,
   AlignJustify,
-  Indent
+  Indent,
+  ListFilterPlus
 } from 'lucide-react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -201,6 +202,25 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   const [importing, setImporting] = useState(false);
   const [viewCase, setViewCase] = useState(null);
   const [activeDetailTab, setActiveDetailTab] = useState('Case Details');
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    const saved = localStorage.getItem('caseMasterVisibleCols');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { }
+    }
+    return ['caseId', 'createdDate', 'company', 'client', 'typeOfComplaint', 'totalAmtPaid', 'priority', 'dueDate', 'status', 'refund', 'assignedTo', 'lastUpdateDate'];
+  });
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  useEffect(() => {
+    localStorage.setItem('caseMasterVisibleCols', JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  const toggleColumn = (key) => {
+    setVisibleColumns(prev => {
+      if (prev.includes(key)) return prev.filter(k => k !== key);
+      return [...prev, key];
+    });
+  };
+
   const [timelineLogs, setTimelineLogs] = useState([]);
   const [expandedRows, setExpandedRows] = useState({});
   const [refundsList, setRefundsList] = useState([]);
@@ -408,11 +428,13 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
           clientMobile: '',
           anyDetail: '',
           selectedField: '',
-          selectedValue: ''
+          selectedValue: '',
+          conditions: []
         };
         if (parsed.customFilters.anyDetail === undefined) parsed.customFilters.anyDetail = '';
         if (parsed.customFilters.selectedField === undefined) parsed.customFilters.selectedField = '';
         if (parsed.customFilters.selectedValue === undefined) parsed.customFilters.selectedValue = '';
+        if (!parsed.customFilters.conditions) parsed.customFilters.conditions = [];
         return parsed;
       } catch (e) { }
     }
@@ -1107,30 +1129,62 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   const handleExportExcel = () => {
     if (filteredCases.length === 0) return toast.error('No data to export');
 
-    const headers = ['Case ID', 'Created', 'Company', 'Client', 'Type of Complaint', 'Amount Received', 'Priority', 'Status', 'Refund', 'Assigned To'];
-    const data = filteredCases.map(c => {
-      const cRef = refundsList.find(r => r.caseId === c.caseId);
-      let refundVal = 'No Refund';
-      if (cRef) {
-        const isPaid = cRef.transactionId && (cRef.installments || []).length <= 1;
-        refundVal = (cRef.status === 'Paid' || isPaid) ? 'Paid' : 'Pending';
-      }
+    const columnDefs = [
+      { label: 'Case ID', key: 'caseId', getVal: c => c.caseId || c.caseid || '' },
+      { label: 'Created', key: 'createdDate', getVal: c => c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '' },
+      { label: 'Company', key: 'company', getVal: c => c.companyName || '' },
+      { label: 'Client', key: 'client', getVal: c => c.clientName || '' },
+      { label: 'Type of Complaint', key: 'typeOfComplaint', getVal: c => c.typeOfComplaint || '' },
+      { label: 'Amount Received', key: 'totalAmtPaid', getVal: c => c.totalAmtPaid || '0' },
+      { label: 'Priority', key: 'priority', getVal: c => c.priority || '' },
+      { label: 'Due Date', key: 'dueDate', getVal: c => c.dueDate ? format(new Date(c.dueDate), 'dd/MM/yyyy') : '' },
+      { label: 'Status', key: 'status', getVal: c => normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy) },
+      {
+        label: 'Refund', key: 'refund', getVal: c => {
+          const r = refundsList.find(x => x.caseId === c.caseId);
+          if (!r) return 'No Refund';
+          const paid = r.transactionId && (r.installments || []).length <= 1;
+          return (r.status?.toLowerCase() === 'paid' || paid) ? 'Paid' : 'Pending';
+        }
+      },
+      { label: 'Assigned To', key: 'assignedTo', getVal: c => c.assignedTo || c.initiatedBy || '' },
+      { label: 'Last Update', key: 'lastUpdateDate', getVal: c => c.lastUpdateDate ? format(new Date(c.lastUpdateDate), 'dd/MM/yyyy') : '' },
+      ...filterableFields.filter(f => ['clientMobile', 'clientEmail', 'state', 'city', 'sourceOfComplaint', 'amtInDispute', 'bda', 'workStatus', 'legalOfficer', 'serviceName', 'dateOfLastPayment', 'mouSigned', 'totalMouValue', 'clientAllegation', 'caseSummary'].includes(f.key)).map(f => ({
+        label: f.label,
+        key: f.key,
+        getVal: c => {
+          if (f.key.includes('.')) {
+            const [p, ch] = f.key.split('.');
+            return c[p]?.[ch] || '';
+          }
+          let val = c[f.key];
+          if (val === undefined || val === null) return '';
+          if (['dateOfLastPayment', 'lienMarkedOn', 'createdDate'].includes(f.key)) {
+            try {
+              const d = new Date(val);
+              if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+            } catch (e) { }
+          }
+          return String(val);
+        }
+      }))
+    ];
 
-      return {
-        'Case ID': c.caseId,
-        'Created': c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '',
-        'Company': c.companyName,
-        'Client': c.clientName,
-        'Type of Complaint': c.typeOfComplaint || '-',
-        'Amount Received': c.totalAmtPaid || '0',
-        'Priority': c.priority,
-        'Status': normalizeStatus(c.currentStatus || c.status, c.assignedTo, c.initiatedBy),
-        'Refund': refundVal,
-        'Assigned To': c.assignedTo || c.initiatedBy || ''
-      };
+    const activeCols = columnDefs.filter(col => visibleColumns.includes(col.key));
+    if (activeCols.length === 0) {
+      return toast.error('No columns selected for export');
+    }
+
+    const headers = activeCols.map(c => c.label);
+    const data = filteredCases.map(c => {
+      const rowData = {};
+      activeCols.forEach(col => {
+        rowData[col.label] = col.getVal(c);
+      });
+      return rowData;
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
+    const worksheet = XLSX.utils.json_to_sheet(data, { header: headers });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Cases");
 
@@ -1138,7 +1192,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     const maxWidths = headers.map(h => ({ wch: h.length + 5 }));
     data.forEach(row => {
       Object.values(row).forEach((val, i) => {
-        const len = val ? val.toString().length : 0;
+        const len = val ? String(val).length : 0;
         if (len + 2 > maxWidths[i].wch) maxWidths[i].wch = len + 2;
       });
     });
@@ -1394,6 +1448,36 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       if (customFilters.clientMobile && !c.clientMobile?.toLowerCase().includes(customFilters.clientMobile.toLowerCase())) {
         matchCustom = false;
       }
+
+      if (customFilters.conditions && customFilters.conditions.length > 0) {
+        for (const cond of customFilters.conditions) {
+          if (!cond.field) continue;
+          let cVal = '';
+          if (cond.field.includes('.')) {
+            const [p, ch] = cond.field.split('.');
+            cVal = String(c[p]?.[ch] || '');
+          } else {
+            cVal = String(c[cond.field] || '');
+          }
+          cVal = cVal.toLowerCase().trim();
+          const vVal = String(cond.value || '').toLowerCase().trim();
+
+          let condMatch = true;
+          switch (cond.operator) {
+            case 'contains': condMatch = cVal.includes(vVal); break;
+            case 'equals': condMatch = cVal === vVal; break;
+            case 'not_equals': condMatch = cVal !== vVal; break;
+            case 'starts_with': condMatch = cVal.startsWith(vVal); break;
+            case 'is_empty': condMatch = (!cVal || cVal === '—' || cVal === '-'); break;
+            case 'is_not_empty': condMatch = !!(cVal && cVal !== '—' && cVal !== '-'); break;
+          }
+          if (!condMatch) {
+            matchCustom = false;
+            break;
+          }
+        }
+      }
+
       if (customFilters.selectedField && customFilters.selectedValue) {
         const fieldKey = customFilters.selectedField;
         const serviceKeys = ['serviceName', 'bda', 'workStatus', 'serviceAmount', 'signedMouAmount', 'department', 'serviceMouSigned'];
@@ -2782,7 +2866,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                 </div>
               )}
 
-              {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin') && (
+              {(user?.role === 'Admin' || user?.role === 'Super Admin') && (
                 <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
                   <button onClick={handleExportExcel} className="w-full bg-bg-card hover:bg-bg-input text-text-primary border-2 border-border font-black py-2.5 px-4 md:px-6 rounded-2xl shadow-sm text-[10px] md:text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95">
                     <FileDown size={16} /> Export
@@ -2816,6 +2900,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+
             <div className="relative">
               <button
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
@@ -3477,6 +3562,83 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                                   ))}
                                 </div>
                               )}
+                              <div className="mt-6 border-t-2 border-border pt-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h4 className="text-xs font-bold text-text-secondary uppercase tracking-widest">Advanced Conditions</h4>
+                                  <button
+                                    onClick={() => {
+                                      setTempFilters(prev => ({
+                                        ...prev,
+                                        customFilters: {
+                                          ...prev.customFilters,
+                                          conditions: [...(prev.customFilters?.conditions || []), { field: filterableFields[0].key, operator: 'contains', value: '' }]
+                                        }
+                                      }))
+                                    }}
+                                    className="flex items-center gap-1 text-[10px] font-black text-accent hover:text-accent-hover uppercase bg-accent-soft px-2 py-1 rounded transition-colors"
+                                  >
+                                    <Plus size={12} /> Add Condition
+                                  </button>
+                                </div>
+                                <div className="space-y-3">
+                                  {(tempFilters.customFilters?.conditions || []).map((cond, idx) => (
+                                    <div key={idx} className="flex flex-col sm:flex-row items-center gap-2 bg-bg-secondary p-2 rounded-xl border border-border">
+                                      <select
+                                        value={cond.field}
+                                        onChange={e => {
+                                          const newConds = [...(tempFilters.customFilters.conditions || [])];
+                                          newConds[idx].field = e.target.value;
+                                          setTempFilters(prev => ({ ...prev, customFilters: { ...prev.customFilters, conditions: newConds } }));
+                                        }}
+                                        className="w-full sm:w-1/3 px-2 py-1.5 text-xs border border-border rounded-lg bg-bg-input text-text-primary focus:border-accent outline-none"
+                                      >
+                                        {filterableFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                                      </select>
+                                      <select
+                                        value={cond.operator}
+                                        onChange={e => {
+                                          const newConds = [...(tempFilters.customFilters.conditions || [])];
+                                          newConds[idx].operator = e.target.value;
+                                          setTempFilters(prev => ({ ...prev, customFilters: { ...prev.customFilters, conditions: newConds } }));
+                                        }}
+                                        className="w-full sm:w-1/4 px-2 py-1.5 text-xs border border-border rounded-lg bg-bg-input text-text-primary focus:border-accent outline-none"
+                                      >
+                                        <option value="contains">contains</option>
+                                        <option value="equals">is exactly</option>
+                                        <option value="not_equals">is not</option>
+                                        <option value="starts_with">starts with</option>
+                                        <option value="is_empty">is empty</option>
+                                        <option value="is_not_empty">is not empty</option>
+                                      </select>
+                                      {cond.operator !== 'is_empty' && cond.operator !== 'is_not_empty' && (
+                                        <input
+                                          type="text"
+                                          placeholder="Value..."
+                                          value={cond.value}
+                                          onChange={e => {
+                                            const newConds = [...(tempFilters.customFilters.conditions || [])];
+                                            newConds[idx].value = e.target.value;
+                                            setTempFilters(prev => ({ ...prev, customFilters: { ...prev.customFilters, conditions: newConds } }));
+                                          }}
+                                          className="w-full sm:w-1/3 px-2 py-1.5 text-xs border border-border rounded-lg bg-bg-input text-text-primary focus:border-accent outline-none"
+                                        />
+                                      )}
+                                      <button
+                                        onClick={() => {
+                                          const newConds = (tempFilters.customFilters.conditions || []).filter((_, i) => i !== idx);
+                                          setTempFilters(prev => ({ ...prev, customFilters: { ...prev.customFilters, conditions: newConds } }));
+                                        }}
+                                        className="p-1.5 text-text-muted hover:text-red hover:bg-red-soft rounded-lg transition-colors"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {(tempFilters.customFilters?.conditions?.length === 0 || !tempFilters.customFilters?.conditions) && (
+                                    <div className="text-[10px] text-center text-text-muted font-medium py-2">No advanced conditions added.</div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           );
                         })()}
@@ -3563,6 +3725,53 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                 <span className="text-[10px] font-bold uppercase tracking-widest italic">Filtering for "{searchTerm}"</span>
               </div>
             )}
+
+            <div className="relative ml-auto">
+              <button
+                title="Toggle Columns"
+                onClick={() => setShowColumnDropdown(!showColumnDropdown)}
+                className={`flex items-center justify-center w-12 h-12 border-2 rounded-xl shadow-md active:scale-95 transition-all ${showColumnDropdown ? 'bg-accent border-accent text-white' : 'bg-bg-card border-border text-text-primary hover:border-accent hover:text-accent'}`}
+              >
+                <ListFilterPlus size={24} strokeWidth={2.5} />
+              </button>
+              {showColumnDropdown && (
+                <>
+                  <div className="fixed inset-0 z-[90]" onClick={() => setShowColumnDropdown(false)}></div>
+                  <div className="absolute top-full right-0 mt-2 w-[260px] max-h-[400px] overflow-y-auto bg-bg-card rounded-2xl shadow-2xl border-2 border-border z-[100] animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="p-3 border-b border-border bg-bg-secondary sticky top-0 flex justify-between items-center z-10">
+                      <span className="text-xs font-black uppercase tracking-widest text-text-primary">Toggle Columns</span>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      {[
+                        { label: 'Case ID', key: 'caseId' },
+                        { label: 'Created', key: 'createdDate' },
+                        { label: 'Company', key: 'company' },
+                        { label: 'Client', key: 'client' },
+                        { label: 'Type of Complaint', key: 'typeOfComplaint' },
+                        { label: 'Amount Received', key: 'totalAmtPaid' },
+                        { label: 'Priority', key: 'priority' },
+                        { label: 'Due Date', key: 'dueDate' },
+                        { label: 'Status', key: 'status' },
+                        { label: 'Refund', key: 'refund' },
+                        { label: 'Assigned To', key: 'assignedTo' },
+                        { label: 'Last Update', key: 'lastUpdateDate' },
+                        ...filterableFields.filter(f => ['clientMobile', 'clientEmail', 'state', 'city', 'sourceOfComplaint', 'amtInDispute', 'bda', 'workStatus', 'legalOfficer', 'serviceName', 'dateOfLastPayment', 'mouSigned', 'totalMouValue', 'clientAllegation', 'caseSummary'].includes(f.key)).map(f => ({ label: f.label, key: f.key }))
+                      ].map(col => (
+                        <div key={col.key} onClick={(e) => {
+                          e.stopPropagation();
+                          setVisibleColumns(prev => prev.includes(col.key) ? prev.filter(k => k !== col.key) : [...prev, col.key]);
+                        }} className="flex items-center gap-3 px-3 py-2 hover:bg-bg-input rounded-xl cursor-pointer transition-colors group">
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${visibleColumns.includes(col.key) ? 'bg-accent border-accent text-white' : 'border-border group-hover:border-accent'}`}>
+                            {visibleColumns.includes(col.key) && <Check size={10} strokeWidth={4} />}
+                          </div>
+                          <span className="text-[11px] font-bold text-text-secondary truncate">{col.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -3834,9 +4043,9 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     </div>
 
                     {/* Conditional Complaint Fields Integrated into Grid */}
-                    {(formData.typeOfComplaint === 'Cyber Complaint' || formData.typeOfComplaint === '1930 Cyber Complaint') && (
+                    {['Cyber Complaint', '1930 Cyber Complaint', 'Criminal Complaint/FIR', 'FIR'].includes(formData.typeOfComplaint) && (
                       <div className="lg:col-span-2">
-                        <label className={labelClass}>Acknowledgment Numbers</label>
+                        <label className={labelClass}>Acknowledgment Numbers {['Criminal Complaint/FIR', 'FIR'].includes(formData.typeOfComplaint) ? '(If Any)' : ''}</label>
                         <div className="space-y-3">
                           {cyberAcks.map((ack, idx) => (
                             <div key={idx} className="flex gap-3">
@@ -5563,7 +5772,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     </th>
                   )}
                   {/* Static non-filterable columns */}
-                  <th className="px-2 py-3 w-[7%]">Case ID</th>
+                  {visibleColumns.includes('caseId') && <th className="px-2 py-3 w-[7%]">Case ID</th>}
                   {/* Filterable columns */}
                   {[
                     { label: 'Created', key: 'createdDate', width: 'w-[8%]', getVal: c => c.createdDate ? format(new Date(c.createdDate), 'dd/MM/yyyy') : '—' },
@@ -5577,7 +5786,17 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     { label: 'Refund', key: 'refund', width: 'w-[7%]', center: true, getVal: c => { const r = refundsList.find(x => x.caseId === c.caseId); if (!r) return 'No Refund'; const paid = r.transactionId && (r.installments || []).length <= 1; return (r.status?.toLowerCase() === 'paid' || paid) ? 'Paid' : 'Pending'; } },
                     { label: 'Assigned To', key: 'assignedTo', width: 'w-[10%]', getVal: c => c.assignedTo || c.initiatedBy || '—' },
                     { label: 'Last Update', key: 'lastUpdateDate', width: 'w-[8%]', getVal: c => c.lastUpdateDate ? format(new Date(c.lastUpdateDate), 'dd/MM/yyyy') : '—' },
-                  ].map(col => {
+                    ,
+                    ...filterableFields.filter(f => ['clientMobile', 'clientEmail', 'state', 'city', 'sourceOfComplaint', 'amtInDispute', 'bda', 'workStatus', 'legalOfficer', 'serviceName', 'dateOfLastPayment', 'mouSigned', 'totalMouValue', 'clientAllegation', 'caseSummary'].includes(f.key)).map(f => ({
+                      label: f.label, key: f.key, width: 'w-[8%]', getVal: c => {
+                        if (f.key.includes('.')) {
+                          const [p, ch] = f.key.split('.');
+                          return c[p]?.[ch] || '—';
+                        }
+                        return c[f.key] || '—';
+                      }
+                    }))
+                  ].filter(col => visibleColumns.includes(col.key)).map(col => {
                     const activeVals = columnFilters[col.key] || [];
                     const isActive = col.key && activeVals.length > 0;
                     const isSorted = colSortConfig.key === col.key;
@@ -5797,6 +6016,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                       <CaseRow
                         key={c._id}
                         c={c}
+                        visibleColumns={visibleColumns}
+                        filterableFields={filterableFields}
                         isSelected={selectedCases.includes(c.caseId)}
                         bulkAssignUser={bulkAssignUser}
                         toggleSelectCase={toggleSelectCase}
@@ -5812,6 +6033,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                         handleUnarchive={handleUnarchive}
                         user={user}
                         refundStatus={refundStatus}
+                        visibleColumns={visibleColumns}
+                        filterableFields={filterableFields}
                       />
                     );
                   })
@@ -5953,7 +6176,9 @@ const CaseRow = memo(({
   handleQuickArchive,
   handleUnarchive,
   user,
-  refundStatus
+  refundStatus,
+  visibleColumns,
+  filterableFields
 }) => {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const menuRef = React.useRef(null);
@@ -5991,85 +6216,122 @@ const CaseRow = memo(({
           />
         </td>
       )}
-      <td className="px-3 py-5 font-black text-accent break-words max-w-[100px] leading-tight text-[11px] uppercase tracking-tighter">
-        {c.caseId || c.caseid}
-      </td>
-      <td className="px-3 py-5 text-text-muted">
-        {c.createdDate ? (
-          <>
-            <div className="font-bold text-text-secondary">{new Date(c.createdDate).toLocaleDateString('en-IN')}</div>
-            <div className="text-[10px] opacity-60 mt-0.5">{new Date(c.createdDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
-          </>
-        ) : '-'}
-      </td>
-      <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-medium" title={c.companyName}>{c.companyName || '-'}</td>
-      <td className="px-3 py-5">
-        <div className="font-black text-text-primary leading-tight break-words text-sm">{c.clientName || '-'}</div>
-        {c.clientMobile && <div className="text-[10px] text-text-muted font-bold mt-1 tracking-wider">{c.clientMobile}</div>}
-      </td>
-      <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-medium uppercase tracking-[0.01em] text-[11px]">{c.typeOfComplaint || '-'}</td>
-      <td className="px-3 py-5 font-black text-text-primary whitespace-nowrap">₹{Number(c.totalAmtPaid || 0).toLocaleString('en-IN')}</td>
-      <td className="px-3 py-5">
-        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${c.priority === 'High' ? 'bg-red-soft text-red' :
-          c.priority === 'Medium' ? 'bg-yellow-soft text-yellow' :
-            'bg-blue-soft text-blue'
-          }`}>
-          {c.priority || 'Medium'}
-        </span>
-      </td>
-      <td className="px-3 py-5">
-        {c.dueDate ? (
-          <span className="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-orange-soft bg-orange-soft text-orange whitespace-nowrap">
-            {new Date(c.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-          </span>
-        ) : (
-          <span className="text-text-muted/30 font-bold">—</span>
-        )}
-      </td>
-      <td className="px-3 py-5 min-w-[120px]">
-        {(() => {
-          const displayStatus = normalizeStatus(c.currentStatus, c.assignedTo, c.initiatedBy);
-          const isAssigned = (c.assignedTo && c.assignedTo.trim() !== '') || (c.initiatedBy && c.initiatedBy.trim() !== '');
-          const pct = (isAssigned && (c.progressPercentage || 0) < 25) ? 25 : (c.progressPercentage || 10);
-          const badgeClass =
-            (displayStatus === 'Settled' || displayStatus === 'Closed' || displayStatus === 'Closure' || displayStatus === 'Settlement') ? 'bg-green-soft text-green border-green-soft' :
-              displayStatus === 'Escalated' ? 'bg-red-soft text-red border-red-soft' :
-                displayStatus === 'Assigned' ? 'bg-blue-soft text-blue border-blue-soft' :
-                  displayStatus === 'Negotiation' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
-                    (displayStatus === 'Resolution' || displayStatus === 'Submitted') ? 'bg-purple-soft text-purple border-purple-soft' :
-                      'bg-accent-soft text-accent border-accent-soft';
-          return (
-            <div className="flex flex-col gap-1.5">
-              <span className={`w-fit px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${badgeClass}`}>
-                {displayStatus}
-              </span>
-            </div>
-          );
-        })()}
-      </td>
-      <td className="px-3 py-5 text-center">
-        {refundStatus ? (
-          <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${refundStatus === 'Paid'
-            ? 'bg-green-soft text-green border-green-soft'
-            : 'bg-yellow-soft text-yellow border-yellow-soft'
+      {visibleColumns.includes('caseId') && (
+        <td className="px-3 py-5 font-black text-accent break-words max-w-[100px] leading-tight text-[11px] uppercase tracking-tighter">
+          {c.caseId || c.caseid}
+        </td>
+      )}
+      {visibleColumns.includes('createdDate') && (
+        <td className="px-3 py-5 text-text-muted">
+          {c.createdDate ? (
+            <>
+              <div className="font-bold text-text-secondary">{new Date(c.createdDate).toLocaleDateString('en-IN')}</div>
+              <div className="text-[10px] opacity-60 mt-0.5">{new Date(c.createdDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
+            </>
+          ) : '-'}
+        </td>
+      )}
+      {visibleColumns.includes('company') && (
+        <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-medium" title={c.companyName}>{c.companyName || '-'}</td>
+      )}
+      {visibleColumns.includes('client') && (
+        <td className="px-3 py-5">
+          <div className="font-black text-text-primary leading-tight break-words text-sm">{c.clientName || '-'}</div>
+          {c.clientMobile && <div className="text-[10px] text-text-muted font-bold mt-1 tracking-wider">{c.clientMobile}</div>}
+        </td>
+      )}
+      {visibleColumns.includes('typeOfComplaint') && (
+        <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-medium uppercase tracking-[0.01em] text-[11px]">{c.typeOfComplaint || '-'}</td>
+      )}
+      {visibleColumns.includes('totalAmtPaid') && (
+        <td className="px-3 py-5 font-black text-text-primary whitespace-nowrap">₹{Number(c.totalAmtPaid || 0).toLocaleString('en-IN')}</td>
+      )}
+      {visibleColumns.includes('priority') && (
+        <td className="px-3 py-5">
+          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${c.priority === 'High' ? 'bg-red-soft text-red' :
+            c.priority === 'Medium' ? 'bg-yellow-soft text-yellow' :
+              'bg-blue-soft text-blue'
             }`}>
-            {refundStatus}
+            {c.priority || 'Medium'}
           </span>
-        ) : (
-          <span className="text-text-muted/30 font-bold">—</span>
-        )}
-      </td>
-      <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-black text-[10px] uppercase tracking-wider">
-        {c.assignedTo || c.initiatedBy || '-'}
-      </td>
-      <td className="px-3 py-5 text-text-muted">
-        {c.lastUpdateDate ? (
-          <>
-            <div className="text-[11px] font-bold text-text-secondary">{new Date(c.lastUpdateDate).toLocaleDateString('en-IN')}</div>
-            <div className="text-[10px] opacity-60 mt-0.5">{new Date(c.lastUpdateDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
-          </>
-        ) : '-'}
-      </td>
+        </td>
+      )}
+      {visibleColumns.includes('dueDate') && (
+        <td className="px-3 py-5">
+          {c.dueDate ? (
+            <span className="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-orange-soft bg-orange-soft text-orange whitespace-nowrap">
+              {new Date(c.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+            </span>
+          ) : (
+            <span className="text-text-muted/30 font-bold">—</span>
+          )}
+        </td>
+      )}
+      {visibleColumns.includes('status') && (
+        <td className="px-3 py-5 min-w-[120px]">
+          {(() => {
+            const displayStatus = normalizeStatus(c.currentStatus, c.assignedTo, c.initiatedBy);
+            const badgeClass =
+              (displayStatus === 'Settled' || displayStatus === 'Closed' || displayStatus === 'Closure' || displayStatus === 'Settlement') ? 'bg-green-soft text-green border-green-soft' :
+                displayStatus === 'Escalated' ? 'bg-red-soft text-red border-red-soft' :
+                  displayStatus === 'Assigned' ? 'bg-blue-soft text-blue border-blue-soft' :
+                    displayStatus === 'Negotiation' ? 'bg-yellow-soft text-yellow border-yellow-soft' :
+                      (displayStatus === 'Resolution' || displayStatus === 'Submitted') ? 'bg-purple-soft text-purple border-purple-soft' :
+                        'bg-accent-soft text-accent border-accent-soft';
+            return (
+              <div className="flex flex-col gap-1.5">
+                <span className={`w-fit px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${badgeClass}`}>
+                  {displayStatus}
+                </span>
+              </div>
+            );
+          })()}
+        </td>
+      )}
+      {visibleColumns.includes('refund') && (
+        <td className="px-3 py-5 text-center">
+          {refundStatus ? (
+            <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${refundStatus === 'Paid'
+              ? 'bg-green-soft text-green border-green-soft'
+              : 'bg-yellow-soft text-yellow border-yellow-soft'
+              }`}>
+              {refundStatus}
+            </span>
+          ) : (
+            <span className="text-text-muted/30 font-bold">—</span>
+          )}
+        </td>
+      )}
+      {visibleColumns.includes('assignedTo') && (
+        <td className="px-3 py-5 break-words max-w-[120px] leading-tight text-text-secondary font-black text-[10px] uppercase tracking-wider">
+          {c.assignedTo || c.initiatedBy || '-'}
+        </td>
+      )}
+      {visibleColumns.includes('lastUpdateDate') && (
+        <td className="px-3 py-5 text-text-muted">
+          {c.lastUpdateDate ? (
+            <>
+              <div className="text-[11px] font-bold text-text-secondary">{new Date(c.lastUpdateDate).toLocaleDateString('en-IN')}</div>
+              <div className="text-[10px] opacity-60 mt-0.5">{new Date(c.lastUpdateDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
+            </>
+          ) : '-'}
+        </td>
+      )}
+
+      {filterableFields && filterableFields.filter(f => ['clientMobile', 'clientEmail', 'state', 'city', 'sourceOfComplaint', 'amtInDispute', 'bda', 'workStatus', 'legalOfficer', 'serviceName', 'dateOfLastPayment', 'mouSigned', 'totalMouValue', 'clientAllegation', 'caseSummary'].includes(f.key)).filter(f => visibleColumns.includes(f.key)).map(f => {
+        let val = '—';
+        if (f.key.includes('.')) {
+          const [p, ch] = f.key.split('.');
+          val = c[p]?.[ch] || '—';
+        } else {
+          val = c[f.key] || '—';
+        }
+        return (
+          <td key={f.key} className="px-3 py-5 text-text-secondary font-medium text-xs max-w-[150px] truncate" title={String(val)}>
+            {String(val)}
+          </td>
+        )
+      })}
       <td className="px-3 py-5 text-center align-middle" onClick={(e) => e.stopPropagation()}>
         <div className="flex flex-col items-center gap-2 w-[160px] mx-auto relative" ref={menuRef}>
           {/* Top Row: Action Menu Toggle */}

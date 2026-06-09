@@ -3,29 +3,35 @@ const router = express.Router();
 const pdf = require('html-pdf');
 const fs = require('fs');
 const path = require('path');
-const Case = require('../models/Case');
-const Timeline = require('../models/Timeline');
-const Document = require('../models/Document');
+const Case = require('../sql_models/Case');
+const Timeline = require('../sql_models/Timeline');
+const Document = require('../sql_models/Document');
 const { verifyToken } = require('../middleware/auth');
 
 router.post('/generate', verifyToken, async (req, res) => {
   try {
     const { caseId } = req.body;
-    const caseData = await Case.findOne({ caseId });
-    if (!caseData) return res.status(404).json({ error: 'Case not found' });
+    const caseDataDoc = await Case.findOne({ where: { caseId } });
+    if (!caseDataDoc) return res.status(404).json({ error: 'Case not found' });
+    const caseData = caseDataDoc.toJSON();
 
-    const timeline = await Timeline.find({ caseId }).sort({ eventDate: 1, createdAt: 1 });
-    const docs = await Document.find({ caseId });
+    const timeline = await Timeline.findAll({
+      where: { caseId },
+      order: [['eventDate', 'ASC'], ['createdAt', 'ASC']]
+    });
+    
+    // docs is not used in the original template parsing, but we fetch it
+    const docs = await Document.findAll({ where: { caseId } });
 
     let html = fs.readFileSync(path.join(__dirname, '../templates/case_study_template.html'), 'utf8');
 
     // Calculate totals
-    const totalPaid = caseData.servicesSold?.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
-    const totalMou = caseData.servicesSold?.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
-
+    const servicesSold = Array.isArray(caseData.servicesSold) ? caseData.servicesSold : [];
+    const totalPaid = servicesSold.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
+    const totalMou = servicesSold.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
 
     // Prepare dynamic sections for Services
-    const serviceSections = caseData.servicesSold?.map((s, i) => {
+    const serviceSections = servicesSold.map((s, i) => {
       const statusStr = String(s.workStatus || '').toLowerCase().trim();
       let badgeStyle = 'background: #ffedd5; color: #9a3412;'; // Orange (default)
       if (statusStr.includes('completed') || statusStr.includes('converted')) {
@@ -73,7 +79,6 @@ router.post('/generate', verifyToken, async (req, res) => {
       '{{complaintType}}': caseData.typeOfComplaint || 'Case Analysis',
       '{{datePrepared}}': new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
       '{{totalPaid}}': totalPaid.toLocaleString('en-IN'),
-      // '{{breakdown}}': breakdown,
       '{{totalMouText}}': totalMou > 0 ? `Rs. ${totalMou.toLocaleString('en-IN')}/-` : 'NA (No MOU signed)',
       '{{amtInDispute}}': caseData.amtInDispute !== undefined && caseData.amtInDispute !== null ? Number(caseData.amtInDispute).toLocaleString('en-IN') : '0',
       '{{refundStatus}}': caseData.refundStatus || 'Analysis Pending',
@@ -86,7 +91,7 @@ router.post('/generate', verifyToken, async (req, res) => {
       '{{caseSummary}}': caseData.caseSummary || 'No case summary available.',
       '{{clientAllegation}}': caseData.clientAllegation || 'No specific allegations recorded.',
       '{{keyPendingIssue}}': caseData.keyPendingIssue || 'No critical pending issues recorded.',
-      '{{recommendedNextSteps}}': caseData.recommendedNextSteps || '1. Continue standard follow-up.\n2. Monitor for further escalations.',
+      '{{recommendedNextSteps}}': caseData.recommendedNextSteps || '1. Continue standard follow-up.\\n2. Monitor for further escalations.',
       '{{serviceSections}}': serviceSections,
       '{{timelineItems}}': timelineItems
     };

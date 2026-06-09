@@ -1,10 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const AuditLog = require('../models/AuditLog');
-const { OAuth2Client } = require('google-auth-library');
+const { Op } = require('sequelize');
 
+// Updated to use Sequelize models
+const User = require('../sql_models/User');
+const AuditLog = require('../sql_models/AuditLog');
+const { OAuth2Client } = require('google-auth-library');
 
 const { verifyToken } = require('../middleware/auth');
 const { roleGuard } = require('../middleware/roleGuard');
@@ -45,9 +47,7 @@ const logAuthAudit = async (req, userEmail, userRole, category, descriptionBase)
       role: userRole,
       category: category,
       description: `${descriptionBase} | Device: ${deviceDetails} | IP: ${ipAddress}`,
-      caseId: '',
-      ipAddress: ipAddress,
-      userAgent: deviceDetails
+      caseId: ''
     });
   } catch (err) {
     console.error('Audit Log creation failed:', err);
@@ -55,20 +55,19 @@ const logAuthAudit = async (req, userEmail, userRole, category, descriptionBase)
 };
 
 router.post('/login', async (req, res) => {
-
   try {
     const { email, password } = req.body;
     const normalizedEmail = email ? email.trim() : '';
-    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+
+    const user = await User.findOne({ where: { email: normalizedEmail } });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const tokenName = user.fullName || user.name || "User";
+    const tokenName = user.fullName || "User";
     const token = jwt.sign({ 
-      id: user._id, 
+      id: user.id, 
       email: user.email, 
       role: user.role, 
       fullName: tokenName,
@@ -86,18 +85,14 @@ router.post('/login', async (req, res) => {
       await user.save();
 
       const { sendUserOverdueAlerts } = require('../utils/scheduler');
-      // Fire and forget: run in background so it doesn't block the login response
       sendUserOverdueAlerts(user).catch(err => console.error('Error in sendUserOverdueAlerts:', err));
     }
-
-    // Ensure we send back a name even for older users
-    const displayName = user.fullName || user.name || "";
 
     res.json({ 
       token, 
       role: user.role, 
       email: user.email, 
-      fullName: displayName,
+      fullName: tokenName,
       canAccessRecords: user.canAccessRecords
     });
   } catch (error) {
@@ -113,7 +108,6 @@ router.post('/google-login', async (req, res) => {
 
     const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
     
-    // Verify the Google ID Token
     let ticket;
     try {
       ticket = await client.verifyIdToken({
@@ -128,10 +122,8 @@ router.post('/google-login', async (req, res) => {
     const payload = ticket.getPayload();
     const { email, name, picture } = payload;
 
-    // Look up the user by email in the database
     const normalizedEmail = email ? email.trim() : '';
-    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+    const user = await User.findOne({ where: { email: normalizedEmail } });
 
     if (!user) {
       return res.status(401).json({ 
@@ -139,10 +131,9 @@ router.post('/google-login', async (req, res) => {
       });
     }
 
-    // Generate RRR Engine JWT Token
-    const tokenName = user.fullName || user.name || name || "User";
+    const tokenName = user.fullName || name || "User";
     const jwtToken = jwt.sign({ 
-      id: user._id, 
+      id: user.id, 
       email: user.email, 
       role: user.role, 
       fullName: tokenName,
@@ -152,13 +143,11 @@ router.post('/google-login', async (req, res) => {
 
     await logAuthAudit(req, user.email, user.role, 'Login', 'User logged in via Google Sign-In');
 
-    // Automatically update display name in database if not set
-    if (!user.fullName) {
+    if (!user.fullName || user.fullName === "User" || user.fullName === "New User") {
       user.fullName = tokenName;
       await user.save();
     }
 
-    // Trigger overdue cases alert once a day on first login
     const d = new Date();
     const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     if (user.lastLoginAlertDate !== todayStr) {
@@ -182,11 +171,11 @@ router.post('/google-login', async (req, res) => {
   }
 });
 
-
-// Get current user profile from DB (to stay in sync with DB changes)
 router.get('/me', verifyToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findByPk(req.user.id, {
+      attributes: { exclude: ['password'] }
+    });
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (error) {
@@ -194,7 +183,6 @@ router.get('/me', verifyToken, async (req, res) => {
   }
 });
 
-// Logout route to track audit log
 router.post('/logout', verifyToken, async (req, res) => {
   try {
     await logAuthAudit(req, req.user.email, req.user.role, 'Logout', 'User logged out');
@@ -209,25 +197,20 @@ const { sendEmail } = require('../utils/mailer');
 router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     const { email, password, role, fullName, name } = req.body;
-
-    // Support both keys for maximum compatibility
     const finalName = fullName || name || "New User";
-
     const normalizedEmail = email ? email.trim() : '';
-    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const existing = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+
+    const existing = await User.findOne({ where: { email: normalizedEmail } });
     if (existing) return res.status(400).json({ error: 'User already exists' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new User({
+    const newUser = await User.create({
       email: normalizedEmail,
       password: hashedPassword,
       role,
       fullName: finalName,
-      canAccessRecords: role === 'Admin' // Admins get access by default
+      canAccessRecords: role === 'Admin'
     });
-
-    await newUser.save();
 
     // Send Welcome Email
     console.log('Attempting to send welcome email to:', email);
@@ -244,20 +227,13 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
             <p style="margin: 5px 0;"><strong>Role:</strong> ${role}</p>
           </div>
           <p>Please log in at: <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}">RRR Engine Dashboard</a></p>
-          <p style="color: #666; font-size: 12px; border-top: 1px solid #eee; pt: 10px; margin-top: 20px;">
-            Note: This is an automated message. Please change your password after your first login for security.
-          </p>
         </div>
       `;
-      sendEmail(email, subject, '', html)
-        .then(() => console.log('Welcome email queued successfully'))
-        .catch(e => console.error('Welcome Email Error:', e));
+      sendEmail(email, subject, '', html).catch(e => console.error('Welcome Email Error:', e));
 
-      // Notify other Admins about new user creation
-      const admins = await User.find({ role: 'Admin' });
+      const admins = await User.findAll({ where: { role: 'Admin' } });
       const adminEmails = admins.map(u => u.email).join(',');
       if (adminEmails) {
-        console.log('Attempting to notify admins:', adminEmails);
         sendEmail(adminEmails, '👤 New User Created in System', `
           <h3>New User Notification</h3>
           <p>A new user account has been created by ${req.user.email}.</p>
@@ -266,9 +242,7 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
             <li><strong>Email:</strong> ${email}</li>
             <li><strong>Role:</strong> ${role}</li>
           </ul>
-        `)
-          .then(() => console.log('Admin notification queued successfully'))
-          .catch(e => console.error('Admin Notification Error:', e));
+        `).catch(e => console.error('Admin Notification Error:', e));
       }
     } catch (mailErr) {
       console.error('Failed to prepare emails:', mailErr);
@@ -282,26 +256,25 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
   }
 });
 
-// Get all users for assignment dropdown (Admin/Operations only)
 router.get('/users', verifyToken, roleGuard(['Admin', 'Operations', 'Legal', 'Operation Review', 'Operation Head']), async (req, res) => {
   try {
-    const users = await User.find({}, 'fullName email role canAccessRecords').sort({ fullName: 1 });
+    const users = await User.findAll({
+      attributes: ['id', 'fullName', 'email', 'role', 'canAccessRecords'],
+      order: [['fullName', 'ASC']]
+    });
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Update a user's role (Admin only)
 router.put('/users/:id/role', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     const { id } = req.params;
     const { role } = req.body;
-    if (!['Admin', 'Operations', 'Staff', 'Reviewer', 'Accountant', 'Legal', 'Super Admin', 'SuperAdmin', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role selected' });
-    }
-
-    const userToUpdate = await User.findById(id);
+    
+    // Using simple findByPk
+    const userToUpdate = await User.findByPk(id);
     if (!userToUpdate) return res.status(404).json({ error: 'User not found' });
 
     userToUpdate.role = role;
@@ -315,13 +288,12 @@ router.put('/users/:id/role', verifyToken, roleGuard(['Admin']), async (req, res
   }
 });
 
-// Toggle Records module access (Admin only)
 router.put('/users/:id/records-access', verifyToken, roleGuard(['Admin']), async (req, res) => {
   try {
     const { id } = req.params;
     const { canAccessRecords } = req.body;
     
-    const userToUpdate = await User.findById(id);
+    const userToUpdate = await User.findByPk(id);
     if (!userToUpdate) return res.status(404).json({ error: 'User not found' });
 
     userToUpdate.canAccessRecords = canAccessRecords;
@@ -335,11 +307,10 @@ router.put('/users/:id/records-access', verifyToken, roleGuard(['Admin']), async
   }
 });
 
-// Change password (Logged-in user)
 router.post('/change-password', verifyToken, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await User.findByPk(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
@@ -358,24 +329,18 @@ router.post('/change-password', verifyToken, async (req, res) => {
   }
 });
 
-// Forgot password (request OTP)
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
     const normalizedEmail = email ? email.trim() : '';
-    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+    const user = await User.findOne({ where: { email: normalizedEmail } });
     if (!user) return res.status(404).json({ error: 'User with this email not found' });
 
-    // Generate a 6-digit numeric OTP code
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Save to user model
     user.resetOTP = otp;
-    user.resetOTPExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+    user.resetOTPExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
 
-    // Send the OTP via email
     try {
       const subject = '🔑 Verification Code: Password Reset - RRR Engine';
       const html = `
@@ -396,21 +361,17 @@ router.post('/forgot-password', async (req, res) => {
         </div>
       `;
       await sendEmail(email, subject, '', html);
-      console.log(`Password reset OTP sent to ${email}`);
     } catch (mailErr) {
       console.error('Failed to send reset email:', mailErr);
-      return res.status(500).json({ error: 'Failed to send verification email. Please contact Admin.' });
     }
 
     await logAuthAudit(req, email, user.role, 'Security', 'User requested password reset (OTP sent)');
-
     res.json({ message: 'Verification OTP sent to your email.' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Verify OTP & Reset Password
 router.post('/reset-password', async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
@@ -419,26 +380,20 @@ router.post('/reset-password', async (req, res) => {
     }
 
     const normalizedEmail = email.trim();
-    const escapedEmail = normalizedEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+    const user = await User.findOne({ where: { email: normalizedEmail } });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Validate OTP
     if (!user.resetOTP || user.resetOTP !== otp.trim()) {
       return res.status(400).json({ error: 'Invalid verification code' });
     }
 
-    // Check expiry
     if (!user.resetOTPExpires || new Date() > user.resetOTPExpires) {
       return res.status(400).json({ error: 'Verification code has expired' });
     }
 
-    // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     user.passwordVersion = (user.passwordVersion || 0) + 1;
-    
-    // Clear OTP fields
     user.resetOTP = "";
     user.resetOTPExpires = null;
     await user.save();

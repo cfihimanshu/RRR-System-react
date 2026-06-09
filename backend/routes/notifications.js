@@ -1,14 +1,12 @@
 const express = require('express');
+const { Op } = require('sequelize');
 const router = express.Router();
-const Notification = require('../models/Notification');
-const Task = require('../models/Task');
-const Report = require('../models/Report');
-const User = require('../models/User');
+const Notification = require('../sql_models/Notification');
+const Task = require('../sql_models/Task');
+const Report = require('../sql_models/Report');
+const User = require('../sql_models/User');
 const { verifyToken } = require('../middleware/auth');
 
-// ─────────────────────────────────────────
-// GET / — Notifications for logged-in user
-// ─────────────────────────────────────────
 router.get('/', verifyToken, async (req, res) => {
   try {
     const userEmail = req.user.email;
@@ -16,25 +14,46 @@ router.get('/', verifyToken, async (req, res) => {
     const fullName = (req.user.fullName || '').trim();
     const limit = Math.min(parseInt(req.query.limit, 10) || 30, 50);
     const today = new Date().toISOString().split('T')[0];
-    const now = new Date();
     const systemNotifs = [];
 
-    const escName = fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const assigneeRegex = fullName ? new RegExp(`^\\s*${escName}\\s*$`, 'i') : null;
+    const isSystemExempt = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(userRole);
 
-    const [notifications, sodExists, pendingCount] = await Promise.all([
-      Notification.find({
-        recipient: { $in: [userEmail, userRole, 'All'] }
-      }).sort({ createdAt: -1 }).limit(limit).lean(),
-      !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(userRole)
-        ? Report.findOne({ userEmail, type: 'SOD', date: today }).select('_id').lean()
-        : Promise.resolve({ _id: 'admin-skip' }),
-      userRole === 'Admin'
-        ? Task.countDocuments({ status: 'To Do' })
-        : (assigneeRegex
-          ? Task.countDocuments({ assignee: assigneeRegex, status: 'To Do' })
-          : Promise.resolve(0))
-    ]);
+    let sodExists = false;
+    if (!isSystemExempt) {
+      const sod = await Report.findOne({
+        where: { userEmail, type: 'SOD', date: today },
+        attributes: ['id']
+      });
+      if (sod) sodExists = true;
+    } else {
+      sodExists = true; // Skip check for admins
+    }
+
+    let pendingCount = 0;
+    if (userRole === 'Admin') {
+      pendingCount = await Task.count({ where: { status: 'To Do' } });
+    } else if (fullName) {
+      pendingCount = await Task.count({
+        where: { 
+          assignee: { [Op.like]: `%${fullName}%` },
+          status: 'To Do'
+        }
+      });
+    }
+
+    const notificationsRaw = await Notification.findAll({
+      where: {
+        recipient: { [Op.in]: [userEmail, userRole, 'All'] }
+      },
+      order: [['createdAt', 'DESC']],
+      limit: limit
+    });
+    
+    const notifications = notificationsRaw.map(n => {
+      const j = n.toJSON();
+      j._id = j.id;
+      return j;
+    });
 
     if (userRole === 'Admin' && pendingCount > 0) {
       systemNotifs.push({
@@ -47,7 +66,7 @@ router.get('/', verifyToken, async (req, res) => {
         isSystem: true,
         link: '/my-task'
       });
-    } else if (assigneeRegex && pendingCount > 0) {
+    } else if (fullName && pendingCount > 0) {
       systemNotifs.push({
         _id: 'sys-pending-tasks',
         title: '📋 Tasks Pending',
@@ -60,7 +79,7 @@ router.get('/', verifyToken, async (req, res) => {
       });
     }
 
-    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(userRole) && !sodExists) {
+    if (!isSystemExempt && !sodExists) {
       systemNotifs.push({
         _id: 'sys-sod-pending',
         title: '🌅 SOD Pending',
@@ -82,15 +101,16 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────
-// PUT /read-all — Mark all DB notifications as read
-// IMPORTANT: must come before /:id/read to avoid Express matching 'read-all' as an ID
-// ─────────────────────────────────────────
 router.put('/read-all', verifyToken, async (req, res) => {
   try {
-    await Notification.updateMany(
-      { recipient: { $in: [req.user.email, req.user.role, 'All'] }, isRead: false },
-      { isRead: true }
+    await Notification.update(
+      { isRead: true },
+      { 
+        where: { 
+          recipient: { [Op.in]: [req.user.email, req.user.role, 'All'] },
+          isRead: false
+        }
+      }
     );
     res.json({ message: 'All marked as read' });
   } catch (error) {
@@ -98,18 +118,18 @@ router.put('/read-all', verifyToken, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────
-// PUT /:id/read — Mark a single DB notification as read
-// System notifications (isSystem: true) have string IDs — skip DB update for those
-// ─────────────────────────────────────────
 router.put('/:id/read', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-    // System notifications have prefixed string IDs — safe to ignore
-    if (id.startsWith('sys-')) {
+    if (String(id).startsWith('sys-')) {
       return res.json({ message: 'System notification acknowledged' });
     }
-    await Notification.findByIdAndUpdate(id, { isRead: true });
+    
+    await Notification.update(
+      { isRead: true },
+      { where: { id: id } }
+    );
+    
     res.json({ message: 'Marked as read' });
   } catch (error) {
     res.status(500).json({ error: error.message });

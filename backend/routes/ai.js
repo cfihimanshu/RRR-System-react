@@ -2,11 +2,11 @@ const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const { verifyToken } = require('../middleware/auth');
-const Case = require('../models/Case');
-const History = require('../models/History');
-const Communication = require('../models/Communication');
-const Progress = require('../models/Progress');
-const Document = require('../models/Document');
+const Case = require('../sql_models/Case');
+const History = require('../sql_models/History');
+const Communication = require('../sql_models/Communication');
+const Progress = require('../sql_models/Progress');
+const Document = require('../sql_models/Document');
 
 const router = express.Router();
 
@@ -62,7 +62,7 @@ const formatDate = (value) => {
 const summarizeEntries = (entries, prefix) => {
   if (!entries || entries.length === 0) return `${prefix}: none.`;
 
-  return `${prefix}:\n` + entries.map((entry, idx) => {
+  return `${prefix}:\\n` + entries.map((entry, idx) => {
     const summary =
       entry.summary ||
       entry.remarks ||
@@ -78,7 +78,7 @@ const summarizeEntries = (entries, prefix) => {
       formatDate(entry.uploadDate);
 
     return `${idx + 1}. ${date ? `${date} - ` : ''}${summary || 'No details available'}`;
-  }).join('\n');
+  }).join('\\n');
 };
 
 const buildCaseContext = (caseData, history, comms, progressLogs, documents) => {
@@ -118,7 +118,7 @@ const buildCaseContext = (caseData, history, comms, progressLogs, documents) => 
     summarizeEntries(documents.slice(-10), 'Recent documents'),
   ];
 
-  return lines.join('\n');
+  return lines.join('\\n');
 };
 
 const sendGeminiPrompt = async (prompt) => {
@@ -149,24 +149,30 @@ router.post('/case-insights', verifyToken, async (req, res) => {
       });
     }
 
-    const caseData = await Case.findOne({ caseId });
+    const caseDataDoc = await Case.findOne({ where: { caseId } });
 
-    if (!caseData) {
+    if (!caseDataDoc) {
       return res.status(404).json({
         success: false,
         error: 'Case not found',
       });
     }
+    const caseData = caseDataDoc.toJSON();
 
-    const [historyEntries, comms, progressDoc, documents] = await Promise.all([
-      History.find({ caseId }).sort({ timestamp: 1 }).limit(20),
-      Communication.find({ caseId }).sort({ dateTime: -1 }).limit(20),
-      Progress.findOne({ caseId }).lean(),
-      Document.find({ caseId }).sort({ uploadDate: -1 }).limit(20),
+    const [historyEntriesDocs, commsDocs, progressDoc, documentsDocs] = await Promise.all([
+      History.findAll({ where: { caseId }, order: [['timestamp', 'ASC']], limit: 20 }),
+      Communication.findAll({ where: { caseId }, order: [['dateTime', 'DESC']], limit: 20 }),
+      Progress.findOne({ where: { caseId } }),
+      Document.findAll({ where: { caseId }, order: [['uploadDate', 'DESC']], limit: 20 }),
     ]);
-    const progressLogs = progressDoc ? (progressDoc.updates || []) : [];
+
+    const historyEntries = historyEntriesDocs.map(d => d.toJSON());
+    const comms = commsDocs.map(d => d.toJSON());
+    const documents = documentsDocs.map(d => d.toJSON());
+    const progressLogs = progressDoc && Array.isArray(progressDoc.updates) ? progressDoc.updates : [];
+    
     // Sort updates by createdAt descending, limited to 20
-    progressLogs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    progressLogs.sort((a, b) => new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp));
     const limitedProgressLogs = progressLogs.slice(0, 20);
 
     const caseContext = buildCaseContext(
@@ -263,22 +269,23 @@ router.post('/generate-summary', verifyToken, async (req, res) => {
     let documents = [];
 
     if (caseId) {
-      caseData = await Case.findOne({ caseId });
-      if (!caseData) return res.status(404).json({ success: false, error: 'Case not found' });
+      const caseDataDoc = await Case.findOne({ where: { caseId } });
+      if (!caseDataDoc) return res.status(404).json({ success: false, error: 'Case not found' });
+      caseData = caseDataDoc.toJSON();
 
       const [historyData, commsData, progressDoc, docsData] = await Promise.all([
-        History.find({ caseId }).sort({ timestamp: 1 }).limit(20),
-        Communication.find({ caseId }).sort({ dateTime: -1 }).limit(20),
-        Progress.findOne({ caseId }).lean(),
-        Document.find({ caseId }).sort({ uploadDate: -1 }).limit(20),
+        History.findAll({ where: { caseId }, order: [['timestamp', 'ASC']], limit: 20 }),
+        Communication.findAll({ where: { caseId }, order: [['dateTime', 'DESC']], limit: 20 }),
+        Progress.findOne({ where: { caseId } }),
+        Document.findAll({ where: { caseId }, order: [['uploadDate', 'DESC']], limit: 20 }),
       ]);
       
-      historyEntries = historyData;
-      comms = commsData;
-      documents = docsData;
+      historyEntries = historyData.map(d => d.toJSON());
+      comms = commsData.map(d => d.toJSON());
+      documents = docsData.map(d => d.toJSON());
 
-      const progressLogs = progressDoc ? (progressDoc.updates || []) : [];
-      progressLogs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const progressLogs = progressDoc && Array.isArray(progressDoc.updates) ? progressDoc.updates : [];
+      progressLogs.sort((a, b) => new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp));
       limitedProgressLogs = progressLogs.slice(0, 20);
     }
 
@@ -364,7 +371,7 @@ router.post('/agreement-draft', verifyToken, async (req, res) => {
           .map((inst, idx) => {
             return `Installment ${idx + 1}: ₹${inst.amount || '0'} on ${inst.date || 'TBD'}`;
           })
-          .join('\n')
+          .join('\\n')
       : `Single settlement amount: ₹${settlementAmount || '0'}`;
 
     const prompt = `

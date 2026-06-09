@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
-const Agreement = require('../models/Agreement');
+const Agreement = require('../sql_models/Agreement');
 
 // POST /api/agreements/generate - Generate PDF and save record
 router.post('/generate', verifyToken, async (req, res) => {
@@ -61,10 +61,7 @@ router.post('/generate', verifyToken, async (req, res) => {
     // Save agreement record in DB
     let agreementId;
     try {
-      const mongoose = require('mongoose');
-      agreementId = new mongoose.Types.ObjectId();
-      await Agreement.create({
-        _id: agreementId,
+      const doc = await Agreement.create({
         generatedBy: req.user.email,
         generatedByName: req.user.fullName || req.user.name || '',
         clientName: data.ClientName || '',
@@ -79,9 +76,11 @@ router.post('/generate', verifyToken, async (req, res) => {
         firstPartySignatory: data.FirstPartyName || '',
         secondPartySignatory: data.SecondPartyName || '',
         templateId: data.templateId || '',
-        pdfBase64: pdfBase64,
-        pdfUrl: `/api/agreements/download/${agreementId}`
+        pdfBase64: pdfBase64
       });
+      agreementId = doc.id;
+      // Update with correct URL using the auto-generated ID
+      await doc.update({ pdfUrl: `/api/agreements/download/${agreementId}` });
     } catch (saveErr) {
       console.error('[AGREEMENT] Failed to save agreement record:', saveErr.message);
       return res.status(500).json({ error: 'Failed to save agreement record' });
@@ -108,8 +107,17 @@ router.get('/', verifyToken, async (req, res) => {
   try {
     const isAdmin = ['Admin', 'Reviewer', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
     const query = isAdmin ? {} : { generatedBy: req.user.email };
-    const agreements = await Agreement.find(query).sort({ createdAt: -1 }).limit(50);
-    res.json(agreements);
+    const agreements = await Agreement.findAll({
+      where: query,
+      order: [['createdAt', 'DESC']],
+      limit: 50
+    });
+    const formatted = agreements.map(a => {
+      const j = a.toJSON();
+      j._id = j.id;
+      return j;
+    });
+    res.json(formatted);
   } catch (error) {
     console.error('[AGREEMENT] GET Error:', error.message);
     res.status(500).json({ error: error.message });
@@ -119,16 +127,15 @@ router.get('/', verifyToken, async (req, res) => {
 // DELETE /api/agreements/:id - Delete an agreement record
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
-    const agreement = await Agreement.findById(req.params.id);
+    const agreement = await Agreement.findByPk(req.params.id);
     if (!agreement) return res.status(404).json({ error: 'Agreement not found' });
 
-    // Only allow deletion by the creator or Admin
     const isAdmin = ['Admin', 'Reviewer', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
     if (!isAdmin && agreement.generatedBy !== req.user.email) {
       return res.status(403).json({ error: 'Not authorized to delete this agreement' });
     }
 
-    await Agreement.findByIdAndDelete(req.params.id);
+    await agreement.destroy();
     res.json({ success: true, message: 'Agreement deleted' });
   } catch (error) {
     console.error('[AGREEMENT] DELETE Error:', error.message);
@@ -155,7 +162,7 @@ router.get('/download/:id', async (req, res) => {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    const agreement = await Agreement.findById(req.params.id);
+    const agreement = await Agreement.findByPk(req.params.id);
     if (!agreement) {
       return res.status(404).json({ error: 'Agreement not found' });
     }
@@ -172,7 +179,7 @@ router.get('/download/:id', async (req, res) => {
     const buffer = Buffer.from(agreement.pdfBase64, 'base64');
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${agreement.clientName.replace(/\s+/g, '_')}_Agreement.pdf"`,
+      'Content-Disposition': `inline; filename="${agreement.clientName.replace(/\\s+/g, '_')}_Agreement.pdf"`,
       'Content-Length': buffer.length
     });
     res.send(buffer);

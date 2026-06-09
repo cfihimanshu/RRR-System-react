@@ -1,4 +1,4 @@
-const Notification = require('../models/Notification');
+const Notification = require('../sql_models/Notification');
 
 /**
  * Creates a system notification for a user or group
@@ -21,7 +21,7 @@ const createNotification = async (recipient, title, message, type = 'Info', link
       isRead: false
     }));
 
-    await Notification.insertMany(notifications);
+    await Notification.bulkCreate(notifications);
     return true;
   } catch (error) {
     console.error('Failed to create notification:', error);

@@ -1,11 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const Progress = require('../models/Progress');
-const Case = require('../models/Case');
-const Timeline = require('../models/Timeline');
-const User = require('../models/User');
+const { Op, Sequelize } = require('sequelize');
+
+const Progress = require('../sql_models/Progress');
+const Case = require('../sql_models/Case');
+const Timeline = require('../sql_models/Timeline');
+const User = require('../sql_models/User');
+const Document = require('../sql_models/Document');
 const { createNotification } = require('../utils/notificationHelper');
 const { verifyToken } = require('../middleware/auth');
+
+// Helper to generate a unique ID for sub-items in JSON arrays
+const generateId = () => Date.now().toString() + Math.random().toString(36).substring(7);
 
 // Get progress logs for a case
 router.get('/', verifyToken, async (req, res) => {
@@ -13,20 +19,25 @@ router.get('/', verifyToken, async (req, res) => {
     const { caseId } = req.query;
     if (!caseId) return res.status(400).json({ error: 'caseId is required' });
 
-    let progressDocs = await Progress.find({ caseId }).sort({ createdAt: -1 });
+    let progressDocs = await Progress.findAll({ 
+      where: { caseId }, 
+      order: [['createdAt', 'DESC']] 
+    });
+    
     let progressDoc = progressDocs.length > 0 ? progressDocs[0] : null;
 
-    // If no logs exist, create an initial one automatically
     if (!progressDoc) {
       try {
-        const targetCase = await Case.findOne({ caseId });
+        const targetCase = await Case.findOne({ where: { caseId } });
         if (targetCase) {
           const initialLog = {
+            _id: generateId(),
             stage: targetCase.currentStatus || 'Case Logged',
             percentage: targetCase.progressPercentage || 0,
             summary: `Case Registered: ${targetCase.typeOfComplaint} setup complete.`,
             nextAction: targetCase.nextActionPlanned || '',
-            updatedBy: targetCase.initiatedBy || 'System'
+            updatedBy: targetCase.initiatedBy || 'System',
+            createdAt: new Date().toISOString()
           };
           progressDoc = await Progress.create({
             caseId,
@@ -50,39 +61,36 @@ router.get('/', verifyToken, async (req, res) => {
 
     let logs = [];
 
-    // First, fetch Timeline events to act as a fallback/restore for corrupted or missing Progress updates
-    const timelineProgressEvents = await Timeline.find({
-      caseId: caseId,
-      eventType: 'Progress Update'
-    }).lean();
+    const timelineProgressEvents = await Timeline.findAll({
+      where: { caseId, eventType: 'Progress Update' }
+    });
 
-    // Sort Timeline events older-first so they behave like the Progress array logic
     timelineProgressEvents.sort((a, b) => new Date(a.eventDate || a.createdAt) - new Date(b.eventDate || b.createdAt));
 
     for (const tEvent of timelineProgressEvents) {
+      const metadata = tEvent.metadata || {};
       logs.push({
-        _id: tEvent._id,
-        stage: tEvent.metadata?.stage,
-        percentage: tEvent.metadata?.percentage,
+        _id: tEvent.id,
+        stage: metadata.stage,
+        percentage: metadata.percentage,
         summary: tEvent.details,
-        nextAction: tEvent.metadata?.nextAction,
-        blockers: tEvent.metadata?.blockers,
-        followUpDate: tEvent.metadata?.followUpDate,
-        escalateTo: tEvent.metadata?.escalateTo,
-        attachment: tEvent.metadata?.attachment,
+        nextAction: metadata.nextAction,
+        blockers: metadata.blockers,
+        followUpDate: metadata.followUpDate,
+        escalateTo: metadata.escalateTo,
+        attachment: metadata.attachment,
         updatedBy: tEvent.source,
         createdAt: tEvent.eventDate || tEvent.createdAt
       });
     }
     
-    // Combine ALL documents (both legacy top-level and new updates arrays)
     for (const doc of progressDocs) {
-      if (doc.updates && doc.updates.length > 0) {
-        logs.push(...doc.updates);
+      const updates = Array.isArray(doc.updates) ? doc.updates : [];
+      if (updates.length > 0) {
+        logs.push(...updates);
       } else if (doc.summary) {
-        // Also add top-level legacy fields if summary exists and there are no updates
         logs.push({
-          _id: doc._id,
+          _id: doc.id,
           stage: doc.stage,
           percentage: doc.percentage,
           summary: doc.summary,
@@ -99,58 +107,46 @@ router.get('/', verifyToken, async (req, res) => {
       }
     }
 
-    // Deduplicate logs based on full summary text and stage
     const uniqueLogsMap = new Map();
     for (const log of logs) {
-      const logObj = log.toObject ? log.toObject() : log;
-      const stageKey = logObj.stage || 'no-stage';
-      const summaryText = logObj.summary ? logObj.summary.trim() : 'no-summary';
+      const stageKey = log.stage || 'no-stage';
+      const summaryText = log.summary ? log.summary.trim() : 'no-summary';
       const summaryKey = `${stageKey}-${summaryText}`;
-      
-      // If we already have a log with this exact summary and stage, we only keep the latest one
-      // Since logs array is chronologically older-first, we can just overwrite the map
-      uniqueLogsMap.set(summaryKey, logObj);
+      uniqueLogsMap.set(summaryKey, log);
     }
     
     logs = Array.from(uniqueLogsMap.values());
-
-    // Sort updates by createdAt descending
     logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    const targetCase = await Case.findOne({ caseId }).lean();
+    const targetCase = await Case.findOne({ where: { caseId } });
 
-    // Enrich logs with nextAction from Timeline if missing (for older logs)
     const enrichedLogs = await Promise.all(logs.map(async (log, idx) => {
-      const logObj = log.toObject ? log.toObject() : log;
-      if (!logObj.nextAction) {
-        // Try to find matching timeline event with a larger window (5 mins)
+      if (!log.nextAction) {
         const dateToUse = log.createdAt || log.uploadDate;
         if (dateToUse) {
+          const dateObj = new Date(dateToUse);
+          const start = new Date(dateObj.getTime() - 300000);
+          const end = new Date(dateObj.getTime() + 300000);
+          
           const timelineEvent = await Timeline.findOne({
-            caseId: caseId,
-            $or: [
-              { 'metadata.nextAction': { $exists: true, $ne: '' } },
-              { 'metadata.recommendedNextSteps': { $exists: true, $ne: '' } }
-            ],
-            createdAt: { 
-              $gte: new Date(new Date(dateToUse).getTime() - 300000), 
-              $lte: new Date(new Date(dateToUse).getTime() + 300000) 
+            where: {
+              caseId,
+              createdAt: { [Op.between]: [start, end] }
             }
-          }).lean();
+          });
           
           if (timelineEvent && timelineEvent.metadata) {
-            logObj.nextAction = timelineEvent.metadata.nextAction || timelineEvent.metadata.recommendedNextSteps;
+            log.nextAction = timelineEvent.metadata.nextAction || timelineEvent.metadata.recommendedNextSteps;
           }
         }
         
-        // Fallback for latest log or initial logs
-        if (!logObj.nextAction && targetCase) {
+        if (!log.nextAction && targetCase) {
           if (idx === 0) {
-            logObj.nextAction = targetCase.recommendedNextSteps;
+            log.nextAction = targetCase.recommendedNextSteps;
           }
         }
       }
-      return logObj;
+      return log;
     }));
 
     res.json({
@@ -168,6 +164,7 @@ router.post('/', verifyToken, async (req, res) => {
     const { caseId, stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, updatedBy, checklist, refundedAmount, savedAmount, attachment } = req.body;
 
     const newLog = {
+      _id: generateId(),
       stage,
       percentage,
       summary,
@@ -179,10 +176,10 @@ router.post('/', verifyToken, async (req, res) => {
       refundedAmount,
       savedAmount,
       attachment,
-      createdAt: new Date()
+      createdAt: new Date().toISOString()
     };
 
-    let progressDoc = await Progress.findOne({ caseId });
+    let progressDoc = await Progress.findOne({ where: { caseId } });
     if (progressDoc && stage) {
       const stages = ['Case Logged', 'Assigned', 'Analysis', 'Negotiation', 'Settlement', 'Closure'];
       const currentStage = progressDoc.stage || 'Case Logged';
@@ -194,9 +191,7 @@ router.post('/', verifyToken, async (req, res) => {
       }
     }
 
-    let isNewDoc = false;
     if (!progressDoc) {
-      // Try to create new doc; if duplicate key error occurs (race condition), fetch and update
       try {
         progressDoc = await Progress.create({
           caseId,
@@ -214,32 +209,12 @@ router.post('/', verifyToken, async (req, res) => {
           attachment,
           updates: [newLog]
         });
-        isNewDoc = true;
-      } catch (dupErr) {
-        if (dupErr.code === 11000) {
-          // Another request already created it — fetch and fall through to update
-          progressDoc = await Progress.findOne({ caseId });
-        } else {
-          throw dupErr;
-        }
+      } catch (err) {
+        // Handle race conditions conceptually
+        progressDoc = await Progress.findOne({ where: { caseId } });
+        if (!progressDoc) throw err;
       }
-    }
-
-    // If progressDoc already existed (or was just fetched after duplicate), update it
-    if (!isNewDoc && progressDoc) {
-      // Capture the old values before overwriting them
-      const oldStage = progressDoc.stage;
-      const oldPercentage = progressDoc.percentage;
-      const oldSummary = progressDoc.summary;
-      const oldNextAction = progressDoc.nextAction;
-      const oldBlockers = progressDoc.blockers;
-      const oldFollowUpDate = progressDoc.followUpDate;
-      const oldEscalateTo = progressDoc.escalateTo;
-      const oldRefundedAmount = progressDoc.refundedAmount;
-      const oldSavedAmount = progressDoc.savedAmount;
-      const oldAttachment = progressDoc.attachment;
-      const oldUpdatedBy = progressDoc.updatedBy;
-      
+    } else {
       progressDoc.stage = stage || progressDoc.stage;
       progressDoc.percentage = percentage !== undefined ? percentage : progressDoc.percentage;
       progressDoc.summary = summary || progressDoc.summary;
@@ -255,34 +230,31 @@ router.post('/', verifyToken, async (req, res) => {
         progressDoc.checklist = checklist;
       }
 
-      if (!progressDoc.updates || progressDoc.updates.length === 0) {
-        if (oldSummary) {
-          progressDoc.updates = [{
-            stage: oldStage,
-            percentage: oldPercentage,
-            summary: oldSummary,
-            nextAction: oldNextAction,
-            blockers: oldBlockers,
-            followUpDate: oldFollowUpDate,
-            escalateTo: oldEscalateTo,
-            refundedAmount: oldRefundedAmount,
-            savedAmount: oldSavedAmount,
-            attachment: oldAttachment,
-            updatedBy: oldUpdatedBy,
-            createdAt: progressDoc.createdAt || progressDoc.updatedAt || new Date()
-          }];
-        } else {
-          progressDoc.updates = [];
-        }
+      let currentUpdates = Array.isArray(progressDoc.updates) ? progressDoc.updates : [];
+      if (currentUpdates.length === 0 && progressDoc.summary) {
+        currentUpdates.push({
+          _id: generateId(),
+          stage: progressDoc.stage,
+          percentage: progressDoc.percentage,
+          summary: progressDoc.summary,
+          nextAction: progressDoc.nextAction,
+          blockers: progressDoc.blockers,
+          followUpDate: progressDoc.followUpDate,
+          escalateTo: progressDoc.escalateTo,
+          refundedAmount: progressDoc.refundedAmount,
+          savedAmount: progressDoc.savedAmount,
+          attachment: progressDoc.attachment,
+          updatedBy: progressDoc.updatedBy,
+          createdAt: progressDoc.createdAt || progressDoc.updatedAt || new Date().toISOString()
+        });
       }
-      progressDoc.updates.push(newLog);
+      currentUpdates.push(newLog);
+      progressDoc.updates = currentUpdates;
       await progressDoc.save();
     }
 
-    // Create Document record if attachment is provided
     if (attachment) {
-      const Document = require('../models/Document');
-      const existingCount = await Document.countDocuments({ caseId });
+      const existingCount = await Document.count({ where: { caseId } });
       const docId = `DOC-${caseId}-${String(existingCount + 1).padStart(3, '0')}`;
       await Document.create({
         caseId,
@@ -295,7 +267,6 @@ router.post('/', verifyToken, async (req, res) => {
       });
     }
 
-    // Update the Case status and percentage if provided
     const updateFields = {};
     if (stage) {
       updateFields.currentStatus = stage;
@@ -307,11 +278,11 @@ router.post('/', verifyToken, async (req, res) => {
     if (percentage !== undefined) updateFields.progressPercentage = percentage;
 
     if (Object.keys(updateFields).length > 0) {
-      await Case.findOneAndUpdate({ caseId }, updateFields);
+      await Case.update(updateFields, { where: { caseId } });
     }
 
-    // Add to Timeline
-    const timelineEvent = new Timeline({
+    const timelineEvent = await Timeline.create({
+      id: generateId(),
       caseId,
       eventDate: new Date().toISOString(),
       source: req.user.fullName || req.user.email || 'System',
@@ -319,22 +290,14 @@ router.post('/', verifyToken, async (req, res) => {
       summary: `Progress Updated: ${summary} (${stage || 'N/A'})`,
       details: summary,
       metadata: {
-        stage,
-        percentage,
-        nextAction,
-        blockers,
-        followUpDate,
-        escalateTo,
-        attachment
+        stage, percentage, nextAction, blockers, followUpDate, escalateTo, attachment
       }
     });
-    await timelineEvent.save();
 
-    // Trigger Notification if case was forwarded
     if (escalateTo) {
       try {
         const assignee = await User.findOne({
-          fullName: { $regex: new RegExp(`^\\s*${escalateTo.trim()}\\s*$`, 'i') }
+          where: { fullName: { [Op.like]: `%${escalateTo.trim()}%` } }
         });
         if (assignee && assignee.email) {
           createNotification(
@@ -350,8 +313,7 @@ router.post('/', verifyToken, async (req, res) => {
       }
     }
 
-    if (global.clearStatsCache) global.clearStatsCache();
-    const savedLog = progressDoc.updates[progressDoc.updates.length - 1];
+    const savedLog = Array.isArray(progressDoc.updates) ? progressDoc.updates[progressDoc.updates.length - 1] : newLog;
     res.status(201).json(savedLog);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -366,35 +328,32 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
     }
 
     const { caseId, logId } = req.params;
-    const progressDoc = await Progress.findOne({ caseId });
+    const progressDoc = await Progress.findOne({ where: { caseId } });
     if (!progressDoc) {
       return res.status(404).json({ error: 'Progress document not found' });
     }
 
-    // Find the specific update inside updates array
-    const updateIndex = progressDoc.updates.findIndex(u => u._id.toString() === logId);
+    let updates = Array.isArray(progressDoc.updates) ? progressDoc.updates : [];
+    const updateIndex = updates.findIndex(u => String(u._id) === String(logId));
     if (updateIndex === -1) {
       return res.status(404).json({ error: 'Progress log entry not found' });
     }
 
-    const oldLog = progressDoc.updates[updateIndex];
-
-    // Update fields
+    const oldLog = updates[updateIndex];
     const { stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, refundedAmount, savedAmount, attachment } = req.body;
     
-    if (stage !== undefined) progressDoc.updates[updateIndex].stage = stage;
-    if (percentage !== undefined) progressDoc.updates[updateIndex].percentage = percentage;
-    if (summary !== undefined) progressDoc.updates[updateIndex].summary = summary;
-    if (nextAction !== undefined) progressDoc.updates[updateIndex].nextAction = nextAction;
-    if (blockers !== undefined) progressDoc.updates[updateIndex].blockers = blockers;
-    if (followUpDate !== undefined) progressDoc.updates[updateIndex].followUpDate = followUpDate;
-    if (escalateTo !== undefined) progressDoc.updates[updateIndex].escalateTo = escalateTo;
-    if (refundedAmount !== undefined) progressDoc.updates[updateIndex].refundedAmount = refundedAmount;
-    if (savedAmount !== undefined) progressDoc.updates[updateIndex].savedAmount = savedAmount;
-    if (attachment !== undefined) progressDoc.updates[updateIndex].attachment = attachment;
+    if (stage !== undefined) updates[updateIndex].stage = stage;
+    if (percentage !== undefined) updates[updateIndex].percentage = percentage;
+    if (summary !== undefined) updates[updateIndex].summary = summary;
+    if (nextAction !== undefined) updates[updateIndex].nextAction = nextAction;
+    if (blockers !== undefined) updates[updateIndex].blockers = blockers;
+    if (followUpDate !== undefined) updates[updateIndex].followUpDate = followUpDate;
+    if (escalateTo !== undefined) updates[updateIndex].escalateTo = escalateTo;
+    if (refundedAmount !== undefined) updates[updateIndex].refundedAmount = refundedAmount;
+    if (savedAmount !== undefined) updates[updateIndex].savedAmount = savedAmount;
+    if (attachment !== undefined) updates[updateIndex].attachment = attachment;
     
-    // If we are editing the latest update, we should also update the top-level progressDoc fields and the Case document
-    const isLatest = updateIndex === progressDoc.updates.length - 1;
+    const isLatest = updateIndex === updates.length - 1;
     if (isLatest) {
       if (stage !== undefined) progressDoc.stage = stage;
       if (percentage !== undefined) progressDoc.percentage = percentage;
@@ -407,7 +366,6 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
       if (savedAmount !== undefined) progressDoc.savedAmount = savedAmount;
       if (attachment !== undefined) progressDoc.attachment = attachment;
 
-      // Update case
       const caseUpdateFields = {};
       if (stage !== undefined) {
         caseUpdateFields.currentStatus = stage;
@@ -420,26 +378,28 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
       if (escalateTo) caseUpdateFields.assignedTo = escalateTo;
 
       if (Object.keys(caseUpdateFields).length > 0) {
-        await Case.findOneAndUpdate({ caseId }, caseUpdateFields);
+        await Case.update(caseUpdateFields, { where: { caseId } });
       }
     }
 
+    progressDoc.updates = updates;
     await progressDoc.save();
 
-    // Sync timeline event
     try {
       const timelineEvent = await Timeline.findOne({
-        caseId,
-        eventType: 'Progress Update',
-        summary: `Progress Updated: ${oldLog.summary} (${oldLog.stage || 'N/A'})`
+        where: {
+          caseId,
+          eventType: 'Progress Update',
+          summary: `Progress Updated: ${oldLog.summary} (${oldLog.stage || 'N/A'})`
+        }
       });
 
       if (timelineEvent) {
-        const updatedLog = progressDoc.updates[updateIndex];
+        const updatedLog = updates[updateIndex];
         timelineEvent.summary = `Progress Updated: ${updatedLog.summary} (${updatedLog.stage || 'N/A'})`;
         timelineEvent.details = updatedLog.summary;
         timelineEvent.metadata = {
-          ...timelineEvent.metadata,
+          ...(timelineEvent.metadata || {}),
           stage: updatedLog.stage,
           percentage: updatedLog.percentage,
           nextAction: updatedLog.nextAction,
@@ -454,9 +414,7 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
       console.error('Failed to sync timeline on progress update:', timelineErr);
     }
 
-    if (global.clearStatsCache) global.clearStatsCache();
-
-    res.json(progressDoc.updates[updateIndex]);
+    res.json(updates[updateIndex]);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

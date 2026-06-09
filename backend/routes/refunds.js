@@ -1,9 +1,10 @@
 const express = require('express');
-const Refund = require('../models/Refund');
-const Case = require('../models/Case');
-const AuditLog = require('../models/AuditLog');
-const Timeline = require('../models/Timeline');
-const User = require('../models/User');
+const { Op } = require('sequelize');
+const Refund = require('../sql_models/Refund');
+const Case = require('../sql_models/Case');
+const AuditLog = require('../sql_models/AuditLog');
+const Timeline = require('../sql_models/Timeline');
+const User = require('../sql_models/User');
 const { sendEmail } = require('../utils/mailer');
 const { createNotification } = require('../utils/notificationHelper');
 const { verifyToken } = require('../middleware/auth');
@@ -21,65 +22,57 @@ router.get('/', verifyToken, async (req, res) => {
     const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
     const todayStr = istTime.toISOString().split('T')[0];
 
-    // Bulk-mark overdue installments in root
-    await Refund.updateMany(
-      {
-        ...query,
-        installments: {
-          $elemMatch: {
-            status: { $nin: ['Paid', 'Due'] },
-            dueDate: { $lt: todayStr, $exists: true, $ne: '' }
-          }
-        }
-      },
-      { $set: { 'installments.$[inst].status': 'Due' } },
-      {
-        arrayFilters: [
-          {
-            'inst.status': { $nin: ['Paid', 'Due'] },
-            'inst.dueDate': { $lt: todayStr, $exists: true, $ne: '' }
-          }
-        ]
-      }
-    );
-
-    // Bulk-mark overdue installments in nested requests
-    await Refund.updateMany(
-      {
-        ...query,
-        'requests.installments': {
-          $elemMatch: {
-            status: { $nin: ['Paid', 'Due'] },
-            dueDate: { $lt: todayStr, $exists: true, $ne: '' }
-          }
-        }
-      },
-      { $set: { 'requests.$[].installments.$[inst].status': 'Due' } },
-      {
-        arrayFilters: [
-          {
-            'inst.status': { $nin: ['Paid', 'Due'] },
-            'inst.dueDate': { $lt: todayStr, $exists: true, $ne: '' }
-          }
-        ]
-      }
-    );
-
     const limit = Math.min(parseInt(req.query.limit, 10) || 500, 1000);
-    const docs = await Refund.find(query)
-      .sort({ timestamp: -1 })
-      .limit(limit)
-      .lean();
+    const docs = await Refund.findAll({
+      where: query,
+      order: [['createdAt', 'DESC']],
+      limit: limit
+    });
 
-    // Flatten nested requests arrays
     let flatDocs = [];
-    docs.forEach(doc => {
+    for (const d of docs) {
+      const doc = d.toJSON();
+      let changedDb = false;
+
+      // Check and update overdue installments in root
+      let installments = Array.isArray(doc.installments) ? doc.installments : [];
+      installments.forEach(inst => {
+        if (inst.status !== 'Paid' && inst.status !== 'Due' && inst.dueDate && inst.dueDate < todayStr) {
+          inst.status = 'Due';
+          changedDb = true;
+        }
+      });
+      if (changedDb) d.installments = installments;
+
+      // Check and update overdue installments in requests
+      let requests = Array.isArray(doc.requests) ? doc.requests : [];
+      requests.forEach(reqItem => {
+        let reqInsts = Array.isArray(reqItem.installments) ? reqItem.installments : [];
+        reqInsts.forEach(inst => {
+          if (inst.status !== 'Paid' && inst.status !== 'Due' && inst.dueDate && inst.dueDate < todayStr) {
+            inst.status = 'Due';
+            changedDb = true;
+          }
+        });
+        reqItem.installments = reqInsts;
+      });
+      if (changedDb) d.requests = requests;
+
+      if (changedDb) {
+        d.changed('installments', true);
+        d.changed('requests', true);
+        await d.save();
+        // Update local doc for flat mapping
+        doc.installments = d.installments;
+        doc.requests = d.requests;
+      }
+
       if (doc.requests && doc.requests.length > 0) {
         doc.requests.forEach((reqItem, index) => {
           flatDocs.push({
             ...doc,
-            _id: `${doc._id}_req_${index}`,
-            parentRefundId: doc._id,
+            _id: `${doc.id}_req_${index}`,
+            parentRefundId: doc.id,
             requestIndex: index,
             reqId: reqItem.reqId,
             amount: reqItem.amount,
@@ -108,9 +101,10 @@ router.get('/', verifyToken, async (req, res) => {
           });
         });
       } else {
+        doc._id = doc.id;
         flatDocs.push(doc);
       }
-    });
+    }
 
     if (req.query.status) {
       flatDocs = flatDocs.filter(d => d.status === req.query.status);
@@ -118,7 +112,7 @@ router.get('/', verifyToken, async (req, res) => {
 
     const caseIds = [...new Set(flatDocs.map(d => d.caseId).filter(Boolean))];
     const matchingCases = caseIds.length
-      ? await Case.find({ caseId: { $in: caseIds } }, 'caseId companyName').lean()
+      ? await Case.findAll({ where: { caseId: { [Op.in]: caseIds } }, attributes: ['caseId', 'companyName'] })
       : [];
     const caseMap = {};
     matchingCases.forEach(c => {
@@ -138,24 +132,13 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Review', 'Operation Head']), async (req, res) => {
-  console.log("Incoming Refund Request Body:", JSON.stringify(req.body, null, 2));
   try {
     const { 
-      caseId, 
-      amount, 
-      summary, 
-      bankName, 
-      accHolder, 
-      ifsc, 
-      accNum, 
-      branch, 
-      accType, 
-      requestedByName, 
-      installments,
-      documentLink
+      caseId, amount, summary, bankName, accHolder, ifsc, 
+      accNum, branch, accType, requestedByName, installments, documentLink
     } = req.body;
 
-    const existingRefund = await Refund.findOne({ caseId });
+    const existingRefund = await Refund.findOne({ where: { caseId } });
 
     const newReqItem = {
       reqId: req.body.reqId || `REQ-${Date.now()}`,
@@ -181,9 +164,10 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
 
     let doc;
     if (existingRefund) {
-      if (!existingRefund.requests || existingRefund.requests.length === 0) {
-        existingRefund.requests = [{
-          reqId: existingRefund.reqId || `REQ-LEGACY-${existingRefund._id}`,
+      let currentRequests = Array.isArray(existingRefund.requests) ? existingRefund.requests : [];
+      if (currentRequests.length === 0) {
+        currentRequests = [{
+          reqId: existingRefund.reqId || `REQ-LEGACY-${existingRefund.id}`,
           amount: existingRefund.amount,
           summary: existingRefund.summary,
           bankName: existingRefund.bankName,
@@ -208,9 +192,9 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
           timestamp: existingRefund.timestamp || new Date().toISOString()
         }];
       }
-      existingRefund.requests.push(newReqItem);
+      currentRequests.push(newReqItem);
       
-      // Update top-level root fields for backwards compatibility
+      existingRefund.requests = currentRequests;
       existingRefund.amount = String(amount);
       existingRefund.summary = summary;
       existingRefund.status = "Pending Review";
@@ -226,10 +210,12 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
       existingRefund.branch = branch;
       existingRefund.accType = accType;
 
+      existingRefund.changed('requests', true);
+      existingRefund.changed('installments', true);
       await existingRefund.save();
       doc = existingRefund;
     } else {
-      doc = new Refund({
+      doc = await Refund.create({
         caseId,
         amount: String(amount),
         summary,
@@ -248,27 +234,21 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
         timestamp: new Date().toISOString(),
         requests: [newReqItem]
       });
-      await doc.save();
     }
-
-    console.log("Refund Saved Successfully:", doc._id);
 
     try {
-      await Case.findOneAndUpdate({ caseId: doc.caseId }, { refundStatus: 'Pending' });
-      console.log(`Synced Case ${doc.caseId} refundStatus to Pending upon creation`);
-    } catch (e) {
-      console.error('Failed to sync case refundStatus on creation:', e);
-    }
+      await Case.update({ refundStatus: 'Pending' }, { where: { caseId: doc.caseId } });
+    } catch (e) {}
 
     try {
       const staffToNotify = ['Reviewer', 'Admin'];
-      const users = await User.find({ role: { $in: staffToNotify } });
+      const users = await User.findAll({ where: { role: { [Op.in]: staffToNotify } } });
       const emails = users.map(u => u.email).join(',');
       if (emails) {
-        sendEmail(emails, `New Refund Request: ${doc.caseId}`, `A new refund request for ₹${amount} has been submitted by ${req.user.email} and is pending review.`).catch(e => console.error('Refund Notification Error:', e));
+        sendEmail(emails, `New Refund Request: ${doc.caseId}`, `A new refund request for ₹${amount} has been submitted by ${req.user.email} and is pending review.`).catch(e => console.error(e));
         createNotification(staffToNotify, `New Refund Request: ${doc.caseId}`, `A new refund request for ₹${amount} has been submitted by ${newReqItem.requestedByName} and is pending review.`, 'Refund', `/case-master?search=${doc.caseId}`);
       }
-    } catch (e) { console.error('Refund Notification Error:', e); }
+    } catch (e) {}
     
     await AuditLog.create({
       id: Date.now().toString(),
@@ -280,20 +260,20 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
       caseId: doc.caseId
     });
 
-    await new Timeline({
+    await Timeline.create({
       id: Date.now().toString() + Math.random().toString(36).substring(7),
       caseId: doc.caseId,
       eventDate: new Date().toISOString(),
       source: req.user.fullName || req.user.email || 'System',
       eventType: 'Refund Request',
       summary: `Submitted refund request for ₹${amount}`
-    }).save();
+    });
 
-    const matchingCase = await Case.findOne({ caseId: doc.caseId }, 'companyName');
+    const matchingCase = await Case.findOne({ where: { caseId: doc.caseId }, attributes: ['companyName'] });
     const responseObj = {
-      ...doc.toObject(),
-      _id: existingRefund ? `${doc._id}_req_${doc.requests.length - 1}` : `${doc._id}_req_0`,
-      parentRefundId: doc._id,
+      ...doc.toJSON(),
+      _id: existingRefund ? `${doc.id}_req_${doc.requests.length - 1}` : `${doc.id}_req_0`,
+      parentRefundId: doc.id,
       requestIndex: existingRefund ? doc.requests.length - 1 : 0,
       companyName: matchingCase ? matchingCase.companyName : '',
       requests: undefined
@@ -315,7 +295,7 @@ router.put('/:id', verifyToken, async (req, res) => {
       requestIndex = parseInt(parts[1], 10);
     }
 
-    const currentRefund = await Refund.findById(refundId);
+    const currentRefund = await Refund.findByPk(refundId);
     if (!currentRefund) return res.status(404).json({ error: "Refund not found" });
 
     let newStatus = req.body.status;
@@ -324,17 +304,16 @@ router.put('/:id', verifyToken, async (req, res) => {
     const todayStr = istTime.toISOString().split('T')[0];
 
     if (requestIndex !== null) {
-      if (!currentRefund.requests || currentRefund.requests.length <= requestIndex) {
+      let requests = Array.isArray(currentRefund.requests) ? currentRefund.requests : [];
+      if (requests.length <= requestIndex) {
         return res.status(400).json({ error: "Invalid request index" });
       }
       
-      const reqItem = currentRefund.requests[requestIndex];
+      const reqItem = requests[requestIndex];
       Object.assign(reqItem, req.body);
-      if (newStatus) {
-        reqItem.status = newStatus;
-      }
+      if (newStatus) reqItem.status = newStatus;
       
-      if (reqItem.installments && reqItem.installments.length > 0) {
+      if (Array.isArray(reqItem.installments) && reqItem.installments.length > 0) {
         reqItem.installments.forEach(inst => {
           if (inst.status !== 'Paid' && inst.dueDate && inst.dueDate < todayStr) {
             inst.status = 'Due';
@@ -342,12 +321,10 @@ router.put('/:id', verifyToken, async (req, res) => {
         });
       }
 
-      if (requestIndex === currentRefund.requests.length - 1) {
+      if (requestIndex === requests.length - 1) {
         Object.assign(currentRefund, req.body);
-        if (newStatus) {
-          currentRefund.status = newStatus;
-        }
-        if (currentRefund.installments && currentRefund.installments.length > 0) {
+        if (newStatus) currentRefund.status = newStatus;
+        if (Array.isArray(currentRefund.installments) && currentRefund.installments.length > 0) {
           currentRefund.installments.forEach(inst => {
             if (inst.status !== 'Paid' && inst.dueDate && inst.dueDate < todayStr) {
               inst.status = 'Due';
@@ -355,28 +332,30 @@ router.put('/:id', verifyToken, async (req, res) => {
           });
         }
       }
+      currentRefund.requests = requests;
+      currentRefund.changed('requests', true);
+      currentRefund.changed('installments', true);
     } else {
       Object.assign(currentRefund, req.body);
-      if (newStatus) {
-        currentRefund.status = newStatus;
-      }
-      if (currentRefund.installments && currentRefund.installments.length > 0) {
+      if (newStatus) currentRefund.status = newStatus;
+      if (Array.isArray(currentRefund.installments) && currentRefund.installments.length > 0) {
         currentRefund.installments.forEach(inst => {
           if (inst.status !== 'Paid' && inst.dueDate && inst.dueDate < todayStr) {
             inst.status = 'Due';
           }
         });
       }
+      currentRefund.changed('installments', true);
     }
 
     currentRefund.lastStatusAtMs = Date.now();
     const doc = await currentRefund.save();
 
     try {
-      const caseDoc = await Case.findOne({ caseId: doc.caseId });
+      const caseDoc = await Case.findOne({ where: { caseId: doc.caseId } });
       if (caseDoc) {
         let mappedRefundStatus = '';
-        const reqList = doc.requests && doc.requests.length > 0 ? doc.requests : [doc];
+        const reqList = Array.isArray(doc.requests) && doc.requests.length > 0 ? doc.requests : [doc];
         
         const hasPending = reqList.some(r => {
           const s = r.status?.toLowerCase() || '';
@@ -385,26 +364,22 @@ router.put('/:id', verifyToken, async (req, res) => {
         const allPaid = reqList.every(r => {
           const s = r.status?.toLowerCase() || '';
           if (s === 'paid') return true;
-          if (r.installments && r.installments.length > 0) {
+          if (Array.isArray(r.installments) && r.installments.length > 0) {
             return r.installments.every(inst => inst.status?.toLowerCase() === 'paid');
           }
           return r.transactionId && r.paymentDate;
         });
 
-        if (hasPending) {
-          mappedRefundStatus = 'Pending';
-        } else if (allPaid) {
-          mappedRefundStatus = 'Paid';
-        }
+        if (hasPending) mappedRefundStatus = 'Pending';
+        else if (allPaid) mappedRefundStatus = 'Paid';
 
         caseDoc.refundStatus = mappedRefundStatus;
 
-        // Automatically calculate and sync refundedAmount on Case
         let totalPaidAmount = 0;
         reqList.forEach(r => {
           if (r.status?.toLowerCase() === 'paid') {
             totalPaidAmount += Number(r.amount) || 0;
-          } else if (r.installments && r.installments.length > 0) {
+          } else if (Array.isArray(r.installments) && r.installments.length > 0) {
             r.installments.forEach(inst => {
               if (inst.status?.toLowerCase() === 'paid') {
                 totalPaidAmount += Number(inst.amount) || 0;
@@ -414,51 +389,41 @@ router.put('/:id', verifyToken, async (req, res) => {
         });
 
         caseDoc.refundedAmount = totalPaidAmount;
-
-        // Auto-set savedAmount to 0 if fully refunded
         if (totalPaidAmount >= (caseDoc.amtInDispute || 0) && (caseDoc.amtInDispute || 0) > 0) {
           caseDoc.savedAmount = 0;
         }
 
         await caseDoc.save();
-        console.log(`Synced Case ${doc.caseId} refundStatus to: ${mappedRefundStatus}, refundedAmount to: ${totalPaidAmount}`);
       }
-    } catch (caseErr) {
-      console.error(`Failed to sync refundStatus to Case: ${caseErr.message}`);
-    }
+    } catch (caseErr) {}
 
     const activeReq = requestIndex !== null ? doc.requests[requestIndex] : doc;
     try {
       if (activeReq.status === 'Pending Admin Approval') {
-        const admins = await User.find({ role: 'Admin' });
+        const admins = await User.findAll({ where: { role: 'Admin' } });
         const emails = admins.map(u => u.email).join(',');
         if (emails) {
-          sendEmail(emails, `Refund Approval Required: ${doc.caseId}`, `Reviewer has approved a refund for ₹${activeReq.amount}. Final Admin approval is pending.`).catch(e => console.error('Refund Admin Alert Error:', e));
+          sendEmail(emails, `Refund Approval Required: ${doc.caseId}`, `Reviewer has approved a refund for ₹${activeReq.amount}. Final Admin approval is pending.`).catch(e => console.error(e));
           createNotification('Admin', 'Refund Approval Required', `Reviewer has approved a refund for ₹${activeReq.amount} on case ${doc.caseId}.`, 'Refund', `/case-master?search=${doc.caseId}`);
         }
       } else if (activeReq.status === 'Pending Payment') {
-        const accountants = await User.find({ role: 'Accountant' });
+        const accountants = await User.findAll({ where: { role: 'Accountant' } });
         const emails = accountants.map(u => u.email).join(',');
         if (emails) {
-          sendEmail(emails, `New Payment Task: ${doc.caseId}`, `Admin has approved a refund for ₹${activeReq.amount}. Please process the payment.`).catch(e => console.error('Refund Payment Alert Error:', e));
+          sendEmail(emails, `New Payment Task: ${doc.caseId}`, `Admin has approved a refund for ₹${activeReq.amount}. Please process the payment.`).catch(e => console.error(e));
           createNotification('Accountant', 'New Payment Task', `Admin approved a refund for ₹${activeReq.amount} on case ${doc.caseId}. Please process payment.`, 'Refund', `/case-master?search=${doc.caseId}`);
         }
       } else if (activeReq.status === 'Paid' || activeReq.status === 'Rejected') {
         let emailBody = `Your refund request for ₹${activeReq.amount} has been ${activeReq.status}.`;
         if (activeReq.status === 'Rejected' && activeReq.reviewerRemark) {
-          emailBody += `\nReason for Rejection: ${activeReq.reviewerRemark}`;
-        } else if (activeReq.remark) {
-          emailBody += `\nRemark: ${activeReq.remark}`;
+          emailBody += `\\nReason for Rejection: ${activeReq.reviewerRemark}`;
         }
-        sendEmail(activeReq.requestedBy || doc.requestedBy, `Refund Request Update: ${doc.caseId}`, emailBody).catch(e => console.error('Refund Requester Alert Error:', e));
+        sendEmail(activeReq.requestedBy || doc.requestedBy, `Refund Request Update: ${doc.caseId}`, emailBody).catch(e => console.error(e));
 
         let notifBody = `Your refund request for ₹${activeReq.amount} on case ${doc.caseId} has been ${activeReq.status}.`;
-        if (activeReq.status === 'Rejected' && activeReq.reviewerRemark) {
-          notifBody += ` Reason: ${activeReq.reviewerRemark}`;
-        }
         createNotification(activeReq.requestedBy || doc.requestedBy, `Refund ${activeReq.status}`, notifBody, 'Refund', `/case-master?search=${doc.caseId}`);
       }
-    } catch (e) { console.error('Refund Update Notification Error:', e); }
+    } catch (e) {}
     
     await AuditLog.create({
       id: Date.now().toString(),
@@ -470,20 +435,20 @@ router.put('/:id', verifyToken, async (req, res) => {
       caseId: doc.caseId
     });
 
-    await new Timeline({
+    await Timeline.create({
       id: Date.now().toString() + Math.random().toString(36).substring(7),
       caseId: doc.caseId,
       eventDate: new Date().toISOString(),
       source: req.user.fullName || req.user.email || 'System',
       eventType: 'Refund Update',
       summary: `Refund status updated to ${activeReq.status}`
-    }).save();
+    });
 
-    const matchingCase = await Case.findOne({ caseId: doc.caseId }, 'companyName');
+    const matchingCase = await Case.findOne({ where: { caseId: doc.caseId }, attributes: ['companyName'] });
     const responseObj = {
-      ...doc.toObject(),
-      _id: requestIndex !== null ? `${doc._id}_req_${requestIndex}` : doc._id,
-      parentRefundId: doc._id,
+      ...doc.toJSON(),
+      _id: requestIndex !== null ? `${doc.id}_req_${requestIndex}` : doc.id,
+      parentRefundId: doc.id,
       requestIndex: requestIndex,
       reqId: activeReq.reqId,
       amount: activeReq.amount,
@@ -528,27 +493,25 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
       requestIndex = parseInt(parts[1], 10);
     }
 
-    const doc = await Refund.findById(refundId);
+    const doc = await Refund.findByPk(refundId);
     if (!doc) {
       return res.status(404).json({ error: "Refund not found" });
     }
 
     let deletedAmount = doc.amount;
-    if (requestIndex !== null && doc.requests && doc.requests[requestIndex]) {
-      deletedAmount = doc.requests[requestIndex].amount;
+    let requests = Array.isArray(doc.requests) ? doc.requests : [];
+    if (requestIndex !== null && requests[requestIndex]) {
+      deletedAmount = requests[requestIndex].amount;
     }
 
     if (requestIndex !== null) {
-      if (doc.requests && doc.requests.length > requestIndex) {
-        // Remove the request at requestIndex
-        doc.requests.splice(requestIndex, 1);
+      if (requests.length > requestIndex) {
+        requests.splice(requestIndex, 1);
         
-        if (doc.requests.length === 0) {
-          // Delete the entire document if no requests left
-          await Refund.findByIdAndDelete(refundId);
+        if (requests.length === 0) {
+          await doc.destroy();
         } else {
-          // If there are still requests, update the root fields to the last request in the array for backward compatibility
-          const lastReq = doc.requests[doc.requests.length - 1];
+          const lastReq = requests[requests.length - 1];
           doc.amount = lastReq.amount;
           doc.summary = lastReq.summary;
           doc.status = lastReq.status;
@@ -563,26 +526,27 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
           doc.accNum = lastReq.accNum;
           doc.branch = lastReq.branch;
           doc.accType = lastReq.accType;
+          doc.requests = requests;
+          doc.changed('requests', true);
+          doc.changed('installments', true);
           await doc.save();
         }
       } else {
         return res.status(400).json({ error: "Invalid request index" });
       }
     } else {
-      // No request index, delete the whole document
-      await Refund.findByIdAndDelete(refundId);
+      await doc.destroy();
     }
 
-    // Sync Case refundStatus
-    const remaining = await Refund.findOne({ caseId: doc.caseId });
-    const caseDoc = await Case.findOne({ caseId: doc.caseId });
+    const remaining = await Refund.findOne({ where: { caseId: doc.caseId } });
+    const caseDoc = await Case.findOne({ where: { caseId: doc.caseId } });
     if (caseDoc) {
       if (!remaining) {
         caseDoc.refundStatus = '';
         caseDoc.refundedAmount = 0;
       } else {
         let mappedRefundStatus = '';
-        const reqList = remaining.requests && remaining.requests.length > 0 ? remaining.requests : [remaining];
+        const reqList = Array.isArray(remaining.requests) && remaining.requests.length > 0 ? remaining.requests : [remaining];
         
         const hasPending = reqList.some(r => {
           const s = r.status?.toLowerCase() || '';
@@ -591,25 +555,21 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
         const allPaid = reqList.every(r => {
           const s = r.status?.toLowerCase() || '';
           if (s === 'paid') return true;
-          if (r.installments && r.installments.length > 0) {
+          if (Array.isArray(r.installments) && r.installments.length > 0) {
             return r.installments.every(inst => inst.status?.toLowerCase() === 'paid');
           }
           return r.transactionId && r.paymentDate;
         });
 
-        if (hasPending) {
-          mappedRefundStatus = 'Pending';
-        } else if (allPaid) {
-          mappedRefundStatus = 'Paid';
-        }
+        if (hasPending) mappedRefundStatus = 'Pending';
+        else if (allPaid) mappedRefundStatus = 'Paid';
         caseDoc.refundStatus = mappedRefundStatus;
 
-        // Automatically calculate and sync refundedAmount on Case
         let totalPaidAmount = 0;
         reqList.forEach(r => {
           if (r.status?.toLowerCase() === 'paid') {
             totalPaidAmount += Number(r.amount) || 0;
-          } else if (r.installments && r.installments.length > 0) {
+          } else if (Array.isArray(r.installments) && r.installments.length > 0) {
             r.installments.forEach(inst => {
               if (inst.status?.toLowerCase() === 'paid') {
                 totalPaidAmount += Number(inst.amount) || 0;
@@ -619,8 +579,6 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
         });
 
         caseDoc.refundedAmount = totalPaidAmount;
-
-        // Auto-set savedAmount to 0 if fully refunded
         if (totalPaidAmount >= (caseDoc.amtInDispute || 0) && (caseDoc.amtInDispute || 0) > 0) {
           caseDoc.savedAmount = 0;
         }
@@ -628,7 +586,6 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
       await caseDoc.save();
     }
 
-    // Audit Log
     await AuditLog.create({
       id: Date.now().toString(),
       timestamp: new Date().toISOString(),
@@ -639,15 +596,14 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
       caseId: doc.caseId
     });
 
-    // Timeline Log for Recent Activity
-    await new Timeline({
+    await Timeline.create({
       id: Date.now().toString() + Math.random().toString(36).substring(7),
       caseId: doc.caseId,
       eventDate: new Date().toISOString(),
       source: req.user.fullName || req.user.email || 'System',
       eventType: 'Refund Deleted',
       summary: `Deleted refund request of ₹${Number(deletedAmount || 0).toLocaleString('en-IN')} for Case ${doc.caseId}`
-    }).save();
+    });
 
     if (global.clearStatsCache) global.clearStatsCache();
     res.json({ success: true, message: "Refund deleted successfully" });
