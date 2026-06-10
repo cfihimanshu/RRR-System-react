@@ -85,7 +85,20 @@ router.get('/', verifyToken, async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
 
-    res.json(reports);
+    const parsedReports = reports.map(r => {
+      let parsedData = {};
+      try {
+        parsedData = typeof r.data === 'string' ? JSON.parse(r.data) : (r.data || {});
+      } catch (e) {
+        parsedData = {};
+      }
+      return {
+        ...r,
+        ...parsedData
+      };
+    });
+
+    res.json(parsedReports);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
