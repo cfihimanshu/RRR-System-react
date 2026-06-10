@@ -21,7 +21,9 @@ if (missingEnvVars.length > 0) {
 const allowedOrigins = [
   'https://cfi247.com',
   'https://www.cfi247.com',
+  'https://api.cfi247.com',
   'https://rrr-system-react-l8cr.vercel.app',
+  'https://rrr-system-react-ia7xqyedv-cfihimanshus-projects.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:5174',
