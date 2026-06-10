@@ -1,3 +1,4 @@
+import { confirmDelete } from '../../utils/confirmAlert';
 import React, { useState, useEffect, useContext } from 'react';
 import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
@@ -477,8 +478,9 @@ const NewCaseTab = () => {
   const addCyberAck = () => setCyberAcks([...cyberAcks, '']);
   const removeCyberAck = (index) => setCyberAcks(cyberAcks.filter((_, i) => i !== index));
 
-  const handleClearForm = () => {
-    if (!window.confirm('Are you sure you want to clear the form? All entered details will be lost.')) return;
+  const handleClearForm = async () => {
+    const isConfirmed = await confirmDelete('Clear Form?', 'Are you sure you want to clear the form? All entered details will be lost.');
+    if (!isConfirmed) return;
     clearFormPersistence();
     setFormData({
       companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',

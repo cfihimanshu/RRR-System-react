@@ -1,3 +1,4 @@
+import { confirmDelete } from '../../utils/confirmAlert';
 import React, { useState, useEffect, useContext, useMemo } from 'react';
 import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
@@ -225,7 +226,8 @@ const MyTaskTab = () => {
   };
 
   const handleDeleteTask = async (taskId) => {
-    if (!window.confirm('Delete this task?')) return;
+    const isConfirmed = await confirmDelete('Delete Task?', 'Delete this task?');
+    if (!isConfirmed) return;
     try {
       await api.delete(`/tasks/${taskId}`);
       setTasks(prev => prev.filter(t => t._id !== taskId));

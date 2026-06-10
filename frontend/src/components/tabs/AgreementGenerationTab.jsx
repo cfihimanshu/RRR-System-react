@@ -1,3 +1,4 @@
+import { confirmDelete } from '../../utils/confirmAlert';
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { FileText, List, Plus, RefreshCw, Trash2, Download, Eye, ClipboardList, IndianRupee } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -46,7 +47,8 @@ const AgreementGenerationTab = () => {
   }, []);
 
   const handleDeleteAgreement = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this agreement record?')) return;
+    const isConfirmed = await confirmDelete('Delete Agreement?', 'Are you sure you want to delete this agreement record?');
+    if (!isConfirmed) return;
     try {
       await api.delete(`/agreements/${id}`);
       toast.success('Agreement record deleted');
@@ -81,8 +83,9 @@ const AgreementGenerationTab = () => {
     ));
   };
 
-  const handleClear = () => {
-    if (window.confirm('Are you sure you want to clear the entire form?')) {
+  const handleClear = async () => {
+    const isConfirmed = await confirmDelete('Clear Form?', 'Are you sure you want to clear the entire form?');
+    if (isConfirmed) {
       setFormData({
         date: '',
         firstPartyCompany: '',

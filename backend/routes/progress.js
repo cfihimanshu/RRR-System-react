@@ -85,7 +85,14 @@ router.get('/', verifyToken, async (req, res) => {
     }
     
     for (const doc of progressDocs) {
-      const updates = Array.isArray(doc.updates) ? doc.updates : [];
+      let rawUpdates = doc.updates;
+      if (typeof rawUpdates === 'string') {
+        try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+      }
+      if (typeof rawUpdates === 'string') {
+        try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+      }
+      const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
       if (updates.length > 0) {
         logs.push(...updates);
       } else if (doc.summary) {
@@ -102,13 +109,15 @@ router.get('/', verifyToken, async (req, res) => {
           savedAmount: doc.savedAmount,
           attachment: doc.attachment,
           updatedBy: doc.updatedBy,
-          createdAt: doc.createdAt || doc.updatedAt || new Date()
+          createdAt: (doc.followUpDate ? new Date(doc.followUpDate).toISOString() : null) || doc.createdAt || doc.updatedAt || new Date()
         });
       }
     }
 
     const uniqueLogsMap = new Map();
     for (const log of logs) {
+      if (!log.summary && !log.stage && !log.nextAction) continue; // Filter out empty timeline events
+      
       const stageKey = log.stage || 'no-stage';
       const summaryText = log.summary ? log.summary.trim() : 'no-summary';
       const summaryKey = `${stageKey}-${summaryText}`;
@@ -176,7 +185,7 @@ router.post('/', verifyToken, async (req, res) => {
       refundedAmount,
       savedAmount,
       attachment,
-      createdAt: new Date().toISOString()
+      createdAt: followUpDate ? new Date(followUpDate).toISOString() : new Date().toISOString()
     };
 
     let progressDoc = await Progress.findOne({ where: { caseId } });
@@ -215,6 +224,35 @@ router.post('/', verifyToken, async (req, res) => {
         if (!progressDoc) throw err;
       }
     } else {
+      let rawUpdates = progressDoc.updates;
+      if (typeof rawUpdates === 'string') {
+        try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+      }
+      if (typeof rawUpdates === 'string') {
+        try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+      }
+      let currentUpdates = Array.isArray(rawUpdates) ? rawUpdates : [];
+      
+      // Archive existing legacy root state if this is the first update
+      if (currentUpdates.length === 0 && progressDoc.summary) {
+        currentUpdates.push({
+          _id: generateId(),
+          stage: progressDoc.stage,
+          percentage: progressDoc.percentage,
+          summary: progressDoc.summary,
+          nextAction: progressDoc.nextAction,
+          blockers: progressDoc.blockers,
+          followUpDate: progressDoc.followUpDate,
+          escalateTo: progressDoc.escalateTo,
+          refundedAmount: progressDoc.refundedAmount,
+          savedAmount: progressDoc.savedAmount,
+          attachment: progressDoc.attachment,
+          updatedBy: progressDoc.updatedBy,
+          createdAt: progressDoc.followUpDate ? new Date(progressDoc.followUpDate).toISOString() : (progressDoc.createdAt || progressDoc.updatedAt || new Date().toISOString())
+        });
+      }
+
+      // Now apply new state to the root doc
       progressDoc.stage = stage || progressDoc.stage;
       progressDoc.percentage = percentage !== undefined ? percentage : progressDoc.percentage;
       progressDoc.summary = summary || progressDoc.summary;
@@ -230,24 +268,6 @@ router.post('/', verifyToken, async (req, res) => {
         progressDoc.checklist = checklist;
       }
 
-      let currentUpdates = Array.isArray(progressDoc.updates) ? progressDoc.updates : [];
-      if (currentUpdates.length === 0 && progressDoc.summary) {
-        currentUpdates.push({
-          _id: generateId(),
-          stage: progressDoc.stage,
-          percentage: progressDoc.percentage,
-          summary: progressDoc.summary,
-          nextAction: progressDoc.nextAction,
-          blockers: progressDoc.blockers,
-          followUpDate: progressDoc.followUpDate,
-          escalateTo: progressDoc.escalateTo,
-          refundedAmount: progressDoc.refundedAmount,
-          savedAmount: progressDoc.savedAmount,
-          attachment: progressDoc.attachment,
-          updatedBy: progressDoc.updatedBy,
-          createdAt: progressDoc.createdAt || progressDoc.updatedAt || new Date().toISOString()
-        });
-      }
       currentUpdates.push(newLog);
       progressDoc.updates = currentUpdates;
       await progressDoc.save();
@@ -284,7 +304,7 @@ router.post('/', verifyToken, async (req, res) => {
     const timelineEvent = await Timeline.create({
       id: generateId(),
       caseId,
-      eventDate: new Date().toISOString(),
+      eventDate: followUpDate ? new Date(followUpDate).toISOString() : new Date().toISOString(),
       source: req.user.fullName || req.user.email || 'System',
       eventType: 'Progress Update',
       summary: `Progress Updated: ${summary} (${stage || 'N/A'})`,
@@ -329,25 +349,73 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
 
     const { caseId, logId } = req.params;
     const progressDoc = await Progress.findOne({ where: { caseId } });
-    if (!progressDoc) {
-      return res.status(404).json({ error: 'Progress document not found' });
-    }
 
-    let updates = Array.isArray(progressDoc.updates) ? progressDoc.updates : [];
+    let rawUpdates = progressDoc ? progressDoc.updates : [];
+    if (typeof rawUpdates === 'string') {
+      try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+    }
+    if (typeof rawUpdates === 'string') {
+      try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+    }
+    let updates = Array.isArray(rawUpdates) ? rawUpdates : [];
     const updateIndex = updates.findIndex(u => String(u._id) === String(logId));
+    const { stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, refundedAmount, savedAmount, attachment } = req.body;
+
     if (updateIndex === -1) {
+      // Fallback 1: Legacy root progress doc
+      if (progressDoc && String(progressDoc.id) === String(logId)) {
+        if (stage !== undefined) progressDoc.stage = stage;
+        if (percentage !== undefined) progressDoc.percentage = percentage;
+        if (summary !== undefined) progressDoc.summary = summary;
+        if (nextAction !== undefined) progressDoc.nextAction = nextAction;
+        if (blockers !== undefined) progressDoc.blockers = blockers;
+        if (followUpDate !== undefined) progressDoc.followUpDate = followUpDate;
+        if (escalateTo !== undefined) progressDoc.escalateTo = escalateTo;
+        if (refundedAmount !== undefined) progressDoc.refundedAmount = refundedAmount;
+        if (savedAmount !== undefined) progressDoc.savedAmount = savedAmount;
+        if (attachment !== undefined) progressDoc.attachment = attachment;
+        await progressDoc.save();
+        return res.json({ message: 'Legacy progress updated', id: logId });
+      }
+      
+      // Fallback 2: Timeline event only
+      const timelineEvent = await Timeline.findOne({ where: { id: logId, caseId } });
+      if (timelineEvent && timelineEvent.eventType === 'Progress Update') {
+        if (summary !== undefined) {
+          timelineEvent.summary = `Progress Updated: ${summary} (${stage || timelineEvent.metadata?.stage || 'N/A'})`;
+          timelineEvent.details = summary;
+        }
+        timelineEvent.metadata = {
+          ...(timelineEvent.metadata || {}),
+          ...(stage !== undefined && { stage }),
+          ...(percentage !== undefined && { percentage }),
+          ...(nextAction !== undefined && { nextAction }),
+          ...(blockers !== undefined && { blockers }),
+          ...(followUpDate !== undefined && { followUpDate }),
+          ...(escalateTo !== undefined && { escalateTo }),
+          ...(attachment !== undefined && { attachment })
+        };
+        if (followUpDate) {
+          timelineEvent.eventDate = new Date(followUpDate).toISOString();
+        }
+        await timelineEvent.save();
+        return res.json({ message: 'Timeline progress updated', id: logId });
+      }
+      
       return res.status(404).json({ error: 'Progress log entry not found' });
     }
 
     const oldLog = updates[updateIndex];
-    const { stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, refundedAmount, savedAmount, attachment } = req.body;
     
     if (stage !== undefined) updates[updateIndex].stage = stage;
     if (percentage !== undefined) updates[updateIndex].percentage = percentage;
     if (summary !== undefined) updates[updateIndex].summary = summary;
     if (nextAction !== undefined) updates[updateIndex].nextAction = nextAction;
     if (blockers !== undefined) updates[updateIndex].blockers = blockers;
-    if (followUpDate !== undefined) updates[updateIndex].followUpDate = followUpDate;
+    if (followUpDate !== undefined) {
+      updates[updateIndex].followUpDate = followUpDate;
+      if (followUpDate) updates[updateIndex].createdAt = new Date(followUpDate).toISOString();
+    }
     if (escalateTo !== undefined) updates[updateIndex].escalateTo = escalateTo;
     if (refundedAmount !== undefined) updates[updateIndex].refundedAmount = refundedAmount;
     if (savedAmount !== undefined) updates[updateIndex].savedAmount = savedAmount;
@@ -408,6 +476,9 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
           escalateTo: updatedLog.escalateTo,
           attachment: updatedLog.attachment
         };
+        if (updatedLog.followUpDate) {
+          timelineEvent.eventDate = new Date(updatedLog.followUpDate).toISOString();
+        }
         await timelineEvent.save();
       }
     } catch (timelineErr) {

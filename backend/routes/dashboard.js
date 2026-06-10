@@ -160,6 +160,10 @@ router.get('/stats', verifyToken, async (req, res) => {
 
     let query = { ...teamDateQuery, ...ownershipQuery };
 
+    if (['operation head', 'operation admin'].includes(req.user?.role?.toLowerCase().trim())) {
+      query.sourceOfComplaint = { [Op.like]: '%odoo%' };
+    }
+
     const bypassEodCheck = dbUser?.bypassEodCheck || false;
     let isEodMissed = false;
 
@@ -283,13 +287,32 @@ router.get('/stats', verifyToken, async (req, res) => {
     const threatTrendMap = {};
 
     allCases.forEach(c => {
-      // Avoid Odoo cases if not operation head
-      if (req.user?.role?.toLowerCase().trim() !== 'operation head' && String(c.sourceOfComplaint).toLowerCase().includes('odoo')) {
+      const isOdooCase = String(c.sourceOfComplaint).toLowerCase().includes('odoo');
+      const roleLower = req.user?.role?.toLowerCase().trim() || '';
+      const isOperationRole = ['operation head', 'operation admin'].includes(roleLower);
+      const isAdminRole = ['admin', 'super admin', 'superadmin'].includes(roleLower);
+      
+      // If it's an Odoo case and user is not operation role, we should NOT add to global metrics.
+      // But if user is admin, we DO want to add it to sourceMap only.
+      // If user is not admin and not operation role, we skip completely.
+      if (isOdooCase && !isOperationRole && !isAdminRole) {
          return;
       }
       
-      b.totalCases++;
       const amt = Number(c.totalAmtPaid) || 0;
+      
+      // Add to source map regardless, because if we reached here, the user is allowed to see the source
+      const source = (c.sourceOfComplaint || 'Unknown').toUpperCase().trim();
+      sourceMap[source] = (sourceMap[source] || { count: 0, amount: 0 });
+      sourceMap[source].count++;
+      sourceMap[source].amount += amt;
+
+      // If it's an Odoo case and user is Admin, they ONLY want to see it in Source of Complaint, nowhere else!
+      if (isOdooCase && !isOperationRole) {
+         return; // Skip adding to any other metrics
+      }
+      
+      b.totalCases++;
       b.totalAmountPaid += amt;
       
       const isSettled = ['Settled', 'settled', 'Settlement', 'settlement'].includes(c.currentStatus);
@@ -326,11 +349,6 @@ router.get('/stats', verifyToken, async (req, res) => {
       caseTypeMap[type].count++;
       caseTypeMap[type].amount += amt;
 
-      const source = (c.sourceOfComplaint || 'Unknown').toUpperCase().trim();
-      sourceMap[source] = (sourceMap[source] || { count: 0, amount: 0 });
-      sourceMap[source].count++;
-      sourceMap[source].amount += amt;
-
       if (new Date(c.createdAt) >= sevenDaysAgo) {
          const dateStr = new Date(c.createdAt).toISOString().split('T')[0];
          trendMap[dateStr] = trendMap[dateStr] || { newCases: 0, highPriority: 0 };
@@ -361,6 +379,17 @@ router.get('/stats', verifyToken, async (req, res) => {
     highPriorityCases.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     const caseTypeWiseData = Object.entries(caseTypeMap).map(([k,v]) => ({ caseType: k, count: v.count, totalAmount: v.amount })).sort((a,b) => b.count - a.count);
+    const allSources = ['EMAIL', 'CALL', 'OFFICE VISIT', 'SOCIAL MEDIA', 'TOLL FREE', 'NOTICE', 'UNKNOWN'];
+    const roleLower = req.user?.role?.toLowerCase().trim() || '';
+    const canSeeOdoo = ['admin', 'super admin', 'superadmin', 'operation head', 'operation admin'].includes(roleLower);
+    
+    if (canSeeOdoo) {
+      allSources.push('ODOO');
+    } else {
+      delete sourceMap['ODOO']; // remove it from metrics if they somehow had one
+    }
+    
+    allSources.forEach(s => { if (!sourceMap[s]) sourceMap[s] = { count: 0, amount: 0 }; });
     const sourceWiseData = Object.entries(sourceMap).map(([k,v]) => ({ source: k, count: v.count, totalAmount: v.amount })).sort((a,b) => b.count - a.count);
 
     const [

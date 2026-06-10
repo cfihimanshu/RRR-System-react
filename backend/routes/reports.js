@@ -98,7 +98,8 @@ router.post('/', verifyToken, async (req, res) => {
       ...req.body,
       userId: req.user.id,
       userEmail: req.user.email,
-      userName: req.user.fullName
+      userName: req.user.fullName,
+      data: req.body
     };
 
     const isExempt = ['admin', 'super admin', 'superadmin', 'reviewer', 'accountant', 'operation head', 'operation review'].includes(req.user.role?.toLowerCase().trim());

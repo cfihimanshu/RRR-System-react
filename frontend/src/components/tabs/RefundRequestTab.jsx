@@ -1,3 +1,4 @@
+import { confirmDelete } from '../../utils/confirmAlert';
 import React, { useEffect, useState, useContext } from 'react';
 import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
@@ -603,7 +604,8 @@ const RefundRequestTab = () => {
   };
 
   const handleDeleteRequest = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this refund request? This action cannot be undone.")) return;
+    const isConfirmed = await confirmDelete('Delete Refund?', 'Are you sure you want to delete this refund request? This action cannot be undone.');
+    if (!isConfirmed) return;
     try {
       await api.delete(`/refunds/${id}`);
       toast.success("Refund request deleted successfully");
@@ -618,7 +620,8 @@ const RefundRequestTab = () => {
   };
 
   const handleDeleteInstallment = async (instIndex) => {
-    if (!window.confirm("Are you sure you want to delete this installment?")) return;
+    const isConfirmed = await confirmDelete('Delete Installment?', 'Are you sure you want to delete this installment?');
+    if (!isConfirmed) return;
     try {
       const updatedInstallments = selectedRefund.installments.filter((_, idx) => idx !== instIndex);
       const newAmount = updatedInstallments.reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0);

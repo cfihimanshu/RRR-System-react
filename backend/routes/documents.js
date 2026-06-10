@@ -121,4 +121,37 @@ router.put('/:id', verifyToken, async (req, res) => {
   }
 });
 
+router.delete('/:id', verifyToken, async (req, res) => {
+  try {
+    const allowedRoles = ['Admin', 'Super Admin', 'SuperAdmin'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
+    }
+
+    const { id } = req.params;
+    const docToDelete = await Document.findByPk(id);
+    if (!docToDelete) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const caseId = docToDelete.caseId;
+    const docType = docToDelete.docType;
+    await docToDelete.destroy();
+
+    await AuditLog.create({
+      id: Date.now().toString() + Math.random().toString(36).substring(7),
+      timestamp: new Date().toISOString(),
+      user: req.user.email,
+      role: req.user.role,
+      category: 'Document Deleted',
+      description: `Deleted document (${docType}) for case ${caseId}`,
+      caseId: caseId
+    });
+
+    res.json({ message: 'Document deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

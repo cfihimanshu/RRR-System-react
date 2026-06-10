@@ -1,3 +1,4 @@
+import { confirmDelete } from '../../utils/confirmAlert';
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import FileUpload from '../shared/FileUpload';
 import api from '../../api/axios';
@@ -1248,7 +1249,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   };
 
   const handleDeleteCase = async (caseId) => {
-    if (!window.confirm(`Are you sure you want to delete case ${caseId}? This action cannot be undone.`)) return;
+    const isConfirmed = await confirmDelete('Delete Case?', `Are you sure you want to delete case ${caseId}? This action cannot be undone.`);
+    if (!isConfirmed) return;
 
     try {
       await api.delete(`/cases/${caseId}`);
@@ -2303,7 +2305,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
 
   const handleQuickArchive = async (c, e) => {
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to instantly archive case ${c.caseId}?`)) return;
+    const isConfirmed = await confirmDelete('Archive Case?', `Are you sure you want to instantly archive case ${c.caseId}?`);
+    if (!isConfirmed) return;
 
     const loadingToast = toast.loading('Archiving case...');
     try {
@@ -2329,7 +2332,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
 
   const handleUnarchive = async (c, e) => {
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to unarchive case ${c.caseId}?`)) return;
+    const isConfirmed = await confirmDelete('Unarchive Case?', `Are you sure you want to unarchive case ${c.caseId}?`);
+    if (!isConfirmed) return;
 
     const loadingToast = toast.loading('Unarchiving case...');
     try {
@@ -2506,6 +2510,20 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     });
     const formElement = document.querySelector('.flex-1.overflow-auto') || window;
     formElement.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDeleteDocument = async (id) => {
+    const isConfirmed = await confirmDelete('Delete Document?', 'Are you sure you want to delete this document? This action cannot be undone.');
+    if (!isConfirmed) return;
+    const loadingToast = toast.loading('Deleting document...');
+    try {
+      await api.delete(`/documents/${id}`);
+      toast.success('Document deleted successfully', { id: loadingToast });
+      setCaseDocs(prev => prev.filter(d => (d.id || d._id) !== id));
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete document', { id: loadingToast });
+    }
   };
 
   const handleStartEditProgress = (log) => {
@@ -5170,14 +5188,24 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                                         <Eye size={12} />
                                       </button>
                                       {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleStartEditDoc(doc)}
-                                          className="bg-bg-secondary hover:bg-accent-soft text-text-primary hover:text-accent p-2 rounded-lg border border-border hover:border-accent-soft transition-all inline-flex items-center justify-center"
-                                          title="Edit Document"
-                                        >
-                                          <Edit3 size={12} />
-                                        </button>
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleStartEditDoc(doc)}
+                                            className="bg-bg-secondary hover:bg-accent-soft text-text-primary hover:text-accent p-2 rounded-lg border border-border hover:border-accent-soft transition-all inline-flex items-center justify-center"
+                                            title="Edit Document"
+                                          >
+                                            <Edit3 size={12} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteDocument(doc.id || doc._id)}
+                                            className="bg-red-soft hover:bg-red text-red hover:text-white p-2 rounded-lg border border-transparent transition-all inline-flex items-center justify-center"
+                                            title="Delete Document"
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        </>
                                       )}
                                     </div>
                                   </td>
@@ -5488,10 +5516,19 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     {progressFormData.attachment && (
                       <div className="flex items-center gap-2 px-4 py-2 bg-blue-soft rounded-lg mt-1 justify-between">
                         <div className="flex items-center gap-2 truncate">
-                          <Paperclip size={14} className="text-blue" />
+                          <Paperclip size={14} className="text-blue shrink-0" />
                           <span className="text-[10px] font-black text-blue truncate">{progressFormData.attachment.split('/').pop()}</span>
                         </div>
-                        <a href={progressFormData.attachment} target="_blank" rel="noreferrer" className="text-[9px] font-bold text-blue underline">View</a>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <a href={progressFormData.attachment} target="_blank" rel="noreferrer" className="text-[9px] font-bold text-blue hover:underline uppercase tracking-widest">View</a>
+                          <button 
+                            type="button" 
+                            onClick={() => setProgressFormData(prev => ({ ...prev, attachment: '' }))}
+                            className="text-[9px] font-bold text-red hover:text-red-700 hover:underline uppercase tracking-widest"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -5643,15 +5680,21 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                               )}
                             </div>
                             {log.attachment && (
-                              <div className="mt-1">
-                                <a
-                                  href={log.attachment}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[9px] font-black text-blue hover:underline uppercase tracking-widest flex items-center gap-1"
-                                >
-                                  <Paperclip size={12} className="text-blue" /> View Document
-                                </a>
+                              <div className="mt-2">
+                                {log.attachment.match(/\.(jpeg|jpg|gif|png|webp|bmp|svg)$/i) ? (
+                                  <a href={log.attachment} target="_blank" rel="noopener noreferrer">
+                                    <img src={log.attachment} alt="Progress Attachment" className="max-h-32 object-contain rounded border-2 border-border/50 hover:border-accent/50 transition-colors shadow-sm" />
+                                  </a>
+                                ) : (
+                                  <a
+                                    href={log.attachment}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[9px] font-black text-blue hover:underline uppercase tracking-widest flex items-center gap-1"
+                                  >
+                                    <Paperclip size={12} className="text-blue" /> View Document
+                                  </a>
+                                )}
                               </div>
                             )}
                           </div>
