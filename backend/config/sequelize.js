@@ -8,6 +8,7 @@ const sequelize = new Sequelize(
   {
     host: process.env.MYSQL_HOST || 'localhost',
     dialect: 'mysql',
+    dialectModule: require('mysql2'),
     logging: false, // Set to console.log to see SQL queries
     pool: {
       max: 5,
