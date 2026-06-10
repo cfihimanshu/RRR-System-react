@@ -85,6 +85,9 @@ router.post('/:email/grant-sod-access', verifyToken, roleGuard(['Admin']), async
       },
       { where: { email } }
     );
+    if (global.clearStatsCache) {
+      global.clearStatsCache();
+    }
     res.json({ message: `Access granted to ${email} to fill SOD today.` });
   } catch (error) {
     res.status(500).json({ error: error.message });

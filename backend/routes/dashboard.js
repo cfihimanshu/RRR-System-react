@@ -646,6 +646,7 @@ router.get('/stats', verifyToken, async (req, res) => {
       trendData,
       threatAnalysis,
       isEodMissed,
+      bypassEodCheck,
       provisions,
       collectionPotential: totalDemandAmount,
       amountAtRisk,
