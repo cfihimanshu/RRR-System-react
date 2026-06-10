@@ -16,5 +16,6 @@ module.exports = sequelize.define('Communication', {
   demandAmount: { type: DataTypes.FLOAT, defaultValue: 0 },
   refundDemanded: { type: DataTypes.FLOAT, defaultValue: 0 },
   amountSaved: { type: DataTypes.FLOAT, defaultValue: 0 },
-  loggedBy: { type: DataTypes.STRING }
+  loggedBy: { type: DataTypes.STRING },
+  fileLink: { type: DataTypes.STRING }
 }, { tableName: 'communications', timestamps: true });

@@ -76,7 +76,7 @@ const AdminPanelTab = () => {
     try {
       const res = await api.get('/auth/users');
       setUsers(res.data);
-      setRoleUpdates(res.data.reduce((acc, item) => ({ ...acc, [item._id]: item.role }), {}));
+      setRoleUpdates(res.data.reduce((acc, item) => ({ ...acc, [item.id || item._id]: item.role }), {}));
     } catch (err) {
       console.error('Failed to fetch users', err);
     }
@@ -148,7 +148,7 @@ const AdminPanelTab = () => {
 
   const handleUpdateUserRole = async (userId) => {
     const newRole = roleUpdates[userId];
-    const userItem = users.find(u => u._id === userId);
+    const userItem = users.find(u => (u.id || u._id) === userId);
     if (!userItem) return;
     if (newRole === userItem.role) {
       toast('No role change detected');
@@ -344,13 +344,13 @@ const AdminPanelTab = () => {
                         <td colSpan="5" className="px-4 py-10 text-center text-text-muted uppercase tracking-[0.2em]">No users available.</td>
                       </tr>
                     ) : (
-                      users.map(u => (
-                        <tr key={u._id} className="hover:bg-bg-input/30 transition-all">
+                      users.map((u, index) => (
+                        <tr key={u.id || u._id || index} className="hover:bg-bg-input/30 transition-all">
                           <td className="px-4 py-3 font-black text-text-primary uppercase tracking-tight">{u.fullName}</td>
                           <td className="px-4 py-3 font-bold text-text-muted italic">{u.role}</td>
                           <td className="px-4 py-3 text-center">
                             <button
-                              onClick={() => handleToggleRecordsAccess(u._id, u.canAccessRecords)}
+                              onClick={() => handleToggleRecordsAccess(u.id || u._id, u.canAccessRecords)}
                               className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all shadow-sm ${u.canAccessRecords
                                 ? 'bg-green-soft text-green border border-green-soft hover:bg-green hover:text-white'
                                 : 'bg-bg-input text-text-muted border border-border hover:border-accent hover:text-accent'
@@ -362,8 +362,8 @@ const AdminPanelTab = () => {
                           <td className="px-4 py-3 min-w-[130px]">
                             <select
                               className="w-full bg-bg-input border border-border rounded-xl px-2 py-1.5 text-[10px] text-text-primary focus:border-accent outline-none transition-all font-bold"
-                              value={roleUpdates[u._id] || u.role}
-                              onChange={e => handleChangeUserRole(u._id, e.target.value)}
+                              value={roleUpdates[u.id || u._id] || u.role}
+                              onChange={e => handleChangeUserRole(u.id || u._id, e.target.value)}
                             >
                               <option value="Super Admin">Super Admin</option>
                               <option value="Admin">Admin</option>
@@ -379,7 +379,7 @@ const AdminPanelTab = () => {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <button
-                              onClick={() => handleUpdateUserRole(u._id)}
+                              onClick={() => handleUpdateUserRole(u.id || u._id)}
                               className="bg-accent hover:bg-accent-hover text-white text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-xl transition-all active:scale-95 whitespace-nowrap"
                             >
                               Update
@@ -421,14 +421,21 @@ const AdminPanelTab = () => {
                   <td colSpan="4" className="px-6 py-12 text-center text-text-muted italic">No users have missed EOD.</td>
                 </tr>
               ) : (
-                missedEodUsers.map(u => (
-                  <tr key={u._id} className="hover:bg-bg-input/30 transition-all">
-                    <td className="px-4 py-5 font-black text-text-primary uppercase tracking-tighter">{u.name || u._id}</td>
-                    <td className="px-4 py-5 font-bold text-text-muted">{u._id}</td>
+                missedEodUsers.map((u, index) => {
+                  let missedList = [];
+                  try {
+                    missedList = Array.isArray(u.missedDates) ? u.missedDates : (typeof u.missedDates === 'string' ? JSON.parse(u.missedDates) : []);
+                  } catch(e) {
+                    missedList = [];
+                  }
+                  return (
+                  <tr key={u.id || u._id || index} className="hover:bg-bg-input/30 transition-all">
+                    <td className="px-4 py-5 font-black text-text-primary uppercase tracking-tighter">{u.name || u.fullName || u.email}</td>
+                    <td className="px-4 py-5 font-bold text-text-muted">{u.email || u._id}</td>
                     <td className="px-4 py-5">
                       <div className="flex flex-wrap gap-1">
-                        {u.missedDates.map(d => (
-                          <span key={d} className="bg-red-soft text-red px-2 py-0.5 rounded-md text-[9px] font-black">{d}</span>
+                        {missedList.map((d, dIdx) => (
+                          <span key={dIdx} className="bg-red-soft text-red px-2 py-0.5 rounded-md text-[9px] font-black">{d}</span>
                         ))}
                       </div>
                     </td>
@@ -446,7 +453,7 @@ const AdminPanelTab = () => {
                         </div>
                       ) : (
                         <button
-                          onClick={() => handleGrantSodAccess(u._id)}
+                          onClick={() => handleGrantSodAccess(u.id || u._id || u.email)}
                           className="bg-accent hover:bg-accent-hover text-white text-[9px] font-black py-2 px-4 rounded-xl shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all active:scale-95 whitespace-nowrap"
                         >
                           Grant Access
@@ -454,7 +461,8 @@ const AdminPanelTab = () => {
                       )}
                     </td>
                   </tr>
-                ))
+                );
+              })
               )}
             </tbody>
           </table>
@@ -490,12 +498,12 @@ const AdminPanelTab = () => {
                   <td colSpan="5" className="px-6 py-12 text-center text-text-muted italic">No refund records found in the ledger.</td>
                 </tr>
               ) : (
-                groupRefundsByCase(filteredAllRefunds).map(g => {
+                groupRefundsByCase(filteredAllRefunds).map((g, gIdx) => {
                   const isExpanded = !!expandedCases[`all_${g.caseId}`];
                   if (g.requests.length === 1) {
                     const r = g.requests[0];
                     return (
-                      <tr key={r._id} className="hover:bg-bg-input/40 transition-all bg-bg-card font-bold select-none">
+                      <tr key={r.id || r._id || gIdx} className="hover:bg-bg-input/40 transition-all bg-bg-card font-bold select-none">
                         <td className="px-4 py-5 font-black text-accent uppercase tracking-tighter">
                           <div className="flex items-center gap-2">
                             <div>{g.caseId}</div>
@@ -576,7 +584,7 @@ const AdminPanelTab = () => {
                       </tr>
                       {/* Child Request Rows */}
                       {isExpanded && g.requests.map((r, idx) => (
-                        <tr key={r._id} className="bg-bg-input/20 hover:bg-bg-input/35 transition-all border-l-4 border-accent">
+                        <tr key={r.id || r._id || idx} className="bg-bg-input/20 hover:bg-bg-input/35 transition-all border-l-4 border-accent">
                           <td className="px-4 py-5 font-black text-accent uppercase tracking-tighter pl-8">
                             <div className="text-[10px] text-text-muted font-bold">Request #{idx + 1} — {new Date(r.timestamp).toLocaleDateString('en-IN')}</div>
                           </td>
@@ -652,8 +660,8 @@ const AdminPanelTab = () => {
                   <td colSpan="7" className="px-6 py-12 text-center text-text-muted italic">No activity logs recorded.</td>
                 </tr>
               ) : (
-                auditLogs.map(log => (
-                  <tr key={log._id || log.id} className="hover:bg-bg-input/30 transition-all">
+                auditLogs.map((log, index) => (
+                  <tr key={log.id || log._id || index} className="hover:bg-bg-input/30 transition-all">
                     <td className="px-6 py-5 font-bold text-text-muted">
                       {log.timestamp ? new Date(log.timestamp).toLocaleString('en-IN', {
                         day: '2-digit',

@@ -202,8 +202,8 @@ const DataSearchTab = () => {
                       </td>
                     </tr>
                   ) : (
-                    results.map(r => (
-                      <tr key={r._id} className="hover:bg-bg-input/70 transition-all group border-b border-border/50 last:border-0">
+                    results.map((r, index) => (
+                      <tr key={r.id || r._id || index} className="hover:bg-bg-input/70 transition-all group border-b border-border/50 last:border-0">
                         <td className="px-6 py-4 text-text-secondary whitespace-nowrap font-black uppercase tracking-tighter">{r.date || '—'}</td>
                         <td className="px-6 py-4">
                           <div className="font-black text-text-primary leading-tight text-sm tracking-tight group-hover:text-accent transition-all capitalize">{r.companyName || '—'}</div>

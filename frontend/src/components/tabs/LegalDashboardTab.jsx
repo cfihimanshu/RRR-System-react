@@ -368,6 +368,31 @@ const LegalDashboardTab = () => {
     }
 
     try {
+      let finalSelfieUrl = selfie;
+      if (selfie && selfie.startsWith('data:image')) {
+        toast.loading('Uploading selfie image...', { id: loadingToast });
+        try {
+          const res = await fetch(selfie);
+          const blob = await res.blob();
+          const file = new File([blob], `selfie_${Date.now()}.jpg`, { type: 'image/jpeg' });
+          
+          const formData = new FormData();
+          formData.append('file', file);
+          
+          const UPLOAD_URL = import.meta.env.VITE_UPLOAD_URL || 'https://serenity.herosite.pro/~fmojnedg/uploads/upload.php';
+          const uploadRes = await fetch(UPLOAD_URL, { method: 'POST', body: formData });
+          if (!uploadRes.ok) throw new Error('Selfie upload failed');
+          const uploadData = await uploadRes.json();
+          if (uploadData.success && uploadData.url) {
+            finalSelfieUrl = uploadData.url;
+          }
+        } catch (uploadErr) {
+          console.error("Selfie upload error:", uploadErr);
+          toast.error("Selfie upload failed. Submitting without image upload.", { id: loadingToast });
+        }
+        toast.loading(`Submitting ${reportType} report...`, { id: loadingToast });
+      }
+
       const d = new Date();
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const payload = {
@@ -381,7 +406,7 @@ const LegalDashboardTab = () => {
           : '',
         workSummary: reportType === 'EOD' ? reportFormData.workSummary : '',
         completionStatus: reportType === 'EOD' ? reportFormData.completionStatus : 'Incomplete',
-        selfieUrl: selfie,
+        selfieUrl: finalSelfieUrl,
         latitude: coords?.latitude,
         longitude: coords?.longitude
       };

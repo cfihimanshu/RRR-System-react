@@ -612,6 +612,7 @@ router.get('/stats', verifyToken, async (req, res) => {
       linkedByCount: b.linkedByCount,
       threatTrendTypes: sortedTypes,
       totalCases: b.totalCases,
+      totalAmountPaid: b.totalAmountPaid,
       openCases: b.openCases,
       openCasesAmount: b.openCasesAmount,
       settledCases: b.settledCount,

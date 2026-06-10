@@ -10,5 +10,11 @@ module.exports = sequelize.define('Progress', {
   nextAction: { type: DataTypes.STRING },
   updatedBy: { type: DataTypes.STRING },
   checklist: { type: DataTypes.JSON, defaultValue: [] },
-  updates: { type: DataTypes.JSON, defaultValue: [] }
+  updates: { type: DataTypes.JSON, defaultValue: [] },
+  attachment: { type: DataTypes.STRING },
+  blockers: { type: DataTypes.TEXT },
+  followUpDate: { type: DataTypes.STRING },
+  escalateTo: { type: DataTypes.STRING },
+  refundedAmount: { type: DataTypes.FLOAT },
+  savedAmount: { type: DataTypes.FLOAT }
 }, { tableName: 'progresses', timestamps: true });

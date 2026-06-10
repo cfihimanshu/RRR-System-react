@@ -389,13 +389,19 @@ export default function TourTab({ user }) {
       const formData = new FormData();
       formData.append('file', file);
       try {
-        const res = await api.post('/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+        const UPLOAD_URL = import.meta.env.VITE_UPLOAD_URL || 'https://serenity.herosite.pro/~fmojnedg/uploads/upload.php';
+        const res = await fetch(UPLOAD_URL, {
+          method: 'POST',
+          body: formData
         });
-        if (res.data && res.data.url) {
-          setFilesState(prev => prev.map(f => f.id === tempId ? { ...f, url: res.data.url, uploading: false } : f));
+        
+        if (!res.ok) throw new Error('Upload failed with status: ' + res.status);
+        const uploadData = await res.json();
+        
+        if (uploadData && uploadData.success && uploadData.url) {
+          setFilesState(prev => prev.map(f => f.id === tempId ? { ...f, url: uploadData.url, uploading: false } : f));
         } else {
-          throw new Error('No URL returned');
+          throw new Error(uploadData?.error || 'No URL returned');
         }
       } catch (err) {
         console.error('File upload failed:', err);

@@ -22,41 +22,32 @@ const FileUpload = ({ onUploadSuccess, label = "Drag & drop or click to upload f
     setUploading(true);
 
     try {
-      // 1. Get Auth Params
-      const authRes = await api.get('/upload/auth');
-      const { token, expire, signature, publicKey } = authRes.data;
-
-      if (!token || !publicKey) {
-        throw new Error('Failed to retrieve upload parameters');
-      }
-
-      // 2. Upload directly to ImageKit
+      // Upload directly to Milesweb cPanel PHP script
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('publicKey', publicKey);
-      formData.append('signature', signature);
-      formData.append('expire', expire);
-      formData.append('token', token);
-      formData.append('fileName', `${Date.now()}_${file.name}`);
-      formData.append('folder', 'rrr_engine');
-      formData.append('useUniqueFileName', 'true');
+      
+      const UPLOAD_URL = import.meta.env.VITE_UPLOAD_URL || 'https://serenity.herosite.pro/~fmojnedg/uploads/upload.php';
 
-      const uploadRes = await fetch('https://upload.imagekit.io/api/v1/files/upload', {
+      const uploadRes = await fetch(UPLOAD_URL, {
         method: 'POST',
         body: formData,
       });
 
       if (!uploadRes.ok) {
-        const errorData = await uploadRes.json();
-        throw new Error(errorData.message || 'ImageKit direct upload failed');
+        throw new Error(`Upload failed with status: ${uploadRes.status}`);
       }
 
       const uploadData = await uploadRes.json();
+      
+      if (!uploadData.success || !uploadData.url) {
+        throw new Error(uploadData.error || 'Server returned invalid response');
+      }
+
       const fileUrl = uploadData.url;
 
       setFileUrl(fileUrl);
       onUploadSuccess(fileUrl);
-      toast.success('File uploaded successfully');
+      toast.success('File uploaded to server successfully!');
     } catch (err) {
       console.error('Upload error:', err);
       toast.error(err.message || 'File upload failed');

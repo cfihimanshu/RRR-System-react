@@ -2553,7 +2553,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     const loadingToast = toast.loading(editingProgress ? 'Updating progress...' : 'Saving progress update...');
     try {
       if (editingProgress) {
-        await api.put(`/progress/${viewCase.caseId}/update/${editingProgress._id}`, adjustedProgressFormData);
+        await api.put(`/progress/${viewCase.caseId}/update/${editingProgress.id || editingProgress._id}`, adjustedProgressFormData);
         toast.success('Progress updated', { id: loadingToast });
         setEditingProgress(null);
       } else {
@@ -2634,7 +2634,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     const loadingToast = toast.loading(editingComm ? 'Updating communication...' : 'Logging communication...');
     try {
       if (editingComm) {
-        await api.put(`/communications/${editingComm._id}`, {
+        await api.put(`/communications/${editingComm.id || editingComm._id}`, {
           ...commFormData
         });
         toast.success('Communication updated', { id: loadingToast });
@@ -2708,7 +2708,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     const loadingToast = toast.loading(editingDoc ? 'Updating document...' : 'Uploading MOU...');
     try {
       if (editingDoc) {
-        await api.put(`/documents/${editingDoc._id}`, {
+        await api.put(`/documents/${editingDoc.id || editingDoc._id}`, {
           docType: finalDocType,
           docDate: mouFormData.mouDate,
           fileSummary: `${finalDocType} - ${mouFormData.signatoryName}`,
@@ -4817,7 +4817,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                             </div>
                           ) : (
                             caseComms.slice(0, 5).map((comm) => (
-                              <div key={comm._id} className="bg-bg-card p-5 rounded-xl border border-border shadow-sm group hover:border-accent transition-all cursor-pointer">
+                              <div key={comm.id || comm._id} className="bg-bg-card p-5 rounded-xl border border-border shadow-sm group hover:border-accent transition-all cursor-pointer">
                                 <div className="flex justify-between items-center mb-3">
                                   <span className="text-[9px] font-black text-text-muted uppercase tracking-widest">
                                     {format(new Date(comm.dateTime || comm.createdAt), 'dd MMM, hh:mm aaa')}
@@ -5131,7 +5131,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                               };
 
                               return (
-                                <tr key={doc._id} className="hover:bg-bg-input/50 transition-all group border-b border-border last:border-0">
+                                <tr key={doc.id || doc._id} className="hover:bg-bg-input/50 transition-all group border-b border-border last:border-0">
                                   <td className="px-4 py-4 font-mono text-[9px] text-accent font-black">
                                     {doc.docId || '---'}
                                   </td>
@@ -5320,7 +5320,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                             </tr>
                           ) : (
                             caseActionLogs.map((log) => (
-                              <tr key={log._id} className="hover:bg-bg-input/50 transition-colors">
+                              <tr key={log.id || log._id} className="hover:bg-bg-input/50 transition-colors">
                                 <td className="px-4 py-4">
                                   <span className="text-[10px] font-black text-text-primary uppercase">{log.actionModality}</span>
                                 </td>
@@ -6051,7 +6051,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     </td>
                   </tr>
                 ) : (
-                  filteredCases.map(c => {
+                  filteredCases.map((c, index) => {
                     const caseRefund = refundsList.find(r => r.caseId === c.caseId);
                     let refundStatus = '';
                     if (caseRefund) {
@@ -6060,7 +6060,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     }
                     return (
                       <CaseRow
-                        key={c._id}
+                        key={c.caseId || c.id || index}
                         c={c}
                         visibleColumns={visibleColumns}
                         filterableFields={filterableFields}

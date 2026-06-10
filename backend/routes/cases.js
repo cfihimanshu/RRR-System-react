@@ -443,6 +443,12 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
         caseId, docType: 'FIR Document', fileLink: req.body.firFileLink, sourceForm: 'New Case', uploadedBy: uploader
       });
     }
+
+    if (['Legal Notice', '1930 Cyber Complaint', 'Consumer Complaint'].includes(req.body.typeOfComplaint) && req.body.importDocumentLink) {
+      await createDocumentIfNotExists({
+        caseId, docType: `${req.body.typeOfComplaint} Proof`, fileLink: req.body.importDocumentLink, sourceForm: 'New Case', uploadedBy: uploader
+      });
+    }
     
     try {
       const admins = await User.findAll({ where: { role: 'Admin' } });
@@ -450,7 +456,64 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
       if (emails) {
         const isCritical = ['Cyber Complaint', 'FIR', 'Legal Notice', 'Consumer Complaint'].includes(req.body.typeOfComplaint);
         const subject = isCritical ? `🚨 CRITICAL CASE: ${caseId} — ${req.body.typeOfComplaint}` : `📋 New Case Created: ${caseId}`;
-        const html = `<div style="font-family: sans-serif; padding: 25px;"><h2 style="color: #1a73e8;">New Case Created: ${caseId}</h2><p>Company: ${req.body.companyName}</p></div>`;
+        const html = `
+          <div style="font-family: Arial, sans-serif; padding: 25px; background-color: #f4f7fa;">
+            <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+              <div style="background-color: ${isCritical ? '#d93025' : '#1a73e8'}; padding: 25px; text-align: center; color: white;">
+                <h2 style="margin: 0; font-size: 24px;">New Case Registration</h2>
+                <p style="margin: 5px 0 0 0; opacity: 0.9;">Case ID: ${caseId}</p>
+              </div>
+              <div style="padding: 30px;">
+                <h3 style="color: #333; margin-top: 0; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">Case Details</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 14px;">
+                  <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #666; width: 40%;"><strong>Type of Complaint:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #333;"><strong>${req.body.typeOfComplaint || 'N/A'}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #666;"><strong>Client Name:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #333;">${req.body.clientName || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #666;"><strong>Company / Brand:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #333;">${req.body.companyName || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #666;"><strong>Amount in Dispute:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #d93025; font-weight: bold;">₹${Number(req.body.amtInDispute || 0).toLocaleString('en-IN')}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #666;"><strong>Total Amount Paid:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #333;">₹${Number(req.body.totalAmtPaid || 0).toLocaleString('en-IN')}</td>
+                  </tr>
+                </table>
+                
+                <h3 style="color: #333; margin-top: 0; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">Contact Information</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                  <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #666; width: 40%;"><strong>Mobile Number:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #333;">${req.body.mobileNumber || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #666;"><strong>Email ID:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #333;">${req.body.emailId || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #666;"><strong>Initiated By:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #1a73e8; font-weight: bold;">${req.user.fullName || req.user.email || 'System'}</td>
+                  </tr>
+                </table>
+                
+                <div style="margin-top: 30px; text-align: center;">
+                  <a href="https://crm.cfi247.com/case-master?search=${caseId}" style="display: inline-block; background-color: ${isCritical ? '#d93025' : '#1a73e8'}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">View Full Case in CRM</a>
+                </div>
+              </div>
+              <div style="background-color: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #888;">
+                This is an automated notification from RRR System.
+              </div>
+            </div>
+          </div>
+        `;
         sendEmail(emails, subject, '', html).catch(e => console.error(e));
         createNotification('Admin', 'New Case Created', `A new case ${caseId} has been registered.`, 'Case', `/case-master?search=${caseId}`);
       }

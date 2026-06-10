@@ -905,6 +905,7 @@ const DashboardTab = () => {
     setIsSubmitting(true);
     const loadingToast = toast.loading(`Submitting ${reportType} report...`);
     try {
+      let finalSelfieUrl = '';
       if (reportType === 'SOD' || reportType === 'EOD') {
         if (!selfie) {
           toast.dismiss(loadingToast);
@@ -917,6 +918,31 @@ const DashboardTab = () => {
           setIsSubmitting(false);
           toast.error(`Please ensure GPS location tracking is successful before submitting your ${reportType}!`);
           return;
+        }
+        
+        finalSelfieUrl = selfie;
+        if (selfie && selfie.startsWith('data:image')) {
+          toast.loading('Uploading selfie image...', { id: loadingToast });
+          try {
+            const res = await fetch(selfie);
+            const blob = await res.blob();
+            const file = new File([blob], `selfie_${Date.now()}.jpg`, { type: 'image/jpeg' });
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const UPLOAD_URL = import.meta.env.VITE_UPLOAD_URL || 'https://serenity.herosite.pro/~fmojnedg/uploads/upload.php';
+            const uploadRes = await fetch(UPLOAD_URL, { method: 'POST', body: formData });
+            if (!uploadRes.ok) throw new Error('Selfie upload failed');
+            const uploadData = await uploadRes.json();
+            if (uploadData.success && uploadData.url) {
+              finalSelfieUrl = uploadData.url;
+            }
+          } catch (uploadErr) {
+            console.error("Selfie upload error:", uploadErr);
+            toast.error("Selfie upload failed. Submitting without image upload.", { id: loadingToast });
+          }
+          toast.loading(`Submitting ${reportType} report...`, { id: loadingToast });
         }
       }
 
@@ -934,7 +960,7 @@ const DashboardTab = () => {
         workSummary: reportType === 'EOD' ? reportFormData.workSummary : '',
         completionStatus: reportType === 'EOD' ? reportFormData.completionStatus : 'Incomplete',
         // GPS & Selfie verification fields
-        selfieUrl: (reportType === 'SOD' || reportType === 'EOD') ? selfie : '',
+        selfieUrl: finalSelfieUrl,
         latitude: (reportType === 'SOD' || reportType === 'EOD') && coords ? coords.latitude : null,
         longitude: (reportType === 'SOD' || reportType === 'EOD') && coords ? coords.longitude : null,
         gpsAddress: (reportType === 'SOD' || reportType === 'EOD') && coords ? `Latitude: ${coords.latitude.toFixed(6)}, Longitude: ${coords.longitude.toFixed(6)}` : ''
@@ -1463,7 +1489,7 @@ const DashboardTab = () => {
                       <div className="bg-bg-secondary/40 rounded-2xl border-2 border-border p-4 space-y-2 max-h-[200px] overflow-y-auto hide-scrollbar">
                         {myTodayTasks.length > 0 ? (
                           myTodayTasks.map(task => (
-                            <div key={task._id} className="flex items-center gap-3 p-3 bg-bg-card rounded-xl border border-border/50 hover:border-accent/30 transition-all">
+                            <div key={task.id || task._id} className="flex items-center gap-3 p-3 bg-bg-card rounded-xl border border-border/50 hover:border-accent/30 transition-all">
                               <div className="w-2 h-2 rounded-full bg-accent/60"></div>
                               <span className="text-[11px] font-bold text-text-primary flex-1">{task.title || task.task}</span>
                               <span className="text-[9px] font-black text-text-muted uppercase bg-bg-secondary px-2 py-0.5 rounded-md">{task.priority || 'Normal'}</span>
@@ -1508,8 +1534,8 @@ const DashboardTab = () => {
                         </div>
                       ) : (
                         myTodayTasks.map(task => (
-                          <div key={task._id} className="flex flex-col bg-bg-input border-2 border-border rounded-2xl overflow-hidden transition-all hover:border-purple/30">
-                            <div className={`flex items-center gap-4 p-4 ${reportFormData.eodCompletedTaskIds?.includes(task._id) ? 'bg-purple/5' : ''}`}>
+                          <div key={task.id || task._id} className="flex flex-col bg-bg-input border-2 border-border rounded-2xl overflow-hidden transition-all hover:border-purple/30">
+                            <div className={`flex items-center gap-4 p-4 ${reportFormData.eodCompletedTaskIds?.includes(task.id || task._id) ? 'bg-purple/5' : ''}`}>
                               {/* Checkbox Container */}
                               <div
                                 onClick={(e) => { e.stopPropagation(); toggleEodTask(task._id); }}
@@ -1610,8 +1636,8 @@ const DashboardTab = () => {
                     className="bg-bg-card border-2 border-border px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-normal sm:tracking-widest text-text-primary shadow-sm hover:bg-bg-input transition-all outline-none w-full sm:w-auto"
                   >
                     <option value="">All Users</option>
-                    {allUsers.map(u => (
-                      <option key={u._id} value={u.fullName || u.name}>{u.fullName || u.name}</option>
+                    {allUsers.map((u, index) => (
+                      <option key={u.id || u._id || index} value={u.fullName || u.name}>{u.fullName || u.name}</option>
                     ))}
                   </select>
                 )}
@@ -1860,7 +1886,7 @@ const DashboardTab = () => {
                     <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">My Cases Overview</div>
                     <div className="flex flex-col items-center justify-center h-full">
                       <div className="w-full h-32 mb-4 relative">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                           <PieChart>
                             <Pie
                               data={[
@@ -2612,7 +2638,7 @@ const DashboardTab = () => {
           </div> */}
               </div>
               <div className="h-[280px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                   <LineChart data={stats?.threatTrendData || []} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                     <XAxis dataKey="date" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
@@ -2970,7 +2996,7 @@ const DashboardTab = () => {
                   </div>
                 </div>
                 <div className="p-6 h-[300px]">
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={300} minWidth={1} minHeight={1}>
                     <LineChart data={stats?.trendData || []} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e2738" vertical={false} />
                       <XAxis
@@ -3075,9 +3101,9 @@ const DashboardTab = () => {
                           </tr>
                         </thead>
                         <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
-                          {stats?.highPriorityCases?.slice(0, 5).map(c => (
+                          {stats?.highPriorityCases?.slice(0, 5).map((c, i) => (
                             <tr
-                              key={c._id}
+                              key={c.id || c._id || i}
                               className="hover:bg-bg-input/50 transition-all cursor-pointer group"
                               onClick={() => navigate('/case-master', { state: { searchId: c.caseId || c.caseid } })}
                             >
@@ -3190,9 +3216,9 @@ const DashboardTab = () => {
                       </tr>
                     </thead>
                     <tbody className="text-[11px] text-text-secondary divide-y divide-border/30">
-                      {stats?.recentCases?.map(c => (
+                      {stats?.recentCases?.map((c, i) => (
                         <tr
-                          key={c._id}
+                          key={c.id || c._id || i}
                           className="hover:bg-bg-input/50 transition-all cursor-pointer group"
                           onClick={() => navigate('/case-master', { state: { searchId: c.caseId || c.caseid } })}
                         >
@@ -3525,12 +3551,12 @@ const DashboardTab = () => {
                                   const refundRequested = Number(r.amount) || 0;
                                   const leftAmt = Math.max(0, refundRequested - paidAmt);
                                   const amtPaidByClient = Number(matchingCase?.totalAmtPaid) || 0;
-                                  const isExpanded = !!expandedRefundIds[r._id];
+                                  const isExpanded = !!expandedRefundIds[r.id || r._id];
 
                                   return (
-                                    <React.Fragment key={r._id}>
+                                    <React.Fragment key={r.id || r._id}>
                                       <tr
-                                        onClick={() => toggleRefundExpand(r._id)}
+                                        onClick={() => toggleRefundExpand(r.id || r._id)}
                                         className="hover:bg-bg-input/30 transition-all border-b border-border/50 cursor-pointer"
                                       >
                                         <td className="px-4 py-4 font-black">

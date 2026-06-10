@@ -518,7 +518,7 @@ const MyTaskTab = () => {
                 ) : (
                   filteredTasks.filter(t => t.status === col.id).map(task => (
                     <div
-                      key={task._id} draggable onDragStart={(e) => onDragStart(e, task._id)}
+                      key={task.id || task._id} draggable onDragStart={(e) => onDragStart(e, task.id || task._id)}
                       onClick={() => handleOpenTaskPanel(task)}
                       className="bg-bg-card rounded-2xl border-2 border-border p-5 shadow-sm hover:shadow-xl hover:border-accent transition-all group cursor-pointer relative overflow-hidden"
                     >
@@ -815,8 +815,8 @@ const MyTaskTab = () => {
                 {user?.role === 'Admin' ? (
                   <>
                     <option value="">Select User</option>
-                    {users.map(u => (
-                      <option key={u._id} value={u.fullName}>{u.fullName}</option>
+                    {users.map((u, i) => (
+                      <option key={u.id || u._id || i} value={u.fullName}>{u.fullName}</option>
                     ))}
                   </>
                 ) : (

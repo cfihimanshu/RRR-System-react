@@ -275,8 +275,17 @@ const CaseStudyTab = ({ caseData = null }) => {
   };
 
   const ReportContent = ({ data, timeline, actions, comms, docs, progressLogs = [], refunds = [], isMobile = false }) => {
-    const totalPaid = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
-    const totalMou = data?.servicesSold?.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
+    const parseJSON = (val) => {
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch(e) { return null; }
+      }
+      return val;
+    };
+    const services = Array.isArray(parseJSON(data?.servicesSold)) ? parseJSON(data?.servicesSold) : [];
+    const bankDetails = parseJSON(data?.bankAccountDetails) || {};
+
+    const totalPaid = services.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
+    const totalMou = services.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
 
 
     const labelClass = "w-1/3 bg-[#f0f7ff] p-3 border border-gray-200 text-[11px] font-bold text-gray-700 uppercase tracking-tighter";
@@ -317,7 +326,7 @@ const CaseStudyTab = ({ caseData = null }) => {
         {/* 2. Service Details */}
         <section className="mb-10">
           <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">{sectionNum++}. Service Details</h2>
-          {data?.servicesSold?.map((s, idx) => (
+          {services.map((s, idx) => (
             <table key={idx} className="w-full border-collapse border border-gray-200 mb-6 last:mb-0">
               <tbody>
                 {s.serviceName && <tr><td className={labelClass}>Service Engaged</td><td className={`${valueClass} font-bold text-gray-950`}>{s.serviceName}</td></tr>}
@@ -455,13 +464,13 @@ const CaseStudyTab = ({ caseData = null }) => {
         )}
 
         {/* 4. Bank Details */}
-        {(data?.bankAccountDetails?.acc1No || data?.bankAccountDetails?.acc2No) && (
+        {(bankDetails?.acc1No || bankDetails?.acc2No) && (
           <section className="mb-10">
             <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">{sectionNum++}. Client Bank Account Details</h2>
             <table className="w-full border-collapse border border-gray-200">
               <tbody>
-                {data?.bankAccountDetails?.acc1No && <tr><td className={labelClass}>Account 1</td><td className={valueClass}>Number: {data.bankAccountDetails.acc1No} | IFSC: {data.bankAccountDetails.acc1Ifsc || '—'}</td></tr>}
-                {data?.bankAccountDetails?.acc2No && <tr><td className={labelClass}>Account 2</td><td className={valueClass}>Number: {data.bankAccountDetails.acc2No} | IFSC: {data.bankAccountDetails.acc2Ifsc || '—'}</td></tr>}
+                {bankDetails?.acc1No && <tr><td className={labelClass}>Account 1</td><td className={valueClass}>Number: {bankDetails.acc1No} | IFSC: {bankDetails.acc1Ifsc || '—'}</td></tr>}
+                {bankDetails?.acc2No && <tr><td className={labelClass}>Account 2</td><td className={valueClass}>Number: {bankDetails.acc2No} | IFSC: {bankDetails.acc2Ifsc || '—'}</td></tr>}
               </tbody>
             </table>
           </section>

@@ -80,6 +80,15 @@ const connectToDatabase = async () => {
   try {
     await sequelize.authenticate();
     console.log('MySQL Database Connected successfully.');
+    const Communication = require('./sql_models/Communication');
+    const LeaveRequest = require('./sql_models/LeaveRequest');
+    const TourRequest = require('./sql_models/TourRequest');
+    const Progress = require('./sql_models/Progress');
+    await Communication.sync({ alter: true });
+    await LeaveRequest.sync({ alter: true });
+    await TourRequest.sync({ alter: true });
+    await Progress.sync({ alter: true });
+    console.log('Models synced.');
   } catch (err) {
     console.error('DATABASE CONNECTION ERROR:', err);
   }
@@ -126,7 +135,6 @@ app.use('/api/timeline', require('./routes/timeline'));
 app.use('/api/refunds', require('./routes/refunds'));
 app.use('/api/auditLogs', require('./routes/auditLogs'));
 app.use('/api/sampleData', require('./routes/sampleData'));
-app.use('/api/upload', require('./routes/upload'));
 app.use('/api/agreements', require('./routes/agreements'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/reports', require('./routes/reports'));
