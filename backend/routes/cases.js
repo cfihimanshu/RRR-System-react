@@ -372,8 +372,8 @@ router.get('/search-client', verifyToken, async (req, res) => {
     if (!name && !mobile) return res.json([]);
 
     let orConditions = [];
-    if (name) orConditions.push({ clientName: { [Op.like]: '%' + name.trim() + '%' } });
-    if (mobile) orConditions.push({ clientMobile: { [Op.like]: '%' + mobile.trim() + '%' } });
+    if (name) orConditions.push({ clientName: name.trim() });
+    if (mobile) orConditions.push({ clientMobile: mobile.trim() });
 
     const cases = await Case.findAll({
       where: { [Op.or]: orConditions },
@@ -438,7 +438,10 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
       currentStatus,
       progressPercentage,
       createdDate: req.body.createdDate || new Date().toISOString(),
-      lastUpdateDate: new Date().toISOString()
+      lastUpdateDate: new Date().toISOString(),
+      assignedAt: isAssigned ? new Date().toISOString() : null,
+      hasBeenWorkedOn: false,
+      lastReminderSentAt: null
     });
 
     const uploader = req.user.fullName || req.user.email || 'System';
@@ -578,8 +581,15 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
 router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations', 'Operation Review', 'Operation Head']), async (req, res) => {
   try {
     const { caseIds, assignedTo } = req.body;
+    const isAssigned = assignedTo && assignedTo.trim() !== '';
     await Case.update(
-      { assignedTo, lastUpdateDate: new Date().toISOString() },
+      { 
+        assignedTo, 
+        lastUpdateDate: new Date().toISOString(),
+        assignedAt: isAssigned ? new Date().toISOString() : null,
+        hasBeenWorkedOn: false,
+        lastReminderSentAt: null
+      },
       { where: { caseId: { [Op.in]: caseIds } } }
     );
     res.json({ message: `Successfully assigned ${caseIds.length} cases.` });
@@ -603,6 +613,12 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', '
     if (hasAssignee && (!existingCase.currentStatus || existingCase.currentStatus === 'New' || existingCase.currentStatus === 'Case Logged')) {
       req.body.currentStatus = 'Assigned';
       req.body.progressPercentage = 25;
+    }
+
+    if (req.body.assignedTo !== undefined && req.body.assignedTo !== existingCase.assignedTo) {
+      req.body.assignedAt = hasAssignee ? new Date().toISOString() : null;
+      req.body.hasBeenWorkedOn = false;
+      req.body.lastReminderSentAt = null;
     }
 
     const { id, createdAt, updatedAt, caseId: ignoreId, ...updateData } = req.body;
@@ -718,6 +734,9 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations', 'Operation
       if (row.assignedTo && row.assignedTo !== '') {
         row.currentStatus = 'Assigned';
         row.progressPercentage = 25;
+        row.assignedAt = new Date().toISOString();
+        row.hasBeenWorkedOn = false;
+        row.lastReminderSentAt = null;
       }
       allCases.push({ caseId: row.caseId });
       finalCases.push(row);

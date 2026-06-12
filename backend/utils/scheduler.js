@@ -431,12 +431,82 @@ const sendUserOverdueAlerts = async (user) => {
   }
 };
 
+const runAssignmentReminders = async () => {
+  console.log('Running Assignment Reminders scan...');
+  try {
+    const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000);
+
+    const pendingCases = await Case.findAll({
+      where: {
+        assignedTo: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] },
+        assignedAt: { [Op.ne]: null },
+        hasBeenWorkedOn: false,
+        [Op.or]: [
+          { lastReminderSentAt: null, assignedAt: { [Op.lte]: thirtyMinsAgo } },
+          { lastReminderSentAt: { [Op.lte]: thirtyMinsAgo } }
+        ],
+        currentStatus: { [Op.notIn]: ['Settled', 'Closed', 'Closure', 'Resolved'] }
+      }
+    });
+
+    for (const caseItem of pendingCases) {
+      let assigneeEmail = null;
+      let assigneeName = caseItem.assignedTo;
+
+      if (caseItem.assignedTo.includes('@')) {
+        assigneeEmail = caseItem.assignedTo;
+      } else {
+        const user = await User.findOne({
+          where: { fullName: { [Op.like]: `%${caseItem.assignedTo.trim()}%` } }
+        });
+        if (user) {
+          assigneeEmail = user.email;
+          assigneeName = user.fullName;
+        }
+      }
+
+      if (assigneeEmail) {
+        const subject = `⚠️ URGENT: Action Required on Assigned Case ${caseItem.caseId}`;
+        const html = `
+          <div style="font-family: sans-serif; padding: 20px; border: 2px solid #dc2626; border-radius: 10px; max-width: 600px;">
+            <h2 style="color: #dc2626; margin-top: 0;">Case Pending Action</h2>
+            <p>Hello <strong>${assigneeName}</strong>,</p>
+            <p>Case <strong>${caseItem.caseId}</strong> (${caseItem.companyName || 'N/A'}) was assigned/forwarded to you, but no work or updates have been logged yet.</p>
+            <div style="background: #fef2f2; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Assigned At:</strong> ${new Date(caseItem.assignedAt).toLocaleString('en-IN')}</p>
+              <p style="margin: 5px 0;"><strong>Current Status:</strong> ${caseItem.currentStatus}</p>
+            </div>
+            <p>Please log in and take immediate action on this case by updating its progress, logging an action, or adding a communication.</p>
+            <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseItem.caseId}" style="display: inline-block; background: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Case</a></p>
+          </div>
+        `;
+
+        await sendEmail(assigneeEmail, subject, '', html);
+        console.log(`Sent assignment reminder to ${assigneeEmail} for case ${caseItem.caseId}`);
+        
+        await Case.update(
+          { lastReminderSentAt: new Date().toISOString() },
+          { where: { id: caseItem.id } }
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Error in assignment reminder scheduler:', err);
+  }
+};
+
 const initScheduler = () => {
   cron.schedule('0 9 * * *', async () => {
     console.log('Running daily alert scheduler...');
     await runDueCaseAlerts();
   });
-  console.log('Scheduler initialized (Startup scan disabled to avoid duplicate emails).');
+
+  cron.schedule('*/30 * * * *', async () => {
+    console.log('Running 30-min assignment reminders...');
+    await runAssignmentReminders();
+  });
+
+  console.log('Scheduler initialized with Daily Alerts and 30-Min Assignment Reminders.');
 };
 
-module.exports = { initScheduler, runDueCaseAlerts, sendUserOverdueAlerts };
+module.exports = { initScheduler, runDueCaseAlerts, sendUserOverdueAlerts, runAssignmentReminders };

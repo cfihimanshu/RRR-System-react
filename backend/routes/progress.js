@@ -8,6 +8,7 @@ const Timeline = require('../sql_models/Timeline');
 const User = require('../sql_models/User');
 const Document = require('../sql_models/Document');
 const { createNotification } = require('../utils/notificationHelper');
+const { sendEmail } = require('../utils/mailer');
 const { verifyToken } = require('../middleware/auth');
 
 // Helper to generate a unique ID for sub-items in JSON arrays
@@ -170,7 +171,7 @@ router.get('/', verifyToken, async (req, res) => {
 // Post a new progress update
 router.post('/', verifyToken, async (req, res) => {
   try {
-    const { caseId, stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, updatedBy, checklist, refundedAmount, savedAmount, attachment } = req.body;
+    const { caseId, stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, updatedBy, checklist, refundedAmount, savedAmount, attachment, compliancePending } = req.body;
 
     const newLog = {
       _id: generateId(),
@@ -287,12 +288,42 @@ router.post('/', verifyToken, async (req, res) => {
       });
     }
 
-    const updateFields = {};
+    const updateFields = { hasBeenWorkedOn: true };
     if (stage) {
       updateFields.currentStatus = stage;
       if (stage === 'Closure') {
         updateFields.refundedAmount = refundedAmount;
         updateFields.savedAmount = savedAmount;
+        if (compliancePending !== undefined) {
+          updateFields.compliancePending = compliancePending;
+        }
+        
+        // Notify Admin on Closure
+        try {
+          const targetCase = await Case.findOne({ where: { caseId } });
+          const admins = await User.findAll({ where: { role: 'Admin' } });
+          const adminEmails = admins.map(u => u.email).filter(Boolean).join(',');
+          
+          if (adminEmails && targetCase && targetCase.currentStatus !== 'Closure') {
+            const subject = `✅ Case Closed: ${caseId}`;
+            const html = `
+              <div style="font-family: sans-serif; padding: 20px; border: 2px solid #16a34a; border-radius: 10px; max-width: 600px;">
+                <h2 style="color: #16a34a; margin-top: 0;">Case Closure Notification</h2>
+                <p>Hello Admin,</p>
+                <p>Case <strong>${caseId}</strong> (${targetCase.companyName || 'N/A'}) has been marked as <strong>Closure</strong> by ${req.user.fullName || req.user.email}.</p>
+                <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Summary:</strong> ${summary || 'N/A'}</p>
+                  <p style="margin: 5px 0;"><strong>Refunded Amount:</strong> ₹${refundedAmount || 0}</p>
+                  <p style="margin: 5px 0;"><strong>Saved Amount:</strong> ₹${savedAmount || 0}</p>
+                </div>
+                <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="display: inline-block; background: #16a34a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Case</a></p>
+              </div>
+            `;
+            sendEmail(adminEmails, subject, '', html).catch(console.error);
+          }
+        } catch (err) {
+          console.error('Error sending closure email:', err);
+        }
       }
     }
     if (percentage !== undefined) updateFields.progressPercentage = percentage;
@@ -359,7 +390,7 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
     }
     let updates = Array.isArray(rawUpdates) ? rawUpdates : [];
     const updateIndex = updates.findIndex(u => String(u._id) === String(logId));
-    const { stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, refundedAmount, savedAmount, attachment } = req.body;
+    const { stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, refundedAmount, savedAmount, attachment, compliancePending } = req.body;
 
     if (updateIndex === -1) {
       // Fallback 1: Legacy root progress doc
@@ -440,6 +471,35 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
         if (stage === 'Closure') {
           if (refundedAmount !== undefined) caseUpdateFields.refundedAmount = refundedAmount;
           if (savedAmount !== undefined) caseUpdateFields.savedAmount = savedAmount;
+          if (compliancePending !== undefined) caseUpdateFields.compliancePending = compliancePending;
+          
+          
+          // Notify Admin on Closure
+          try {
+            const targetCase = await Case.findOne({ where: { caseId } });
+            const admins = await User.findAll({ where: { role: 'Admin' } });
+            const adminEmails = admins.map(u => u.email).filter(Boolean).join(',');
+            
+            if (adminEmails && targetCase && targetCase.currentStatus !== 'Closure') {
+              const subject = `✅ Case Closed: ${caseId}`;
+              const html = `
+                <div style="font-family: sans-serif; padding: 20px; border: 2px solid #16a34a; border-radius: 10px; max-width: 600px;">
+                  <h2 style="color: #16a34a; margin-top: 0;">Case Closure Notification</h2>
+                  <p>Hello Admin,</p>
+                  <p>Case <strong>${caseId}</strong> (${targetCase.companyName || 'N/A'}) has been marked as <strong>Closure</strong> by ${req.user.fullName || req.user.email}.</p>
+                  <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Summary:</strong> ${summary || 'N/A'}</p>
+                    <p style="margin: 5px 0;"><strong>Refunded Amount:</strong> ₹${refundedAmount !== undefined ? refundedAmount : 'N/A'}</p>
+                    <p style="margin: 5px 0;"><strong>Saved Amount:</strong> ₹${savedAmount !== undefined ? savedAmount : 'N/A'}</p>
+                  </div>
+                  <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="display: inline-block; background: #16a34a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Case</a></p>
+                </div>
+              `;
+              sendEmail(adminEmails, subject, '', html).catch(console.error);
+            }
+          } catch (err) {
+            console.error('Error sending closure email:', err);
+          }
         }
       }
       if (percentage !== undefined) caseUpdateFields.progressPercentage = percentage;

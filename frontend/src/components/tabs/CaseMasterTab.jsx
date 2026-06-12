@@ -2303,6 +2303,39 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     }
   };
 
+  const handleClearCompliancePending = async () => {
+    if (!window.confirm("Are you sure you want to mark compliance as DONE and archive this case?")) return;
+    const loadingToast = toast.loading('Clearing compliance and archiving case...');
+    try {
+      await api.put(`/cases/${viewCase.caseId}`, {
+        compliancePending: false,
+        isArchived: true
+      });
+
+      await api.post('/progress', {
+        caseId: viewCase.caseId,
+        stage: 'Closure',
+        percentage: 100,
+        summary: 'Compliance marked as DONE. Case archived.',
+        updatedBy: user?.fullName || user?.email
+      });
+
+      toast.success('Compliance cleared & Case archived', { id: loadingToast });
+      
+      setViewCase(prev => ({
+        ...prev,
+        compliancePending: false,
+        isArchived: true
+      }));
+
+      // Broadcast update
+      const channel = new BroadcastChannel('case-updates');
+      channel.postMessage({ type: 'CASE_PROGRESS_UPDATED' });
+    } catch (err) {
+      toast.error('Failed to clear compliance', { id: loadingToast });
+    }
+  };
+
   const handleQuickArchive = async (c, e) => {
     e.stopPropagation();
     const isConfirmed = await confirmDelete('Archive Case?', `Are you sure you want to instantly archive case ${c.caseId}?`);
@@ -2534,6 +2567,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       summary: log.summary || '',
       nextAction: log.nextAction || '',
       blockers: log.blockers || '',
+      compliancePending: viewCase.compliancePending || false,
       followUpDate: log.followUpDate ? log.followUpDate.substring(0, 10) : '',
       escalateTo: log.escalateTo || '',
       refundedAmount: log.refundedAmount || '',
@@ -2586,7 +2620,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
           currentStatus: progressFormData.stage,
           progressPercentage: progressFormData.percentage,
           refundedAmount: adjustedProgressFormData.refundedAmount !== '' ? Number(adjustedProgressFormData.refundedAmount) : undefined,
-          savedAmount: adjustedProgressFormData.savedAmount !== '' ? Number(adjustedProgressFormData.savedAmount) : undefined
+          savedAmount: adjustedProgressFormData.savedAmount !== '' ? Number(adjustedProgressFormData.savedAmount) : undefined,
+          compliancePending: adjustedProgressFormData.compliancePending
         };
 
         if (progressFormData.escalateTo) {
@@ -2609,7 +2644,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
           currentStatus: progressFormData.stage,
           progressPercentage: progressFormData.percentage,
           refundedAmount: adjustedProgressFormData.refundedAmount !== '' ? Number(adjustedProgressFormData.refundedAmount) : viewCase.refundedAmount,
-          savedAmount: adjustedProgressFormData.savedAmount !== '' ? Number(adjustedProgressFormData.savedAmount) : viewCase.savedAmount
+          savedAmount: adjustedProgressFormData.savedAmount !== '' ? Number(adjustedProgressFormData.savedAmount) : viewCase.savedAmount,
+          compliancePending: adjustedProgressFormData.compliancePending
         };
         if (progressFormData.escalateTo) {
           updatedCase.assignedTo = progressFormData.escalateTo;
@@ -2628,6 +2664,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
         summary: '',
         nextAction: '',
         blockers: '',
+        compliancePending: false,
         followUpDate: '',
         escalateTo: '',
         refundedAmount: '',
@@ -3891,8 +3928,19 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     {viewCase.typeOfComplaint || 'Payment Dispute'} — {viewCase.companyName}
                   </h2>
                   {isResolvedDisplay ? (
-                    <div className={`text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap ${viewCase.compliancePending ? 'bg-orange-500 shadow-orange-900/20' : 'bg-green shadow-green-900/20'}`}>
-                      <CheckCircle size={14} strokeWidth={3} /> {viewCase.compliancePending ? 'Closure Marked - Compliance Pending' : 'Resolved'}
+                    <div className="flex items-center gap-2">
+                      <div className={`text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap ${viewCase.compliancePending ? 'bg-orange-500 shadow-orange-900/20' : 'bg-green shadow-green-900/20'}`}>
+                        <CheckCircle size={14} strokeWidth={3} /> {viewCase.compliancePending ? 'Closure Marked - Compliance Pending' : 'Resolved'}
+                      </div>
+                      {viewCase.compliancePending && (
+                        <button
+                          onClick={handleClearCompliancePending}
+                          className="bg-accent text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 hover:bg-accent-hover"
+                          title="Click here if compliance is now completed"
+                        >
+                          <CheckCircle size={12} strokeWidth={3} /> Mark Done
+                        </button>
+                      )}
                     </div>
                   ) : closureReady ? (
                     <button
@@ -5557,6 +5605,17 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                           required
                         />
                       </div>
+                      <div className="space-y-1 col-span-2">
+                        <label className="flex items-center gap-2 cursor-pointer mt-2 bg-bg-input px-5 py-3 rounded-xl border-2 border-border hover:border-accent transition-all shadow-sm">
+                          <input
+                            type="checkbox"
+                            checked={progressFormData.compliancePending || false}
+                            onChange={(e) => setProgressFormData({ ...progressFormData, compliancePending: e.target.checked })}
+                            className="w-4 h-4 accent-accent rounded"
+                          />
+                          <span className="text-[10px] font-black text-text-primary uppercase tracking-widest">Mark Compliance As Due</span>
+                        </label>
+                      </div>
                     </div>
                   )}
 
@@ -5604,6 +5663,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                             escalateTo: '',
                             refundedAmount: '',
                             savedAmount: '',
+                            compliancePending: false,
                             attachment: ''
                           });
                         }}

@@ -85,10 +85,14 @@ const connectToDatabase = async () => {
     const LeaveRequest = require('./sql_models/LeaveRequest');
     const TourRequest = require('./sql_models/TourRequest');
     const Progress = require('./sql_models/Progress');
+    const Document = require('./sql_models/Document');
+    const Case = require('./sql_models/Case');
     await Communication.sync({ alter: true });
     await LeaveRequest.sync({ alter: true });
     await TourRequest.sync({ alter: true });
     await Progress.sync({ alter: true });
+    await Document.sync({ alter: true });
+    await Case.sync({ alter: true });
     console.log('Models synced.');
   } catch (err) {
     console.error('DATABASE CONNECTION ERROR:', err);

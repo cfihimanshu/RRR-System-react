@@ -1,6 +1,7 @@
 const express = require('express');
 const Action = require('../sql_models/Action');
 const Timeline = require('../sql_models/Timeline');
+const Case = require('../sql_models/Case');
 const { verifyToken } = require('../middleware/auth');
 const router = express.Router();
 
@@ -34,6 +35,8 @@ router.post('/', verifyToken, async (req, res) => {
       eventType: doc.actionType,
       summary: doc.remarks || doc.summary
     });
+
+    await Case.update({ hasBeenWorkedOn: true }, { where: { caseId: doc.caseId } });
 
     // Send Email Alert if Next Action Date is set
     if (doc.nextActionDate) {

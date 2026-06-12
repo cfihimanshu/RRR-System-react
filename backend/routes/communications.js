@@ -2,6 +2,7 @@ const express = require('express');
 const { Op } = require('sequelize');
 const Communication = require('../sql_models/Communication');
 const Timeline = require('../sql_models/Timeline');
+const Case = require('../sql_models/Case');
 const { verifyToken } = require('../middleware/auth');
 const router = express.Router();
 
@@ -47,6 +48,8 @@ router.post('/', verifyToken, async (req, res) => {
         smMentioned: doc.smMentioned
       }
     });
+
+    await Case.update({ hasBeenWorkedOn: true }, { where: { caseId: doc.caseId } });
 
     res.status(201).json(doc);
   } catch (error) {
