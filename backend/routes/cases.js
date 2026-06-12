@@ -410,8 +410,12 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
       });
     }
 
-    const allCases = await Case.findAll({ attributes: ['caseId'] });
-    const caseId = generateCaseId(req.body.brandName, req.body.companyName, allCases);
+    const year = new Date().getFullYear();
+    const relevantCases = await Case.findAll({
+      where: { caseId: { [Op.like]: `RRR-%-${year}-%` } },
+      attributes: ['caseId']
+    });
+    const caseId = generateCaseId(req.body.brandName, req.body.companyName, relevantCases);
 
     const forbiddenNames = ['staff', 'system'];
     let initiatedBy = forbiddenNames.includes(req.body.initiatedBy?.toLowerCase()) ? "" : (req.body.initiatedBy || "");
@@ -701,7 +705,11 @@ router.post('/import', verifyToken, roleGuard(['Admin', 'Operations', 'Operation
       });
     });
 
-    let allCases = await Case.findAll({ attributes: ['caseId'] });
+    const year = new Date().getFullYear();
+    let allCases = await Case.findAll({
+      where: { caseId: { [Op.like]: `RRR-%-${year}-%` } },
+      attributes: ['caseId']
+    });
     const finalCases = [];
     
     for (let row of results) {

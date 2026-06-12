@@ -671,7 +671,7 @@ const RefundRequestTab = () => {
           <div className="section-header flex flex-col items-start gap-4 mb-8 pt-4">
             <div>
               <h2 className="text-3xl font-bold text-[#0b72b8] tracking-tight uppercase">
-                Request
+                Approvals
               </h2>
             </div>
             <div className="flex items-center justify-start gap-3">

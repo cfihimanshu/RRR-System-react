@@ -266,7 +266,10 @@ router.get('/stats', verifyToken, async (req, res) => {
     }
     
     // We will do a full fetch of relevant cases and reduce them in JS, which is very fast for a few thousand cases
-    const allCases = await track('fetchAllCases', () => Case.findAll({ where: query }));
+    const allCases = await track('fetchAllCases', () => Case.findAll({ 
+      where: query,
+      attributes: { exclude: ['clientAllegation', 'complaint', 'engagementNote', 'servicesSold', 'keyPendingIssue', 'recommendedNextSteps', 'proofCallRec', 'proofWaChat', 'proofVideoCall', 'proofFundingEmail', 'bankAccountDetails'] }
+    }));
     
     const b = {
       totalCases: 0, totalAmountPaid: 0, openCases: 0, openCasesAmount: 0,
@@ -443,7 +446,10 @@ router.get('/stats', verifyToken, async (req, res) => {
     });
 
     const [tasks] = await Promise.all([
-      Task.findAll({ where: taskUserQuery })
+      Task.findAll({ 
+        where: taskUserQuery,
+        attributes: ['status', 'createdAt', 'updatedAt', 'dueDate']
+      })
     ]);
 
     let pendingTasksCount = 0;
@@ -461,7 +467,7 @@ router.get('/stats', verifyToken, async (req, res) => {
        if (!isCompleted && new Date(t.createdAt) >= startOfToday) dueToday++;
        if (!isCompleted && t.dueDate === tomorrowStr) dueWithin24h++;
        if (!isCompleted && t.dueDate === dayAfterTomorrowStr) dueWithin48h++;
-       if (!isCompleted && t.reminderDateTime && t.reminderDateTime < new Date().toISOString() && t.reminderDateTime !== '') overdue++;
+       if (!isCompleted && t.dueDate && new Date(t.dueDate) < new Date() && t.dueDate !== '') overdue++;
        if (t.status === 'Completed' && new Date(t.updatedAt) >= startOfToday) actionTakenToday++;
        if (new Date(t.createdAt) >= startOfToday) totalTasksToday++;
        if (isCompleted && new Date(t.createdAt) >= startOfToday) completedTasksToday++;
@@ -592,7 +598,10 @@ router.get('/stats', verifyToken, async (req, res) => {
     provisions.thisMonth.count = caseSets.thisMonth.size;
     provisions.next6Months.count = caseSets.next6Months.size;
 
-    const commsForPotential = await track('commsPotential', () => Communication.findAll({ where: (req.user.role !== 'Admin' ? { caseId: { [Op.in]: myCaseIds } } : {}) }));
+    const commsForPotential = await track('commsPotential', () => Communication.findAll({ 
+      where: (req.user.role !== 'Admin' ? { caseId: { [Op.in]: myCaseIds } } : {}),
+      attributes: ['caseId', 'demandAmount', 'refundDemanded', 'amountSaved']
+    }));
     
     let totalDemandAmount = 0;
     let totalAmountSaved = 0;

@@ -3750,7 +3750,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                   }}
                 >
                   <option value="">Bulk Assign Mode...</option>
-                  {opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review'].includes(u.role?.toLowerCase()?.trim())).map(u => (
+                  {opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review', 'legal', 'advocate'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`bulk-${u._id || u.email}`} value={u.fullName}>Assign: {u.fullName}</option>
                   ))}
                 </select>
@@ -5578,7 +5578,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                         className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent uppercase tracking-widest"
                       >
                         <option value="">-- NO ESCALATION --</option>
-                        {opsUsers.filter(u => ['operations', 'legal', 'operation admin', 'operation review',].includes(u.role?.toLowerCase()?.trim())).map(u => (
+                        {opsUsers.filter(u => ['operations', 'admin', 'legal', 'advocate', 'operation admin', 'operation review'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                           <option key={`escalate-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                         ))}
                       </select>
@@ -6484,7 +6484,7 @@ const CaseRow = memo(({
               >
                 <option value="">Assign</option>
                 {['admin', 'super admin'].includes(user?.role?.toLowerCase())
-                  ? opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review'].includes(u.role?.toLowerCase()?.trim())).map(u => (
+                  ? opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review', 'legal', 'advocate'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                   ))
                   : (user?.fullName && (

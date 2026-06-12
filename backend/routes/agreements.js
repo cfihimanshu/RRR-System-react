@@ -146,7 +146,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
 // GET /api/agreements/download/:id - Stream stored PDF
 router.get('/download/:id', async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
+    const authHeader = req.headers['authorization'] || req.headers['x-access-token'];
     const queryToken = req.query.token;
     const token = (authHeader ? authHeader.split(' ').pop() : null) || queryToken;
 

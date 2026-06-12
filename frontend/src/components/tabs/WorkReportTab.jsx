@@ -214,16 +214,22 @@ const WorkReportTab = () => {
 
     setLoading(true);
     try {
-      const detailedRows = await Promise.all(filteredReports.map(async (r) => {
+      const detailedRows = [];
+      
+      for (const r of filteredReports) {
         const params = new URLSearchParams();
         if (r.date) params.append('date', r.date);
         if (r.userEmail) params.append('userEmail', r.userEmail);
 
-        // Fetch specific activities for this report row
+        const taskParams = new URLSearchParams();
+        if (r.date) taskParams.append('date', r.date);
+        const assigneeName = users.find(u => u.email === r.userEmail)?.fullName || r.userName;
+        if (assigneeName) taskParams.append('assignee', assigneeName);
+
+        // Fetch specific activities for this report row sequentially to avoid overloading the server
         const [timelineRes, tasksRes] = await Promise.all([
           api.get(`/timeline?${params.toString()}`),
-          // We try to find the fullName from our users list to match the assignee
-          api.get(`/tasks?date=${r.date}&assignee=${users.find(u => u.email === r.userEmail)?.fullName || r.userName}`)
+          api.get(`/tasks?${taskParams.toString()}`)
         ]);
 
         const timelineData = timelineRes.data.logs || timelineRes.data.timeline || (Array.isArray(timelineRes.data) ? timelineRes.data : []);
@@ -248,7 +254,7 @@ const WorkReportTab = () => {
           .map(t => `${t.taskId || 'N/A'}: ${t.title} [${t.status}]`)
           .join(' | ');
 
-        return [
+        detailedRows.push([
           r.date || '',
           r.type || '',
           r.userName || '',
@@ -265,8 +271,8 @@ const WorkReportTab = () => {
           progress,
           tasks,
           (r.commCount || 0) + (r.docCount || 0) + (r.progressCount || 0) + (r.taskCount || 0)
-        ];
-      }));
+        ]);
+      }
 
       const headers = [
         'Date', 'Type', 'Submitted By', 'Check-In', 'Check-Out', 'Duration',
@@ -323,19 +329,14 @@ const WorkReportTab = () => {
           </div>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
-          {/* <button
-            onClick={fetchData}
-            className="flex-1 md:flex-none flex justify-center items-center p-3 rounded-xl bg-bg-card border-2 border-border text-text-muted hover:border-accent hover:text-text-primary transition-all shadow-sm"
-            title="Refresh"
-          >
-            <RefreshCw size={18} />
-          </button> */}
-          <button
-            onClick={handleDownload}
-            className="btn btn-primary !py-3 !px-6 !rounded-xl shadow-lg shadow-blue-900/20"
-          >
-            <Download size={18} /> Export CSV
-          </button>
+          {isAdmin && (
+            <button
+              onClick={handleDownload}
+              className="btn btn-primary !py-3 !px-6 !rounded-xl shadow-lg shadow-blue-900/20"
+            >
+              <Download size={18} /> Export CSV
+            </button>
+          )}
         </div>
       </div>
 

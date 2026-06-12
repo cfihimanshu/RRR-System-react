@@ -3,7 +3,7 @@ const { sequelize } = require('../config/sequelize');
 
 module.exports = sequelize.define('Progress', {
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-  caseId: { type: DataTypes.STRING, allowNull: false, unique: true },
+  caseId: { type: DataTypes.STRING, allowNull: false },
   stage: { type: DataTypes.STRING },
   percentage: { type: DataTypes.INTEGER },
   summary: { type: DataTypes.TEXT, allowNull: false },

@@ -12,6 +12,7 @@ api.interceptors.request.use(
     const token = localStorage.getItem('rrr_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      config.headers['x-access-token'] = `Bearer ${token}`;
     }
     return config;
   },
