@@ -4285,9 +4285,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                           <label className={labelClass}>Department</label>
                           <select className={inputClass} value={svc.department} onChange={e => handleServiceChange(idx, 'department', e.target.value)} disabled={!isEditing}>
                             <option value="Operations">Operations</option>
-                            <option value="Legal">Legal</option>
-                            <option value="Accounts">Accounts</option>
-                            <option value="Tech">Tech</option>
+                            <option value="Digital Marketing">Digital Marketing</option>
+                            <option value="Loan">Loan</option>
                           </select>
                         </div>
                       </div>
