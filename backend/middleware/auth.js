@@ -26,8 +26,12 @@ const verifyToken = async (req, res, next) => {
       req.user.isSuperAdmin = true;
     }
     
-    // Update lastSeen asynchronously
-    User.update({ lastSeen: new Date() }, { where: { id: decoded.id } }).catch(err => console.error('Failed to update lastSeen:', err));
+    // Update lastSeen and wait for it so Vercel doesn't freeze the container mid-query
+    try {
+      await User.update({ lastSeen: new Date() }, { where: { id: decoded.id } });
+    } catch (err) {
+      console.error('Failed to update lastSeen:', err);
+    }
 
     next();
   } catch (err) {

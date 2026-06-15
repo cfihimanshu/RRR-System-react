@@ -35,7 +35,11 @@ router.get('/', verifyToken, async (req, res) => {
       let changedDb = false;
 
       // Check and update overdue installments in root
-      let installments = Array.isArray(doc.installments) ? doc.installments : [];
+      let parsedInstallments = doc.installments;
+      if (typeof parsedInstallments === 'string') {
+        try { parsedInstallments = JSON.parse(parsedInstallments); } catch (e) { parsedInstallments = []; }
+      }
+      let installments = Array.isArray(parsedInstallments) ? parsedInstallments : [];
       installments.forEach(inst => {
         if (inst.status !== 'Paid' && inst.status !== 'Due' && inst.dueDate && inst.dueDate < todayStr) {
           inst.status = 'Due';
@@ -45,7 +49,11 @@ router.get('/', verifyToken, async (req, res) => {
       if (changedDb) d.installments = installments;
 
       // Check and update overdue installments in requests
-      let requests = Array.isArray(doc.requests) ? doc.requests : [];
+      let parsedRequests = doc.requests;
+      if (typeof parsedRequests === 'string') {
+        try { parsedRequests = JSON.parse(parsedRequests); } catch (e) { parsedRequests = []; }
+      }
+      let requests = Array.isArray(parsedRequests) ? parsedRequests : [];
       requests.forEach(reqItem => {
         let reqInsts = Array.isArray(reqItem.installments) ? reqItem.installments : [];
         reqInsts.forEach(inst => {
@@ -67,8 +75,12 @@ router.get('/', verifyToken, async (req, res) => {
         doc.requests = d.requests;
       }
 
-      if (doc.requests && doc.requests.length > 0) {
-        doc.requests.forEach((reqItem, index) => {
+      let finalRequests = doc.requests;
+      if (typeof finalRequests === 'string') {
+        try { finalRequests = JSON.parse(finalRequests); } catch (e) { finalRequests = []; }
+      }
+      if (finalRequests && Array.isArray(finalRequests) && finalRequests.length > 0) {
+        finalRequests.forEach((reqItem, index) => {
           flatDocs.push({
             ...doc,
             _id: `${doc.id}_req_${index}`,
@@ -304,7 +316,11 @@ router.put('/:id', verifyToken, async (req, res) => {
     const todayStr = istTime.toISOString().split('T')[0];
 
     if (requestIndex !== null) {
-      let requests = Array.isArray(currentRefund.requests) ? currentRefund.requests : [];
+      let parsedRequests = currentRefund.requests;
+      if (typeof parsedRequests === 'string') {
+        try { parsedRequests = JSON.parse(parsedRequests); } catch (e) { parsedRequests = []; }
+      }
+      let requests = Array.isArray(parsedRequests) ? parsedRequests : [];
       if (requests.length <= requestIndex) {
         return res.status(400).json({ error: "Invalid request index" });
       }
@@ -355,7 +371,12 @@ router.put('/:id', verifyToken, async (req, res) => {
       const caseDoc = await Case.findOne({ where: { caseId: doc.caseId } });
       if (caseDoc) {
         let mappedRefundStatus = '';
-        const reqList = Array.isArray(doc.requests) && doc.requests.length > 0 ? doc.requests : [doc];
+        
+        let reqListRaw = doc.requests;
+        if (typeof reqListRaw === 'string') {
+          try { reqListRaw = JSON.parse(reqListRaw); } catch (e) { reqListRaw = []; }
+        }
+        const reqList = Array.isArray(reqListRaw) && reqListRaw.length > 0 ? reqListRaw : [doc];
         
         const hasPending = reqList.some(r => {
           const s = r.status?.toLowerCase() || '';
@@ -499,7 +520,11 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
     }
 
     let deletedAmount = doc.amount;
-    let requests = Array.isArray(doc.requests) ? doc.requests : [];
+    let parsedRequestsDelete = doc.requests;
+    if (typeof parsedRequestsDelete === 'string') {
+      try { parsedRequestsDelete = JSON.parse(parsedRequestsDelete); } catch (e) { parsedRequestsDelete = []; }
+    }
+    let requests = Array.isArray(parsedRequestsDelete) ? parsedRequestsDelete : [];
     if (requestIndex !== null && requests[requestIndex]) {
       deletedAmount = requests[requestIndex].amount;
     }
@@ -546,7 +571,11 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
         caseDoc.refundedAmount = 0;
       } else {
         let mappedRefundStatus = '';
-        const reqList = Array.isArray(remaining.requests) && remaining.requests.length > 0 ? remaining.requests : [remaining];
+        let remReqListRaw = remaining.requests;
+        if (typeof remReqListRaw === 'string') {
+          try { remReqListRaw = JSON.parse(remReqListRaw); } catch (e) { remReqListRaw = []; }
+        }
+        const reqList = Array.isArray(remReqListRaw) && remReqListRaw.length > 0 ? remReqListRaw : [remaining];
         
         const hasPending = reqList.some(r => {
           const s = r.status?.toLowerCase() || '';

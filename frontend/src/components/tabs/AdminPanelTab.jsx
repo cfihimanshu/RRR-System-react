@@ -978,7 +978,28 @@ const AdminPanelTab = () => {
                 </div>
               )}
 
-
+              {refundToRender.status === 'Pending Admin Approval' && (
+                <div className="flex flex-wrap items-center justify-end gap-4 mt-8 pt-6 border-t border-border/60">
+                  <button
+                    onClick={() => {
+                      setIsDetailOpen(false);
+                      handleRejectRefund(refundToRender._id);
+                    }}
+                    className="px-6 py-3 rounded-[1rem] border-2 border-red text-red text-[11px] font-black uppercase tracking-widest hover:bg-red hover:text-white transition-all shadow-sm active:scale-95"
+                  >
+                    Reject Request
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsDetailOpen(false);
+                      handleApproveRefund(refundToRender._id);
+                    }}
+                    className="px-8 py-3 rounded-[1rem] bg-green text-white text-[11px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-md shadow-green/20 active:scale-95 flex items-center gap-2"
+                  >
+                    ✅ Approve & Send to Accountant
+                  </button>
+                </div>
+              )}
             </div>
           )
         })()}

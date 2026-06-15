@@ -421,7 +421,11 @@ router.get('/stats', verifyToken, async (req, res) => {
     let pendingApprovals = 0;
 
     allRefunds.forEach(r => {
-      const itemsToProcess = (r.requests && r.requests.length > 0) ? r.requests : [r];
+      let parsedRequests = r.requests;
+      if (typeof parsedRequests === 'string') {
+        try { parsedRequests = JSON.parse(parsedRequests); } catch (e) { parsedRequests = []; }
+      }
+      const itemsToProcess = (parsedRequests && Array.isArray(parsedRequests) && parsedRequests.length > 0) ? parsedRequests : [r];
 
       itemsToProcess.forEach(item => {
         if (item.status === 'Pending Admin Approval') {
@@ -430,7 +434,11 @@ router.get('/stats', verifyToken, async (req, res) => {
 
         if (item.status === 'Rejected') return;
 
-        const instList = Array.isArray(item.installments) ? item.installments : [];
+        let parsedInstList = item.installments;
+        if (typeof parsedInstList === 'string') {
+          try { parsedInstList = JSON.parse(parsedInstList); } catch (e) { parsedInstList = []; }
+        }
+        const instList = Array.isArray(parsedInstList) ? parsedInstList : [];
         const allInstPaid = instList.length > 0 && instList.every(inst => inst.status === 'Paid');
         const isFullyPaid = item.status === 'Paid' || allInstPaid;
 
@@ -558,8 +566,12 @@ router.get('/stats', verifyToken, async (req, res) => {
     allRefunds.forEach(r => {
       if (r.status === 'Rejected') return;
 
-      const installments = r.installments && r.installments.length > 0
-        ? r.installments
+      let parsedInsts2 = r.installments;
+      if (typeof parsedInsts2 === 'string') {
+        try { parsedInsts2 = JSON.parse(parsedInsts2); } catch (e) { parsedInsts2 = []; }
+      }
+      const installments = parsedInsts2 && Array.isArray(parsedInsts2) && parsedInsts2.length > 0
+        ? parsedInsts2
         : [{ status: r.status, dueDate: r.paymentDate || r.timestamp, amount: r.amount, paymentDate: r.paymentDate, transactionId: r.transactionId }];
 
       installments.forEach(inst => {

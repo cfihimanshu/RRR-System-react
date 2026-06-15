@@ -11,10 +11,23 @@ const sequelize = new Sequelize(
     dialectModule: require('mysql2'),
     logging: false, // Set to console.log to see SQL queries
     pool: {
-      max: 5,
+      max: process.env.VERCEL ? 3 : 5,
       min: 0,
       acquire: 30000,
-      idle: 10000
+      idle: process.env.VERCEL ? 0 : 10000,
+      evict: process.env.VERCEL ? 0 : 1000
+    },
+    retry: {
+      match: [
+        /ECONNRESET/,
+        /ETIMEDOUT/,
+        /EHOSTUNREACH/,
+        /ECONNREFUSED/,
+        /EPIPE/,
+        'SequelizeConnectionError',
+        'SequelizeDatabaseError'
+      ],
+      max: 3
     }
   }
 );

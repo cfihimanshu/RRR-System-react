@@ -22,6 +22,67 @@ const { roleGuard } = require('../middleware/roleGuard');
 const { createNotification } = require('../utils/notificationHelper');
 const { sendEmail } = require('../utils/mailer');
 
+async function sendAssignmentEmail(assignedTo, caseIdsArray, assignerName) {
+  if (!assignedTo || !assignedTo.trim() || !caseIdsArray || caseIdsArray.length === 0) return;
+  try {
+    const assigneeUser = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: assignedTo },
+          { fullName: assignedTo }
+        ]
+      }
+    });
+
+    let emails = [];
+    let assigneeName = 'Team Member';
+    
+    if (assigneeUser && assigneeUser.email) {
+      emails.push(assigneeUser.email);
+      assigneeName = assigneeUser.fullName || 'Team Member';
+    }
+
+    // Always notify Operation Head and Operation Review about the assignment
+    const managementUsers = await User.findAll({
+      where: {
+        role: { [Op.in]: ['Operation Head', 'Operation Review'] }
+      }
+    });
+
+    managementUsers.forEach(u => {
+      if (u.email && !emails.includes(u.email)) {
+        emails.push(u.email);
+      }
+    });
+
+    if (emails.length > 0) {
+      const subject = caseIdsArray.length === 1 
+        ? `🔔 New Case Assigned: ${caseIdsArray[0]} to ${assigneeName}` 
+        : `🔔 ${caseIdsArray.length} New Cases Assigned to ${assigneeName}`;
+      const caseListHtml = caseIdsArray.map(id => `<li><strong>${id}</strong></li>`).join('');
+      const html = `
+        <div style="font-family: sans-serif; padding: 24px; border: 2px solid #10b981; border-radius: 12px; max-width: 600px;">
+          <h2 style="color: #059669; margin-top: 0; font-size: 18px;">New Case Assignment</h2>
+          <p style="color: #374151;">Hello Team,</p>
+          <p style="color: #374151;"><strong>${assignerName}</strong> has assigned the following case(s) to <strong>${assigneeName}</strong> for review and action:</p>
+          <ul style="color: #374151;">
+            ${caseListHtml}
+          </ul>
+          <div style="background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 12px; margin: 16px 0;">
+            <p style="color: #b91c1c; margin: 0; font-weight: bold;">🚨 URGENT ACTION REQUIRED</p>
+            <p style="color: #991b1b; margin: 4px 0 0 0;">Work on this case must be initiated within <strong>30 minutes</strong> of this assignment.</p>
+          </div>
+          <p style="color: #374151;">Please login to the system to check the <strong>My Cases</strong> dashboard.</p>
+          <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/my-cases" style="display: inline-block; background: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; margin-top: 12px;">Go to My Cases</a>
+        </div>
+      `;
+      await sendEmail(emails.join(','), subject, '', html);
+    }
+  } catch (err) {
+    console.error('Error sending assignment email:', err);
+  }
+}
+
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -76,7 +137,8 @@ async function updateRelatedModels(oldId, newId) {
     Refund.update({ caseId: newId }, { where: { caseId: oldId } }),
     Document.update({ caseId: newId }, { where: { caseId: oldId } }),
     History.update({ caseId: newId }, { where: { caseId: oldId } }),
-    AuditLog.update({ caseId: newId }, { where: { caseId: oldId } })
+    AuditLog.update({ caseId: newId }, { where: { caseId: oldId } }),
+    Progress.update({ caseId: newId }, { where: { caseId: oldId } })
   ]);
 }
 
@@ -444,6 +506,11 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
       lastReminderSentAt: null
     });
 
+    if (isAssigned) {
+      const assignerName = req.user.fullName || req.user.email || 'System';
+      sendAssignmentEmail(assignedTo, [caseId], assignerName);
+    }
+
     const uploader = req.user.fullName || req.user.email || 'System';
     if (['FIR', 'Criminal Complaint/FIR'].includes(req.body.typeOfComplaint) && req.body.firFileLink) {
       await createDocumentIfNotExists({
@@ -592,6 +659,12 @@ router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations', 'Opera
       },
       { where: { caseId: { [Op.in]: caseIds } } }
     );
+    
+    if (isAssigned) {
+      const assignerName = req.user.fullName || req.user.email || 'System';
+      sendAssignmentEmail(assignedTo, caseIds, assignerName);
+    }
+    
     res.json({ message: `Successfully assigned ${caseIds.length} cases.` });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -643,6 +716,38 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', '
       }
     }
 
+    if (req.body.assignedTo !== undefined && req.body.assignedTo !== existingCase.assignedTo && hasAssignee) {
+      const assignerName = req.user.fullName || req.user.email || 'System';
+      sendAssignmentEmail(req.body.assignedTo, [caseId], assignerName);
+    }
+
+    // Notify Admin on case edit
+    try {
+      const admins = await User.findAll({ where: { role: 'Admin' } });
+      const adminEmails = admins.map(u => u.email).filter(Boolean).join(',');
+
+      if (adminEmails) {
+        const editorName = req.user.fullName || req.user.email || 'System';
+        const subject = `✏️ Case Details Updated: ${caseId}`;
+        const html = `
+          <div style="font-family: sans-serif; padding: 24px; border: 2px solid #3b82f6; border-radius: 12px; max-width: 600px;">
+            <h2 style="color: #2563eb; margin-top: 0; font-size: 18px;">Case Details Updated</h2>
+            <p style="color: #374151;">Hello Admin,</p>
+            <p style="color: #374151;">The details for Case <strong>${caseId}</strong> have been edited and updated by <strong>${editorName}</strong>.</p>
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 8px; margin: 16px 0;">
+              <p style="margin: 6px 0; color: #374151;"><strong>Company:</strong> ${updated.companyName || 'N/A'}</p>
+              <p style="margin: 6px 0; color: #374151;"><strong>Client:</strong> ${updated.clientName || 'N/A'}</p>
+              <p style="margin: 6px 0; color: #374151;"><strong>Status:</strong> ${updated.currentStatus || 'N/A'}</p>
+            </div>
+            <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Updated Case</a>
+          </div>
+        `;
+        sendEmail(adminEmails, subject, '', html).catch(console.error);
+      }
+    } catch (err) {
+      console.error('Error sending case edit notification:', err);
+    }
+
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -655,9 +760,62 @@ router.delete('/:caseId', verifyToken, roleGuard(['Admin']), async (req, res) =>
     const deletedCase = await Case.findOne({ where: { caseId } });
     if (!deletedCase) return res.status(404).json({ error: 'Case not found' });
 
-    await Case.destroy({ where: { caseId } });
-    await Timeline.destroy({ where: { caseId } });
-    res.json({ message: 'Case deleted successfully' });
+    await Promise.all([
+      Case.destroy({ where: { caseId } }),
+      Timeline.destroy({ where: { caseId } }),
+      Task.destroy({ where: { caseId } }),
+      Communication.destroy({ where: { caseId } }),
+      Action.destroy({ where: { caseId } }),
+      Refund.destroy({ where: { caseId } }),
+      Document.destroy({ where: { caseId } }),
+      History.destroy({ where: { caseId } }),
+      AuditLog.destroy({ where: { caseId } }),
+      Progress.destroy({ where: { caseId } })
+    ]);
+    
+    res.json({ message: 'Case and all associated records deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// TEMPORARY ENDPOINT TO FIX GHOST DATA ON LIVE SERVER
+router.get('/fix-ghost/:caseId', async (req, res) => {
+  try {
+    const { caseId } = req.params;
+    const targetCase = await Case.findOne({ where: { caseId } });
+    if (!targetCase) return res.status(404).json({ error: 'Case not found' });
+    
+    const cutoffDate = targetCase.createdAt || targetCase.createdDate;
+    if (!cutoffDate) return res.status(400).json({ error: 'No creation date found to use as cutoff.' });
+
+    const tDel = await Timeline.destroy({ where: { caseId, createdAt: { [Op.lt]: cutoffDate } } });
+    const cDel = await Communication.destroy({ where: { caseId, createdAt: { [Op.lt]: cutoffDate } } });
+    const dDel = await Document.destroy({ where: { caseId, createdAt: { [Op.lt]: cutoffDate } } });
+
+    const progressDoc = await Progress.findOne({ where: { caseId } });
+    let removedProgress = 0;
+    if (progressDoc) {
+      let rawUpdates = progressDoc.updates;
+      if (typeof rawUpdates === 'string') { try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {} }
+      if (typeof rawUpdates === 'string') { try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {} }
+      const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
+      
+      const filteredUpdates = updates.filter(u => new Date(u.createdAt) >= new Date(cutoffDate));
+      if (filteredUpdates.length !== updates.length) {
+        removedProgress = updates.length - filteredUpdates.length;
+        progressDoc.updates = filteredUpdates;
+        await progressDoc.save();
+      }
+    }
+
+    res.json({ 
+      message: 'Ghost data cleaned successfully', 
+      deletedTimelines: tDel, 
+      deletedCommunications: cDel, 
+      deletedDocuments: dDel,
+      removedProgressEntries: removedProgress
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
