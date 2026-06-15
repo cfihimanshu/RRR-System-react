@@ -15,6 +15,18 @@ router.get('/', verifyToken, async (req, res) => {
       query.loggedBy = { [Op.in]: myIds };
     }
 
+    if (req.query.caseId) {
+      const targetCase = await Case.findOne({ where: { caseId: req.query.caseId }, attributes: ['createdAt', 'createdDate'] });
+      if (targetCase) {
+        const cutoffDate = targetCase.createdAt || targetCase.createdDate;
+        if (cutoffDate) {
+          const cutoff = new Date(cutoffDate);
+          cutoff.setMinutes(cutoff.getMinutes() - 5);
+          query.createdAt = { [Op.gte]: cutoff };
+        }
+      }
+    }
+
     const docs = await Communication.findAll({
       where: query,
       order: [['dateTime', 'DESC']]

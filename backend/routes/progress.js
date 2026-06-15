@@ -20,8 +20,20 @@ router.get('/', verifyToken, async (req, res) => {
     const { caseId } = req.query;
     if (!caseId) return res.status(400).json({ error: 'caseId is required' });
 
+    let query = { caseId };
+    const targetCase = await Case.findOne({ where: { caseId } });
+    let cutoff = null;
+    if (targetCase) {
+      const cutoffDate = targetCase.createdAt || targetCase.createdDate;
+      if (cutoffDate) {
+        cutoff = new Date(cutoffDate);
+        cutoff.setMinutes(cutoff.getMinutes() - 5);
+        query.createdAt = { [Op.gte]: cutoff };
+      }
+    }
+
     let progressDocs = await Progress.findAll({ 
-      where: { caseId }, 
+      where: query, 
       order: [['createdAt', 'DESC']] 
     });
     
@@ -62,8 +74,13 @@ router.get('/', verifyToken, async (req, res) => {
 
     let logs = [];
 
+    let timelineQuery = { caseId, eventType: 'Progress Update' };
+    if (cutoff) {
+      timelineQuery.createdAt = { [Op.gte]: cutoff };
+    }
+
     const timelineProgressEvents = await Timeline.findAll({
-      where: { caseId, eventType: 'Progress Update' }
+      where: timelineQuery
     });
 
     timelineProgressEvents.sort((a, b) => new Date(a.eventDate || a.createdAt) - new Date(b.eventDate || b.createdAt));
@@ -128,7 +145,7 @@ router.get('/', verifyToken, async (req, res) => {
     logs = Array.from(uniqueLogsMap.values());
     logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    const targetCase = await Case.findOne({ where: { caseId } });
+    // targetCase already fetched above
 
     const enrichedLogs = await Promise.all(logs.map(async (log, idx) => {
       if (!log.nextAction) {

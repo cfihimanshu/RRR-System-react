@@ -94,7 +94,7 @@ const connectToDatabase = async () => {
     await TourRequest.sync({ alter: true });
     await Progress.sync({ alter: true });
     await Document.sync({ alter: true });
-    await Case.sync({ alter: true });
+    await Case.sync(); // alter: true removed to fix ER_TOO_MANY_KEYS
     await Refund.sync({ alter: true });
     console.log('Models synced.');
   } catch (err) {

@@ -908,9 +908,17 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     // De-duplicate "Case Created" events - keep only the EARLIEST one (actual creation)
     const creationEvents = events.filter(e => e.action === 'Case Created');
     let finalEvents = events;
-    if (creationEvents.length > 1) {
-      const earliest = creationEvents.sort((a, b) => new Date(a.date) - new Date(b.date))[0];
-      finalEvents = events.filter(e => e.action !== 'Case Created' || e.id === earliest.id);
+    let earliestCreation = null;
+    
+    if (creationEvents.length > 0) {
+      earliestCreation = creationEvents.sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+      if (creationEvents.length > 1) {
+        finalEvents = events.filter(e => e.action !== 'Case Created' || e.id === earliestCreation.id);
+      }
+      
+      // Filter out any entries that have a date older than the case creation date
+      const cutoffTime = new Date(earliestCreation.date).getTime() - 60000; // 1 min buffer
+      finalEvents = finalEvents.filter(e => new Date(e.date).getTime() >= cutoffTime || e.action === 'Case Created');
     }
 
     // Sort by date descending (latest first)
