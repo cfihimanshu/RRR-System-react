@@ -200,12 +200,16 @@ const DashboardTab = () => {
   const isExemptFromSodEod = ['admin', 'super admin', 'superadmin', 'accountant', 'reviewer', 'operation head', 'operation review'].includes(user?.role?.toLowerCase().trim());
   const navigate = useNavigate();
   const location = useLocation();
-  const isOperationAdmin = user?.role?.toLowerCase().trim() === 'operation admin';
-  // Helper: navigate to case-master, auto-adding assigneeFilter for Operation Admin
+   const isOperationAdmin = user?.role?.toLowerCase().trim() === 'operation admin';
+  const isOperationReview = user?.role?.toLowerCase().trim() === 'operation review';
+  // Helper: navigate to case-master, auto-adding assigneeFilter for Operation Admin and Operation Review
   const navigateCases = (extraState = {}) => {
-    const state = isOperationAdmin
-      ? { ...extraState, assigneeFilter: user?.fullName }
-      : extraState;
+    let state = extraState;
+    if (isOperationAdmin) {
+      state = { ...extraState, assigneeFilter: user?.fullName };
+    } else if (isOperationReview) {
+      state = { ...extraState, assigneeFilter: user?.fullName, sourceFilter: 'Odoo' };
+    }
     navigate('/case-master', Object.keys(state).length > 0 ? { state } : undefined);
   };
 
@@ -444,10 +448,18 @@ const DashboardTab = () => {
     const completedStatuses = ['Settled', 'Closed', 'Settlement', 'Closure', 'Resolution', 'Resolved', 'Done', 'Complete', 'Completed', 'closed', 'settled'];
 
     return userCases.filter(c => {
-      // Operation Head: only show Odoo-sourced cases
-      if (user?.role?.toLowerCase().trim() === 'operation head') {
+      // Operation Head & Operation Review: only show Odoo-sourced cases
+      if (['operation head', 'operation review'].includes(user?.role?.toLowerCase().trim())) {
         const src = (c.sourceOfComplaint || '').toLowerCase().trim();
         if (src !== 'odoo') return false;
+      }
+
+      // Operation Review: only show cases assigned to them
+      if (user?.role?.toLowerCase().trim() === 'operation review') {
+        const assigned = (c.assignedTo || '').toLowerCase().trim();
+        const myName = (user?.fullName || '').toLowerCase().trim();
+        const myEmail = (user?.email || '').toLowerCase().trim();
+        if (assigned !== myName && assigned !== myEmail) return false;
       }
 
       if (user?.role === 'Admin') {
@@ -2121,7 +2133,7 @@ const DashboardTab = () => {
                     <span className="text-[9px] font-black uppercase text-text-primary">EOD Submission</span>
                   </button> */}
                       <button
-                        onClick={() => navigate('/case-master')}
+                        onClick={() => navigateCases()}
                         className="flex flex-col items-center justify-center p-3 bg-bg-secondary rounded-xl hover:bg-bg-card-hover transition-all"
                       >
                         <Activity size={16} className="text-green mb-1" />
@@ -2365,7 +2377,7 @@ const DashboardTab = () => {
                         <div
                           key={index}
                           className="flex flex-col p-4 bg-bg-secondary/50 rounded-xl border border-border/50 cursor-pointer hover:bg-bg-secondary/80 transition-all min-w-[160px] flex-shrink-0"
-                          onClick={() => navigate('/case-master', { state: { typeFilter: item.caseType } })}
+                          onClick={() => navigateCases({ typeFilter: item.caseType })}
                         >
                           <div className="flex items-center gap-2 mb-2">
                             <div className={`p-1 ${color.bg} rounded ${color.text}`}>

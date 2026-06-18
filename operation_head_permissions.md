@@ -1,0 +1,153 @@
+# RRR-System: Operation Head Access & Permissions Manual
+## Executive Presentation & Functional Scope Directory
+
+---
+
+## 1. Overview & Core Mission of the Role
+
+The **Operation Head** is a key supervisory operational role in the RRR-System. The system grants this role wide visibility into case statistics, assignment tools, and target configuration capabilities. 
+
+*   **Primary System Focus:** Overseeing specialist performance, managing and auditing Odoo-sourced cases, and submitting/handling team operational approvals (tours, refund settlements, and leaves).
+*   **Operational Exemption:** The role is exempt from standard system blocks (such as the mandatory SOD/EOD dashboard lock), allowing uninterrupted operational navigation. They do not fill out SOD or EOD forms.
+
+---
+
+## 2. Complete Navigation Flow & Sub-Feature Chart
+
+The following diagram maps the entire system path for the **Operation Head**, including all main tabs and their respective sub-features and action forms:
+
+```text
+                          ┌──────────────────────────┐
+                          │     🔑 User Logs In      │
+                          └─────────────┬────────────┘
+                                        │
+                                        ▼
+                          ┌──────────────────────────┐
+                          │ 📊 Dashboard Tab Opens   │
+                          │ (Exempt from SOD/EOD)    │
+                          └─────────────┬────────────┘
+                                        │
+                                        ▼
+                          ┌──────────────────────────┐
+                          │ 📈 Browse System Tabs    │
+                          └─────────────┬────────────┘
+                                        │
+         ┌───────────────────┬──────────┴──────────┬───────────────────┐
+         ▼                   ▼                     ▼                   ▼
+ ┌──────────────┐    ┌──────────────┐      ┌──────────────┐    ┌──────────────┐
+ │ 📊 Dashboard │    │ 📉 MIS Report│      │ ➕ New Case  │    │ 📋 My Cases  │
+ ├──────────────┤    ├──────────────┤      ├──────────────┤    ├──────────────┤
+ │• View Stats  │    │• View Oper.  │      │• Register    │    │• View Odoo   │
+ │• Filter Data │    │  Review      │      │  New Cases   │    │  Cases Only  │
+ │              │    │  Targets Only│      │• Assign to   │    │• Edit Details│
+ │              │    │• Edit Daily/ │      │  Team Member │    │• Log Comms   │
+ │              │    │  Monthly     │      └──────────────┘    │• Upload Docs │
+ │              │    │  Targets     │                          └──────────────┘
+ └──────────────┘    └──────────────┘                                  │
+         │                   │                                         │
+         └───────────────────┼─────────────────────┼───────────────────┘
+                             │
+         ┌───────────────────┴──────────┬──────────┴───────────────────┐
+         ▼                              ▼                              ▼
+ ┌──────────────┐               ┌──────────────┐               ┌──────────────┐
+ │📄 Agreement  │               │ ⚙️ My Tasks   │               │ ✔️ Approvals  │
+ ├──────────────┤               ├──────────────┤               ├──────────────┤
+ │• Generate MOU│               │• Create/      │               │• Tour        │
+ │  Agreement   │               │  Assign Tasks│               │  - Travel Req│
+ │• Download    │               │• Task Status │               │  - Reimburse │
+ │  PDFs        │               │• View Logs   │               │• Settlement  │
+ │• Delete Past │               └──────────────┘               │  - Refund Req│
+ │  Agreements  │                                              │• Leave       │
+ └──────────────┘                                              │  - Leave Req │
+                                                               └──────────────┘
+```
+
+---
+
+## 3. Tab-by-Tab Functional Scope & Capabilities
+
+The **Operation Head** can access exactly 9 main navigation sections in the sidebar. Below is the comprehensive breakdown of permissions and action capabilities for each:
+
+### 3.1. Dashboard
+*   **Visual Scope:** High-level metrics view showing organizational metrics (Total Cases, Active Cases, High Risk Cases, Critical, Closure Cases, and Settlement metrics).
+*   **Create/Write Actions:**
+    *   ❌ Exempt from SOD/EOD: Does not fill out Start of Day (SOD) or End of Day (EOD) reports.
+*   **Update/Edit Actions:**
+    *   Can apply filters by Specialist/User and Date range to query aggregate dashboard statistics.
+*   **Delete Actions:**
+    *   ❌ None.
+
+### 3.2. MIS Report
+*   **Visual Scope:** Viewing is strictly limited to the performance metrics and target progression graphs of specialists under the **Operation Review** role.
+*   **Update/Edit Actions:**
+    *   **Edit Daily and Monthly Targets:** Authorized to modify the daily and monthly performance targets *only* for the **Operation Review** specialists.
+*   **Reporting Actions:**
+    *   Can export the performance reports of Operation Review specialists to Excel.
+
+### 3.3. New Case
+*   **Create/Write Actions:**
+    *   Register and create new case files (inputs: Company Name, Case Title, Priority, Source, Complaint Type, Brand Name).
+    *   Assign the case to an active team member directly at the time of registration.
+
+### 3.4. My Cases (Case Master)
+*   **Visual Scope:** Access is restricted to cases where the source of complaint is Odoo (`sourceOfComplaint` contains 'odoo').
+*   **Create/Write Actions:**
+    *   **Log Communications:** Register calls, emails, WhatsApp messages, and in-person meetings.
+    *   **Document Upload:** Attach case-specific files (e.g. Legal notices, FIR documents, bank account details).
+*   **Update/Edit Actions:**
+    *   Update case details, status (e.g. Assigned, In Progress, Settled), and next action dates.
+*   **Delete Actions:**
+    *   ❌ Case deletion is restricted (Admin/Super Admin only).
+
+### 3.5. Archived Cases
+*   **Visual Scope:** Database lookup for resolved or closed cases.
+*   **Read Actions:**
+    *   Read-only viewing. No edits allowed on archived cases.
+
+### 3.6. Agreement Generation
+*   **Create/Write Actions:**
+    *   Input client billing details and generate client MOU/Agreements from configured templates.
+    *   Set up installment payment schedules.
+*   **Read Actions:**
+    *   Download generated agreement PDFs.
+*   **Delete Actions:**
+    *   Delete agreement records from history.
+
+### 3.7. My Tasks
+*   **Create/Write Actions:**
+    *   Create tasks with titles, descriptions, assignees, and due dates.
+*   **Update/Edit Actions:**
+    *   Assign tasks to self or team members.
+    *   Mark tasks as To Do, In Progress, or Completed.
+
+### 3.8. Work Report
+*   **Read Actions:**
+    *   View audit logs of activities performed by team members.
+
+### 3.9. Approvals (UI: "Approvals" | Code: `refund-request`)
+This tab consolidates three distinct request workflows, which the Operation Head can submit and track:
+
+#### A. Tour (Travel Management)
+*   **New Request:** Submit detailed travel applications (specifying Employee Name, Role, Trip Purpose, Departure/Return dates, Travel mode: Owned Vehicle/Cab/Flight/Train/Bus, Estimated Fare, Meals, and Lodging).
+*   **Reimbursement:** Submit billing claims, actual expenses, and transaction logs.
+*   **Travel Policy:** View reference policies and travel guidelines.
+*   **Status Tracker:** View status of own requests (Pending Review, Approved, Rejected).
+*   *Note: Approval authority for tours is reserved for Admin/Super Admin.*
+
+#### B. Settlement (Refund Requests)
+*   **Request Form:** Submit new refund/settlement requests for clients (inputs: Case ID, dispute details, total settlement amount, bank details).
+*   **Status Tracker:** View and track status of own submitted requests.
+*   *Note: Approval authority is reserved for Admin/Super Admin; processing payouts is reserved for Accountants.*
+
+#### C. Leave (Leave Management)
+*   **Leave Request:** Submit leave requests (inputs: Leave Type: Casual, Sick, Paid, or Other; dates; and reasons).
+*   **Status Tracker:** View status of own leave requests.
+*   *Note: Approval authority is reserved for Admin/Super Admin/Reviewer.*
+
+---
+
+## 4. Operational Boundaries & Security Locks
+
+1.  **Deletion Guardrails:** The Operation Head cannot delete cases, uploaded files, or communication logs. Deletion buttons are hidden/disabled and backend requests for deletion are restricted to Admins.
+2.  **Odoo Scoping:** The backend enforces a strict filter on Case Master queries for the Operation Head, scoping their search results and statistics to Odoo-sourced complaints.
+3.  **Target Setting Authority:** Along with Admins, the Operation Head has the authority to configure daily and monthly performance metrics for the Operation Review team.

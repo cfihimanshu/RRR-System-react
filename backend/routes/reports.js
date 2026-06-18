@@ -44,7 +44,7 @@ router.get('/', verifyToken, async (req, res) => {
         };
       });
       const total = await Report.count({ where: matchQuery });
-      
+
       res.set('Cache-Control', 'private, max-age=30');
       return res.json({ reports, total, page, pages: Math.ceil(total / limitNum) });
     }
@@ -132,14 +132,14 @@ router.post('/', verifyToken, async (req, res) => {
         const nowForIST = new Date();
         const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
         const todayStr = istTime.toISOString().split('T')[0];
-        
-        const lastSod = await Report.findOne({ 
+
+        const lastSod = await Report.findOne({
           where: { userEmail: req.user.email, type: 'SOD', date: { [Op.lt]: todayStr } },
           order: [['date', 'DESC']]
         });
-        
+
         if (lastSod) {
-          const lastEod = await Report.findOne({ 
+          const lastEod = await Report.findOne({
             where: { userEmail: req.user.email, type: 'EOD', date: lastSod.date }
           });
           if (!lastEod) {
@@ -183,14 +183,14 @@ router.get('/stats', verifyToken, async (req, res) => {
 
     const manualTasksCount = await Task.count({ where: taskQuery });
     const manualCompletedCount = await Task.count({ where: { ...taskQuery, status: 'Completed' } });
-    
+
     const totalCasesCount = await Case.count({ where: caseQuery });
-    const settledCasesCount = await Case.count({ 
-      where: { ...caseQuery, currentStatus: { [Op.in]: ['Settled', 'Settlement'] } } 
+    const settledCasesCount = await Case.count({
+      where: { ...caseQuery, currentStatus: { [Op.in]: ['Settled', 'Settlement'] } }
     });
 
-    const closedCasesCount = await Case.count({ 
-      where: { ...caseQuery, currentStatus: { [Op.in]: ['Closed', 'Closure'] } } 
+    const closedCasesCount = await Case.count({
+      where: { ...caseQuery, currentStatus: { [Op.in]: ['Closed', 'Closure'] } }
     });
 
     const sodToday = await Report.count({ where: { ...query, type: 'SOD', createdAt: { [Op.gte]: today } } });
@@ -198,15 +198,15 @@ router.get('/stats', verifyToken, async (req, res) => {
 
     let workingHours = 0;
     if (!isAdmin) {
-      const firstSod = await Report.findOne({ 
+      const firstSod = await Report.findOne({
         where: { ...query, type: 'SOD', createdAt: { [Op.gte]: today } },
         order: [['createdAt', 'ASC']]
       });
-      const lastEod = await Report.findOne({ 
+      const lastEod = await Report.findOne({
         where: { ...query, type: 'EOD', createdAt: { [Op.gte]: today } },
         order: [['createdAt', 'DESC']]
       });
-      
+
       if (firstSod) {
         const startTime = new Date(firstSod.createdAt);
         const endTime = lastEod ? new Date(lastEod.createdAt) : new Date();
@@ -241,16 +241,37 @@ router.get('/mis', verifyToken, async (req, res) => {
       'Closed', 'closed', 'NA', 'na', 'Na', 'nA',
       'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'
     ];
-    
+
+    const closureStatuses = [
+      'Closure', 'closure', 'Resolution', 'resolution',
+      'Resolved', 'resolved', 'Done', 'done',
+      'Complete', 'complete', 'Completed', 'completed',
+      'Closed', 'closed', 'NA', 'na', 'Na', 'nA',
+      'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'
+    ];
+
+    const isClosureStatus = (status) => {
+      if (!status) return false;
+      return closureStatuses.includes(status.trim());
+    };
+
     const nowForIST = new Date();
     const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
     const todayStr = istTime.toISOString().split('T')[0];
     const startOfToday = new Date(`${todayStr}T00:00:00+05:30`);
 
+    const { startDate, endDate } = req.query;
     const isOperationHead = req.user?.role?.toLowerCase().trim() === 'operation head';
     const caseQuery = { isArchived: { [Op.not]: true } };
     if (!isOperationHead) {
       caseQuery.sourceOfComplaint = { [Op.notLike]: '%odoo%' };
+    }
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      caseQuery.createdAt = { [Op.between]: [start, end] };
     }
 
     const allCases = await Case.findAll({ where: caseQuery });
@@ -271,11 +292,22 @@ router.get('/mis', verifyToken, async (req, res) => {
       return completedStatuses.includes(status.trim());
     };
 
+    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
+    const userFullName = (req.user.fullName || '').trim().toLowerCase();
+    const userEmail = (req.user.email || '').trim().toLowerCase();
+
     allCases.forEach(c => {
       const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
       const isCaseActive = !isCaseResolved;
       const createdDate = c.createdAt ? new Date(c.createdAt) : null;
       const isCreatedToday = createdDate && createdDate >= startOfToday;
+
+      // Check if case belongs to the logged in user if they are not admin
+      const isOwnCase = isAdmin ||
+        (c.assignedTo && (
+          c.assignedTo.trim().toLowerCase() === userFullName ||
+          c.assignedTo.trim().toLowerCase() === userEmail
+        ));
 
       if (isCaseActive) {
         totalActiveCases++;
@@ -293,17 +325,19 @@ router.get('/mis', verifyToken, async (req, res) => {
           pendingOverdueCasesAmount += (c.totalAmtPaid || 0);
         }
 
-        activeCasesList.push({
-          assignee: c.assignedTo || 'Unassigned',
-          caseId: c.caseId,
-          companyName: c.companyName || '—',
-          dueDate: c.dueDate || '—',
-          totalAmtPaid: c.totalAmtPaid || 0,
-          currentStatus: c.currentStatus || 'New'
-        });
+        if (isOwnCase) {
+          activeCasesList.push({
+            assignee: c.assignedTo || 'Unassigned',
+            caseId: c.caseId,
+            companyName: c.companyName || '—',
+            dueDate: c.dueDate || '—',
+            totalAmtPaid: c.totalAmtPaid || 0,
+            currentStatus: c.currentStatus || 'New'
+          });
+        }
       }
 
-      if (isCreatedToday) {
+      if (isCreatedToday && isOwnCase) {
         casesAssignedToday++;
         todayCasesList.push({
           assignee: c.assignedTo || 'Unassigned',
@@ -325,7 +359,7 @@ router.get('/mis', verifyToken, async (req, res) => {
         name: u.fullName.trim(),
         email: u.email,
         role: u.role,
-        target: u.monthlyTarget || 500000,
+        target: u.monthlyTarget,
         saved: 0,
         totalCases: 0,
         totalAmt: 0,
@@ -343,7 +377,7 @@ router.get('/mis', verifyToken, async (req, res) => {
     allCases.forEach(c => {
       const assigneeName = c.assignedTo;
       if (!assigneeName) return;
-      
+
       const key = assigneeName.trim().toLowerCase();
       if (!assigneeStatsMap[key]) return;
 
@@ -351,18 +385,21 @@ router.get('/mis', verifyToken, async (req, res) => {
       const amt = c.totalAmtPaid || 0;
       const saved = c.savedAmount || c.refundedAmount || 0;
       const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
+      const isCaseClosure = isClosureStatus(c.currentStatus);
 
       const createdDate = c.createdAt ? new Date(c.createdAt) : null;
       const isAssignedToday = createdDate && createdDate >= startOfToday;
-      
+
       const updatedDate = c.updatedAt ? new Date(c.updatedAt) : null;
-      const isResolvedToday = isCaseResolved && updatedDate && updatedDate >= startOfToday;
+      const isResolvedToday = isCaseResolved && isCaseClosure && updatedDate && updatedDate >= startOfToday;
 
       stats.totalCases++;
       stats.totalAmt += amt;
 
       if (isCaseResolved) {
-        stats.resolvedCases++;
+        if (isCaseClosure) {
+          stats.resolvedCases++;
+        }
         stats.resolvedAmt += saved;
         stats.saved += saved;
       } else {
@@ -381,10 +418,27 @@ router.get('/mis', verifyToken, async (req, res) => {
       }
     });
 
-    const performanceList = Object.values(assigneeStatsMap).filter(stats => {
-      const isSpecialist = ['Operations', 'Staff', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head', 'Reviewer', 'Accountant'].includes(stats.role);
+    let performanceList = Object.values(assigneeStatsMap).filter(stats => {
+      const roleLower = (stats.role || '').toLowerCase().trim();
+      const isExcluded = ['admin', 'super admin', 'superadmin', 'operation head', 'accountant'].includes(roleLower);
+      if (isExcluded) return false;
+
+      const isSpecialist = ['operations', 'staff', 'operation admin', 'operation review', 'reviewer'].includes(roleLower);
       return stats.totalCases > 0 || isSpecialist;
     });
+
+    if (!isAdmin) {
+      if (req.user?.role?.toLowerCase().trim() === 'operation head') {
+        performanceList = performanceList.filter(p =>
+          (p.role || '').toLowerCase().trim() === 'operation review'
+        );
+      } else {
+        performanceList = performanceList.filter(p =>
+          (p.name || '').trim().toLowerCase() === userFullName ||
+          (p.email || '').trim().toLowerCase() === userEmail
+        );
+      }
+    }
 
     res.json({
       reportDate: todayStr,

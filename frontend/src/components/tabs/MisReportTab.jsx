@@ -28,7 +28,7 @@ const MisReportTab = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTabIdx, setActiveTabIdx] = useState(0);
+  const [selectedSpecialistId, setSelectedSpecialistId] = useState(null);
   const [editingTargetId, setEditingTargetId] = useState(null);
   const [newTargetValue, setNewTargetValue] = useState('');
   const [submittingTarget, setSubmittingTarget] = useState(false);
@@ -110,22 +110,42 @@ const MisReportTab = () => {
 
   const visibleAssigneePerformance = useMemo(() => {
     if (!data) return [];
-    if (canViewAllSpecialists) return data.assigneePerformance;
+
+    // Filter out Admin, Operation Head, and Accountant roles
+    const filteredPerformance = (data.assigneePerformance || []).filter(p => {
+      const roleLower = (p.role || '').toLowerCase().trim();
+      return !['admin', 'super admin', 'superadmin', 'operation head', 'accountant'].includes(roleLower);
+    });
+
+    if (canViewAllSpecialists) return filteredPerformance;
+    if (user?.role?.toLowerCase().trim() === 'operation head') {
+      return filteredPerformance.filter(p =>
+        (p.role || '').toLowerCase().trim() === 'operation review'
+      );
+    }
     const userFullName = (user?.fullName || '').trim().toLowerCase();
     const userEmail = (user?.email || '').trim().toLowerCase();
-    return data.assigneePerformance.filter(p =>
+    return filteredPerformance.filter(p =>
       (p.name || '').trim().toLowerCase() === userFullName ||
       (p.email || '').trim().toLowerCase() === userEmail
     );
   }, [data, user, canViewAllSpecialists]);
 
+  // Sync selectedSpecialistId when performance data loads/changes
   useEffect(() => {
-    if (activeTabIdx >= visibleAssigneePerformance.length) {
-      setActiveTabIdx(0);
+    if (visibleAssigneePerformance.length > 0) {
+      if (!selectedSpecialistId || !visibleAssigneePerformance.some(p => p.userId === selectedSpecialistId)) {
+        setSelectedSpecialistId(visibleAssigneePerformance[0].userId);
+      }
+    } else {
+      setSelectedSpecialistId(null);
     }
-  }, [visibleAssigneePerformance, activeTabIdx]);
+  }, [visibleAssigneePerformance, selectedSpecialistId]);
 
-  const currentSpecialist = visibleAssigneePerformance[activeTabIdx] || null;
+  const currentSpecialist = useMemo(() => {
+    if (!selectedSpecialistId) return visibleAssigneePerformance[0] || null;
+    return visibleAssigneePerformance.find(p => p.userId === selectedSpecialistId) || visibleAssigneePerformance[0] || null;
+  }, [visibleAssigneePerformance, selectedSpecialistId]);
 
   const handleUpdateTarget = async (userId, currentTarget, type = 'monthly') => {
     if (editingTargetId === userId && editingTargetType === type) {
@@ -338,12 +358,27 @@ const MisReportTab = () => {
   if (!data) return null;
 
   // Active tab specialist data
-  const targetMetPct = currentSpecialist && currentSpecialist.target
-    ? Math.min(100, Math.round((currentSpecialist.saved / currentSpecialist.target) * 100))
+  const dailyTarget = currentSpecialist && currentSpecialist.target
+    ? Math.round(currentSpecialist.target / 30)
     : 0;
+  const savedTodayAmt = currentSpecialist ? (currentSpecialist.resolvedTodayAmt || 0) : 0;
+  const dailyTargetCompleted = Math.min(dailyTarget, savedTodayAmt);
+  const dailyTargetRemaining = Math.max(0, dailyTarget - savedTodayAmt);
+
+  const displayedMonthlyTarget = currentSpecialist
+    ? Math.max(0, currentSpecialist.target - dailyTargetCompleted)
+    : 0;
+
+  const targetMetPct = currentSpecialist
+    ? (displayedMonthlyTarget > 0
+        ? Math.min(100, Math.round((currentSpecialist.saved / displayedMonthlyTarget) * 100))
+        : (currentSpecialist.saved > 0 || currentSpecialist.target > 0 ? 100 : 0))
+    : 0;
+
   const targetLeft = currentSpecialist
-    ? Math.max(0, currentSpecialist.target - currentSpecialist.saved)
+    ? Math.max(0, displayedMonthlyTarget - (currentSpecialist.saved - dailyTargetCompleted))
     : 0;
+
   const barColor = targetMetPct >= 80 ? 'bg-[#4ACE8A]' : targetMetPct >= 50 ? 'bg-[#E8A84A]' : 'bg-[#E85B5B]';
   const textColor = targetMetPct >= 80 ? 'text-[#4ACE8A]' : targetMetPct >= 50 ? 'text-[#E8A84A]' : 'text-[#E85B5B]';
 
@@ -359,9 +394,6 @@ const MisReportTab = () => {
             <h1 className="text-xl md:text-2xl font-black text-text-primary tracking-tight">
               Escalation MIS Report
             </h1>
-            <p className="text-[10px] md:text-xs text-text-muted font-black uppercase tracking-widest mt-1">
-              Monthly Performance &amp; Case Tracker
-            </p>
           </div>
         </div>
 
@@ -445,6 +477,7 @@ const MisReportTab = () => {
 
       {/* METRICS ROW */}
       <div className="p-6 md:p-8 space-y-8">
+        {canViewAllSpecialists && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Card 1: Total Active Cases */}
           <div onClick={() => navigate('/case-master', { state: { misFilter: 'active' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-blue-400/30 transition-all cursor-pointer">
@@ -492,6 +525,7 @@ const MisReportTab = () => {
             </div>
           </div>
         </div>
+        )}
 
         {/* SECTION 4: ASSIGNEE-WISE PERFORMANCE */}
         <div className="space-y-6">
@@ -507,11 +541,11 @@ const MisReportTab = () => {
               <button
                 key={idx}
                 onClick={() => {
-                  setActiveTabIdx(idx);
+                  setSelectedSpecialistId(spec.userId);
                   setEditingTargetId(null);
                 }}
                 className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all border shrink-0 ${
-                  activeTabIdx === idx
+                  currentSpecialist?.userId === spec.userId
                     ? 'bg-accent/15 border-accent/30 text-accent font-black'
                     : 'bg-bg-card border-border text-text-secondary hover:bg-bg-card-hover'
                 }`}
@@ -628,7 +662,7 @@ const MisReportTab = () => {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-black text-text-primary">{formatCurrency(Math.round(currentSpecialist.target / 30))}</span>
+                          <span className="text-sm font-black text-text-primary">{formatCurrency(dailyTargetRemaining)}</span>
                           {['Admin', 'Super Admin', 'SuperAdmin', 'Operations', 'Operation Head'].includes(user?.role) && (
                             <button
                               onClick={() => handleUpdateTarget(currentSpecialist.userId, currentSpecialist.target, 'daily')}
@@ -664,7 +698,7 @@ const MisReportTab = () => {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-black text-text-primary">{formatCurrency(currentSpecialist.target)}</span>
+                          <span className="text-sm font-black text-text-primary">{formatCurrency(displayedMonthlyTarget)}</span>
                           {['Admin', 'Super Admin', 'SuperAdmin', 'Operations', 'Operation Head'].includes(user?.role) && (
                             <button
                               onClick={() => handleUpdateTarget(currentSpecialist.userId, currentSpecialist.target, 'monthly')}
