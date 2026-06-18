@@ -32,8 +32,13 @@ router.get('/', verifyToken, async (req, res) => {
       }
     }
 
+    let timelineQuery = { caseId, eventType: 'Progress Update' };
+    if (cutoff) {
+      timelineQuery.createdAt = { [Op.gte]: cutoff };
+    }
+
     let progressDocs = await Progress.findAll({ 
-      where: query, 
+      where: { caseId }, 
       order: [['createdAt', 'DESC']] 
     });
     
@@ -73,11 +78,6 @@ router.get('/', verifyToken, async (req, res) => {
     }
 
     let logs = [];
-
-    let timelineQuery = { caseId, eventType: 'Progress Update' };
-    if (cutoff) {
-      timelineQuery.createdAt = { [Op.gte]: cutoff };
-    }
 
     const timelineProgressEvents = await Timeline.findAll({
       where: timelineQuery
@@ -203,7 +203,7 @@ router.post('/', verifyToken, async (req, res) => {
       refundedAmount,
       savedAmount,
       attachment,
-      createdAt: followUpDate ? new Date(followUpDate).toISOString() : new Date().toISOString()
+      createdAt: new Date().toISOString()
     };
 
     let progressDoc = await Progress.findOne({ where: { caseId } });
@@ -266,7 +266,7 @@ router.post('/', verifyToken, async (req, res) => {
           savedAmount: progressDoc.savedAmount,
           attachment: progressDoc.attachment,
           updatedBy: progressDoc.updatedBy,
-          createdAt: progressDoc.followUpDate ? new Date(progressDoc.followUpDate).toISOString() : (progressDoc.createdAt || progressDoc.updatedAt || new Date().toISOString())
+          createdAt: progressDoc.createdAt || progressDoc.updatedAt || new Date().toISOString()
         });
       }
 

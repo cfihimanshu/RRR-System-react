@@ -129,7 +129,7 @@ router.get('/stats', verifyToken, async (req, res) => {
       } else {
         ownershipQuery = { assignedTo: '__non_existent_user__' };
       }
-    } else if (['operation admin', 'operation admin'].includes(req.user.role?.toLowerCase().trim())) {
+    } else if (['operation admin'].includes(req.user.role?.toLowerCase().trim())) {
       ownershipQuery = { assignedTo: { [Op.like]: `%${userName}%` } };
     } else if (req.user.role !== 'Admin') {
       ownershipQuery = {
@@ -292,7 +292,7 @@ router.get('/stats', verifyToken, async (req, res) => {
     allCases.forEach(c => {
       const isOdooCase = String(c.sourceOfComplaint).toLowerCase().includes('odoo');
       const roleLower = req.user?.role?.toLowerCase().trim() || '';
-      const isOperationRole = ['operation head', 'operation admin'].includes(roleLower);
+      const isOperationRole = ['operation head', 'operation admin', 'operation review'].includes(roleLower);
       const isAdminRole = ['admin', 'super admin', 'superadmin'].includes(roleLower);
       
       // If it's an Odoo case and user is not operation role, we should NOT add to global metrics.
@@ -384,7 +384,7 @@ router.get('/stats', verifyToken, async (req, res) => {
     const caseTypeWiseData = Object.entries(caseTypeMap).map(([k,v]) => ({ caseType: k, count: v.count, totalAmount: v.amount })).sort((a,b) => b.count - a.count);
     const allSources = ['EMAIL', 'CALL', 'OFFICE VISIT', 'SOCIAL MEDIA', 'TOLL FREE', 'NOTICE', 'UNKNOWN'];
     const roleLower = req.user?.role?.toLowerCase().trim() || '';
-    const canSeeOdoo = ['admin', 'super admin', 'superadmin', 'operation head', 'operation admin'].includes(roleLower);
+    const canSeeOdoo = ['admin', 'super admin', 'superadmin', 'operation head', 'operation admin', 'operation review'].includes(roleLower);
     
     if (canSeeOdoo) {
       allSources.push('ODOO');

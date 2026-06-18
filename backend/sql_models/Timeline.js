@@ -10,5 +10,7 @@ module.exports = sequelize.define('Timeline', {
   summary: { type: DataTypes.TEXT },
   fieldChanged: { type: DataTypes.STRING },
   oldValue: { type: DataTypes.TEXT },
-  newValue: { type: DataTypes.TEXT }
+  newValue: { type: DataTypes.TEXT },
+  details: { type: DataTypes.TEXT },
+  metadata: { type: DataTypes.JSON }
 }, { tableName: 'timelines', timestamps: true });

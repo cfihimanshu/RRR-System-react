@@ -120,4 +120,24 @@ router.put('/:id', verifyToken, async (req, res) => {
   }
 });
 
+router.delete('/:id', verifyToken, async (req, res) => {
+  try {
+    const allowedRoles = ['Admin', 'Super Admin', 'SuperAdmin'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
+    }
+
+    const { id } = req.params;
+    const comm = await Communication.findByPk(id);
+    if (!comm) {
+      return res.status(404).json({ error: 'Communication log not found' });
+    }
+
+    await comm.destroy();
+    res.json({ message: 'Communication deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

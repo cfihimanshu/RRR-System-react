@@ -563,13 +563,13 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   const canEditCase = useMemo(() => {
     if (!user || !viewCase) return false;
     const role = user.role;
-    if (role === 'Admin' || role === 'Super Admin' || role === 'SuperAdmin' || role === 'Operations') {
+    if (role === 'Admin' || role === 'Super Admin' || role === 'SuperAdmin' || role === 'Operations' || role === 'Operation Head') {
       return true;
     }
     const assignedName = (viewCase.assignedTo || '').trim().toLowerCase();
     const myName = (user.fullName || user.name || '').trim().toLowerCase();
     const myEmail = (user.email || '').trim().toLowerCase();
-    if (['Staff', 'Operation Admin', 'operation admin'].includes(role)) {
+    if (['Staff', 'Operation Admin', 'operation admin', 'Operation Review'].includes(role)) {
       return assignedName !== '' && (assignedName === myName || assignedName === myEmail);
     }
     return false;
@@ -1002,7 +1002,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   };
 
   const fetchOpsUsers = async () => {
-    if (!user || (user.role !== 'Admin' && user.role !== 'Operations' && user.role !== 'Super Admin' && user.role !== 'Legal')) {
+    if (!user || (!['Admin', 'Operations', 'Super Admin', 'Legal', 'Operation Head'].includes(user.role))) {
       return;
     }
     try {
@@ -2567,6 +2567,20 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     }
   };
 
+  const handleDeleteComm = async (id) => {
+    const isConfirmed = await confirmDelete('Delete Communication?', 'Are you sure you want to delete this communication log? This action cannot be undone.');
+    if (!isConfirmed) return;
+    const loadingToast = toast.loading('Deleting communication...');
+    try {
+      await api.delete(`/communications/${id}`);
+      toast.success('Communication deleted successfully', { id: loadingToast });
+      setCaseComms(prev => prev.filter(c => (c.id || c._id) !== id));
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete communication', { id: loadingToast });
+    }
+  };
+
   const handleStartEditProgress = (log) => {
     setEditingProgress(log);
     setProgressFormData({
@@ -3782,7 +3796,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
               )}
             </div>
 
-            {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin') && (
+            {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin' || user?.role === 'Operation Head') && (
               <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full md:w-auto md:ml-auto">
                 <select
                   className={`border-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-widest outline-none shadow-sm min-w-[200px] transition-all ${bulkAssignUser ? 'border-accent bg-accent-soft text-accent' : 'border-border bg-bg-card text-text-secondary'}`}
@@ -4904,17 +4918,30 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                                   <span className="text-[9px] font-black text-accent uppercase tracking-widest">{comm.mode} via {comm.fromTo || 'Client'}</span>
                                   <div className="flex gap-2 items-center">
                                     {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleStartEditComm(comm);
-                                        }}
-                                        className="text-text-primary hover:text-accent bg-bg-secondary hover:bg-accent/10 p-1.5 rounded-md border border-border hover:border-accent transition-all flex items-center gap-1"
-                                        title="Edit Signal"
-                                      >
-                                        <Edit3 size={10} /> <span className="text-[8px] font-bold">EDIT</span>
-                                      </button>
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleStartEditComm(comm);
+                                          }}
+                                          className="text-text-primary hover:text-accent bg-bg-secondary hover:bg-accent/10 p-1.5 rounded-md border border-border hover:border-accent transition-all flex items-center gap-1"
+                                          title="Edit Signal"
+                                        >
+                                          <Edit3 size={10} /> <span className="text-[8px] font-bold">EDIT</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteComm(comm.id || comm._id);
+                                          }}
+                                          className="text-red hover:text-white bg-red/10 hover:bg-red p-1.5 rounded-md border border-red/20 hover:border-red transition-all flex items-center gap-1"
+                                          title="Delete Signal"
+                                        >
+                                          <Trash2 size={10} /> <span className="text-[8px] font-bold">DELETE</span>
+                                        </button>
+                                      </>
                                     )}
                                     {comm.fileLink ? (
                                       <button
@@ -6542,7 +6569,7 @@ const CaseRow = memo(({
           </div>
 
           {/* Bottom Row: Assignment Section */}
-          {['Admin', 'Operations', 'Super Admin'].includes(user?.role) && !c.isArchived && (
+          {['Admin', 'Operations', 'Super Admin', 'Operation Head'].includes(user?.role) && !c.isArchived && (
             <div className="flex gap-2 w-full">
               <select
                 className="flex-1 bg-bg-input border-2 border-border rounded-xl text-[9px] px-2 py-2.5 outline-none focus:border-accent shadow-sm min-w-0 text-text-primary font-black uppercase tracking-widest cursor-pointer"
@@ -6550,7 +6577,7 @@ const CaseRow = memo(({
                 onChange={(e) => handleAssignmentInputChange(c.caseId, e.target.value)}
               >
                 <option value="">Assign</option>
-                {['admin', 'super admin'].includes(user?.role?.toLowerCase())
+                {['admin', 'super admin', 'operation head'].includes(user?.role?.toLowerCase())
                   ? opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review', 'legal', 'advocate'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                   ))

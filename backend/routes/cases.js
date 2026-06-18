@@ -211,7 +211,7 @@ async function buildCaseQuery(req) {
     req.user.role !== 'Reviewer' &&
     req.user.role !== 'Super Admin' &&
     req.user.role !== 'SuperAdmin' &&
-    !['operation admin', 'operation admin'].includes(req.user.role?.toLowerCase().trim())
+    !['operation admin'].includes(req.user.role?.toLowerCase().trim())
   ) {
     const dbUser = await User.findByPk(req.user.id);
     const userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();

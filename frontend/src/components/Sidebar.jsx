@@ -24,7 +24,8 @@ import {
   ClipboardList,
   IndianRupee,
   Scale,
-  Archive
+  Archive,
+  BookOpen
 } from 'lucide-react';
 
 import { TAB_ACCESS } from '../config/tabAccess';
@@ -51,6 +52,7 @@ const tabsConfig = [
   { id: 'work-report', label: 'Work Report', path: '/work-report', icon: BarChart },
   { id: 'refund-request', label: 'Approvals', path: '/refund-request', icon: IndianRupee },
   { id: 'pending-refunds', label: 'Pending Refunds', path: '/pending-refunds', icon: CircleDollarSign },
+  { id: 'user-manual', label: 'User Manual', path: '/user-manual', icon: BookOpen },
 ];
 
 const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogoutClick }) => {
@@ -77,6 +79,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
 
   const visibleTabs = tabsConfig.filter(tab => {
     if (!user) return false;
+    if (tab.id === 'user-manual') return true;
     // Show Records module if user has explicit permission OR role-based access
     if (tab.id === 'internal-search' && user.canAccessRecords) return true;
     return TAB_ACCESS[tab.id]?.includes(user?.role);
