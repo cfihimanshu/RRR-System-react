@@ -3,8 +3,13 @@ const { Op } = require('sequelize');
 const Action = require('../sql_models/Action');
 const User = require('../sql_models/User');
 const Case = require('../sql_models/Case');
+const Report = require('../sql_models/Report');
+const Task = require('../sql_models/Task');
+const Timeline = require('../sql_models/Timeline');
+const { sequelize } = require('../config/sequelize');
 const { sendEmail } = require('./mailer');
 const { createNotification } = require('./notificationHelper');
+const XLSX = require('xlsx');
 
 const runDueCaseAlerts = async () => {
   console.log('Running Case Due Date and action alerts scan...');
@@ -495,6 +500,413 @@ const runAssignmentReminders = async () => {
   }
 };
 
+const sendDailyReportsToAdmins = async () => {
+  console.log('Generating daily 8:00 PM email reports...');
+  try {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
+    // Find all admins
+    const admins = await User.findAll({ 
+      where: { 
+        role: ['Admin', 'Super Admin', 'SuperAdmin'] 
+      } 
+    });
+    const adminEmails = admins.map(a => a.email).join(',');
+    if (!adminEmails) {
+      console.log('No admin emails found to send reports.');
+      return;
+    }
+
+    // ==========================================
+    // Part 1: Generate Escalation MIS Report
+    // ==========================================
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const caseQuery = { 
+      isArchived: { [Op.not]: true }
+    };
+
+    const allCases = await Case.findAll({ where: caseQuery });
+    const allUsers = await User.findAll({ attributes: ['id', 'fullName', 'email', 'role', 'monthlyTarget'] });
+
+    const completedStatuses = ['Settled', 'Closed', 'Closure', 'Resolved'];
+    const isCompleted = (status) => {
+      if (!status) return false;
+      return completedStatuses.includes(status.trim());
+    };
+    const isClosureStatus = (status) => {
+      if (!status) return false;
+      return ['Closed', 'Closure'].includes(status.trim());
+    };
+
+    const assigneeStatsMap = {};
+    allUsers.forEach(u => {
+      const key = u.fullName.trim().toLowerCase();
+      assigneeStatsMap[key] = {
+        name: u.fullName.trim(),
+        email: u.email,
+        role: u.role,
+        target: u.monthlyTarget || 0,
+        saved: 0,
+        totalCases: 0,
+        totalAmt: 0,
+        pendingCases: 0,
+        pendingAmt: 0,
+        resolvedCases: 0,
+        resolvedAmt: 0
+      };
+    });
+
+    allCases.forEach(c => {
+      const assigneeName = c.assignedTo;
+      if (!assigneeName) return;
+
+      const key = assigneeName.trim().toLowerCase();
+      let stats = assigneeStatsMap[key];
+      if (!stats) {
+        const foundKey = Object.keys(assigneeStatsMap).find(k => 
+          assigneeStatsMap[k].email?.trim().toLowerCase() === key
+        );
+        if (foundKey) {
+          stats = assigneeStatsMap[foundKey];
+        }
+      }
+      if (!stats) return;
+
+      // Exclude Odoo complaints from non-"Operation Review" specialists
+      const roleLower = (stats.role || '').toLowerCase().trim();
+      const isOdooCase = c.sourceOfComplaint && c.sourceOfComplaint.toLowerCase().includes('odoo');
+      if (roleLower !== 'operation review' && isOdooCase) {
+        return;
+      }
+
+      const amt = c.totalAmtPaid || 0;
+      const saved = c.savedAmount || c.refundedAmount || 0;
+      const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
+      const isCaseClosure = isClosureStatus(c.currentStatus);
+
+      let shouldCount = false;
+      if (!isCaseResolved) {
+        shouldCount = true;
+      } else {
+        const resolvedDate = c.updatedAt ? new Date(c.updatedAt) : (c.createdAt ? new Date(c.createdAt) : null);
+        const isResolvedInPeriod = resolvedDate && resolvedDate >= startOfMonth && resolvedDate <= endOfToday;
+        if (isResolvedInPeriod) {
+          shouldCount = true;
+        }
+      }
+
+      if (!shouldCount) return;
+
+      stats.totalCases++;
+      stats.totalAmt += amt;
+
+      if (isCaseResolved) {
+        if (isCaseClosure) {
+          stats.resolvedCases++;
+        }
+        stats.resolvedAmt += saved;
+        stats.saved += saved;
+      } else {
+        stats.pendingCases++;
+        stats.pendingAmt += amt;
+      }
+    });
+
+    const performanceList = Object.values(assigneeStatsMap).filter(stats => {
+      const roleLower = (stats.role || '').toLowerCase().trim();
+      const isExcluded = ['admin', 'super admin', 'superadmin', 'operation head', 'accountant'].includes(roleLower);
+      if (isExcluded) return false;
+      const isSpecialist = ['operations', 'staff', 'operation admin', 'operation review', 'reviewer'].includes(roleLower);
+      return stats.totalCases > 0 || isSpecialist;
+    });
+
+    const misRows = [
+      ['All Specialists Performance Overview (Today)'],
+      [],
+      ['Specialist', 'Role', 'Total Cases', 'Total Amount', 'Pending Cases', 'Pending Amount', 'Resolved Cases', 'Amount Saved', 'Monthly Target']
+    ];
+
+    let sumTotalCases = 0;
+    let sumTotalAmt = 0;
+    let sumPendingCases = 0;
+    let sumPendingAmt = 0;
+    let sumResolvedCases = 0;
+    let sumResolvedAmt = 0;
+    let sumTarget = 0;
+
+    performanceList.forEach(spec => {
+      sumTotalCases += (spec.totalCases || 0);
+      sumTotalAmt += (spec.totalAmt || 0);
+      sumPendingCases += (spec.pendingCases || 0);
+      sumPendingAmt += (spec.pendingAmt || 0);
+      sumResolvedCases += (spec.resolvedCases || 0);
+      sumResolvedAmt += (spec.saved || 0);
+      sumTarget += (spec.target || 0);
+
+      misRows.push([
+        spec.name,
+        spec.role || '—',
+        spec.totalCases || 0,
+        spec.totalAmt || 0,
+        spec.pendingCases || 0,
+        spec.pendingAmt || 0,
+        spec.resolvedCases || 0,
+        spec.saved || 0,
+        spec.target || 0
+      ]);
+    });
+
+    // Add Total Row
+    misRows.push([
+      'Total',
+      '',
+      sumTotalCases,
+      sumTotalAmt,
+      sumPendingCases,
+      sumPendingAmt,
+      sumResolvedCases,
+      sumResolvedAmt,
+      sumTarget
+    ]);
+
+    const misWorkbook = XLSX.utils.book_new();
+    const misWorksheet = XLSX.utils.aoa_to_sheet(misRows);
+    misWorksheet['!cols'] = [
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 15 }
+    ];
+    XLSX.utils.book_append_sheet(misWorkbook, misWorksheet, 'Performance Overview');
+    const misBuffer = XLSX.write(misWorkbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // ==========================================
+    // Part 2: Generate Work Report Excel
+    // ==========================================
+    const reportsRaw = await Report.findAll({
+      where: { date: todayStr }
+    });
+
+    const groups = {};
+    reportsRaw.forEach(r => {
+      const key = `${r.date || 'unknown'}_${r.userEmail || r.userName || 'unknown'}`;
+      if (!groups[key]) {
+        groups[key] = {
+          date: r.date,
+          userEmail: r.userEmail,
+          userName: r.userName,
+          sod: null,
+          eod: null,
+          reports: []
+        };
+      }
+      groups[key].reports.push(r);
+      let parsedData = {};
+      try {
+        parsedData = typeof r.data === 'string' ? JSON.parse(r.data) : (r.data || {});
+      } catch (e) {
+        parsedData = {};
+      }
+      if (r.type === 'SOD') groups[key].sod = { ...r.toJSON(), ...parsedData };
+      if (r.type === 'EOD') groups[key].eod = { ...r.toJSON(), ...parsedData };
+    });
+
+    const formatDuration = (startTime, endTime) => {
+      if (!startTime || !endTime) return '';
+      const parseTime = (timeStr) => {
+        if (!timeStr) return null;
+        const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
+        if (!match) return null;
+        let hour = Number(match[1]);
+        const minute = Number(match[2]);
+        const period = match[3].toLowerCase();
+        if (period === 'pm' && hour !== 12) hour += 12;
+        if (period === 'am' && hour === 12) hour = 0;
+        const d = new Date();
+        d.setHours(hour, minute, 0, 0);
+        return d;
+      };
+      const start = parseTime(startTime);
+      const end = parseTime(endTime);
+      if (!start || !end) return '';
+      let diff = (end - start) / 1000 / 60;
+      if (diff < 0) diff += 24 * 60;
+      const hours = Math.floor(diff / 60);
+      const minutes = Math.round(diff % 60);
+      return `${hours}h ${minutes}m`;
+    };
+
+    const aggregatedReports = Object.values(groups).map(group => {
+      const hasSod = !!group.sod;
+      const hasEod = !!group.eod;
+      const type = hasSod && hasEod ? 'SOD+EOD' : hasSod ? 'SOD' : 'EOD';
+      const checkInTime = group.sod?.checkInTime || group.eod?.checkInTime || '';
+      const checkOutTime = group.eod?.checkOutTime || group.sod?.checkOutTime || '';
+      const duration = group.eod?.workDuration || formatDuration(checkInTime, checkOutTime);
+      return {
+        ...group,
+        type,
+        checkInTime,
+        checkOutTime,
+        duration,
+        plannedTasks: group.sod?.plannedTasks || '',
+        workSummary: group.eod?.workSummary || group.sod?.plannedTasks || '',
+        progressScore: group.eod?.progressScore || null,
+        moodEnergy: group.eod?.moodEnergy || '',
+        completionStatus: hasSod && hasEod ? 'Fully Completed' : 'Incomplete'
+      };
+    });
+
+    const timelinesToday = await Timeline.findAll({
+      where: {
+        eventDate: { [Op.like]: `${todayStr}%` }
+      }
+    });
+
+    const tasksToday = await Task.findAll({
+      where: {
+        updatedAt: { [Op.between]: [startOfToday, endOfToday] }
+      }
+    });
+
+    const detailedRows = [];
+    for (const r of aggregatedReports) {
+      const userComms = timelinesToday.filter(a => 
+        (a.source === r.userName || a.source === r.userEmail) &&
+        ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting', 'Communication'].includes(a.eventType)
+      );
+
+      const userDocs = timelinesToday.filter(a => 
+        (a.source === r.userName || a.source === r.userEmail) &&
+        ['Document Upload', 'Document Uploaded', 'Document Indexed'].includes(a.eventType)
+      );
+
+      const userProgress = timelinesToday.filter(a => 
+        (a.source === r.userName || a.source === r.userEmail) &&
+        ['Progress Update', 'Status Update', 'Progress Updated'].includes(a.eventType)
+      );
+
+      const userTasks = tasksToday.filter(t => 
+        t.assignee && (t.assignee.trim().toLowerCase() === (allUsers.find(u => u.email === r.userEmail)?.fullName || r.userName).toLowerCase())
+      );
+
+      const commsList = userComms
+        .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
+        .join('\n');
+
+      const docsList = userDocs
+        .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
+        .join('\n');
+
+      const progressList = userProgress
+        .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
+        .join('\n');
+
+      const tasksList = userTasks
+        .map(t => `• ${t.taskId || 'N/A'}: ${t.title} [${t.status}]`)
+        .join('\n');
+
+      const totalCount = userComms.length + userDocs.length + userProgress.length + userTasks.length;
+
+      detailedRows.push([
+        r.date || '',
+        r.type || '',
+        r.userName || '',
+        r.checkInTime || '',
+        r.checkOutTime || '',
+        r.duration || '',
+        r.plannedTasks || '',
+        r.workSummary || '',
+        r.completionStatus || '',
+        r.progressScore || '',
+        r.moodEnergy || '',
+        commsList,
+        docsList,
+        progressList,
+        tasksList,
+        totalCount
+      ]);
+    }
+
+    const workHeaders = [
+      'Date', 'Type', 'Submitted By', 'Check-In', 'Check-Out', 'Duration',
+      'Planned Tasks', 'Work Summary', 'Completion', 'Progress Score', 'Mood',
+      'Communication Details (ID: Summary)', 'Document Details (ID: Summary)',
+      'Progress Updates (ID: Summary)', 'Task Details (ID: Title [Status])', 'Total Activity Count'
+    ];
+
+    const workRows = [workHeaders, ...detailedRows];
+    const workWorkbook = XLSX.utils.book_new();
+    const workWorksheet = XLSX.utils.aoa_to_sheet(workRows);
+    
+    // Set column widths
+    const workColWidths = workHeaders.map((h, i) => {
+      let maxLen = h.length;
+      detailedRows.forEach(row => {
+        const val = String(row[i] || '');
+        if (val.length > maxLen) {
+          maxLen = val.length;
+        }
+      });
+      return { wch: Math.min(Math.max(maxLen + 2, 10), 50) };
+    });
+    workWorksheet['!cols'] = workColWidths;
+
+    XLSX.utils.book_append_sheet(workWorkbook, workWorksheet, 'Detailed Work Report');
+    const workBuffer = XLSX.write(workWorkbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // ==========================================
+    // Part 3: Send Email
+    // ==========================================
+    const subject = `📅 RRR System: Daily Reports Summary - ${todayStr}`;
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #ddd; border-radius: 12px; padding: 25px;">
+        <h2 style="color: #0b72b8; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0;">Daily Reports Summary</h2>
+        <p>Hello Admin,</p>
+        <p>Please find attached the daily reports for <strong>${todayStr}</strong>:</p>
+        <ol>
+          <li><strong>Escalation MIS Report</strong> (All Specialists Performance Overview)</li>
+          <li><strong>Work Report</strong> (Detailed Work Report with SOD/EOD details)</li>
+        </ol>
+        <p>These reports are automatically compiled and sent every day at 8:00 PM.</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="font-size: 12px; color: #666;">This is an automated notification from the RRR System. Please do not reply directly to this email.</p>
+      </div>
+    `;
+
+    const attachments = [
+      {
+        filename: `Escalation_MIS_Report_${todayStr}.xlsx`,
+        content: misBuffer
+      },
+      {
+        filename: `Detailed_Work_Report_${todayStr}.xlsx`,
+        content: workBuffer
+      }
+    ];
+
+    await sendEmail(adminEmails, subject, '', htmlContent, attachments);
+    console.log(`Daily 8:00 PM email reports successfully sent to: ${adminEmails}`);
+
+  } catch (error) {
+    console.error('Error generating or sending daily 8:00 PM reports:', error);
+  }
+};
+
 const initScheduler = () => {
   cron.schedule('0 9 * * *', async () => {
     console.log('Running daily alert scheduler...');
@@ -506,7 +918,12 @@ const initScheduler = () => {
     await runAssignmentReminders();
   });
 
-  console.log('Scheduler initialized with Daily Alerts and 30-Min Assignment Reminders.');
+  // Daily 8:00 PM report mailer
+  cron.schedule('0 20 * * *', async () => {
+    await sendDailyReportsToAdmins();
+  });
+
+  console.log('Scheduler initialized with Daily Alerts, 30-Min Assignment Reminders, and Daily 8:00 PM Reports.');
 };
 
-module.exports = { initScheduler, runDueCaseAlerts, sendUserOverdueAlerts, runAssignmentReminders };
+module.exports = { initScheduler, runDueCaseAlerts, sendUserOverdueAlerts, runAssignmentReminders, sendDailyReportsToAdmins };

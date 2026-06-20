@@ -23,11 +23,27 @@ const getGeminiModel = () => {
   const genAI = new GoogleGenerativeAI(key);
 
   return genAI.getGenerativeModel({
-    model: 'gemini-flash-latest',
+    model: 'gemini-2.5-flash-lite',
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 1200,
       responseMimeType: 'application/json',
+    },
+  });
+};
+
+const getPlainGeminiModel = () => {
+  const key = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : '';
+
+  if (!key) {
+    throw new Error('Gemini API key is not configured. Please add GEMINI_API_KEY in backend .env');
+  }
+
+  const genAI = new GoogleGenerativeAI(key);
+
+  return genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash-lite',
+    generationConfig: {
+      temperature: 0.4,
     },
   });
 };
@@ -47,6 +63,40 @@ const extractJsonObject = (text) => {
       return null;
     }
   }
+};
+
+const parseTextSections = (text) => {
+  const sections = {
+    Summary: '',
+    RiskAnalysis: '',
+    NextSteps: '',
+    AgreementGuidance: '',
+    DraftEmail: '',
+    ResolutionPath: ''
+  };
+
+  const regexes = {
+    Summary: /\[SUMMARY\]([\s\S]*?)(?=\[(?:RISK_ANALYSIS|NEXT_STEPS|AGREEMENT_GUIDANCE|DRAFT_EMAIL|RESOLUTION_PATH)\]|$)/i,
+    RiskAnalysis: /\[RISK_ANALYSIS\]([\s\S]*?)(?=\[(?:SUMMARY|NEXT_STEPS|AGREEMENT_GUIDANCE|DRAFT_EMAIL|RESOLUTION_PATH)\]|$)/i,
+    NextSteps: /\[NEXT_STEPS\]([\s\S]*?)(?=\[(?:SUMMARY|RISK_ANALYSIS|AGREEMENT_GUIDANCE|DRAFT_EMAIL|RESOLUTION_PATH)\]|$)/i,
+    AgreementGuidance: /\[AGREEMENT_GUIDANCE\]([\s\S]*?)(?=\[(?:SUMMARY|RISK_ANALYSIS|NEXT_STEPS|DRAFT_EMAIL|RESOLUTION_PATH)\]|$)/i,
+    DraftEmail: /\[DRAFT_EMAIL\]([\s\S]*?)(?=\[(?:SUMMARY|RISK_ANALYSIS|NEXT_STEPS|AGREEMENT_GUIDANCE|RESOLUTION_PATH)\]|$)/i,
+    ResolutionPath: /\[RESOLUTION_PATH\]([\s\S]*?)(?=\[(?:SUMMARY|RISK_ANALYSIS|NEXT_STEPS|AGREEMENT_GUIDANCE|DRAFT_EMAIL)\]|$)/i,
+  };
+
+  for (const [key, regex] of Object.entries(regexes)) {
+    const match = text.match(regex);
+    if (match && match[1]) {
+      sections[key] = match[1].trim();
+    }
+  }
+
+  // Fallback if no sections matched
+  if (!Object.values(sections).some(v => v)) {
+    sections.Summary = text;
+  }
+
+  return sections;
 };
 
 const formatDate = (value) => {
@@ -160,7 +210,7 @@ router.post('/case-insights', verifyToken, async (req, res) => {
     const caseData = caseDataDoc.toJSON();
 
     const [historyEntriesDocs, commsDocs, progressDoc, documentsDocs] = await Promise.all([
-      History.findAll({ where: { caseId }, order: [['timestamp', 'ASC']], limit: 20 }),
+      History.findAll({ where: { caseId }, order: [['createdAt', 'ASC']], limit: 20 }),
       Communication.findAll({ where: { caseId }, order: [['dateTime', 'DESC']], limit: 20 }),
       Progress.findOne({ where: { caseId } }),
       Document.findAll({ where: { caseId }, order: [['uploadDate', 'DESC']], limit: 20 }),
@@ -184,59 +234,48 @@ router.post('/case-insights', verifyToken, async (req, res) => {
     );
 
     const prompt = `
-You are an expert legal and operational case analyst.
+You are an expert legal and operational case strategist.
 
-Analyze the case details and return ONLY valid JSON.
+Based on the case facts, history, communications and progress below, write a detailed and professional strategy report. 
+Organize your response using these exact section headers:
 
-Required JSON format:
-{
-  "Summary": "Short case summary in simple professional English.",
-  "RiskAnalysis": "Key legal, operational, payment, reputational and evidence-related risks.",
-  "NextSteps": "Clear practical next steps for the internal team.",
-  "AgreementGuidance": "Guidance for MOU, settlement, refund, installment or closure agreement.",
-  "DraftEmail": "Professional email draft to client/counterparty.",
-  "ResolutionPath": "Recommended resolution path with practical action plan."
-}
+[SUMMARY]
+Write a concise executive summary of the case, the dispute, and the current status.
+
+[RISK_ANALYSIS]
+Analyze key risks (legal risk, cyber threat, financial exposure, or reputational risks) in detail. Use bullet points or numbers.
+
+[NEXT_STEPS]
+Provide clear, practical, numbered next steps for the internal operations and legal teams.
+
+[RESOLUTION_PATH]
+Outline the recommended path to resolution (e.g., settlement plan, full refund, revised terms, or court posture).
+
+[AGREEMENT_GUIDANCE]
+Suggest terms to include in the MOU, settlement, or closure agreement to protect the organization.
+
+[DRAFT_EMAIL]
+Write a professional, ready-to-send email draft to the client or counterparty to defuse the situation and propose the next steps.
 
 Rules:
-- Do not write markdown.
-- Do not add text outside JSON.
-- Keep response professional.
-- Do not claim guaranteed legal outcome.
-- Use the available case facts only.
+- Be clear, practical, and highly professional.
+- Start each section with its corresponding tag (e.g. [SUMMARY]).
+- Do NOT use markdown code blocks like \`\`\` around the tags.
+- Feel free to use standard line breaks and paragraphs inside the sections.
 
 Case context:
 ${caseContext}
 `;
 
-    const text = await sendGeminiPrompt(prompt);
-    const parsed = extractJsonObject(text);
+    const model = getPlainGeminiModel();
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
-    if (parsed) {
-      return res.status(200).json({
-        success: true,
-        insights: {
-          Summary: parsed.Summary || '',
-          RiskAnalysis: parsed.RiskAnalysis || '',
-          NextSteps: parsed.NextSteps || '',
-          AgreementGuidance: parsed.AgreementGuidance || '',
-          DraftEmail: parsed.DraftEmail || '',
-          ResolutionPath: parsed.ResolutionPath || '',
-        },
-        raw: text,
-      });
-    }
+    const parsed = parseTextSections(text);
 
     return res.status(200).json({
       success: true,
-      insights: {
-        Summary: text,
-        RiskAnalysis: '',
-        NextSteps: '',
-        AgreementGuidance: '',
-        DraftEmail: '',
-        ResolutionPath: '',
-      },
+      insights: parsed,
       raw: text,
     });
 
@@ -274,7 +313,7 @@ router.post('/generate-summary', verifyToken, async (req, res) => {
       caseData = caseDataDoc.toJSON();
 
       const [historyData, commsData, progressDoc, docsData] = await Promise.all([
-        History.findAll({ where: { caseId }, order: [['timestamp', 'ASC']], limit: 20 }),
+        History.findAll({ where: { caseId }, order: [['createdAt', 'ASC']], limit: 20 }),
         Communication.findAll({ where: { caseId }, order: [['dateTime', 'DESC']], limit: 20 }),
         Progress.findOne({ where: { caseId } }),
         Document.findAll({ where: { caseId }, order: [['uploadDate', 'DESC']], limit: 20 }),
@@ -317,10 +356,9 @@ ${caseContext}
     // For this we just need plain text, not JSON
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY.trim());
     const simpleModel = genAI.getGenerativeModel({
-      model: 'gemini-flash-latest',
+      model: 'gemini-2.5-flash-lite',
       generationConfig: {
         temperature: 0.5,
-        maxOutputTokens: 800,
       },
     });
 

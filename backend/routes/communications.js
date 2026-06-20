@@ -15,6 +15,18 @@ router.get('/', verifyToken, async (req, res) => {
       query.loggedBy = { [Op.in]: myIds };
     }
 
+    if (req.query.caseId) {
+      const targetCase = await Case.findOne({ where: { caseId: req.query.caseId }, attributes: ['createdAt', 'createdDate'] });
+      if (targetCase) {
+        const cutoffDate = targetCase.createdAt || targetCase.createdDate;
+        if (cutoffDate) {
+          const cutoff = new Date(cutoffDate);
+          cutoff.setMinutes(cutoff.getMinutes() - 5);
+          query.createdAt = { [Op.gte]: cutoff };
+        }
+      }
+    }
+
     const docs = await Communication.findAll({
       where: query,
       order: [['dateTime', 'DESC']]
@@ -103,6 +115,26 @@ router.put('/:id', verifyToken, async (req, res) => {
     }
 
     res.json(updatedComm);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/:id', verifyToken, async (req, res) => {
+  try {
+    const allowedRoles = ['Admin', 'Super Admin', 'SuperAdmin'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
+    }
+
+    const { id } = req.params;
+    const comm = await Communication.findByPk(id);
+    if (!comm) {
+      return res.status(404).json({ error: 'Communication log not found' });
+    }
+
+    await comm.destroy();
+    res.json({ message: 'Communication deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -211,7 +211,7 @@ async function buildCaseQuery(req) {
     req.user.role !== 'Reviewer' &&
     req.user.role !== 'Super Admin' &&
     req.user.role !== 'SuperAdmin' &&
-    !['operation admin', 'operation admin'].includes(req.user.role?.toLowerCase().trim())
+    !['operation admin'].includes(req.user.role?.toLowerCase().trim())
   ) {
     const dbUser = await User.findByPk(req.user.id);
     const userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
@@ -695,8 +695,44 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', '
     }
 
     const { id, createdAt, updatedAt, caseId: ignoreId, ...updateData } = req.body;
+    // Always protect refundedAmount and savedAmount from manual edits
+    delete updateData.refundedAmount;
+    delete updateData.savedAmount;
+
     await Case.update({ ...updateData, lastUpdateDate: new Date().toISOString() }, { where: { caseId } });
     const updated = await Case.findOne({ where: { caseId } });
+
+    // Auto-calculate savedAmount based on totalAmtPaid and current refundedAmount
+    if (updated) {
+      const isPaid = updated.refundStatus === 'Paid';
+      const calculatedRefundedAmount = isPaid ? (updated.refundedAmount || 0) : 0;
+      const calculatedSavedAmount = isPaid ? Math.max(0, (updated.totalAmtPaid || 0) - calculatedRefundedAmount) : 0;
+      if (updated.savedAmount !== calculatedSavedAmount || updated.refundedAmount !== calculatedRefundedAmount) {
+        await updated.update({ refundedAmount: calculatedRefundedAmount, savedAmount: calculatedSavedAmount });
+        updated.refundedAmount = calculatedRefundedAmount;
+        updated.savedAmount = calculatedSavedAmount;
+      }
+    }
+
+    // Sync with progresses table
+    const existingProgress = await Progress.findOne({ where: { caseId } });
+    if (existingProgress && updated) {
+      existingProgress.refundedAmount = updated.refundedAmount;
+      existingProgress.savedAmount = updated.savedAmount;
+      
+      let rawUpdates = existingProgress.updates;
+      if (typeof rawUpdates === 'string') {
+        try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+      }
+      const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
+      if (updates.length > 0) {
+        const latestIndex = updates.length - 1;
+        updates[latestIndex].refundedAmount = updated.refundedAmount;
+        updates[latestIndex].savedAmount = updated.savedAmount;
+        existingProgress.updates = updates;
+      }
+      await existingProgress.save();
+    }
 
     if (req.body.currentStatus && req.body.currentStatus !== existingCase.currentStatus) {
       const existingProgress = await Progress.findOne({ where: { caseId } });

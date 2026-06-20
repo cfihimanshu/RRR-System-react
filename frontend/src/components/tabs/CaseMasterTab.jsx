@@ -533,6 +533,87 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   }, [viewCase]);
   const { user } = useContext(AuthContext);
 
+  const [legalRequests, setLegalRequests] = useState([]);
+  const [isAddDraftOpen, setIsAddDraftOpen] = useState(false);
+  const [draftCaseId, setDraftCaseId] = useState('');
+  const [draftDocName, setDraftDocName] = useState('');
+  const [draftFileLink, setDraftFileLink] = useState('');
+  const [draftRemark, setDraftRemark] = useState('');
+  const [draftFileUploading, setDraftFileUploading] = useState(false);
+
+  const fetchLegalRequests = async () => {
+    try {
+      const res = await api.get('/legal-requests');
+      setLegalRequests(res.data);
+    } catch (err) {
+      console.error('Failed to fetch legal requests:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.role === 'Legal') {
+      fetchLegalRequests();
+    }
+  }, [user]);
+
+  const handleLegalDraftUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setDraftFileUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const UPLOAD_URL = import.meta.env.VITE_UPLOAD_URL || 'https://serenity.herosite.pro/~fmojnedg/uploads/upload.php';
+      const res = await fetch(UPLOAD_URL, {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      const uploadData = await res.json();
+      if (uploadData && uploadData.success && uploadData.url) {
+        setDraftFileLink(uploadData.url);
+        toast.success('Document uploaded successfully');
+      } else {
+        throw new Error(uploadData?.error || 'No URL returned');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('File upload failed');
+    } finally {
+      setDraftFileUploading(false);
+    }
+  };
+
+  const handleLegalDraftSubmit = async (e) => {
+    e.preventDefault();
+    if (!draftCaseId) {
+      toast.error('Please select a Case ID');
+      return;
+    }
+    if (!draftDocName) {
+      toast.error('Please enter a Document Name');
+      return;
+    }
+    try {
+      const payload = {
+        caseId: draftCaseId,
+        documentName: draftDocName,
+        fileLink: draftFileLink,
+        remark: draftRemark
+      };
+      await api.post('/legal-requests', payload);
+      toast.success('Legal draft request submitted for approval');
+      setDraftCaseId('');
+      setDraftDocName('');
+      setDraftFileLink('');
+      setDraftRemark('');
+      fetchLegalRequests();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to submit legal draft request');
+    }
+  };
+
   // Form states for editable case details
   const [formData, setFormData] = useState({
     companyName: '', caseTitle: '', priority: 'Medium', sourceOfComplaint: '',
@@ -563,13 +644,13 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   const canEditCase = useMemo(() => {
     if (!user || !viewCase) return false;
     const role = user.role;
-    if (role === 'Admin' || role === 'Super Admin' || role === 'SuperAdmin' || role === 'Operations') {
+    if (role === 'Admin' || role === 'Super Admin' || role === 'SuperAdmin' || role === 'Operations' || role === 'Operation Head') {
       return true;
     }
     const assignedName = (viewCase.assignedTo || '').trim().toLowerCase();
     const myName = (user.fullName || user.name || '').trim().toLowerCase();
     const myEmail = (user.email || '').trim().toLowerCase();
-    if (['Staff', 'Operation Admin', 'operation admin'].includes(role)) {
+    if (['Staff', 'Operation Admin', 'operation admin', 'Operation Review'].includes(role)) {
       return assignedName !== '' && (assignedName === myName || assignedName === myEmail);
     }
     return false;
@@ -908,9 +989,17 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     // De-duplicate "Case Created" events - keep only the EARLIEST one (actual creation)
     const creationEvents = events.filter(e => e.action === 'Case Created');
     let finalEvents = events;
-    if (creationEvents.length > 1) {
-      const earliest = creationEvents.sort((a, b) => new Date(a.date) - new Date(b.date))[0];
-      finalEvents = events.filter(e => e.action !== 'Case Created' || e.id === earliest.id);
+    let earliestCreation = null;
+    
+    if (creationEvents.length > 0) {
+      earliestCreation = creationEvents.sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+      if (creationEvents.length > 1) {
+        finalEvents = events.filter(e => e.action !== 'Case Created' || e.id === earliestCreation.id);
+      }
+      
+      // Filter out any entries that have a date older than the case creation date
+      const cutoffTime = new Date(earliestCreation.date).getTime() - 60000; // 1 min buffer
+      finalEvents = finalEvents.filter(e => new Date(e.date).getTime() >= cutoffTime || e.action === 'Case Created');
     }
 
     // Sort by date descending (latest first)
@@ -994,7 +1083,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   };
 
   const fetchOpsUsers = async () => {
-    if (!user || (user.role !== 'Admin' && user.role !== 'Operations' && user.role !== 'Super Admin' && user.role !== 'Legal')) {
+    if (!user || (!['Admin', 'Operations', 'Super Admin', 'Legal', 'Operation Head'].includes(user.role))) {
       return;
     }
     try {
@@ -1867,8 +1956,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
         totalMouValue: (caseToUse.totalMouValue !== undefined && caseToUse.totalMouValue !== null && caseToUse.totalMouValue !== '') ? caseToUse.totalMouValue : ((caseToUse.mouValue !== undefined && caseToUse.mouValue !== null && caseToUse.mouValue !== '') ? caseToUse.mouValue : ''),
         amtInDispute: (caseToUse.amtInDispute !== undefined && caseToUse.amtInDispute !== null && caseToUse.amtInDispute !== '') ? caseToUse.amtInDispute : ((caseToUse.disputeAmount !== undefined && caseToUse.disputeAmount !== null && caseToUse.disputeAmount !== '') ? caseToUse.disputeAmount : ''),
         dateOfLastPayment: formatDateForInput(caseToUse.dateOfLastPayment || ''),
-        refundedAmount: caseToUse.refundedAmount || 0,
-        savedAmount: caseToUse.savedAmount || 0,
+        refundedAmount: caseToUse.refundStatus === 'Paid' ? (caseToUse.refundedAmount || 0) : 0,
+        savedAmount: caseToUse.refundStatus === 'Paid' ? (caseToUse.savedAmount || 0) : 0,
         dueDate: formatDateForInput(caseToUse.dueDate || ''),
         initiatedBy: caseToUse.initiatedBy || caseToUse.initiator || '',
         accountable: caseToUse.accountable || '',
@@ -1969,6 +2058,21 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       amtInDispute: dispute === 0 ? 0 : (dispute || '')
     }));
   }, [services, viewCase]);
+
+  // Auto-calculate savedAmount on the frontend
+  useEffect(() => {
+    const isPaid = viewCase?.refundStatus === 'Paid';
+    const paid = Number(formData.totalAmtPaid) || 0;
+    const refunded = isPaid ? (Number(formData.refundedAmount) || 0) : 0;
+    const calculatedSaved = isPaid ? Math.max(0, paid - refunded) : 0;
+    if (formData.refundedAmount !== refunded || formData.savedAmount !== calculatedSaved) {
+      setFormData(prev => ({
+        ...prev,
+        refundedAmount: refunded,
+        savedAmount: calculatedSaved
+      }));
+    }
+  }, [formData.totalAmtPaid, formData.refundedAmount, viewCase]);
 
   // Listen to custom reset event from sidebar 'My Cases' link
   useEffect(() => {
@@ -2559,6 +2663,20 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     }
   };
 
+  const handleDeleteComm = async (id) => {
+    const isConfirmed = await confirmDelete('Delete Communication?', 'Are you sure you want to delete this communication log? This action cannot be undone.');
+    if (!isConfirmed) return;
+    const loadingToast = toast.loading('Deleting communication...');
+    try {
+      await api.delete(`/communications/${id}`);
+      toast.success('Communication deleted successfully', { id: loadingToast });
+      setCaseComms(prev => prev.filter(c => (c.id || c._id) !== id));
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete communication', { id: loadingToast });
+    }
+  };
+
   const handleStartEditProgress = (log) => {
     setEditingProgress(log);
     setProgressFormData({
@@ -2582,24 +2700,16 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     e.preventDefault();
     if (!progressFormData.summary) return toast.error('Update summary is required');
 
-    const isFullyRefunded = Number(progressFormData.refundedAmount) >= Number(viewCase.amtInDispute) && Number(viewCase.amtInDispute) > 0;
-    const adjustedSavedAmount = isFullyRefunded ? 0 : progressFormData.savedAmount;
-
-    if (progressFormData.stage === 'Closure') {
-      if (progressFormData.refundedAmount === undefined || progressFormData.refundedAmount === null || progressFormData.refundedAmount === '') {
-        return toast.error('Refunded Amount is required');
-      }
-      if (adjustedSavedAmount === undefined || adjustedSavedAmount === null || adjustedSavedAmount === '') {
-        return toast.error('Saved Amount is required');
-      }
-    }
+    const refAmt = Number(viewCase.refundedAmount) || 0;
+    const totAmt = Number(viewCase.totalAmtPaid) || 0;
+    const computedSavedAmount = Math.max(0, totAmt - refAmt);
 
     if (isSubmitting) return;
     setIsSubmitting(true);
 
     const adjustedProgressFormData = {
       ...progressFormData,
-      savedAmount: adjustedSavedAmount !== '' ? Number(adjustedSavedAmount) : ''
+      savedAmount: progressFormData.stage === 'Closure' ? computedSavedAmount : ''
     };
 
     const loadingToast = toast.loading(editingProgress ? 'Updating progress...' : 'Saving progress update...');
@@ -2619,7 +2729,6 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
         const caseUpdatePayload = {
           currentStatus: progressFormData.stage,
           progressPercentage: progressFormData.percentage,
-          refundedAmount: adjustedProgressFormData.refundedAmount !== '' ? Number(adjustedProgressFormData.refundedAmount) : undefined,
           savedAmount: adjustedProgressFormData.savedAmount !== '' ? Number(adjustedProgressFormData.savedAmount) : undefined,
           compliancePending: adjustedProgressFormData.compliancePending
         };
@@ -2643,7 +2752,6 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
           ...viewCase,
           currentStatus: progressFormData.stage,
           progressPercentage: progressFormData.percentage,
-          refundedAmount: adjustedProgressFormData.refundedAmount !== '' ? Number(adjustedProgressFormData.refundedAmount) : viewCase.refundedAmount,
           savedAmount: adjustedProgressFormData.savedAmount !== '' ? Number(adjustedProgressFormData.savedAmount) : viewCase.savedAmount,
           compliancePending: adjustedProgressFormData.compliancePending
         };
@@ -3774,7 +3882,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
               )}
             </div>
 
-            {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin') && (
+            {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin' || user?.role === 'Operation Head') && (
               <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full md:w-auto md:ml-auto">
                 <select
                   className={`border-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-widest outline-none shadow-sm min-w-[200px] transition-all ${bulkAssignUser ? 'border-accent bg-accent-soft text-accent' : 'border-border bg-bg-card text-text-secondary'}`}
@@ -3827,7 +3935,19 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
               </div>
             )}
 
-            <div className="relative ml-auto">
+            {user?.role?.toLowerCase()?.trim() === 'legal' && (
+              <button
+                onClick={() => {
+                  setIsAddDraftOpen(true);
+                  fetchLegalRequests();
+                }}
+                className="ml-auto bg-accent hover:bg-accent-hover text-white font-black py-2.5 px-5 rounded-2xl shadow-md text-xs transition-all flex items-center gap-2 uppercase tracking-widest active:scale-95 animate-in fade-in"
+              >
+                <Plus size={16} /> Add Draft
+              </button>
+            )}
+
+            <div className={`relative ${user?.role?.toLowerCase()?.trim() === 'legal' ? '' : 'ml-auto'}`}>
               <button
                 title="Toggle Columns"
                 onClick={() => setShowColumnDropdown(!showColumnDropdown)}
@@ -4066,12 +4186,14 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
               </div>
               <div>
                 <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Refunded Amount</div>
-                <div className="text-sm font-black text-green-600">₹{(viewCase.refundedAmount || 0).toLocaleString('en-IN')}</div>
+                <div className="text-sm font-black text-green-600">
+                  ₹{(Number(formData.refundedAmount) || 0).toLocaleString('en-IN')}
+                </div>
               </div>
               <div>
                 <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Saved Amount</div>
                 <div className="text-sm font-black text-blue">
-                  ₹{(Number(viewCase.refundedAmount) >= Number(viewCase.amtInDispute) && Number(viewCase.amtInDispute) > 0 ? 0 : (viewCase.savedAmount || 0)).toLocaleString('en-IN')}
+                  ₹{(Number(formData.savedAmount) || 0).toLocaleString('en-IN')}
                 </div>
               </div>
             </div>
@@ -4383,11 +4505,11 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     </div>
                     <div>
                       <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Refunded Amount (₹)</label>
-                      <input type="number" className={`${inputClass} font-black text-green-600 h-12`} name="refundedAmount" value={formData.refundedAmount || ''} onChange={handleFormChange} placeholder="0" disabled={!isEditing} />
+                      <input type="number" className={`${inputClass} !bg-bg-secondary !border-dashed font-black text-green-600 h-12`} name="refundedAmount" value={(formData.refundedAmount !== undefined && formData.refundedAmount !== null && formData.refundedAmount !== '') ? formData.refundedAmount : ''} readOnly placeholder="0" disabled={true} />
                     </div>
                     <div>
                       <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Saved Amount (₹)</label>
-                      <input type="number" className={`${inputClass} font-black text-blue h-12`} name="savedAmount" value={formData.savedAmount || ''} onChange={handleFormChange} placeholder="0" disabled={!isEditing} />
+                      <input type="number" className={`${inputClass} !bg-bg-secondary !border-dashed font-black text-blue h-12`} name="savedAmount" value={(formData.savedAmount !== undefined && formData.savedAmount !== null && formData.savedAmount !== '') ? formData.savedAmount : ''} readOnly placeholder="0" disabled={true} />
                     </div>
                     <div>
                       <label className={`${labelClass} min-h-[36px] flex items-end pb-1`}>Date of Last Payment</label>
@@ -4896,17 +5018,30 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                                   <span className="text-[9px] font-black text-accent uppercase tracking-widest">{comm.mode} via {comm.fromTo || 'Client'}</span>
                                   <div className="flex gap-2 items-center">
                                     {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleStartEditComm(comm);
-                                        }}
-                                        className="text-text-primary hover:text-accent bg-bg-secondary hover:bg-accent/10 p-1.5 rounded-md border border-border hover:border-accent transition-all flex items-center gap-1"
-                                        title="Edit Signal"
-                                      >
-                                        <Edit3 size={10} /> <span className="text-[8px] font-bold">EDIT</span>
-                                      </button>
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleStartEditComm(comm);
+                                          }}
+                                          className="text-text-primary hover:text-accent bg-bg-secondary hover:bg-accent/10 p-1.5 rounded-md border border-border hover:border-accent transition-all flex items-center gap-1"
+                                          title="Edit Signal"
+                                        >
+                                          <Edit3 size={10} /> <span className="text-[8px] font-bold">EDIT</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteComm(comm.id || comm._id);
+                                          }}
+                                          className="text-red hover:text-white bg-red/10 hover:bg-red p-1.5 rounded-md border border-red/20 hover:border-red transition-all flex items-center gap-1"
+                                          title="Delete Signal"
+                                        >
+                                          <Trash2 size={10} /> <span className="text-[8px] font-bold">DELETE</span>
+                                        </button>
+                                      </>
                                     )}
                                     {comm.fileLink ? (
                                       <button
@@ -5581,31 +5716,9 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                   </div>
 
                   {progressFormData.stage === 'Closure' && (
-                    <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">REFUNDED AMOUNT (₹)</label>
-                        <input
-                          type="number"
-                          value={progressFormData.refundedAmount || ''}
-                          onChange={(e) => setProgressFormData({ ...progressFormData, refundedAmount: e.target.value })}
-                          placeholder="Amount refunded to client"
-                          className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent transition-all shadow-sm"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black text-text-muted uppercase tracking-widest ml-1 after:content-['*'] after:text-red after:ml-0.5">SAVED AMOUNT (₹)</label>
-                        <input
-                          type="number"
-                          value={progressFormData.savedAmount || ''}
-                          onChange={(e) => setProgressFormData({ ...progressFormData, savedAmount: e.target.value })}
-                          placeholder="Amount saved for client"
-                          className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent transition-all shadow-sm"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1 col-span-2">
-                        <label className="flex items-center gap-2 cursor-pointer mt-2 bg-bg-input px-5 py-3 rounded-xl border-2 border-border hover:border-accent transition-all shadow-sm">
+                        <label className="flex items-center gap-2 cursor-pointer bg-bg-input px-5 py-[15px] rounded-xl border-2 border-border hover:border-accent transition-all shadow-sm">
                           <input
                             type="checkbox"
                             checked={progressFormData.compliancePending || false}
@@ -6181,8 +6294,6 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                         handleUnarchive={handleUnarchive}
                         user={user}
                         refundStatus={refundStatus}
-                        visibleColumns={visibleColumns}
-                        filterableFields={filterableFields}
                       />
                     );
                   })
@@ -6300,6 +6411,150 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={isAddDraftOpen} onClose={() => setIsAddDraftOpen(false)} title="Legal Draft Requests">
+        <div className="p-6 max-h-[80vh] overflow-y-auto space-y-6">
+          <form onSubmit={handleLegalDraftSubmit} className="space-y-4">
+            <h3 className="text-sm font-black text-text-primary uppercase tracking-widest border-b border-border pb-2">Submit New Draft Request</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Case ID</label>
+                <select
+                  required
+                  value={draftCaseId}
+                  onChange={(e) => setDraftCaseId(e.target.value)}
+                  className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-2.5 text-xs font-bold text-text-primary outline-none focus:border-accent transition-all h-[42px]"
+                >
+                  <option value="">Select Case ID</option>
+                  {cases.map(c => (
+                    <option key={c.caseId} value={c.caseId}>{c.caseId} - {c.companyName}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Document Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Legal Notice Draft"
+                  value={draftDocName}
+                  onChange={(e) => setDraftDocName(e.target.value)}
+                  className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-2.5 text-xs font-bold text-text-primary outline-none focus:border-accent transition-all h-[42px]"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Upload Document</label>
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    id="legal-draft-file-input"
+                    className="hidden"
+                    onChange={handleLegalDraftUpload}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('legal-draft-file-input').click()}
+                    className="bg-bg-input hover:bg-bg-card border border-border text-text-primary font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2 h-[42px]"
+                  >
+                    Upload File
+                  </button>
+                  {draftFileUploading && (
+                    <div className="flex items-center gap-2 text-xs text-text-muted italic">
+                      <RefreshCw size={12} className="animate-spin" /> Uploading...
+                    </div>
+                  )}
+                  {draftFileLink && (
+                    <div className="flex items-center gap-2 text-[10px] text-green-600 font-bold bg-green-50 px-3 py-2 rounded-xl border border-green-100 h-[42px]">
+                      <CheckCircle2 size={12} /> Uploaded
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Remark</label>
+                <input
+                  type="text"
+                  placeholder="Any remarks..."
+                  value={draftRemark}
+                  onChange={(e) => setDraftRemark(e.target.value)}
+                  className="w-full bg-bg-input border-2 border-border rounded-xl px-4 py-2.5 text-xs font-bold text-text-primary outline-none focus:border-accent transition-all h-[42px]"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={draftFileUploading}
+              className="w-full bg-accent hover:bg-accent-hover text-white font-black py-2.5 px-5 rounded-xl shadow-md text-xs transition-all uppercase tracking-widest active:scale-95"
+            >
+              Submit Request
+            </button>
+          </form>
+
+          <div className="space-y-4 pt-4 border-t border-border">
+            <h3 className="text-sm font-black text-text-primary uppercase tracking-widest border-b border-border pb-2">My Requests Status</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border text-text-muted uppercase tracking-wider text-[9px] font-black">
+                    <th className="py-2 px-3">Case ID</th>
+                    <th className="py-2 px-3">Document Name</th>
+                    <th className="py-2 px-3">Document</th>
+                    <th className="py-2 px-3">Remark</th>
+                    <th className="py-2 px-3">Status</th>
+                    <th className="py-2 px-3">Admin Remark</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {legalRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="py-4 text-center text-text-muted italic">No requests submitted yet.</td>
+                    </tr>
+                  ) : (
+                    legalRequests.map(r => (
+                      <tr key={r._id || r.id} className="border-b border-border hover:bg-bg-input transition-all">
+                        <td className="py-2.5 px-3 font-bold text-text-primary">{r.caseId}</td>
+                        <td className="py-2.5 px-3 text-text-secondary">{r.documentName}</td>
+                        <td className="py-2.5 px-3">
+                          {r.fileLink ? (
+                            <a
+                              href={r.fileLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-accent hover:underline font-bold"
+                            >
+                              View File
+                            </a>
+                          ) : (
+                            <span className="text-text-muted italic">No file</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-text-secondary">{r.remark || '-'}</td>
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                            r.status === 'Approved' ? 'bg-green-soft text-green' :
+                            r.status === 'Rejected' ? 'bg-red-soft text-red' :
+                            'bg-orange-100 text-orange-600'
+                          }`}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-text-secondary">{r.rejectRemark || '-'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </Modal>
@@ -6534,7 +6789,7 @@ const CaseRow = memo(({
           </div>
 
           {/* Bottom Row: Assignment Section */}
-          {['Admin', 'Operations', 'Super Admin'].includes(user?.role) && !c.isArchived && (
+          {['Admin', 'Operations', 'Super Admin', 'Operation Head'].includes(user?.role) && !c.isArchived && (
             <div className="flex gap-2 w-full">
               <select
                 className="flex-1 bg-bg-input border-2 border-border rounded-xl text-[9px] px-2 py-2.5 outline-none focus:border-accent shadow-sm min-w-0 text-text-primary font-black uppercase tracking-widest cursor-pointer"
@@ -6542,7 +6797,7 @@ const CaseRow = memo(({
                 onChange={(e) => handleAssignmentInputChange(c.caseId, e.target.value)}
               >
                 <option value="">Assign</option>
-                {['admin', 'super admin'].includes(user?.role?.toLowerCase())
+                {['admin', 'super admin', 'operation head'].includes(user?.role?.toLowerCase())
                   ? opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review', 'legal', 'advocate'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                   ))

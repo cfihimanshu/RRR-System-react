@@ -394,10 +394,10 @@ export default function TourTab({ user }) {
           method: 'POST',
           body: formData
         });
-        
+
         if (!res.ok) throw new Error('Upload failed with status: ' + res.status);
         const uploadData = await res.json();
-        
+
         if (uploadData && uploadData.success && uploadData.url) {
           setFilesState(prev => prev.map(f => f.id === tempId ? { ...f, url: uploadData.url, uploading: false } : f));
         } else {
@@ -414,6 +414,17 @@ export default function TourTab({ user }) {
   // Submit Travel Request Form to DB
   const handleRequestSubmit = async (e) => {
     e.preventDefault();
+
+    if (!employeeInfo.department) {
+      triggerToast('Please select your Role/Department');
+      return;
+    }
+
+    if (!tripDetails.departureCity || !tripDetails.destinationCity) {
+      triggerToast('Please enter both departure and destination cities');
+      return;
+    }
+
     try {
       const payload = {
         purpose: tripDetails.purpose === 'Other' ? customPurpose : tripDetails.purpose,
@@ -1664,9 +1675,9 @@ export default function TourTab({ user }) {
                         <div>Estimated Cost: <span className="text-text-primary font-black">₹{req.totalTravelAmount}</span></div>
                       </div>
 
-                      {((req.preTravelDocuments && req.preTravelDocuments.length > 0) || (req.reimbursementBills && req.reimbursementBills.length > 0)) && (
+                      {((Array.isArray(req.preTravelDocuments) && req.preTravelDocuments.length > 0) || (Array.isArray(req.reimbursementBills) && req.reimbursementBills.length > 0)) && (
                         <div className="flex flex-col gap-2 pt-3 border-t border-border/40 text-[10px] font-bold text-text-secondary">
-                          {req.preTravelDocuments && req.preTravelDocuments.length > 0 && (
+                          {Array.isArray(req.preTravelDocuments) && req.preTravelDocuments.length > 0 && (
                             <div className="flex flex-wrap gap-2 items-center">
                               <span className="text-[9px] font-black text-text-muted uppercase tracking-wider">Pre-Travel Docs:</span>
                               {req.preTravelDocuments.map((docStr, docIdx) => {
@@ -1689,7 +1700,7 @@ export default function TourTab({ user }) {
                               })}
                             </div>
                           )}
-                          {req.reimbursementBills && req.reimbursementBills.length > 0 && (
+                          {Array.isArray(req.reimbursementBills) && req.reimbursementBills.length > 0 && (
                             <div className="flex flex-wrap gap-2 items-center">
                               <span className="text-[9px] font-black text-text-muted uppercase tracking-wider">Receipts & Bills:</span>
                               {req.reimbursementBills.map((docStr, docIdx) => {
@@ -2107,8 +2118,8 @@ export default function TourTab({ user }) {
                           <div>
                             <span className="text-[10px] font-black text-text-muted uppercase tracking-wider block">Status</span>
                             <span className={`status-badge text-[8px] sm:text-[9px] font-black px-2.5 py-0.5 rounded-lg border uppercase tracking-wider select-none ${req.reimbursementStatus === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                                req.reimbursementStatus === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
-                                  'bg-orange-500/10 text-orange-500 border-orange-500/20'
+                              req.reimbursementStatus === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                                'bg-orange-500/10 text-orange-500 border-orange-500/20'
                               }`}>
                               {req.reimbursementStatus}
                             </span>
@@ -2144,7 +2155,7 @@ export default function TourTab({ user }) {
                         </div>
 
                         {/* Bills/Receipts Files */}
-                        {req.reimbursementBills && req.reimbursementBills.length > 0 && (
+                        {Array.isArray(req.reimbursementBills) && req.reimbursementBills.length > 0 && (
                           <div className="flex flex-wrap gap-2 mt-1">
                             <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block self-center mr-1">Receipts:</span>
                             {req.reimbursementBills.map((docStr, idx) => {

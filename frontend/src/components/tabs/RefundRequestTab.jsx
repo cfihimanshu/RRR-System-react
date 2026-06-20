@@ -56,8 +56,40 @@ const RefundRequestTab = () => {
   const [accType, setAccType] = useState('Saving');
   const [paymentMethod, setPaymentMethod] = useState('Bank');
   const [upiQrLink, setUpiQrLink] = useState('');
+  const [bdaName, setBdaName] = useState('');
+  const [showBdaSuggestions, setShowBdaSuggestions] = useState(false);
   const containerRef = React.useRef(null);
   const [activeRequestType, setActiveRequestType] = useState(null);
+
+  const [legalRequests, setLegalRequests] = useState([]);
+  const [rejectingRequestId, setRejectingRequestId] = useState(null);
+  const [rejectRemark, setRejectRemark] = useState('');
+
+  const fetchLegalRequests = async () => {
+    try {
+      const res = await api.get('/legal-requests');
+      setLegalRequests(res.data);
+    } catch (err) {
+      console.error("Error fetching legal requests:", err);
+    }
+  };
+
+  const handleLegalStatusUpdate = async (id, newStatus) => {
+    try {
+      const payload = { status: newStatus };
+      if (newStatus === 'Rejected') {
+        payload.rejectRemark = rejectRemark;
+      }
+      await api.put(`/legal-requests/${id}/status`, payload);
+      toast.success(`Legal draft request ${newStatus.toLowerCase()} successfully!`);
+      setRejectingRequestId(null);
+      setRejectRemark('');
+      fetchLegalRequests();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to update legal request status");
+      console.error(err);
+    }
+  };
 
   const [tourFormData, setTourFormData] = useState({
     purpose: '',
@@ -206,6 +238,48 @@ const RefundRequestTab = () => {
     toast.success('Attendance exported successfully!');
   };
 
+  const handleExportRefunds = () => {
+    if (filteredRefunds.length === 0) {
+      toast.error('No data available to export');
+      return;
+    }
+
+    const data = filteredRefunds.map(r => ({
+      'Case ID': r.caseId || '',
+      'Company Name': r.companyName || 'N/A',
+      'Amount (₹)': Number(r.amount) || 0,
+      'Status': r.status || '',
+      'BDA Name': r.bdaName || 'N/A',
+      'Refund Requested By': r.requestedByName || r.requestedBy || 'N/A',
+      'Summary / Reason': r.summary || '',
+      'Bank Name': r.bankName || '',
+      'Account Holder': r.accHolder || '',
+      'IFSC Code': r.ifsc || '',
+      'Account Number': r.accNum || '',
+      'Branch Location': r.branch || '',
+      'Account Type': r.accType || '',
+      'Date': r.timestamp ? new Date(r.timestamp).toLocaleDateString('en-IN') : ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Refund Requests");
+
+    // Auto-size columns
+    const keys = Object.keys(data[0]);
+    const maxWidths = keys.map(k => ({ wch: k.length + 5 }));
+    data.forEach(row => {
+      Object.values(row).forEach((val, i) => {
+        const len = val ? val.toString().length : 0;
+        if (len + 2 > maxWidths[i].wch) maxWidths[i].wch = len + 2;
+      });
+    });
+    worksheet['!cols'] = maxWidths;
+
+    XLSX.writeFile(workbook, `Refund_Requests_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success('Refund Requests exported successfully!');
+  };
+
   const handlePrevMonth = () => {
     setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
   };
@@ -339,6 +413,7 @@ const RefundRequestTab = () => {
     setAccNum(r.accNum || '');
     setBranch(r.branch || '');
     setAccType(r.accType || 'Saving');
+    setBdaName(r.bdaName || '');
 
     if (r.accType === 'UPI' || r.bankName === 'UPI') {
       setPaymentMethod('UPI');
@@ -389,9 +464,7 @@ const RefundRequestTab = () => {
     if (location.state?.filter) {
       setStatusFilter(location.state.filter);
     }
-    if (location.state?.activeRequestType) {
-      setActiveRequestType(location.state.activeRequestType);
-    }
+    setActiveRequestType(location.state?.activeRequestType || 'Tour');
   }, [location.state]);
 
   useEffect(() => {
@@ -448,7 +521,17 @@ const RefundRequestTab = () => {
   const fetchMyRefunds = async () => {
     try {
       const res = await api.get('/refunds');
-      setMyRefunds(res.data);
+      const parsedData = (res.data || []).map(r => {
+        let insts = r.installments;
+        if (typeof insts === 'string') {
+          try { insts = JSON.parse(insts); } catch (e) { insts = []; }
+        }
+        return {
+          ...r,
+          installments: Array.isArray(insts) ? insts : []
+        };
+      });
+      setMyRefunds(parsedData);
     } catch (err) {
       console.error("Error fetching refunds:", err);
     }
@@ -481,6 +564,7 @@ const RefundRequestTab = () => {
     fetchUserCases();
     fetchMyRefunds();
     fetchLeaves();
+    fetchLegalRequests();
     if (['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)) {
       fetchAllUsersForCalendar();
     } else if (user?.email) {
@@ -565,7 +649,8 @@ const RefundRequestTab = () => {
       accType: finalAccType,
       requestedByName: editingRefund ? editingRefund.requestedByName : (user?.fullName || ""),
       installments: cleanedInstallments,
-      documentLink
+      documentLink,
+      bdaName
     };
 
     console.log("Submitting Refund Payload:", payload);
@@ -597,6 +682,7 @@ const RefundRequestTab = () => {
       setAccType('Saving');
       setPaymentMethod('Bank');
       setUpiQrLink('');
+      setBdaName('');
       fetchMyRefunds();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Submission failed');
@@ -644,6 +730,12 @@ const RefundRequestTab = () => {
   const showRequesterColumn = user?.role === 'Admin' || user?.role === 'Super Admin' || user?.role === 'SuperAdmin';
 
   const filteredRefunds = myRefunds.filter(r => {
+    // Role filter: non-admins only see their own requests
+    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role);
+    if (!isAdmin && r.requestedBy !== user?.email) {
+      return false;
+    }
+
     // Status Filter
     let statusMatch = true;
     if (statusFilter === 'Paid') statusMatch = r.status === 'Paid';
@@ -654,11 +746,12 @@ const RefundRequestTab = () => {
     let searchMatch = true;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      searchMatch = 
+      searchMatch =
         (r.caseId && r.caseId.toLowerCase().includes(q)) ||
         (r.companyName && r.companyName.toLowerCase().includes(q)) ||
         (r.requestedByName && r.requestedByName.toLowerCase().includes(q)) ||
-        (r.requestedBy && r.requestedBy.toLowerCase().includes(q));
+        (r.requestedBy && r.requestedBy.toLowerCase().includes(q)) ||
+        (r.bdaName && r.bdaName.toLowerCase().includes(q));
     }
 
     return statusMatch && searchMatch;
@@ -675,25 +768,25 @@ const RefundRequestTab = () => {
               </h2>
             </div>
             <div className="flex items-center justify-start gap-3">
-              {['Tour', 'Settlement', 'Leave'].map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => {
-                    setActiveRequestType(type);
-                    if (type !== 'Settlement') {
-                      setEditingRefund(null);
-                    }
-                  }}
-                  className={`px-5 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all border-2 cursor-pointer ${activeRequestType === type
-                    ? 'bg-accent border-accent text-white shadow-lg active:scale-95'
-                    : 'bg-bg-card border-border text-text-muted hover:text-text-primary hover:border-text-primary active:scale-95'
-                    }`}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
+               {['Tour', 'Settlement', 'Leave', 'Legal'].filter((type) => type !== 'Legal' || ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)).map((type) => (
+                 <button
+                   key={type}
+                   type="button"
+                   onClick={() => {
+                     setActiveRequestType(type);
+                     if (type !== 'Settlement') {
+                       setEditingRefund(null);
+                     }
+                   }}
+                   className={`px-5 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all border-2 cursor-pointer ${activeRequestType === type
+                     ? 'bg-accent border-accent text-white shadow-lg active:scale-95'
+                     : 'bg-bg-card border-border text-text-muted hover:text-text-primary hover:border-text-primary active:scale-95'
+                     }`}
+                 >
+                   {type}
+                 </button>
+               ))}
+             </div>
           </div>
 
           {activeRequestType === 'Settlement' && (
@@ -706,7 +799,7 @@ const RefundRequestTab = () => {
                   {editingRefund ? 'Edit Refund Request' : 'Settlement Request'}
                 </h3>
               </div>
-              <form onSubmit={handleRefundSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <form onSubmit={handleRefundSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-8">
                 <div className="flex flex-col gap-3">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Case Id</label>
                   <SearchableCaseSelect
@@ -737,6 +830,18 @@ const RefundRequestTab = () => {
                   </div>
                 </div>
                 <div className="flex flex-col gap-3">
+                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">BDA Name</label>
+                  <input
+                    type="text"
+                    name="bdaName"
+                    value={bdaName}
+                    onChange={(e) => setBdaName(e.target.value)}
+                    required
+                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-black text-text-primary outline-none focus:border-green focus:ring-4 focus:ring-green-soft transition-all shadow-inner uppercase tracking-widest placeholder:text-text-muted"
+                    placeholder="E.G. JOHN DOE"
+                  />
+                </div>
+                <div className="flex flex-col gap-3">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Upload Document</label>
                   <FileUpload
                     onUploadSuccess={setDocumentLink}
@@ -749,7 +854,7 @@ const RefundRequestTab = () => {
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col gap-3 md:col-span-3">
+                <div className="flex flex-col gap-3 md:col-span-4">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2"> Summary / Reason</label>
                   <textarea
                     name="summary"
@@ -761,7 +866,7 @@ const RefundRequestTab = () => {
                     className="w-full bg-bg-input border-2 border-border rounded-xl p-6 text-sm font-medium text-text-primary outline-none focus:border-green focus:ring-4 focus:ring-green-soft transition-all shadow-inner resize-none italic placeholder:text-text-muted"
                   ></textarea>
                 </div>
-                <div className="flex flex-col gap-3 md:col-span-3">
+                <div className="flex flex-col gap-3 md:col-span-4">
                   <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Payment Method</label>
                   <div className="flex items-center justify-start gap-3">
                     {['Bank', 'UPI', 'Card', 'QR'].map((method) => (
@@ -880,7 +985,7 @@ const RefundRequestTab = () => {
 
 
                 {/* Installments Section */}
-                <div className="md:col-span-3 pt-6 border-t border-border">
+                <div className="md:col-span-4 pt-6 border-t border-border">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-yellow-soft rounded-xl text-yellow border border-yellow-soft/30">
@@ -944,7 +1049,7 @@ const RefundRequestTab = () => {
                     </div>
                   )}
                 </div>
-                <div className="md:col-span-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-5 mt-6 pt-8 border-t-2 border-border">
+                <div className="md:col-span-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-5 mt-6 pt-8 border-t-2 border-border">
                   <button type="submit" className="w-full sm:w-auto bg-green text-white font-black py-4 px-12 rounded-2xl transition-all shadow-xl shadow-green-900/20 text-xs flex items-center justify-center gap-3 uppercase tracking-[0.2em] hover:bg-green-600 active:scale-95">
                     <CheckCircle size={18} /> {editingRefund ? 'Update Request' : 'Submit'}
                   </button>
@@ -966,6 +1071,7 @@ const RefundRequestTab = () => {
                         setAccType('Saving');
                         setPaymentMethod('Bank');
                         setUpiQrLink('');
+                        setBdaName('');
                       }}
                       className="w-full sm:w-auto bg-bg-card hover:bg-bg-card-hover text-text-primary border-2 border-border font-black py-4 px-12 rounded-2xl transition-all text-xs uppercase tracking-[0.2em] active:scale-95"
                     >
@@ -1059,6 +1165,63 @@ const RefundRequestTab = () => {
                   </button>
                 </div>
               </form>
+
+              {/* My Leave Requests Section */}
+              <div className="mt-12 border-t-2 border-border pt-10">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
+                    <ClipboardList size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
+                      My Leave Requests
+                    </h3>
+                    <p className="text-[10px] text-text-muted font-bold mt-0.5">Track the status of your submitted leave requests</p>
+                  </div>
+                </div>
+
+                {leaves.filter(l => l.requestedBy === user?.email).length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12 animate-zoom-in">
+                    {leaves.filter(l => l.requestedBy === user?.email).map((l) => (
+                      <div key={l._id} className="bg-bg-input/10 border-2 border-border rounded-3xl p-6 flex flex-col gap-4 relative group hover:border-purple/50 transition-all">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Leave Type</span>
+                            <span className="text-xs font-black text-text-primary mt-0.5 block">{l.leaveType}</span>
+                          </div>
+                          <span className={`status-badge text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${
+                            l.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                            l.status === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                            'bg-orange-500/10 text-orange-500 border-orange-500/20'
+                          }`}>
+                            {l.status}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 bg-bg-card p-3 rounded-2xl border border-border/60">
+                          <div>
+                            <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">Start Date</span>
+                            <span className="text-xs font-bold text-text-primary">{l.startDate}</span>
+                          </div>
+                          <div>
+                            <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">End Date</span>
+                            <span className="text-xs font-bold text-text-primary">{l.endDate}</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Reason</span>
+                          <p className="text-xs font-medium text-text-secondary leading-relaxed mt-0.5">{l.reason || 'No reason provided'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-xs text-text-muted font-bold uppercase border-2 border-dashed border-border rounded-3xl mb-12">
+                    You have not submitted any leave requests yet.
+                  </div>
+                )}
+              </div>
 
               {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
                 <div className="mt-12 border-t-2 border-border pt-10">
@@ -1210,7 +1373,7 @@ const RefundRequestTab = () => {
                       onClick={handleExportAttendance}
                       className="flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all h-[42px] self-end mt-auto bg-accent hover:bg-accent/80 text-white shadow-md active:scale-95 cursor-pointer border border-accent/20"
                     >
-                      <Download size={14} /> Export Excel
+                      <Download size={14} /> Export
                     </button>
                   </div>
                 </div>
@@ -1312,6 +1475,127 @@ const RefundRequestTab = () => {
               )
             </div>
           )}
+
+          {activeRequestType === 'Legal' && ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
+            <div className="space-y-6 animate-zoom-in">
+              <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-10 shadow-sm">
+                <div className="flex items-center justify-between border-b border-border pb-4 mb-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-text-primary">Legal Draft Request Approvals</h3>
+                    <p className="text-[10px] text-text-muted font-bold mt-0.5">Approve or reject pending legal draft requests</p>
+                  </div>
+                </div>
+
+                {legalRequests.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-text-muted uppercase tracking-wider text-[9px] font-black">
+                          <th className="py-3 px-4">Requester</th>
+                          <th className="py-3 px-4">Case ID</th>
+                          <th className="py-3 px-4">Document Name</th>
+                          <th className="py-3 px-4">Document</th>
+                          <th className="py-3 px-4">Remark</th>
+                          <th className="py-3 px-4 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {legalRequests.map((r) => (
+                          <tr key={r._id || r.id} className="border-b border-border hover:bg-bg-input transition-all">
+                            <td className="py-4 px-4 font-bold text-text-primary">
+                              {r.requestedByName || r.requestedBy}
+                            </td>
+                            <td className="py-4 px-4 font-bold text-text-secondary">{r.caseId}</td>
+                            <td className="py-4 px-4 text-text-secondary">{r.documentName}</td>
+                            <td className="py-4 px-4">
+                              {r.fileLink ? (
+                                <a
+                                  href={r.fileLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-accent hover:underline font-bold"
+                                >
+                                  View File
+                                </a>
+                              ) : (
+                                <span className="text-text-muted italic">No file</span>
+                              )}
+                            </td>
+                            <td className="py-4 px-4 text-text-secondary">{r.remark || '-'}</td>
+                            <td className="py-4 px-4">
+                              {r.status === 'Pending' ? (
+                                <div className="flex flex-col gap-2 items-center justify-center">
+                                  {rejectingRequestId === (r._id || r.id) ? (
+                                    <div className="flex flex-col gap-2 w-full max-w-[200px]">
+                                      <input
+                                        type="text"
+                                        placeholder="Enter rejection remark..."
+                                        value={rejectRemark}
+                                        onChange={(e) => setRejectRemark(e.target.value)}
+                                        className="bg-bg-input border border-border rounded-lg px-2.5 py-1 text-xs outline-none focus:border-accent w-full"
+                                      />
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => handleLegalStatusUpdate(r._id || r.id, 'Rejected')}
+                                          disabled={!rejectRemark.trim()}
+                                          className="flex-1 bg-red text-white py-1 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-red-600 transition-all disabled:opacity-50"
+                                        >
+                                          Confirm Reject
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setRejectingRequestId(null);
+                                            setRejectRemark('');
+                                          }}
+                                          className="flex-1 bg-bg-input border border-border text-text-primary py-1 rounded-lg text-[9px] font-black uppercase tracking-wider"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex gap-2 justify-center">
+                                      <button
+                                        onClick={() => handleLegalStatusUpdate(r._id || r.id, 'Approved')}
+                                        className="bg-green text-white px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-green-600 transition-all active:scale-95 shadow-sm"
+                                      >
+                                        Approve
+                                      </button>
+                                      <button
+                                        onClick={() => setRejectingRequestId(r._id || r.id)}
+                                        className="bg-red text-white px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-red-600 transition-all active:scale-95 shadow-sm"
+                                      >
+                                        Reject
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center justify-center gap-1">
+                                  <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                                    r.status === 'Approved' ? 'bg-green-soft text-green' : 'bg-red-soft text-red'
+                                  }`}>
+                                    {r.status}
+                                  </span>
+                                  {r.rejectRemark && (
+                                    <span className="text-[9px] text-text-muted italic">Reason: {r.rejectRemark}</span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-10 text-text-muted italic border-2 border-dashed border-border rounded-3xl">
+                    No legal draft requests found.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -1327,13 +1611,45 @@ const RefundRequestTab = () => {
               </h3>
             </div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <input
-                type="text"
-                placeholder="Search by Case ID, Company..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-[10px] font-black text-text-primary outline-none focus:border-green transition-all min-w-[200px]"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by Case ID, Company, BDA..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowBdaSuggestions(true);
+                  }}
+                  onFocus={() => setShowBdaSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowBdaSuggestions(false), 200)}
+                  className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-[10px] font-black text-text-primary outline-none focus:border-green transition-all min-w-[200px]"
+                />
+                {showBdaSuggestions && searchQuery.trim() && (
+                  (() => {
+                    const uniqueBdaNames = [...new Set(myRefunds.map(r => r.bdaName).filter(Boolean))];
+                    const bdaSuggestions = uniqueBdaNames.filter(name => 
+                      name.toLowerCase().includes(searchQuery.toLowerCase()) && 
+                      name.toLowerCase() !== searchQuery.toLowerCase()
+                    );
+                    return bdaSuggestions.length > 0 ? (
+                      <div className="absolute left-0 right-0 mt-1 bg-bg-card border-2 border-border rounded-xl shadow-lg max-h-40 overflow-y-auto z-50 divide-y divide-border/40">
+                        {bdaSuggestions.map((name) => (
+                          <div
+                            key={name}
+                            onClick={() => {
+                              setSearchQuery(name);
+                              setShowBdaSuggestions(false);
+                            }}
+                            className="px-4 py-2 text-[10px] font-bold text-text-primary hover:bg-accent-soft hover:text-accent cursor-pointer transition-colors"
+                          >
+                            {name}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <label className="text-[10px] font-black text-text-muted uppercase tracking-widest">Status Filter:</label>
                 <select
@@ -1347,6 +1663,13 @@ const RefundRequestTab = () => {
                   <option value="Pending">Pending</option>
                 </select>
               </div>
+              <button
+                type="button"
+                onClick={handleExportRefunds}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all bg-accent hover:bg-accent/80 text-white shadow-md active:scale-95 cursor-pointer border border-accent/20"
+              >
+                <Download size={14} /> Export
+              </button>
             </div>
           </div>
 
@@ -1362,6 +1685,7 @@ const RefundRequestTab = () => {
                     <tr className="border-b-2 border-border text-[9px] font-black text-text-muted uppercase tracking-[0.2em]">
                       <th className="px-4 py-4 whitespace-nowrap">Case Details</th>
                       <th className="px-4 py-4 whitespace-nowrap">Amount</th>
+                      <th className="px-4 py-4 whitespace-nowrap">BDA Name</th>
                       <th className="px-4 py-4 whitespace-nowrap">Status</th>
                       {showRequesterColumn && <th className="px-4 py-4 whitespace-nowrap">Refund Requested By</th>}
                       <th className="px-4 py-4 whitespace-nowrap w-8"></th>
@@ -1389,6 +1713,9 @@ const RefundRequestTab = () => {
                                   ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
                                   : '1 Installment'}
                               </div>
+                            </td>
+                            <td className="px-4 py-4 align-middle">
+                              <div className="text-[11px] font-semibold text-text-secondary uppercase">{r.bdaName || 'N/A'}</div>
                             </td>
                             <td className="px-4 py-4 align-middle">
                               <span className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border ${r.status === 'Paid'
@@ -1451,6 +1778,11 @@ const RefundRequestTab = () => {
                               <div className="text-[9px] text-text-muted font-bold mt-0.5">{g.requests.length} Requests</div>
                             </td>
                             <td className="px-4 py-4 align-middle">
+                              <div className="text-[11px] font-semibold text-text-secondary uppercase">
+                                {[...new Set(g.requests.map(r => r.bdaName).filter(Boolean))].join(', ') || 'N/A'}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 align-middle">
                               <div className="flex flex-wrap gap-1 max-w-[120px]">
                                 {[...new Set(g.requests.map(r => r.status))].map(status => (
                                   <span key={status} className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border ${status === 'Paid'
@@ -1497,6 +1829,9 @@ const RefundRequestTab = () => {
                                     ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
                                     : '1 Installment'}
                                 </div>
+                              </td>
+                              <td className="px-4 py-4 align-middle">
+                                <div className="text-[11px] font-semibold text-text-secondary uppercase">{r.bdaName || 'N/A'}</div>
                               </td>
                               <td className="px-4 py-4 align-middle">
                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border-2 ${r.status === 'Paid'

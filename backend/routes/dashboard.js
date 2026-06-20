@@ -85,7 +85,16 @@ router.get('/stats', verifyToken, async (req, res) => {
     commDateQuery = teamDateQuery;
     commDateStrWhere = dateStrWhere;
 
-    const dbUser = await track('fetchUserDb', () => User.findByPk(req.user.id));
+    const [dbUser, allDbUsers] = await Promise.all([
+      track('fetchUserDb', () => User.findByPk(req.user.id)),
+      User.findAll({ attributes: ['id', 'fullName', 'email', 'role'] })
+    ]);
+    const userEmailMap = {};
+    allDbUsers.forEach(u => {
+      if (u.fullName) {
+        userEmailMap[u.fullName.toLowerCase().trim()] = u.email;
+      }
+    });
     let userName = (dbUser?.fullName || dbUser?.name || req.user.fullName || '').trim();
     let userEmail = (dbUser?.email || req.user.email || '').trim();
     let userId = req.user.id;
@@ -94,10 +103,7 @@ router.get('/stats', verifyToken, async (req, res) => {
     if (userFilter) {
       const filteredUser = await User.findOne({
         where: {
-          [Op.or]: [
-            { fullName: { [Op.like]: `%${userFilter.trim()}%` } },
-            { name: { [Op.like]: `%${userFilter.trim()}%` } }
-          ]
+          fullName: { [Op.like]: `%${userFilter.trim()}%` }
         }
       });
       if (filteredUser) {
@@ -129,7 +135,7 @@ router.get('/stats', verifyToken, async (req, res) => {
       } else {
         ownershipQuery = { assignedTo: '__non_existent_user__' };
       }
-    } else if (['operation admin', 'operation review'].includes(req.user.role?.toLowerCase().trim())) {
+    } else if (['operation admin'].includes(req.user.role?.toLowerCase().trim())) {
       ownershipQuery = { assignedTo: { [Op.like]: `%${userName}%` } };
     } else if (req.user.role !== 'Admin') {
       ownershipQuery = {
@@ -246,7 +252,8 @@ router.get('/stats', verifyToken, async (req, res) => {
 
     let timelineMatch = { ...timelineQuery };
     if (req.user.role !== 'Admin' || userFilter || isLegalDashboard) {
-      timelineMatch.source = { [Op.like]: `%${userName}%` };
+      const sourceUser = userFilter || userName;
+      timelineMatch.source = { [Op.like]: `%${sourceUser}%` };
     }
 
     const yesterday = new Date(istTime);
@@ -288,6 +295,8 @@ router.get('/stats', verifyToken, async (req, res) => {
     const dueSoonActions = [];
     const highPriorityCases = [];
     const threatTrendMap = {};
+    const missingNoUpdateUsersMap = new Map();
+    const missingSlaUsersMap = new Map();
 
     allCases.forEach(c => {
       const isOdooCase = String(c.sourceOfComplaint).toLowerCase().includes('odoo');
@@ -339,8 +348,26 @@ router.get('/stats', verifyToken, async (req, res) => {
       if (new Date(c.createdAt) >= startOfToday) b.createdToday++;
 
       if (c.priority === 'High' && new Date(c.updatedAt) >= fortyEightHrsAgo && !isCompletedStatus && c.refundStatus !== 'Paid') b.liveEscalations++;
-      if (new Date(c.updatedAt) < fortyEightHrsAgo && !isCompletedStatus && c.refundStatus !== 'Paid') b.noUpdate48Hrs++;
-      if (c.priority === 'High' && c.nextActionDate && c.nextActionDate < today && !isCompletedStatus && c.refundStatus !== 'Paid') b.slaBreached++;
+      if (new Date(c.updatedAt) < fortyEightHrsAgo && !isCompletedStatus && c.refundStatus !== 'Paid') {
+        b.noUpdate48Hrs++;
+        const assignedName = (c.assignedTo || 'Unassigned').trim();
+        const email = userEmailMap[assignedName.toLowerCase()] || '';
+        const key = `${assignedName}_${c.caseId}`;
+        missingNoUpdateUsersMap.set(key, {
+          name: `${assignedName} (Case: ${c.caseId})`,
+          email: email || 'No Email'
+        });
+      }
+      if (c.priority === 'High' && c.nextActionDate && c.nextActionDate < today && !isCompletedStatus && c.refundStatus !== 'Paid') {
+        b.slaBreached++;
+        const assignedName = (c.assignedTo || 'Unassigned').trim();
+        const email = userEmailMap[assignedName.toLowerCase()] || '';
+        const key = `${assignedName}_${c.caseId}`;
+        missingSlaUsersMap.set(key, {
+          name: `${assignedName} (Case: ${c.caseId})`,
+          email: email || 'No Email'
+        });
+      }
 
       if (c.priority === 'High' && !c.isArchived) b.totalCriticalCases++;
       if (c.priority === 'High' && (isSettled || isClosed)) b.closedCriticalCases++;
@@ -397,7 +424,8 @@ router.get('/stats', verifyToken, async (req, res) => {
 
     const [
       docsTodayCount, commsTodayCount, totalCommsCountRaw, progressTodayCount,
-      yesterdayEod, todaySod, todayEod, lastTimeline, refundDocs
+      yesterdayEod, todaySod, todayEod, lastTimeline, refundDocs,
+      todaySodReports, todayEodReports
     ] = await Promise.all([
       Timeline.count({ where: { ...timelineMatch, eventType: { [Op.in]: ['Document Upload', 'Document Uploaded'] }, createdAt: { [Op.gte]: startOfToday } } }),
       Timeline.count({ where: { ...timelineMatch, eventType: { [Op.in]: ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'] }, createdAt: { [Op.gte]: startOfToday } } }),
@@ -407,8 +435,10 @@ router.get('/stats', verifyToken, async (req, res) => {
       Report.findOne({ where: { userEmail: targetEmail, type: 'EOD', date: yesterdayStr }, order: [['createdAt', 'DESC']] }),
       Report.findOne({ where: { userEmail: targetEmail, type: 'SOD', date: dateStrIST }, order: [['createdAt', 'DESC']] }),
       Report.findOne({ where: { userEmail: targetEmail, type: 'EOD', date: dateStrIST }, order: [['createdAt', 'DESC']] }),
-      Timeline.findOne({ where: { source: { [Op.like]: `%${userName}%` }, createdAt: { [Op.gte]: startOfToday } }, order: [['createdAt', 'DESC']] }),
-      Refund.findAll({ where: refundQuery })
+      Timeline.findOne({ where: { source: { [Op.like]: `%${userFilter || userName}%` }, createdAt: { [Op.gte]: startOfToday } }, order: [['createdAt', 'DESC']] }),
+      Refund.findAll({ where: refundQuery }),
+      Report.findAll({ where: { type: 'SOD', date: dateStrIST } }),
+      Report.findAll({ where: { type: 'EOD', date: dateStrIST } })
     ]);
 
     const documentsUploadedToday = docsTodayCount;
@@ -652,6 +682,23 @@ router.get('/stats', verifyToken, async (req, res) => {
        }
     });
 
+    const missingNoUpdateUsers = Array.from(missingNoUpdateUsersMap.values());
+    const missingSlaUsers = Array.from(missingSlaUsersMap.values());
+
+    const exemptRoles = ['admin', 'super admin', 'superadmin', 'reviewer', 'accountant', 'operation head', 'operation review'];
+    const nonExemptUsers = allDbUsers.filter(u => u.role && !exemptRoles.includes(u.role.toLowerCase().trim()));
+
+    const submittedSodEmails = new Set(todaySodReports.map(r => r.userEmail.toLowerCase().trim()));
+    const submittedEodEmails = new Set(todayEodReports.map(r => r.userEmail.toLowerCase().trim()));
+
+    const missingSodUsers = nonExemptUsers
+      .filter(u => u.email && !submittedSodEmails.has(u.email.toLowerCase().trim()))
+      .map(u => ({ name: u.fullName, email: u.email }));
+
+    const missingEodUsers = nonExemptUsers
+      .filter(u => u.email && !submittedEodEmails.has(u.email.toLowerCase().trim()))
+      .map(u => ({ name: u.fullName, email: u.email }));
+
     const responseData = {
       _timings: timings,
       myPerformance,
@@ -702,13 +749,14 @@ router.get('/stats', verifyToken, async (req, res) => {
       amountAtRisk,
       timeBoundActions,
       violations: {
-         sodNotSubmitted: 0,
-         eodNotSubmitted: 0,
+         sodNotSubmitted: missingSodUsers.length,
+         eodNotSubmitted: missingEodUsers.length,
          noUpdate48Hrs: b.noUpdate48Hrs,
          slaBreached: b.slaBreached,
-         missingSodUsers: [],
-         missingEodUsers: [],
-         missingNoUpdateUsers: []
+         missingSodUsers: missingSodUsers,
+         missingEodUsers: missingEodUsers,
+         missingNoUpdateUsers: missingNoUpdateUsers,
+         missingSlaUsers: missingSlaUsers
       }
     };
 

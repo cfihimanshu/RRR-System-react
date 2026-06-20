@@ -5,6 +5,7 @@ const Case = require('../sql_models/Case');
 const AuditLog = require('../sql_models/AuditLog');
 const Timeline = require('../sql_models/Timeline');
 const User = require('../sql_models/User');
+const Progress = require('../sql_models/Progress');
 const { sendEmail } = require('../utils/mailer');
 const { createNotification } = require('../utils/notificationHelper');
 const { verifyToken } = require('../middleware/auth');
@@ -97,6 +98,7 @@ router.get('/', verifyToken, async (req, res) => {
             accType: reqItem.accType,
             requestedBy: reqItem.requestedBy,
             requestedByName: reqItem.requestedByName,
+            bdaName: reqItem.bdaName || doc.bdaName || '',
             documentLink: reqItem.documentLink,
             status: reqItem.status,
             reviewerRemark: reqItem.reviewerRemark,
@@ -147,7 +149,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
   try {
     const { 
       caseId, amount, summary, bankName, accHolder, ifsc, 
-      accNum, branch, accType, requestedByName, installments, documentLink
+      accNum, branch, accType, requestedByName, installments, documentLink, bdaName
     } = req.body;
 
     const existingRefund = await Refund.findOne({ where: { caseId } });
@@ -164,6 +166,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
       accType,
       requestedBy: req.user.email,
       requestedByName: requestedByName || req.user.fullName || "",
+      bdaName: bdaName || "",
       documentLink,
       installments: Array.isArray(installments) ? installments.map(inst => ({
         amount: String(inst.amount),
@@ -190,6 +193,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
           accType: existingRefund.accType,
           requestedBy: existingRefund.requestedBy,
           requestedByName: existingRefund.requestedByName,
+          bdaName: existingRefund.bdaName || "",
           documentLink: existingRefund.documentLink,
           installments: existingRefund.installments,
           status: existingRefund.status,
@@ -214,6 +218,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
       existingRefund.installments = newReqItem.installments;
       existingRefund.requestedByName = newReqItem.requestedByName;
       existingRefund.requestedBy = newReqItem.requestedBy;
+      existingRefund.bdaName = newReqItem.bdaName;
       existingRefund.documentLink = newReqItem.documentLink;
       existingRefund.bankName = bankName;
       existingRefund.accHolder = accHolder;
@@ -240,6 +245,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
         requestedBy: req.user.email,
         documentLink,
         requestedByName: requestedByName || req.user.fullName || "",
+        bdaName: bdaName || "",
         installments: newReqItem.installments,
         status: "Pending Review",
         lastStatusAtMs: Date.now(),
@@ -409,12 +415,43 @@ router.put('/:id', verifyToken, async (req, res) => {
           }
         });
 
-        caseDoc.refundedAmount = totalPaidAmount;
-        if (totalPaidAmount >= (caseDoc.amtInDispute || 0) && (caseDoc.amtInDispute || 0) > 0) {
-          caseDoc.savedAmount = 0;
+        const existingProgress = await Progress.findOne({ where: { caseId: doc.caseId } });
+
+        if (mappedRefundStatus === 'Paid') {
+          caseDoc.refundedAmount = totalPaidAmount;
+          caseDoc.savedAmount = Math.max(0, (caseDoc.totalAmtPaid || 0) - totalPaidAmount);
+        } else {
+          caseDoc.refundedAmount = existingProgress ? (existingProgress.refundedAmount || 0) : 0;
+          caseDoc.savedAmount = Math.max(0, (caseDoc.totalAmtPaid || 0) - caseDoc.refundedAmount);
         }
 
         await caseDoc.save();
+
+        // Sync with progresses table
+        try {
+          if (existingProgress) {
+            existingProgress.refundedAmount = caseDoc.refundedAmount;
+            existingProgress.savedAmount = caseDoc.savedAmount;
+            
+            let rawUpdates = existingProgress.updates;
+            if (typeof rawUpdates === 'string') {
+              try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+            }
+            if (typeof rawUpdates === 'string') {
+              try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+            }
+            const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
+            if (updates.length > 0) {
+              const latestIndex = updates.length - 1;
+              updates[latestIndex].refundedAmount = caseDoc.refundedAmount;
+              updates[latestIndex].savedAmount = caseDoc.savedAmount;
+              existingProgress.updates = updates;
+            }
+            await existingProgress.save();
+          }
+        } catch (progressErr) {
+          console.error('Failed to sync progress on refund update:', progressErr);
+        }
       }
     } catch (caseErr) {}
 
@@ -607,12 +644,43 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
           }
         });
 
-        caseDoc.refundedAmount = totalPaidAmount;
-        if (totalPaidAmount >= (caseDoc.amtInDispute || 0) && (caseDoc.amtInDispute || 0) > 0) {
-          caseDoc.savedAmount = 0;
+        const existingProgress = await Progress.findOne({ where: { caseId: doc.caseId } });
+
+        if (mappedRefundStatus === 'Paid') {
+          caseDoc.refundedAmount = totalPaidAmount;
+          caseDoc.savedAmount = Math.max(0, (caseDoc.totalAmtPaid || 0) - totalPaidAmount);
+        } else {
+          caseDoc.refundedAmount = existingProgress ? (existingProgress.refundedAmount || 0) : 0;
+          caseDoc.savedAmount = Math.max(0, (caseDoc.totalAmtPaid || 0) - caseDoc.refundedAmount);
         }
       }
       await caseDoc.save();
+
+      // Sync with progresses table
+      try {
+        if (existingProgress) {
+          existingProgress.refundedAmount = caseDoc.refundedAmount;
+          existingProgress.savedAmount = caseDoc.savedAmount;
+          
+          let rawUpdates = existingProgress.updates;
+          if (typeof rawUpdates === 'string') {
+            try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+          }
+          if (typeof rawUpdates === 'string') {
+            try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+          }
+          const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
+          if (updates.length > 0) {
+            const latestIndex = updates.length - 1;
+            updates[latestIndex].refundedAmount = caseDoc.refundedAmount;
+            updates[latestIndex].savedAmount = caseDoc.savedAmount;
+            existingProgress.updates = updates;
+          }
+          await existingProgress.save();
+        }
+      } catch (progressErr) {
+        console.error('Failed to sync progress on refund delete:', progressErr);
+      }
     }
 
     await AuditLog.create({

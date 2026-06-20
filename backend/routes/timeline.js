@@ -18,7 +18,18 @@ router.get('/', verifyToken, async (req, res) => {
     
     let whereClause = {};
 
-    if (caseId) whereClause.caseId = caseId;
+    if (caseId) {
+      whereClause.caseId = caseId;
+      const targetCase = await Case.findOne({ where: { caseId }, attributes: ['createdAt', 'createdDate'] });
+      if (targetCase) {
+        const cutoffDate = targetCase.createdAt || targetCase.createdDate;
+        if (cutoffDate) {
+          const cutoff = new Date(cutoffDate);
+          cutoff.setMinutes(cutoff.getMinutes() - 5);
+          whereClause.createdAt = { [Op.gte]: cutoff };
+        }
+      }
+    }
     if (sourceFilter) whereClause.source = sourceFilter;
     if (type) {
       if (type === 'Communication') {

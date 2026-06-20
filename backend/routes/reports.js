@@ -262,17 +262,16 @@ router.get('/mis', verifyToken, async (req, res) => {
 
     const { startDate, endDate } = req.query;
     const isOperationHead = req.user?.role?.toLowerCase().trim() === 'operation head';
+    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
+    const isOperationReview = req.user?.role?.toLowerCase().trim() === 'operation review';
+    const isOperationAdmin = req.user?.role?.toLowerCase().trim() === 'operation admin';
     const caseQuery = { isArchived: { [Op.not]: true } };
-    if (!isOperationHead) {
+    if (!isOperationHead && !isAdmin && !isOperationReview && !isOperationAdmin) {
       caseQuery.sourceOfComplaint = { [Op.notLike]: '%odoo%' };
     }
 
-    if (startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      caseQuery.createdAt = { [Op.between]: [start, end] };
-    }
+    const start = startDate ? new Date(`${startDate}T00:00:00+05:30`) : null;
+    const end = endDate ? new Date(`${endDate}T23:59:59.999+05:30`) : null;
 
     const allCases = await Case.findAll({ where: caseQuery });
     const allUsers = await User.findAll({ attributes: ['id', 'fullName', 'email', 'role', 'monthlyTarget'] });
@@ -292,7 +291,6 @@ router.get('/mis', verifyToken, async (req, res) => {
       return completedStatuses.includes(status.trim());
     };
 
-    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
     const userFullName = (req.user.fullName || '').trim().toLowerCase();
     const userEmail = (req.user.email || '').trim().toLowerCase();
 
@@ -309,7 +307,9 @@ router.get('/mis', verifyToken, async (req, res) => {
           c.assignedTo.trim().toLowerCase() === userEmail
         ));
 
-      if (isCaseActive) {
+      const isOdooCase = c.sourceOfComplaint && c.sourceOfComplaint.toLowerCase().includes('odoo');
+
+      if (isCaseActive && !isOdooCase) {
         totalActiveCases++;
         totalActiveCasesAmount += (c.totalAmtPaid || 0);
         totalAmountAtRisk += (c.totalAmtPaid || 0);
@@ -337,7 +337,7 @@ router.get('/mis', verifyToken, async (req, res) => {
         }
       }
 
-      if (isCreatedToday && isOwnCase) {
+      if (isCreatedToday && isOwnCase && !isOdooCase) {
         casesAssignedToday++;
         todayCasesList.push({
           assignee: c.assignedTo || 'Unassigned',
@@ -370,7 +370,12 @@ router.get('/mis', verifyToken, async (req, res) => {
         todayCases: 0,
         todayAmt: 0,
         resolvedToday: 0,
-        resolvedTodayAmt: 0
+        resolvedTodayAmt: 0,
+        totalCasesList: [],
+        pendingCasesList: [],
+        resolvedCasesList: [],
+        todayCasesList: [],
+        resolvedTodayList: []
       };
     });
 
@@ -379,13 +384,41 @@ router.get('/mis', verifyToken, async (req, res) => {
       if (!assigneeName) return;
 
       const key = assigneeName.trim().toLowerCase();
-      if (!assigneeStatsMap[key]) return;
+      let stats = assigneeStatsMap[key];
+      if (!stats) {
+        // Fallback: search by email
+        const foundKey = Object.keys(assigneeStatsMap).find(k => 
+          assigneeStatsMap[k].email.trim().toLowerCase() === key
+        );
+        if (foundKey) {
+          stats = assigneeStatsMap[foundKey];
+        }
+      }
+      if (!stats) return;
 
-      const stats = assigneeStatsMap[key];
+      const roleLower = (stats.role || '').toLowerCase().trim();
+      const isOdooCase = c.sourceOfComplaint && c.sourceOfComplaint.toLowerCase().includes('odoo');
+      if (roleLower !== 'operation review' && isOdooCase) {
+        return; // Skip Odoo cases for non-"Operation Review" specialists
+      }
+
       const amt = c.totalAmtPaid || 0;
       const saved = c.savedAmount || c.refundedAmount || 0;
       const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
       const isCaseClosure = isClosureStatus(c.currentStatus);
+
+      let shouldCount = false;
+      if (!isCaseResolved) {
+        shouldCount = true;
+      } else {
+        const resolvedDate = c.updatedAt ? new Date(c.updatedAt) : (c.createdAt ? new Date(c.createdAt) : null);
+        const isResolvedInPeriod = !start || !end || (resolvedDate && resolvedDate >= start && resolvedDate <= end);
+        if (isResolvedInPeriod) {
+          shouldCount = true;
+        }
+      }
+
+      if (!shouldCount) return;
 
       const createdDate = c.createdAt ? new Date(c.createdAt) : null;
       const isAssignedToday = createdDate && createdDate >= startOfToday;
@@ -393,28 +426,46 @@ router.get('/mis', verifyToken, async (req, res) => {
       const updatedDate = c.updatedAt ? new Date(c.updatedAt) : null;
       const isResolvedToday = isCaseResolved && isCaseClosure && updatedDate && updatedDate >= startOfToday;
 
+      const caseItem = {
+        id: c.id,
+        caseId: c.caseId,
+        companyName: c.companyName || '—',
+        totalAmtPaid: amt,
+        currentStatus: c.currentStatus || 'New',
+        priority: c.priority || 'Medium',
+        dueDate: c.dueDate || '—',
+        savedAmount: saved,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt
+      };
+
       stats.totalCases++;
       stats.totalAmt += amt;
+      stats.totalCasesList.push(caseItem);
 
       if (isCaseResolved) {
         if (isCaseClosure) {
           stats.resolvedCases++;
+          stats.resolvedCasesList.push(caseItem);
         }
         stats.resolvedAmt += saved;
         stats.saved += saved;
       } else {
         stats.pendingCases++;
         stats.pendingAmt += amt;
+        stats.pendingCasesList.push(caseItem);
       }
 
       if (isAssignedToday) {
         stats.todayCases++;
         stats.todayAmt += amt;
+        stats.todayCasesList.push(caseItem);
       }
 
       if (isResolvedToday) {
         stats.resolvedToday++;
         stats.resolvedTodayAmt += saved;
+        stats.resolvedTodayList.push(caseItem);
       }
     });
 
@@ -456,6 +507,21 @@ router.get('/mis', verifyToken, async (req, res) => {
     });
 
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/send-daily-email', verifyToken, async (req, res) => {
+  try {
+    const userRole = req.user.role;
+    if (!['Admin', 'Super Admin', 'SuperAdmin'].includes(userRole)) {
+      return res.status(403).json({ error: 'Access denied: Only Admins can trigger reports.' });
+    }
+    const { sendDailyReportsToAdmins } = require('../utils/scheduler');
+    await sendDailyReportsToAdmins();
+    res.json({ success: true, message: 'Daily reports compiled and sent successfully.' });
+  } catch (error) {
+    console.error('Trigger mail reports error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -35,6 +35,47 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+const TaskTimer = ({ task }) => {
+  const getElapsedMs = () => {
+    const start = task.createdAt ? new Date(task.createdAt).getTime() : Date.now();
+    if (task.status === 'Completed' || task.status === 'Done') {
+      const end = task.completedAt ? new Date(task.completedAt).getTime() : (task.updatedAt ? new Date(task.updatedAt).getTime() : Date.now());
+      return Math.max(0, end - start);
+    }
+    return Math.max(0, Date.now() - start);
+  };
+
+  const [elapsed, setElapsed] = useState(getElapsedMs());
+
+  useEffect(() => {
+    if (task.status === 'Completed' || task.status === 'Done') {
+      setElapsed(getElapsedMs());
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setElapsed(getElapsedMs());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [task.status, task.createdAt, task.completedAt, task.updatedAt]);
+
+  const formatDuration = (ms) => {
+    const totalSecs = Math.floor(ms / 1000);
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <span className={`text-[9px] font-mono font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 ml-1.5 ${task.status === 'Completed' ? 'bg-green-soft text-green border border-green-soft/20' : 'bg-orange-soft text-accent border border-accent/20'}`}>
+      <Clock size={10} className={task.status === 'Completed' ? '' : 'animate-pulse'} />
+      {formatDuration(elapsed)}
+    </span>
+  );
+};
+
 const MyTaskTab = () => {
   const { user } = useContext(AuthContext);
   const [tasks, setTasks] = useState([]);
@@ -192,6 +233,20 @@ const MyTaskTab = () => {
   };
 
   const handleUpdateTask = async (taskId, updates, silent = false) => {
+    if (updates.status === 'Completed') {
+      if (!selectedTask?.notes?.trim() && !newNote.trim()) {
+        toast.error('Progress notes are required to mark the task as Completed');
+        return;
+      }
+      if (newNote.trim()) {
+        const timestamp = new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
+        const formattedNote = `[${timestamp} - ${user?.fullName || 'User'}]: ${newNote.trim()}`;
+        const updatedNotes = selectedTask.notes ? (selectedTask.notes + '\n' + formattedNote) : formattedNote;
+        updates.notes = updatedNotes;
+        setNewNote('');
+      }
+    }
+
     try {
       const payload = { ...updates };
       const res = await api.put(`/tasks/${taskId}`, payload);
@@ -303,9 +358,7 @@ const MyTaskTab = () => {
   const [dateFilter, setDateFilter] = useState('');
 
   useEffect(() => {
-    if (location.state?.taskFilter) {
-      setTaskFilter(location.state.taskFilter);
-    }
+    setTaskFilter(location.state?.taskFilter || '');
   }, [location.state]);
 
   const filteredTasks = tasks.filter(t => {
@@ -328,7 +381,8 @@ const MyTaskTab = () => {
 
     let matchesTimeFilter = true;
     if (taskFilter === 'overdue') {
-      matchesTimeFilter = t.reminderDateTime && t.reminderDateTime < new Date().toISOString() && !['Completed', 'Done'].includes(t.status);
+      const cleanDueDate = t.dueDate ? t.dueDate.split('T')[0] : '';
+      matchesTimeFilter = ((cleanDueDate && cleanDueDate < todayStr) || (t.reminderDateTime && t.reminderDateTime < new Date().toISOString())) && !['Completed', 'Done'].includes(t.status);
     } else if (taskFilter === 'today') {
       const taskCreatedAtDate = t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : '';
       matchesTimeFilter = taskCreatedAtDate === todayStr && !['Completed', 'Done'].includes(t.status);
@@ -350,7 +404,23 @@ const MyTaskTab = () => {
   const handleExportTasks = () => {
     if (filteredTasks.length === 0) return toast.error('No tasks to export');
 
-    const headers = ['Task ID', 'Title', 'Priority', 'Assignee', 'Case ID', 'Due Date', 'Status', 'Notes'];
+    const getDurationStr = (task) => {
+      const start = task.createdAt ? new Date(task.createdAt).getTime() : Date.now();
+      let ms = 0;
+      if (task.status === 'Completed' || task.status === 'Done') {
+        const end = task.completedAt ? new Date(task.completedAt).getTime() : (task.updatedAt ? new Date(task.updatedAt).getTime() : Date.now());
+        ms = Math.max(0, end - start);
+      } else {
+        ms = Math.max(0, Date.now() - start);
+      }
+      const totalSecs = Math.floor(ms / 1000);
+      const hrs = Math.floor(totalSecs / 3600);
+      const mins = Math.floor((totalSecs % 3600) / 60);
+      const secs = totalSecs % 60;
+      return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const headers = ['Task ID', 'Title', 'Priority', 'Assignee', 'Case ID', 'Due Date', 'Status', 'Duration', 'Notes'];
     const data = filteredTasks.map(t => ({
       'Task ID': t.taskId || '',
       'Title': t.title || '',
@@ -359,6 +429,7 @@ const MyTaskTab = () => {
       'Case ID': t.caseId || '',
       'Due Date': t.dueDate || '',
       'Status': t.status || '',
+      'Duration': getDurationStr(t),
       'Notes': (t.notes || '').replace(/\n/g, ' ')
     }));
 
@@ -451,7 +522,7 @@ const MyTaskTab = () => {
           )}
           <div className="flex items-center gap-3">
             <button onClick={handleExportTasks} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-bg-card border-2 border-border text-text-secondary px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-bg-card-hover transition-all shadow-sm active:scale-95">
-              <Download size={18} /> Export Excel
+              <Download size={18} /> Export
             </button>
             <button onClick={() => setIsModalOpen(true)} className="btn btn-primary !py-2.5 !px-6 !rounded-xl shadow-lg shadow-orange-900/20">
               <Plus size={20} /> New Task
@@ -489,6 +560,16 @@ const MyTaskTab = () => {
             )}
           </div>
         </div>
+
+        {taskFilter && (
+          <div className="mb-6 flex items-center gap-2 animate-in fade-in duration-200">
+            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Active Filter:</span>
+            <div className="flex items-center gap-2 bg-red-soft text-red px-3 py-1.5 rounded-xl border border-red-soft/20 text-xs font-black uppercase tracking-wider">
+              <span>{taskFilter === 'overdue' ? 'Overdue' : taskFilter === 'today' ? 'Due Today' : taskFilter === '24h' ? 'Due in 24 Hrs' : taskFilter === '48h' ? 'Due in 48 Hrs' : taskFilter === 'completed_today' ? 'Completed Today' : taskFilter}</span>
+              <button onClick={() => setTaskFilter('')} className="hover:bg-red-soft/50 p-0.5 rounded transition-colors"><X size={12} /></button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 pb-4">
           {columns.map(col => (
@@ -547,6 +628,7 @@ const MyTaskTab = () => {
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 bg-accent rounded-lg flex items-center justify-center text-white text-[8px] font-black shadow-sm">{task.assignee?.charAt(0)}</div>
                           <span className="text-[10px] font-bold text-text-secondary">{task.assignee}</span>
+                          <TaskTimer task={task} />
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex items-center gap-2">
@@ -644,6 +726,12 @@ const MyTaskTab = () => {
                   <div className="flex justify-between items-center p-3.5 bg-bg-input rounded-2xl border border-border">
                     <span className="text-text-muted font-bold text-xs">Due Date</span>
                     <span className="font-bold text-text-primary text-sm flex items-center gap-2"><Calendar size={18} className="text-white" /> {selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString('en-IN') : 'Not set'}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3.5 bg-bg-input rounded-2xl border border-border">
+                    <span className="text-text-muted font-bold text-xs">Duration</span>
+                    <span className="font-bold text-text-primary text-sm flex items-center gap-2">
+                      <TaskTimer task={selectedTask} />
+                    </span>
                   </div>
                   <div className="flex justify-between items-center p-3.5 bg-bg-input rounded-2xl border border-border">
                     <span className="text-text-muted font-bold text-xs">Case ID</span>

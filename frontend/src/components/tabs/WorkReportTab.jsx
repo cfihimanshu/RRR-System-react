@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
 import TabLoader from '../shared/TabLoader';
+import * as XLSX from 'xlsx';
 import {
   BarChart3,
   Target,
@@ -215,7 +216,7 @@ const WorkReportTab = () => {
     setLoading(true);
     try {
       const detailedRows = [];
-      
+
       for (const r of filteredReports) {
         const params = new URLSearchParams();
         if (r.date) params.append('date', r.date);
@@ -237,22 +238,22 @@ const WorkReportTab = () => {
 
         const comms = timelineData
           .filter(a => ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'].includes(a.eventType))
-          .map(a => `${a.caseId || 'N/A'}: ${a.summary}`)
-          .join(' | ');
+          .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
+          .join('\n');
 
         const docs = timelineData
           .filter(a => a.eventType === 'Document Upload')
-          .map(a => `${a.caseId || 'N/A'}: ${a.summary}`)
-          .join(' | ');
+          .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
+          .join('\n');
 
         const progress = timelineData
           .filter(a => a.eventType === 'Progress Update')
-          .map(a => `${a.caseId || 'N/A'}: ${a.summary}`)
-          .join(' | ');
+          .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
+          .join('\n');
 
         const tasks = taskData
-          .map(t => `${t.taskId || 'N/A'}: ${t.title} [${t.status}]`)
-          .join(' | ');
+          .map(t => `• ${t.taskId || 'N/A'}: ${t.title} [${t.status}]`)
+          .join('\n');
 
         detailedRows.push([
           r.date || '',
@@ -261,8 +262,8 @@ const WorkReportTab = () => {
           r.checkInTime || '',
           r.checkOutTime || '',
           r.duration || '',
-          (r.plannedTasks || '').replace(/\n/g, ' '),
-          (r.workSummary || '').replace(/\n/g, ' '),
+          r.plannedTasks || '',
+          r.workSummary || '',
           getCompletionStatus(r) || '',
           r.progressScore || '',
           r.moodEnergy || '',
@@ -281,22 +282,27 @@ const WorkReportTab = () => {
         'Progress Updates (ID: Summary)', 'Task Details (ID: Title [Status])', 'Total Activity Count'
       ];
 
-      const csvContent = [headers, ...detailedRows].map(row =>
-        row.map(v => {
-          const content = String(v || '');
-          return `"${content.replace(/"/g, '""')}"`;
-        }).join(',')
-      ).join('\n');
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...detailedRows]);
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Detailed_Work_Report_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // Calculate column widths for clean structure
+      const colWidths = headers.map((h, i) => {
+        let maxLen = h.length;
+        detailedRows.forEach(row => {
+          const val = String(row[i] || '');
+          if (val.length > maxLen) {
+            maxLen = val.length;
+          }
+        });
+        // Limit max width to 50 characters to prevent extremely wide columns, min width 10
+        return { wch: Math.min(Math.max(maxLen + 2, 10), 50) };
+      });
+      worksheet['!cols'] = colWidths;
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Detailed Work Report');
+
+      const fileName = `Detailed_Work_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
     } catch (err) {
       console.error('Detailed Export Error:', err);
       alert('Failed to generate detailed report. Please try again.');
@@ -334,12 +340,11 @@ const WorkReportTab = () => {
               onClick={handleDownload}
               className="btn btn-primary !py-3 !px-6 !rounded-xl shadow-lg shadow-blue-900/20"
             >
-              <Download size={18} /> Export CSV
+              <Download size={18} /> Export
             </button>
           )}
         </div>
       </div>
-
 
       {/* Reports Table */}
       <div className="bg-bg-card rounded-[2rem] border-2 border-border shadow-sm overflow-hidden flex flex-col flex-1">

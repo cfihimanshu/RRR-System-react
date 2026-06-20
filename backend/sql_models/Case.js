@@ -46,10 +46,42 @@ const Case = sequelize.define('Case', {
   state: { type: DataTypes.STRING, defaultValue: "" },
   city: { type: DataTypes.STRING, defaultValue: "" },
   pincode: { type: DataTypes.STRING, defaultValue: "" },
-  totalAmtPaid: DataTypes.FLOAT,
+  totalAmtPaid: {
+    type: DataTypes.DOUBLE,
+    get() {
+      const services = this.getDataValue('servicesSold');
+      const parsedServices = typeof services === 'string' ? JSON.parse(services) : services;
+      if (Array.isArray(parsedServices) && parsedServices.length > 0) {
+        return parsedServices.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0);
+      }
+      return this.getDataValue('totalAmtPaid') || 0;
+    }
+  },
   mouSigned: DataTypes.STRING,
-  totalMouValue: DataTypes.FLOAT,
-  amtInDispute: DataTypes.FLOAT,
+  totalMouValue: {
+    type: DataTypes.DOUBLE,
+    get() {
+      const services = this.getDataValue('servicesSold');
+      const parsedServices = typeof services === 'string' ? JSON.parse(services) : services;
+      if (Array.isArray(parsedServices) && parsedServices.length > 0) {
+        return parsedServices.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0);
+      }
+      return this.getDataValue('totalMouValue') || 0;
+    }
+  },
+  amtInDispute: {
+    type: DataTypes.DOUBLE,
+    get() {
+      const services = this.getDataValue('servicesSold');
+      const parsedServices = typeof services === 'string' ? JSON.parse(services) : services;
+      if (Array.isArray(parsedServices) && parsedServices.length > 0) {
+        const paid = parsedServices.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0);
+        const mou = parsedServices.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0);
+        return Math.max(0, paid - mou);
+      }
+      return this.getDataValue('amtInDispute') || 0;
+    }
+  },
   dateOfLastPayment: DataTypes.STRING,
   smRisk: DataTypes.STRING,
   complaint: DataTypes.TEXT,
@@ -84,8 +116,8 @@ const Case = sequelize.define('Case', {
   assignedAt: { type: DataTypes.DATE, allowNull: true },
   hasBeenWorkedOn: { type: DataTypes.BOOLEAN, defaultValue: false },
   lastReminderSentAt: { type: DataTypes.DATE, allowNull: true },
-  refundedAmount: DataTypes.FLOAT,
-  savedAmount: DataTypes.FLOAT,
+  refundedAmount: DataTypes.DOUBLE,
+  savedAmount: DataTypes.DOUBLE,
   lienMarkedOn: DataTypes.STRING,
   lienBank: DataTypes.STRING,
   refundStatus: DataTypes.STRING,

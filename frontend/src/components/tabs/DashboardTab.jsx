@@ -369,9 +369,13 @@ const DashboardTab = () => {
     );
   };
 
-  const fetchUserCases = async () => {
+  const fetchUserCases = async (uFilter = userFilter) => {
     try {
-      const res = await api.get('/cases/summary?limit=1000'); // Limit for dashboard preview
+      let url = '/cases/summary?limit=1000';
+      if (uFilter) {
+        url += `&userFilter=${encodeURIComponent(uFilter)}`;
+      }
+      const res = await api.get(url);
       setUserCases(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
@@ -862,9 +866,11 @@ const DashboardTab = () => {
   useEffect(() => {
     fetchStats(teamFilter);
     fetchMyTodayTasks();
+    fetchUserCases(userFilter);
 
     const statsInterval = setInterval(() => {
       fetchStats(teamFilter);
+      fetchUserCases(userFilter);
     }, 120000);
 
     const channel = new BroadcastChannel('case_updates');
@@ -872,6 +878,7 @@ const DashboardTab = () => {
       if (event.data.type === 'CASE_PROGRESS_UPDATED') {
         fetchStats(teamFilter);
         fetchMyTodayTasks();
+        fetchUserCases(userFilter);
       }
     };
 
@@ -3296,13 +3303,16 @@ const DashboardTab = () => {
                   {(() => {
                     const users = violationType === 'SOD' ? stats?.violations?.missingSodUsers :
                       violationType === 'EOD' ? stats?.violations?.missingEodUsers :
-                        stats?.violations?.missingNoUpdateUsers;
+                      violationType === '48H' ? stats?.violations?.missingNoUpdateUsers :
+                      stats?.violations?.missingSlaUsers;
 
                     if (!users || users.length === 0) {
                       return (
                         <div className="text-center py-12 opacity-50">
                           <CheckCircle size={48} className="mx-auto mb-4 text-green" />
-                          <div className="text-sm font-black uppercase tracking-widest text-text-primary">All {violationType}s Submitted</div>
+                          <div className="text-sm font-black uppercase tracking-widest text-text-primary">
+                            {violationType === '48H' ? 'No 48h Violations' : violationType === 'SLA' ? 'No SLA Breaches' : `All ${violationType}s Submitted`}
+                          </div>
                           <div className="text-[10px] font-bold text-text-muted uppercase mt-1">Great job team!</div>
                         </div>
                       );
@@ -3320,7 +3330,7 @@ const DashboardTab = () => {
                           </div>
                         </div>
                         <div className="px-3 py-1.5 bg-red-soft text-red rounded-lg text-[9px] font-black uppercase tracking-widest">
-                          Missing {violationType}
+                          {violationType === 'SLA' ? 'SLA Breached' : violationType === '48H' ? 'No Update > 48 Hrs' : `Missing ${violationType}`}
                         </div>
                       </div>
                     ));

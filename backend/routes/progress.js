@@ -20,6 +20,23 @@ router.get('/', verifyToken, async (req, res) => {
     const { caseId } = req.query;
     if (!caseId) return res.status(400).json({ error: 'caseId is required' });
 
+    let query = { caseId };
+    const targetCase = await Case.findOne({ where: { caseId } });
+    let cutoff = null;
+    if (targetCase) {
+      const cutoffDate = targetCase.createdAt || targetCase.createdDate;
+      if (cutoffDate) {
+        cutoff = new Date(cutoffDate);
+        cutoff.setMinutes(cutoff.getMinutes() - 5);
+        query.createdAt = { [Op.gte]: cutoff };
+      }
+    }
+
+    let timelineQuery = { caseId, eventType: 'Progress Update' };
+    if (cutoff) {
+      timelineQuery.createdAt = { [Op.gte]: cutoff };
+    }
+
     let progressDocs = await Progress.findAll({ 
       where: { caseId }, 
       order: [['createdAt', 'DESC']] 
@@ -63,7 +80,7 @@ router.get('/', verifyToken, async (req, res) => {
     let logs = [];
 
     const timelineProgressEvents = await Timeline.findAll({
-      where: { caseId, eventType: 'Progress Update' }
+      where: timelineQuery
     });
 
     timelineProgressEvents.sort((a, b) => new Date(a.eventDate || a.createdAt) - new Date(b.eventDate || b.createdAt));
@@ -128,7 +145,7 @@ router.get('/', verifyToken, async (req, res) => {
     logs = Array.from(uniqueLogsMap.values());
     logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    const targetCase = await Case.findOne({ where: { caseId } });
+    // targetCase already fetched above
 
     const enrichedLogs = await Promise.all(logs.map(async (log, idx) => {
       if (!log.nextAction) {
@@ -173,6 +190,16 @@ router.post('/', verifyToken, async (req, res) => {
   try {
     const { caseId, stage, percentage, summary, nextAction, blockers, followUpDate, escalateTo, updatedBy, checklist, refundedAmount, savedAmount, attachment, compliancePending } = req.body;
 
+    const existingCase = await Case.findOne({ where: { caseId } });
+    if (!existingCase) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+    const isRefundPaid = existingCase.refundStatus === 'Paid';
+
+    const isPaid = existingCase.refundStatus === 'Paid';
+    const finalRefundedAmount = isPaid ? (existingCase.refundedAmount || 0) : 0;
+    const finalSavedAmount = isPaid ? Math.max(0, (existingCase.totalAmtPaid || 0) - finalRefundedAmount) : 0;
+
     const newLog = {
       _id: generateId(),
       stage,
@@ -183,10 +210,10 @@ router.post('/', verifyToken, async (req, res) => {
       followUpDate,
       escalateTo,
       updatedBy,
-      refundedAmount,
-      savedAmount,
+      refundedAmount: finalRefundedAmount,
+      savedAmount: finalSavedAmount,
       attachment,
-      createdAt: followUpDate ? new Date(followUpDate).toISOString() : new Date().toISOString()
+      createdAt: new Date().toISOString()
     };
 
     let progressDoc = await Progress.findOne({ where: { caseId } });
@@ -214,8 +241,8 @@ router.post('/', verifyToken, async (req, res) => {
           escalateTo,
           updatedBy,
           checklist,
-          refundedAmount,
-          savedAmount,
+          refundedAmount: finalRefundedAmount,
+          savedAmount: finalSavedAmount,
           attachment,
           updates: [newLog]
         });
@@ -249,7 +276,7 @@ router.post('/', verifyToken, async (req, res) => {
           savedAmount: progressDoc.savedAmount,
           attachment: progressDoc.attachment,
           updatedBy: progressDoc.updatedBy,
-          createdAt: progressDoc.followUpDate ? new Date(progressDoc.followUpDate).toISOString() : (progressDoc.createdAt || progressDoc.updatedAt || new Date().toISOString())
+          createdAt: progressDoc.createdAt || progressDoc.updatedAt || new Date().toISOString()
         });
       }
 
@@ -261,8 +288,8 @@ router.post('/', verifyToken, async (req, res) => {
       progressDoc.blockers = blockers || progressDoc.blockers;
       progressDoc.followUpDate = followUpDate || progressDoc.followUpDate;
       progressDoc.escalateTo = escalateTo || progressDoc.escalateTo;
-      progressDoc.refundedAmount = refundedAmount !== undefined ? refundedAmount : progressDoc.refundedAmount;
-      progressDoc.savedAmount = savedAmount !== undefined ? savedAmount : progressDoc.savedAmount;
+      progressDoc.refundedAmount = finalRefundedAmount !== undefined ? finalRefundedAmount : progressDoc.refundedAmount;
+      progressDoc.savedAmount = finalSavedAmount !== undefined ? finalSavedAmount : progressDoc.savedAmount;
       progressDoc.attachment = attachment || progressDoc.attachment;
       progressDoc.updatedBy = updatedBy || progressDoc.updatedBy;
       if (checklist) {
@@ -291,59 +318,61 @@ router.post('/', verifyToken, async (req, res) => {
     const updateFields = { hasBeenWorkedOn: true };
     if (stage) {
       updateFields.currentStatus = stage;
-      if (stage === 'Closure') {
-        updateFields.refundedAmount = refundedAmount;
-        updateFields.savedAmount = savedAmount;
-        if (compliancePending !== undefined) {
-          updateFields.compliancePending = compliancePending;
-        }
-      }
+    }
+    if (finalRefundedAmount !== undefined) {
+      updateFields.refundedAmount = finalRefundedAmount;
+    }
+    if (finalSavedAmount !== undefined) {
+      updateFields.savedAmount = finalSavedAmount;
+    }
+    if (stage === 'Closure' && compliancePending !== undefined) {
+      updateFields.compliancePending = compliancePending;
+    }
 
-      // Notify Admin on key stage changes
-      const notifyStages = ['Analysis', 'Negotiation', 'Closure'];
-      const isComplianceDue = stage === 'Closure' && compliancePending === true;
-      
-      if (notifyStages.includes(stage) || isComplianceDue) {
-        try {
-          const targetCase = await Case.findOne({ where: { caseId } });
-          const admins = await User.findAll({ where: { role: 'Admin' } });
-          const adminEmails = admins.map(u => u.email).filter(Boolean).join(',');
+    // Notify Admin on key stage changes
+    const notifyStages = ['Analysis', 'Negotiation', 'Closure'];
+    const isComplianceDue = stage === 'Closure' && compliancePending === true;
+    
+    if (stage && (notifyStages.includes(stage) || isComplianceDue)) {
+      try {
+        const targetCase = await Case.findOne({ where: { caseId } });
+        const admins = await User.findAll({ where: { role: 'Admin' } });
+        const adminEmails = admins.map(u => u.email).filter(Boolean).join(',');
 
-          if (adminEmails && targetCase) {
-            let stageLabel = stage;
-            let bgColor = '#2563eb';
-            let borderColor = '#1d4ed8';
+        if (adminEmails && targetCase) {
+          let stageLabel = stage;
+          let bgColor = '#2563eb';
+          let borderColor = '#1d4ed8';
 
-            if (stage === 'Analysis') { bgColor = '#7c3aed'; borderColor = '#6d28d9'; }
-            else if (stage === 'Negotiation') { bgColor = '#d97706'; borderColor = '#b45309'; }
-            else if (stage === 'Closure' && compliancePending) { stageLabel = 'Closure (Compliance Due)'; bgColor = '#ea580c'; borderColor = '#c2410c'; }
-            else if (stage === 'Closure') { bgColor = '#16a34a'; borderColor = '#15803d'; }
+          if (stage === 'Analysis') { bgColor = '#7c3aed'; borderColor = '#6d28d9'; }
+          else if (stage === 'Negotiation') { bgColor = '#d97706'; borderColor = '#b45309'; }
+          else if (stage === 'Closure' && compliancePending) { stageLabel = 'Closure (Compliance Due)'; bgColor = '#ea580c'; borderColor = '#c2410c'; }
+          else if (stage === 'Closure') { bgColor = '#16a34a'; borderColor = '#15803d'; }
 
-            const subject = `📋 Case Stage Updated: ${stageLabel} — ${caseId}`;
-            const html = `
-              <div style="font-family: sans-serif; padding: 24px; border: 2px solid ${borderColor}; border-radius: 12px; max-width: 600px;">
-                <h2 style="color: ${bgColor}; margin-top: 0; font-size: 18px;">Case Progress Notification</h2>
-                <p style="color: #374151;">Hello Admin,</p>
-                <p style="color: #374151;">Case <strong>${caseId}</strong> has been updated to stage <strong style="color: ${bgColor};">${stageLabel}</strong> by <strong>${req.user.fullName || req.user.email}</strong>.</p>
-                <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 8px; margin: 16px 0;">
-                  <p style="margin: 6px 0; color: #374151;"><strong>Company:</strong> ${targetCase.companyName || 'N/A'}</p>
-                  <p style="margin: 6px 0; color: #374151;"><strong>Client:</strong> ${targetCase.clientName || 'N/A'}</p>
-                  <p style="margin: 6px 0; color: #374151;"><strong>Stage:</strong> <span style="color: ${bgColor}; font-weight: bold;">${stageLabel}</span></p>
-                  <p style="margin: 6px 0; color: #374151;"><strong>Summary:</strong> ${summary || 'N/A'}</p>
-                  ${stage === 'Closure' ? `
-                  <p style="margin: 6px 0; color: #374151;"><strong>Refunded Amount:</strong> ₹${refundedAmount || 0}</p>
-                  <p style="margin: 6px 0; color: #374151;"><strong>Saved Amount:</strong> ₹${savedAmount || 0}</p>
-                  ` : ''}
-                  ${compliancePending ? `<p style="margin: 6px 0; color: #ea580c; font-weight: bold;">⚠️ Compliance Due — action required.</p>` : ''}
-                </div>
-                <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="display: inline-block; background: ${bgColor}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Case</a>
+          const subject = `📋 Case Stage Updated: ${stageLabel} — ${caseId}`;
+          const html = `
+            <div style="font-family: sans-serif; padding: 24px; border: 2px solid ${borderColor}; border-radius: 12px; max-width: 600px;">
+              <h2 style="color: ${bgColor}; margin-top: 0; font-size: 18px;">Case Progress Notification</h2>
+              <p style="color: #374151;">Hello Admin,</p>
+              <p style="color: #374151;">Case <strong>${caseId}</strong> has been updated to stage <strong style="color: ${bgColor};">${stageLabel}</strong> by <strong>${req.user.fullName || req.user.email}</strong>.</p>
+              <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                <p style="margin: 6px 0; color: #374151;"><strong>Company:</strong> ${targetCase.companyName || 'N/A'}</p>
+                <p style="margin: 6px 0; color: #374151;"><strong>Client:</strong> ${targetCase.clientName || 'N/A'}</p>
+                <p style="margin: 6px 0; color: #374151;"><strong>Stage:</strong> <span style="color: ${bgColor}; font-weight: bold;">${stageLabel}</span></p>
+                <p style="margin: 6px 0; color: #374151;"><strong>Summary:</strong> ${summary || 'N/A'}</p>
+                ${stage === 'Closure' ? `
+                <p style="margin: 6px 0; color: #374151;"><strong>Refunded Amount:</strong> ₹${finalRefundedAmount || 0}</p>
+                <p style="margin: 6px 0; color: #374151;"><strong>Saved Amount:</strong> ₹${finalSavedAmount || 0}</p>
+                ` : ''}
+                ${compliancePending ? `<p style="margin: 6px 0; color: #ea580c; font-weight: bold;">⚠️ Compliance Due — action required.</p>` : ''}
               </div>
-            `;
-            sendEmail(adminEmails, subject, '', html).catch(console.error);
-          }
-        } catch (err) {
-          console.error('Error sending stage notification email:', err);
+              <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="display: inline-block; background: ${bgColor}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Case</a>
+            </div>
+          `;
+          sendEmail(adminEmails, subject, '', html).catch(console.error);
         }
+      } catch (err) {
+        console.error('Error sending stage notification email:', err);
       }
     }
     if (percentage !== undefined) updateFields.progressPercentage = percentage;
@@ -456,7 +485,14 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Progress log entry not found' });
     }
 
+    const existingCase = await Case.findOne({ where: { caseId } });
+    const isRefundPaid = existingCase && existingCase.refundStatus === 'Paid';
+
     const oldLog = updates[updateIndex];
+
+    const isPaid = existingCase && existingCase.refundStatus === 'Paid';
+    const finalRefundedAmount = isPaid ? (existingCase.refundedAmount || 0) : 0;
+    const finalSavedAmount = isPaid ? Math.max(0, (existingCase ? (existingCase.totalAmtPaid || 0) : 0) - finalRefundedAmount) : 0;
     
     if (stage !== undefined) updates[updateIndex].stage = stage;
     if (percentage !== undefined) updates[updateIndex].percentage = percentage;
@@ -468,8 +504,8 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
       if (followUpDate) updates[updateIndex].createdAt = new Date(followUpDate).toISOString();
     }
     if (escalateTo !== undefined) updates[updateIndex].escalateTo = escalateTo;
-    if (refundedAmount !== undefined) updates[updateIndex].refundedAmount = refundedAmount;
-    if (savedAmount !== undefined) updates[updateIndex].savedAmount = savedAmount;
+    if (finalRefundedAmount !== undefined) updates[updateIndex].refundedAmount = finalRefundedAmount;
+    if (finalSavedAmount !== undefined) updates[updateIndex].savedAmount = finalSavedAmount;
     if (attachment !== undefined) updates[updateIndex].attachment = attachment;
     
     const isLatest = updateIndex === updates.length - 1;
@@ -481,45 +517,44 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
       if (blockers !== undefined) progressDoc.blockers = blockers;
       if (followUpDate !== undefined) progressDoc.followUpDate = followUpDate;
       if (escalateTo !== undefined) progressDoc.escalateTo = escalateTo;
-      if (refundedAmount !== undefined) progressDoc.refundedAmount = refundedAmount;
-      if (savedAmount !== undefined) progressDoc.savedAmount = savedAmount;
+      if (finalRefundedAmount !== undefined) progressDoc.refundedAmount = finalRefundedAmount;
+      if (finalSavedAmount !== undefined) progressDoc.savedAmount = finalSavedAmount;
       if (attachment !== undefined) progressDoc.attachment = attachment;
 
       const caseUpdateFields = {};
-      if (stage !== undefined) {
-        caseUpdateFields.currentStatus = stage;
-        if (stage === 'Closure') {
-          if (refundedAmount !== undefined) caseUpdateFields.refundedAmount = refundedAmount;
-          if (savedAmount !== undefined) caseUpdateFields.savedAmount = savedAmount;
-          if (compliancePending !== undefined) caseUpdateFields.compliancePending = compliancePending;
+      if (stage !== undefined) caseUpdateFields.currentStatus = stage;
+      if (finalRefundedAmount !== undefined) caseUpdateFields.refundedAmount = finalRefundedAmount;
+      if (finalSavedAmount !== undefined) caseUpdateFields.savedAmount = finalSavedAmount;
+      if (stage === 'Closure' && compliancePending !== undefined) {
+        caseUpdateFields.compliancePending = compliancePending;
+      }
           
+      // Notify Admin on Closure
+      if (stage === 'Closure') {
+        try {
+          const targetCase = await Case.findOne({ where: { caseId } });
+          const admins = await User.findAll({ where: { role: 'Admin' } });
+          const adminEmails = admins.map(u => u.email).filter(Boolean).join(',');
           
-          // Notify Admin on Closure
-          try {
-            const targetCase = await Case.findOne({ where: { caseId } });
-            const admins = await User.findAll({ where: { role: 'Admin' } });
-            const adminEmails = admins.map(u => u.email).filter(Boolean).join(',');
-            
-            if (adminEmails && targetCase && targetCase.currentStatus !== 'Closure') {
-              const subject = `✅ Case Closed: ${caseId}`;
-              const html = `
-                <div style="font-family: sans-serif; padding: 20px; border: 2px solid #16a34a; border-radius: 10px; max-width: 600px;">
-                  <h2 style="color: #16a34a; margin-top: 0;">Case Closure Notification</h2>
-                  <p>Hello Admin,</p>
-                  <p>Case <strong>${caseId}</strong> (${targetCase.companyName || 'N/A'}) has been marked as <strong>Closure</strong> by ${req.user.fullName || req.user.email}.</p>
-                  <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>Summary:</strong> ${summary || 'N/A'}</p>
-                    <p style="margin: 5px 0;"><strong>Refunded Amount:</strong> ₹${refundedAmount !== undefined ? refundedAmount : 'N/A'}</p>
-                    <p style="margin: 5px 0;"><strong>Saved Amount:</strong> ₹${savedAmount !== undefined ? savedAmount : 'N/A'}</p>
-                  </div>
-                  <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="display: inline-block; background: #16a34a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Case</a></p>
+          if (adminEmails && targetCase && targetCase.currentStatus !== 'Closure') {
+            const subject = `✅ Case Closed: ${caseId}`;
+            const html = `
+              <div style="font-family: sans-serif; padding: 20px; border: 2px solid #16a34a; border-radius: 10px; max-width: 600px;">
+                <h2 style="color: #16a34a; margin-top: 0;">Case Closure Notification</h2>
+                <p>Hello Admin,</p>
+                <p>Case <strong>${caseId}</strong> (${targetCase.companyName || 'N/A'}) has been marked as <strong>Closure</strong> by ${req.user.fullName || req.user.email}.</p>
+                <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Summary:</strong> ${summary || 'N/A'}</p>
+                  <p style="margin: 5px 0;"><strong>Refunded Amount:</strong> ₹${refundedAmount !== undefined ? refundedAmount : 'N/A'}</p>
+                  <p style="margin: 5px 0;"><strong>Saved Amount:</strong> ₹${savedAmount !== undefined ? savedAmount : 'N/A'}</p>
                 </div>
-              `;
-              sendEmail(adminEmails, subject, '', html).catch(console.error);
-            }
-          } catch (err) {
-            console.error('Error sending closure email:', err);
+                <p><a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="display: inline-block; background: #16a34a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Case</a></p>
+              </div>
+            `;
+            sendEmail(adminEmails, subject, '', html).catch(console.error);
           }
+        } catch (err) {
+          console.error('Error sending closure email:', err);
         }
       }
       if (percentage !== undefined) caseUpdateFields.progressPercentage = percentage;

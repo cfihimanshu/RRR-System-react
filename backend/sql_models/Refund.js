@@ -14,13 +14,34 @@ module.exports = sequelize.define('Refund', {
   accType: { type: DataTypes.STRING },
   requestedBy: { type: DataTypes.STRING },
   requestedByName: { type: DataTypes.STRING },
+  bdaName: { type: DataTypes.STRING },
   status: { type: DataTypes.STRING, defaultValue: 'Pending Review' },
   reviewerRemark: { type: DataTypes.TEXT },
   reviewedBy: { type: DataTypes.STRING },
   approvedBy: { type: DataTypes.STRING },
   approvedAt: { type: DataTypes.STRING },
-  installments: { type: DataTypes.JSON, defaultValue: [] },
-  requests: { type: DataTypes.JSON, defaultValue: [] },
+  installments: {
+    type: DataTypes.JSON,
+    defaultValue: [],
+    get() {
+      const rawValue = this.getDataValue('installments');
+      if (typeof rawValue === 'string') {
+        try { return JSON.parse(rawValue); } catch (e) { return []; }
+      }
+      return rawValue || [];
+    }
+  },
+  requests: {
+    type: DataTypes.JSON,
+    defaultValue: [],
+    get() {
+      const rawValue = this.getDataValue('requests');
+      if (typeof rawValue === 'string') {
+        try { return JSON.parse(rawValue); } catch (e) { return []; }
+      }
+      return rawValue || [];
+    }
+  },
   documentLink: { type: DataTypes.STRING },
   transactionId: { type: DataTypes.STRING },
   paymentDate: { type: DataTypes.STRING },

@@ -12,5 +12,7 @@ module.exports = sequelize.define('Task', {
   caseId: { type: DataTypes.STRING },
   status: { type: DataTypes.ENUM('To Do', 'In Progress', 'Completed', 'Done'), defaultValue: 'To Do' },
   createdBy: { type: DataTypes.STRING },
-  source: { type: DataTypes.STRING, defaultValue: 'Manual' }
+  source: { type: DataTypes.STRING, defaultValue: 'Manual' },
+  notes: { type: DataTypes.TEXT },
+  completedAt: { type: DataTypes.DATE }
 }, { tableName: 'tasks', timestamps: true });

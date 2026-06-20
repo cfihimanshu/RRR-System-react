@@ -41,10 +41,24 @@ router.post('/', verifyToken, async (req, res) => {
     payload.timestamp = new Date().toISOString();
     payload.status = 'Pending Review';
 
+    if (payload.destinationFrom || payload.destinationTo) {
+      payload.destination = `${payload.destinationFrom || ''} to ${payload.destinationTo || ''}`;
+    }
+
     const tour = await TourRequest.create(payload);
 
     const doc = tour.toJSON();
     doc._id = doc.id;
+
+    if (doc.destination && doc.destination.includes(' to ')) {
+      const parts = doc.destination.split(' to ');
+      doc.destinationFrom = parts[0] || '';
+      doc.destinationTo = parts[1] || '';
+    } else {
+      doc.destinationFrom = '';
+      doc.destinationTo = doc.destination || '';
+    }
+
     res.status(201).json(doc);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -64,6 +78,14 @@ router.get('/', verifyToken, async (req, res) => {
     const formatted = list.map(l => {
       const d = l.toJSON();
       d._id = d.id;
+      if (d.destination && d.destination.includes(' to ')) {
+        const parts = d.destination.split(' to ');
+        d.destinationFrom = parts[0] || '';
+        d.destinationTo = parts[1] || '';
+      } else {
+        d.destinationFrom = '';
+        d.destinationTo = d.destination || '';
+      }
       return d;
     });
     res.json(formatted);
@@ -84,15 +106,22 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
 
     await tour.update({ status });
 
+    let destinationTo = '';
+    if (tour.destination && tour.destination.includes(' to ')) {
+      destinationTo = tour.destination.split(' to ')[1] || '';
+    } else {
+      destinationTo = tour.destination || '';
+    }
+
     const { sendEmail } = require('../utils/mailer');
     if (status === 'Approved') {
       try {
-        const textContent = `Dear ${tour.requestedByName},\\n\\nYour Travel Request ${tour.reqId} to ${tour.destinationTo} has been APPROVED.\\n\\nDetails:\\nTravel Dates: ${tour.startDate} to ${tour.endDate}\\nMode of Travel: ${tour.travellingBy}\\nTotal Estimated Amount: ₹${tour.totalTravelAmount}\\n\\nBest Regards,\\nTravel Desk`;
+        const textContent = `Dear ${tour.requestedByName},\n\nYour Travel Request ${tour.reqId} to ${destinationTo} has been APPROVED.\n\nDetails:\nTravel Dates: ${tour.startDate} to ${tour.endDate}\nMode of Travel: ${tour.travellingBy}\nTotal Estimated Amount: ₹${tour.totalTravelAmount}\n\nBest Regards,\nTravel Desk`;
         const htmlContent = `
           <div style="font-family: sans-serif; padding: 20px; line-height: 1.6;">
             <h2 style="color: #10b981;">Travel Request Approved</h2>
             <p>Dear <strong>${tour.requestedByName}</strong>,</p>
-            <p>Your Travel Request <strong>${tour.reqId}</strong> to <strong>${tour.destinationTo}</strong> has been <strong>APPROVED</strong>.</p>
+            <p>Your Travel Request <strong>${tour.reqId}</strong> to <strong>${destinationTo}</strong> has been <strong>APPROVED</strong>.</p>
             <table style="border-collapse: collapse; width: 100%; max-width: 500px; margin-top: 15px;">
               <tr style="border-bottom: 1px solid #ddd;"><td style="padding: 8px 0; font-weight: bold;">Travel Request ID</td><td style="padding: 8px 0;">${tour.reqId}</td></tr>
               <tr style="border-bottom: 1px solid #ddd;"><td style="padding: 8px 0; font-weight: bold;">Travel Dates</td><td style="padding: 8px 0;">${tour.startDate} to ${tour.endDate}</td></tr>
@@ -113,16 +142,16 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
       }
     } else if (status === 'Rejected') {
       try {
-        const textContent = `Dear ${tour.requestedByName},\\n\\nYour Travel Request ${tour.reqId} to ${tour.destinationTo} has been REJECTED.\\n\\nYou can log in to the Travel Management Portal, view this request at the bottom, modify the details, and re-submit it.\\n\\nBest Regards,\\nTravel Desk`;
+        const textContent = `Dear ${tour.requestedByName},\n\nYour Travel Request ${tour.reqId} to ${destinationTo} has been REJECTED.\n\nYou can log in to the Travel Management Portal, view this request at the bottom, modify the details, and re-submit it.\n\nBest Regards,\nTravel Desk`;
         const htmlContent = `
           <div style="font-family: sans-serif; padding: 20px; line-height: 1.6;">
             <h2 style="color: #ef4444;">Travel Request Rejected</h2>
             <p>Dear <strong>${tour.requestedByName}</strong>,</p>
-            <p>Your Travel Request <strong>${tour.reqId}</strong> to <strong>${tour.destinationTo}</strong> has been <strong>REJECTED</strong>.</p>
+            <p>Your Travel Request <strong>${tour.reqId}</strong> to <strong>${destinationTo}</strong> has been <strong>REJECTED</strong>.</p>
             <p>You can edit and re-submit this request in your Travel Management Portal dashboard.</p>
             <table style="border-collapse: collapse; width: 100%; max-width: 500px; margin-top: 15px;">
               <tr style="border-bottom: 1px solid #ddd;"><td style="padding: 8px 0; font-weight: bold;">Travel Request ID</td><td style="padding: 8px 0;">${tour.reqId}</td></tr>
-              <tr style="border-bottom: 1px solid #ddd;"><td style="padding: 8px 0; font-weight: bold;">Destination</td><td style="padding: 8px 0;">${tour.destinationTo}</td></tr>
+              <tr style="border-bottom: 1px solid #ddd;"><td style="padding: 8px 0; font-weight: bold;">Destination</td><td style="padding: 8px 0;">${destinationTo}</td></tr>
             </table>
             <p style="margin-top: 25px; font-size: 12px; color: #888;">This is an automated notification. Please do not reply to this email.</p>
           </div>
@@ -153,10 +182,24 @@ router.put('/reimbursement/:reqId', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Tour request not found' });
     }
     
+    if (updateFields.destinationFrom || updateFields.destinationTo) {
+      updateFields.destination = `${updateFields.destinationFrom || ''} to ${updateFields.destinationTo || ''}`;
+    }
+
     await tour.update(updateFields);
     
     const doc = tour.toJSON();
     doc._id = doc.id;
+
+    if (doc.destination && doc.destination.includes(' to ')) {
+      const parts = doc.destination.split(' to ');
+      doc.destinationFrom = parts[0] || '';
+      doc.destinationTo = parts[1] || '';
+    } else {
+      doc.destinationFrom = '';
+      doc.destinationTo = doc.destination || '';
+    }
+
     res.json(doc);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -172,10 +215,24 @@ router.put('/:id', verifyToken, async (req, res) => {
     const tour = await TourRequest.findByPk(req.params.id);
     if (!tour) return res.status(404).json({ error: 'Tour request not found' });
     
+    if (payload.destinationFrom || payload.destinationTo) {
+      payload.destination = `${payload.destinationFrom || ''} to ${payload.destinationTo || ''}`;
+    }
+
     await tour.update(payload);
     
     const doc = tour.toJSON();
     doc._id = doc.id;
+
+    if (doc.destination && doc.destination.includes(' to ')) {
+      const parts = doc.destination.split(' to ');
+      doc.destinationFrom = parts[0] || '';
+      doc.destinationTo = parts[1] || '';
+    } else {
+      doc.destinationFrom = '';
+      doc.destinationTo = doc.destination || '';
+    }
+
     res.json(doc);
   } catch (error) {
     res.status(500).json({ error: error.message });

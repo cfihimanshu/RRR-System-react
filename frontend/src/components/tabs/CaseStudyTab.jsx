@@ -21,8 +21,53 @@ import {
   Loader2,
   Inbox,
   Eye,
-  X
+  X,
+  Sparkles,
+  Bot
 } from 'lucide-react';
+
+const renderFormattedText = (text) => {
+  if (!text) return null;
+
+  return text.split('\n').map((line, idx) => {
+    let cleanLine = line;
+    let isBullet = false;
+
+    const trimmed = line.trim();
+    if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+      isBullet = true;
+      cleanLine = trimmed.slice(2);
+    }
+
+    // Process **bold** text
+    const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
+    const content = parts.map((part, pIdx) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return (
+          <strong key={pIdx} className="font-extrabold text-slate-800">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      return part;
+    });
+
+    if (isBullet) {
+      return (
+        <span key={idx} className="flex gap-2 ml-4 my-1">
+          <span className="text-indigo-500 font-bold">•</span>
+          <span className="flex-1 text-xs text-text-primary leading-relaxed">{content}</span>
+        </span>
+      );
+    }
+
+    return (
+      <span key={idx} className="block min-h-[1.2em] text-xs text-text-primary leading-relaxed">
+        {content}
+      </span>
+    );
+  });
+};
 
 const CaseStudyTab = ({ caseData = null }) => {
   const [cases, setCases] = useState([]);
@@ -34,6 +79,10 @@ const CaseStudyTab = ({ caseData = null }) => {
 
   const [loading, setLoading] = useState(false);
   const [fetchingCases, setFetchingCases] = useState(true);
+
+  const [aiInsights, setAiInsights] = useState(null);
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const [timeline, setTimeline] = useState([]);
   const [actions, setActions] = useState([]);
@@ -50,6 +99,30 @@ const CaseStudyTab = ({ caseData = null }) => {
       .then(res => setCases(res.data))
       .catch(console.error)
       .finally(() => setFetchingCases(false));
+  };
+
+  const fetchAiInsights = async () => {
+    const targetId = caseData?.caseId || selectedCase;
+    if (!targetId) return toast.error('No case selected');
+
+    setLoadingAi(true);
+    setShowAiModal(true);
+    try {
+      const res = await api.post('/ai/case-insights', { caseId: targetId });
+      if (res.data.success && res.data.insights) {
+        setAiInsights(res.data.insights);
+        toast.success('AI Analysis complete');
+      } else {
+        toast.error('Failed to parse AI insights');
+        setShowAiModal(false);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('AI Analysis failed');
+      setShowAiModal(false);
+    } finally {
+      setLoadingAi(false);
+    }
   };
 
   useEffect(() => {
@@ -367,6 +440,18 @@ const CaseStudyTab = ({ caseData = null }) => {
                 </tr>
               )}
               {data?.refundStatus && <tr><td className={labelClass}>Refund Status</td><td className={`${valueClass} text-[#1e3a8a] font-black uppercase tracking-widest`}>{data.refundStatus}</td></tr>}
+              <tr>
+                <td className={labelClass}>Refunded Amount</td>
+                <td className={`${valueClass} font-bold text-green-600`}>
+                  Rs. {(data?.refundStatus === 'Paid' ? (data?.refundedAmount || 0) : 0).toLocaleString('en-IN')}/-
+                </td>
+              </tr>
+              <tr>
+                <td className={labelClass}>Saved Amount</td>
+                <td className={`${valueClass} font-bold text-blue`}>
+                  Rs. {(data?.refundStatus === 'Paid' ? Math.max(0, (totalPaid || 0) - (data?.refundedAmount || 0)) : 0).toLocaleString('en-IN')}/-
+                </td>
+              </tr>
               {data?.lienMarkedOn && <tr><td className={labelClass}>Lien Marked On</td><td className={valueClass}>{data.lienMarkedOn}</td></tr>}
               {data?.lienBank && <tr><td className={labelClass}>Bank</td><td className={valueClass}>{data.lienBank}</td></tr>}
             </tbody>
@@ -664,6 +749,9 @@ const CaseStudyTab = ({ caseData = null }) => {
                     </button>
                   </div>
                   <div className="flex gap-4">
+                    <button onClick={fetchAiInsights} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl shadow-xl shadow-indigo-900/20 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 group">
+                      <Sparkles size={18} className="group-hover:rotate-12 transition-transform" /> AI Insights
+                    </button>
                     <button onClick={handleDownloadPDF} className="bg-green hover:bg-green-600 text-white px-8 py-3 rounded-2xl shadow-xl shadow-green-900/20 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 group">
                       <FileDown size={18} className="group-hover:scale-110 transition-transform" /> Export PDF
                     </button>
@@ -685,6 +773,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                   <div className="flex items-center justify-between px-8 py-6 bg-bg-card border-b border-border shadow-lg">
                     <span className="font-black uppercase tracking-[0.2em] text-[10px] text-text-muted">Intelligence Synthesis</span>
                     <div className="flex items-center gap-3">
+                      <button onClick={fetchAiInsights} className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-2xl shadow-lg shadow-indigo-900/20 transition-all active:scale-90"><Sparkles size={20} /></button>
                       <button onClick={handleDownloadPDF} className="bg-green hover:bg-green-600 text-white p-3 rounded-2xl shadow-lg shadow-green-900/20 transition-all active:scale-90"><FileDown size={20} /></button>
                       <button onClick={() => setShowMobilePreview(false)} className="bg-bg-input hover:bg-bg-card-hover text-text-primary p-3 rounded-2xl border-2 border-border transition-all active:scale-90"><X size={20} /></button>
                     </div>
@@ -816,6 +905,109 @@ const CaseStudyTab = ({ caseData = null }) => {
               </div>
             )}
           </>
+        )}
+
+        {/* AI Insights Modal */}
+        {showAiModal && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-bg-primary/95 backdrop-blur-xl">
+            <div className="bg-bg-secondary w-full max-w-4xl max-h-[90vh] rounded-[2.5rem] border-2 border-border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+              <div className="flex items-center justify-between px-8 py-6 bg-gradient-to-r from-indigo-900 to-indigo-700 border-b border-indigo-900/50">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white shadow-inner">
+                    <Bot size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+                      AI Case Strategist <Sparkles size={14} className="text-indigo-300" />
+                    </h3>
+                    <p className="text-[10px] text-indigo-200 font-bold uppercase tracking-widest mt-1">
+                      {generatedCase?.caseId || caseData?.caseId}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAiModal(false)} className="bg-white/10 hover:bg-white/20 text-white p-3 rounded-2xl transition-all active:scale-90">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 scrollbar-thin bg-bg-input">
+                {loadingAi ? (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <div className="relative">
+                      <Loader2 size={64} className="text-indigo-500 animate-spin opacity-20" />
+                      <Sparkles size={32} className="text-indigo-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+                    </div>
+                    <h4 className="mt-8 text-sm font-black text-text-primary uppercase tracking-widest">Analyzing Case Data</h4>
+                    <p className="text-[10px] text-text-muted mt-2 font-bold uppercase tracking-widest max-w-xs text-center leading-relaxed">
+                      The AI is reviewing the timeline, communications, documents, and case history to formulate the best strategy...
+                    </p>
+                  </div>
+                ) : aiInsights ? (
+                  <div className="space-y-6">
+                    {aiInsights.Summary && (
+                      <div className="bg-white p-6 rounded-2xl shadow-sm border border-border">
+                        <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <FileText size={14} /> Executive Summary
+                        </h4>
+                        <div className="space-y-1">{renderFormattedText(aiInsights.Summary)}</div>
+                      </div>
+                    )}
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {aiInsights.RiskAnalysis && (
+                        <div className="bg-red-50/50 p-6 rounded-2xl border border-red-100">
+                          <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <ShieldAlert size={14} /> Risk Analysis
+                          </h4>
+                          <div className="space-y-1 text-red-900/80">{renderFormattedText(aiInsights.RiskAnalysis)}</div>
+                        </div>
+                      )}
+
+                      {aiInsights.NextSteps && (
+                        <div className="bg-green-50/50 p-6 rounded-2xl border border-green-100">
+                          <h4 className="text-[10px] font-black text-green-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <CheckSquare size={14} /> Immediate Next Steps
+                          </h4>
+                          <div className="space-y-1 text-green-900/80">{renderFormattedText(aiInsights.NextSteps)}</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {aiInsights.ResolutionPath && (
+                      <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100">
+                        <h4 className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <History size={14} /> Recommended Resolution Path
+                        </h4>
+                        <div className="space-y-1 text-blue-900/80">{renderFormattedText(aiInsights.ResolutionPath)}</div>
+                      </div>
+                    )}
+
+                    {aiInsights.AgreementGuidance && (
+                      <div className="bg-orange-50/50 p-6 rounded-2xl border border-orange-100">
+                        <h4 className="text-[10px] font-black text-orange-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <FileText size={14} /> Agreement / Contract Guidance
+                        </h4>
+                        <div className="space-y-1 text-orange-900/80">{renderFormattedText(aiInsights.AgreementGuidance)}</div>
+                      </div>
+                    )}
+
+                    {aiInsights.DraftEmail && (
+                      <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                        <h4 className="text-[10px] font-black text-gray-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <MessageSquare size={14} /> Draft Communication to Client
+                        </h4>
+                        <div className="bg-white p-4 rounded-xl border border-gray-100 text-xs text-gray-700 leading-relaxed font-mono space-y-1">
+                          {renderFormattedText(aiInsights.DraftEmail)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-20 text-text-muted text-xs font-bold">No insights generated.</div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
         <FilePreviewModal
           isOpen={!!previewFileUrl}

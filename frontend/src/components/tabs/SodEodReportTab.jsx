@@ -136,7 +136,7 @@ const SodEodReportTab = () => {
               onClick={handleExportReports}
               className="btn btn-primary !py-2.5 !px-6 !rounded-xl shadow-lg shadow-orange-900/20"
             >
-              <Download size={18} /> Export Excel
+              <Download size={18} /> Export
             </button>
           )}
         </div>
@@ -319,7 +319,7 @@ const SodEodReportTab = () => {
                       <Camera size={18} className="text-accent" />
                       <span className="text-[10px] font-black uppercase tracking-widest">Captured Selfie</span>
                     </div>
-                    <div 
+                    <div
                       className="w-40 h-30 rounded-xl overflow-hidden border border-border shadow-md bg-black transition-all hover:scale-[1.04] active:scale-95 cursor-pointer relative group"
                       title="Click to view full image"
                       onClick={() => setPreviewSelfie({ url: selectedReport.selfieUrl, type: `${selectedReport.type} Checkpoint`, userName: selectedReport.userName, lat: selectedReport.latitude, lng: selectedReport.longitude })}
@@ -366,7 +366,7 @@ const SodEodReportTab = () => {
               <div className="w-full aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-black shadow-inner">
                 <img src={previewSelfie.url} alt="Selfie Proof" className="w-full h-full object-cover" />
               </div>
-              
+
               {/* Telemetry info */}
               <div className="w-full p-4 bg-bg-input rounded-2xl border border-border/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
                 <div className="space-y-1">

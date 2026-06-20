@@ -65,7 +65,7 @@ router.get('/', verifyToken, async (req, res) => {
       order: [['updatedAt', 'DESC']],
       offset: skip,
       limit: limit,
-      attributes: ['id', 'taskId', 'title', 'priority', 'assignee', 'dueDate', 'caseId', 'details', 'status', 'source', 'createdBy', 'createdAt', 'updatedAt']
+      attributes: ['id', 'taskId', 'title', 'priority', 'assignee', 'dueDate', 'caseId', 'details', 'status', 'source', 'createdBy', 'createdAt', 'updatedAt', 'notes', 'completedAt']
     });
 
     const caseIds = [...new Set(rawTasks.map(t => t.caseId).filter(Boolean))];
@@ -113,8 +113,12 @@ router.post('/', verifyToken, async (req, res) => {
       taskId = `TSK-${basePart}-${String(count + 1).padStart(3, '0')}`;
       exists = await Task.findOne({ where: { taskId } });
     }
+    const taskData = { ...req.body };
+    if (taskData.status === 'Completed') {
+      taskData.completedAt = new Date();
+    }
     const newTask = await Task.create({
-      ...req.body,
+      ...taskData,
       taskId,
       source: 'Manual',
       createdBy: req.user.email
@@ -146,7 +150,17 @@ router.put('/:id', verifyToken, async (req, res) => {
     
     let updated = await Task.findByPk(req.params.id);
     if (updated) {
-      await updated.update({ ...req.body });
+      const updateData = { ...req.body };
+      if (status) {
+        if (status === 'Completed') {
+          if (updated.status !== 'Completed') {
+            updateData.completedAt = new Date();
+          }
+        } else {
+          updateData.completedAt = null;
+        }
+      }
+      await updated.update(updateData);
       const responseObj = updated.toJSON();
       responseObj._id = updated.id;
       return res.json(responseObj);

@@ -35,12 +35,38 @@ const PendingRefundsTab = () => {
   };
 
   const fetchPendingRefunds = async () => {
-    try { const res = await api.get('/refunds?status=Pending Admin Approval'); setPendingRefunds(res.data); }
+    try {
+      const res = await api.get('/refunds?status=Pending Admin Approval');
+      const parsedData = (res.data || []).map(r => {
+        let insts = r.installments;
+        if (typeof insts === 'string') {
+          try { insts = JSON.parse(insts); } catch (e) { insts = []; }
+        }
+        return {
+          ...r,
+          installments: Array.isArray(insts) ? insts : []
+        };
+      });
+      setPendingRefunds(parsedData);
+    }
     catch (err) { console.error('Failed to fetch refunds', err); }
   };
 
   const fetchAllRefunds = async () => {
-    try { const res = await api.get('/refunds'); setAllRefunds(res.data); }
+    try {
+      const res = await api.get('/refunds');
+      const parsedData = (res.data || []).map(r => {
+        let insts = r.installments;
+        if (typeof insts === 'string') {
+          try { insts = JSON.parse(insts); } catch (e) { insts = []; }
+        }
+        return {
+          ...r,
+          installments: Array.isArray(insts) ? insts : []
+        };
+      });
+      setAllRefunds(parsedData);
+    }
     catch (err) { console.error('Failed to fetch all refunds', err); }
   };
 

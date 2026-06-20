@@ -84,18 +84,22 @@ const connectToDatabase = async () => {
     const Communication = require('./sql_models/Communication');
     const LeaveRequest = require('./sql_models/LeaveRequest');
     const TourRequest = require('./sql_models/TourRequest');
+    const LegalRequest = require('./sql_models/LegalRequest');
     const Progress = require('./sql_models/Progress');
     const Document = require('./sql_models/Document');
     const Case = require('./sql_models/Case');
     const Refund = require('./sql_models/Refund');
+    const Task = require('./sql_models/Task');
     
     await Communication.sync({ alter: true });
     await LeaveRequest.sync({ alter: true });
     await TourRequest.sync({ alter: true });
+    await LegalRequest.sync({ alter: true });
     await Progress.sync({ alter: true });
     await Document.sync({ alter: true });
-    await Case.sync({ alter: true });
+    await Case.sync(); // alter: true removed to fix ER_TOO_MANY_KEYS
     await Refund.sync({ alter: true });
+    await Task.sync({ alter: true });
     console.log('Models synced.');
   } catch (err) {
     console.error('DATABASE CONNECTION ERROR:', err);
@@ -152,6 +156,7 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/case-study', require('./routes/caseStudy'));
 app.use('/api/tours', require('./routes/tours'));
 app.use('/api/leaves', require('./routes/leaves'));
+app.use('/api/legal-requests', require('./routes/legalRequests'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 

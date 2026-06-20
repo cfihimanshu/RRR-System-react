@@ -15,6 +15,6 @@ module.exports = sequelize.define('Progress', {
   blockers: { type: DataTypes.TEXT },
   followUpDate: { type: DataTypes.STRING },
   escalateTo: { type: DataTypes.STRING },
-  refundedAmount: { type: DataTypes.FLOAT },
-  savedAmount: { type: DataTypes.FLOAT }
+  refundedAmount: { type: DataTypes.DOUBLE },
+  savedAmount: { type: DataTypes.DOUBLE }
 }, { tableName: 'progresses', timestamps: true });

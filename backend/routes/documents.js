@@ -3,12 +3,26 @@ const { Op } = require('sequelize');
 const Document = require('../sql_models/Document');
 const AuditLog = require('../sql_models/AuditLog');
 const Timeline = require('../sql_models/Timeline');
+const Case = require('../sql_models/Case');
 const { verifyToken } = require('../middleware/auth');
 const router = express.Router();
 
 router.get('/', verifyToken, async (req, res) => {
   try {
     const query = req.query.caseId ? { caseId: req.query.caseId } : {};
+
+    if (req.query.caseId) {
+      const targetCase = await Case.findOne({ where: { caseId: req.query.caseId }, attributes: ['createdAt', 'createdDate'] });
+      if (targetCase) {
+        const cutoffDate = targetCase.createdAt || targetCase.createdDate;
+        if (cutoffDate) {
+          const cutoff = new Date(cutoffDate);
+          cutoff.setMinutes(cutoff.getMinutes() - 5);
+          query.createdAt = { [Op.gte]: cutoff };
+        }
+      }
+    }
+
     const docs = await Document.findAll({
       where: query,
       order: [['uploadDate', 'DESC']]

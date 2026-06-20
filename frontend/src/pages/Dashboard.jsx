@@ -32,6 +32,8 @@ const MisReportTab = React.lazy(() => import('../components/tabs/MisReportTab'))
 const RefundRequestTab = React.lazy(() => import('../components/tabs/RefundRequestTab'));
 const LegalDashboardTab = React.lazy(() => import('../components/tabs/LegalDashboardTab'));
 const PendingRefundsTab = React.lazy(() => import('../components/tabs/PendingRefundsTab'));
+const UserManualTab = React.lazy(() => import('../components/tabs/UserManualTab'));
+const FAQTab = React.lazy(() => import('../components/tabs/FAQTab'));
 
 import TabLoader from '../components/shared/TabLoader';
 
@@ -41,7 +43,7 @@ const ProtectedRoute = ({ children, allowedRoles, id }) => {
   if (!user) return <Navigate to="/login" />;
   
   // Allow access if user has explicit module permission OR role-based access
-  const hasAccess = (id === 'internal-search' && user.canAccessRecords) || TAB_ACCESS[id]?.includes(user?.role);
+  const hasAccess = id === 'user-manual' || id === 'faq' || (id === 'internal-search' && user.canAccessRecords) || TAB_ACCESS[id]?.includes(user?.role);
   
   if (!hasAccess) return <Navigate to="/" />;
   
@@ -188,6 +190,14 @@ const Dashboard = () => {
 
             <Route path="/pending-refunds" element={
               <ProtectedRoute id="pending-refunds"><PendingRefundsTab /></ProtectedRoute>
+            } />
+
+            <Route path="/user-manual" element={
+              <ProtectedRoute id="user-manual"><UserManualTab /></ProtectedRoute>
+            } />
+
+            <Route path="/faq" element={
+              <ProtectedRoute id="faq"><FAQTab /></ProtectedRoute>
             } />
 
             {/* Catch-all for unauthorized or non-existent URLs */}

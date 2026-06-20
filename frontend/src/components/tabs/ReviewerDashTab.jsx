@@ -52,7 +52,17 @@ const ReviewerDashTab = () => {
   const fetchRefunds = async () => {
     try {
       const res = await api.get('/refunds');
-      setRefunds(res.data);
+      const parsedData = (res.data || []).map(r => {
+        let insts = r.installments;
+        if (typeof insts === 'string') {
+          try { insts = JSON.parse(insts); } catch (e) { insts = []; }
+        }
+        return {
+          ...r,
+          installments: Array.isArray(insts) ? insts : []
+        };
+      });
+      setRefunds(parsedData);
     } catch (err) {
       console.error(err);
     }
@@ -196,6 +206,7 @@ const ReviewerDashTab = () => {
               <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
                 <th className="px-6 py-5">Case Id</th>
                 <th className="px-6 py-5">Amount</th>
+                <th className="px-6 py-5">BDA Name</th>
                 <th className="px-6 py-5">Refund Requested By</th>
                 <th className="px-6 py-5">Bank Details</th>
                 <th className="px-6 py-5">Details</th>
@@ -207,7 +218,7 @@ const ReviewerDashTab = () => {
             <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
               {filteredRefunds.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="px-6 py-24 text-center">
+                  <td colSpan="9" className="px-6 py-24 text-center">
                     <div className="flex flex-col items-center gap-4 opacity-30">
                       <div className="p-6 bg-bg-input rounded-full">
                         <span className="text-4xl">💎</span>
@@ -248,6 +259,9 @@ const ReviewerDashTab = () => {
                             ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
                             : '1 Installment'}
                         </div>
+                      </td>
+                      <td className="px-6 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
+                        {r.bdaName || 'N/A'}
                       </td>
                       <td className="px-6 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
                         {r.requestedByName || r.requestedBy}
@@ -322,6 +336,9 @@ const ReviewerDashTab = () => {
                       </td>
                       <td className="px-6 py-5 font-black text-green text-sm tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</td>
                       <td className="px-6 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
+                        {[...new Set(g.requests.map(r => r.bdaName).filter(Boolean))].join(', ') || 'N/A'}
+                      </td>
+                      <td className="px-6 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
                         {g.requests.length === 1 ? (g.requests[0].requestedByName || g.requests[0].requestedBy) : 'Multiple Requesters'}
                       </td>
                       <td className="px-6 py-5 text-text-muted font-bold" colSpan="4">
@@ -353,6 +370,9 @@ const ReviewerDashTab = () => {
                               ? `${r.installments.length} Installment${r.installments.length > 1 ? 's' : ''}`
                               : '1 Installment'}
                           </div>
+                        </td>
+                        <td className="px-6 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
+                          {r.bdaName || 'N/A'}
                         </td>
                         <td className="px-6 py-5 font-black text-text-primary uppercase text-[10px] tracking-wider">
                           {r.requestedByName || r.requestedBy}
@@ -436,7 +456,7 @@ const ReviewerDashTab = () => {
       <Modal isOpen={isDetailOpen} onClose={() => setIsDetailOpen(false)} title="Refund Details">
         {selectedRefund && (
           <div className="p-6 flex flex-col gap-8">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
                 <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Case ID</p>
                 <p className="font-black text-accent text-sm tracking-tighter uppercase">{selectedRefund.caseId}</p>
@@ -447,6 +467,10 @@ const ReviewerDashTab = () => {
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
                 <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">Amount</p>
                 <p className="font-black text-green text-sm tracking-tight">₹{Number(selectedRefund.amount).toLocaleString('en-IN')}</p>
+              </div>
+              <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
+                <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-2">BDA Name</p>
+                <p className="text-text-primary font-black uppercase text-[10px] tracking-widest break-all">{selectedRefund.bdaName || 'N/A'}</p>
               </div>
               <div className="bg-bg-input p-5 rounded-2xl border border-border shadow-sm">
                 <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mb-1">Refund Requested By</p>

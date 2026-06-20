@@ -51,7 +51,17 @@ const AccountantDashTab = () => {
   const fetchRefunds = async () => {
     try {
       const res = await api.get('/refunds');
-      setRefunds(res.data);
+      const parsedData = (res.data || []).map(r => {
+        let insts = r.installments;
+        if (typeof insts === 'string') {
+          try { insts = JSON.parse(insts); } catch (e) { insts = []; }
+        }
+        return {
+          ...r,
+          installments: Array.isArray(insts) ? insts : []
+        };
+      });
+      setRefunds(parsedData);
     } catch (err) {
       console.error(err);
     }
@@ -79,7 +89,8 @@ const AccountantDashTab = () => {
           (r.caseId && r.caseId.toLowerCase().includes(q)) ||
           (r.companyName && r.companyName.toLowerCase().includes(q)) ||
           (r.requestedByName && r.requestedByName.toLowerCase().includes(q)) ||
-          (r.requestedBy && r.requestedBy.toLowerCase().includes(q));
+          (r.requestedBy && r.requestedBy.toLowerCase().includes(q)) ||
+          (r.bdaName && r.bdaName.toLowerCase().includes(q));
       }
 
       return searchMatch;
@@ -266,6 +277,7 @@ const AccountantDashTab = () => {
                 <th className="px-4 py-5">Case ID</th>
                 <th className="px-4 py-5">Bank Details</th>
                 <th className="px-4 py-5">Amount</th>
+                <th className="px-4 py-5">BDA Name</th>
                 <th className="px-4 py-5">History</th>
                 <th className="px-4 py-5 text-right">Details</th>
               </tr>
@@ -273,7 +285,7 @@ const AccountantDashTab = () => {
             <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
               {filteredRefunds.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-4 py-24 text-center">
+                  <td colSpan="6" className="px-4 py-24 text-center">
                     <div className="flex flex-col items-center gap-4 opacity-30">
                       <div className="p-6 bg-bg-input rounded-full">
                         <CheckCircle size={48} className="text-text-muted" />
@@ -313,6 +325,9 @@ const AccountantDashTab = () => {
                             ? `${r.installments.filter(i => i.status === 'Paid').length} of ${r.installments.length} PAID`
                             : 'Single Payout'}
                         </div>
+                      </td>
+                      <td className="px-4 py-5 align-top">
+                        <div className="text-[11px] font-semibold text-text-secondary uppercase">{r.bdaName || 'N/A'}</div>
                       </td>
                       <td className="px-4 py-5 align-top">
                         <div className="text-text-primary font-bold mb-1">Req: <span className="text-text-secondary font-medium">{r.requestedByName || r.requestedBy}</span></div>
@@ -360,6 +375,11 @@ const AccountantDashTab = () => {
                         <div className="text-lg font-black text-green tracking-tight">₹{Number(g.totalAmount).toLocaleString('en-IN')}</div>
                       </td>
                       <td className="px-4 py-5 align-top">
+                        <div className="text-[11px] font-semibold text-text-secondary uppercase">
+                          {[...new Set(g.requests.map(r => r.bdaName).filter(Boolean))].join(', ') || 'N/A'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-5 align-top">
                         <div className="text-[9px] text-text-muted font-bold mt-1">Click to expand & pay individual requests</div>
                       </td>
                       <td className="px-4 py-5 align-top text-right">
@@ -387,6 +407,9 @@ const AccountantDashTab = () => {
                               ? `${r.installments.filter(i => i.status === 'Paid').length} of ${r.installments.length} PAID`
                               : 'Single Payout'}
                           </div>
+                        </td>
+                        <td className="px-4 py-5 align-top">
+                          <div className="text-[11px] font-semibold text-text-secondary uppercase">{r.bdaName || 'N/A'}</div>
                         </td>
                         <td className="px-4 py-5 align-top">
                           <div className="text-text-primary font-bold mb-1">Req: <span className="text-text-secondary font-medium">{r.requestedByName || r.requestedBy}</span></div>
@@ -427,6 +450,9 @@ const AccountantDashTab = () => {
                     🏢 {selectedRefund.companyName}
                   </div>
                 )}
+                <div className="text-[10px] text-text-secondary font-black tracking-wide uppercase bg-bg-card px-2.5 py-1 rounded-xl border border-border inline-block self-start shadow-sm mt-1">
+                  👤 BDA: {selectedRefund.bdaName || 'N/A'}
+                </div>
               </div>
               {selectedInstIndex === null ? (
                 <div className="flex flex-col gap-6 animate-in fade-in duration-200">
