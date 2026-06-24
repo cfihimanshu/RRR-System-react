@@ -43,7 +43,7 @@ const POPULAR_CITIES = [
   "Varanasi", "Vijayawada", "Visakhapatnam"
 ];
 
-export default function TourTab({ user }) {
+export default function TourTab({ user, onToursChange }) {
   const isAdmin = user?.role === 'Admin' || user?.role === 'Super Admin' || user?.role === 'SuperAdmin';
   const [activeTab, setActiveTab] = useState('request');
   const [previewFileUrl, setPreviewFileUrl] = useState(null);
@@ -68,6 +68,9 @@ export default function TourTab({ user }) {
       setDbRequests(res.data);
       if (res.data.length > 0) {
         setReimLink(prev => prev || res.data[0].reqId);
+      }
+      if (onToursChange) {
+        onToursChange();
       }
     } catch (error) {
       console.error('Error fetching tours:', error);

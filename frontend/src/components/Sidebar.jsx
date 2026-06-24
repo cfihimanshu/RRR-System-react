@@ -60,6 +60,13 @@ const tabsConfig = [
 const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogoutClick }) => {
   const { user, logout } = useContext(AuthContext);
   const [caseCount, setCaseCount] = useState(0);
+  const [approvalCounts, setApprovalCounts] = useState({
+    tour: 0,
+    settlement: 0,
+    leave: 0,
+    legal: 0,
+    total: 0
+  });
 
   useEffect(() => {
     const fetchCount = async () => {
@@ -77,6 +84,45 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
       }
     };
     if (user) fetchCount();
+  }, [user]);
+
+  useEffect(() => {
+    const fetchApprovalCounts = async () => {
+      if (!user || !['Admin', 'Super Admin', 'SuperAdmin'].includes(user.role)) return;
+      try {
+        const [toursRes, leavesRes, legalRes] = await Promise.all([
+          api.get('/tours'),
+          api.get('/leaves'),
+          api.get('/legal-requests')
+        ]);
+
+        const tours = toursRes.data || [];
+        const leaves = leavesRes.data || [];
+        const legals = legalRes.data || [];
+
+        const tourPending = tours.filter(r => 
+          (!r.reimbursementStatus && (r.status === 'Pending Review' || r.status === 'Pending')) ||
+          (r.reimbursementStatus && (r.reimbursementStatus === 'Submitted' || r.reimbursementStatus === 'Pending'))
+        ).length;
+
+        const leavePending = leaves.filter(r => r.status === 'Pending' || r.status === 'Pending Review').length;
+        const legalPending = legals.filter(r => r.status === 'Pending').length;
+
+        setApprovalCounts({
+          tour: tourPending,
+          settlement: 0,
+          leave: leavePending,
+          legal: legalPending,
+          total: tourPending + leavePending + legalPending
+        });
+      } catch (err) {
+        console.error("Failed to fetch approval counts in sidebar:", err);
+      }
+    };
+
+    fetchApprovalCounts();
+    const interval = setInterval(fetchApprovalCounts, 15000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const visibleTabs = tabsConfig.filter(tab => {
@@ -152,15 +198,29 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
                   {isActive && (
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[var(--accent)] rounded-full shadow-[0_0_8px_var(--accent)]" />
                   )}
-                  <tab.icon
-                    size={18}
-                    strokeWidth={isActive ? 2.5 : 2}
-                    className={`flex-shrink-0 transition-colors duration-200
-                      ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'}
-                    `}
-                  />
+                  <div className="relative flex items-center justify-center">
+                    <tab.icon
+                      size={18}
+                      strokeWidth={isActive ? 2.5 : 2}
+                      className={`flex-shrink-0 transition-colors duration-200
+                        ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'}
+                      `}
+                    />
+                    {tab.id === 'refund-request' && approvalCounts.total > 0 && isCollapsed && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-red text-white text-[7px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border border-[var(--bg-secondary)] shadow-sm animate-pulse">
+                        {approvalCounts.total}
+                      </span>
+                    )}
+                  </div>
                   {!isCollapsed && (
-                    <span className="truncate leading-none">{tab.label}</span>
+                    <span className="truncate leading-none flex items-center justify-between w-full min-w-0">
+                      <span>{tab.label}</span>
+                      {tab.id === 'refund-request' && approvalCounts.total > 0 && (
+                        <span className="bg-red text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
+                          {approvalCounts.total}
+                        </span>
+                      )}
+                    </span>
                   )}
                 </>
               )}

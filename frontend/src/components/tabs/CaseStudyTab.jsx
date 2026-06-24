@@ -69,6 +69,51 @@ const renderFormattedText = (text) => {
   });
 };
 
+const parseLegalProcessSummary = (summary) => {
+  if (!summary) return '';
+  if (summary.startsWith('PACK_AD_READY_JSON:')) {
+    try {
+      const data = JSON.parse(summary.replace('PACK_AD_READY_JSON:', ''));
+      return `Pack & AD ready: Receiver: ${data.receiverName || ''}, Address: ${data.receiverAddress || ''}, Remark: ${data.remark || ''}`;
+    } catch (e) {
+      return 'Pack & AD ready details saved';
+    }
+  }
+  if (summary.startsWith('COURIER_SENT_JSON:')) {
+    try {
+      const data = JSON.parse(summary.replace('COURIER_SENT_JSON:', ''));
+      return `Courier Sent: Date: ${data.dateTime || ''}, Sender: ${data.senderName || ''}, Doc: ${data.documentName || ''}, Company: ${data.senderCompany || ''}`;
+    } catch (e) {
+      return 'Courier Sent details saved';
+    }
+  }
+  if (summary.startsWith('REPLY_RECEIVED_JSON:')) {
+    try {
+      const data = JSON.parse(summary.replace('REPLY_RECEIVED_JSON:', ''));
+      return `Reply Received: Date: ${data.replyDate || ''}, Replied By: ${data.repliedBy || ''}, Remark: ${data.remark || ''}`;
+    } catch (e) {
+      return 'Reply Received details saved';
+    }
+  }
+  if (summary.startsWith('DRAFT_JSON:')) {
+    try {
+      const data = JSON.parse(summary.replace('DRAFT_JSON:', ''));
+      return `Draft Request: Doc: ${data.documentName || ''}, Remark: ${data.remark || ''}, Status: ${data.status || ''}`;
+    } catch (e) {
+      return 'Draft request details saved';
+    }
+  }
+  if (summary.startsWith('DRAFT_STATUS_JSON:')) {
+    try {
+      const data = JSON.parse(summary.replace('DRAFT_STATUS_JSON:', ''));
+      return `Draft Status Update: Doc: ${data.documentName || ''}, Status: ${data.status || ''}, Remark: ${data.rejectRemark || ''}`;
+    } catch (e) {
+      return 'Draft status updated';
+    }
+  }
+  return summary;
+};
+
 const CaseStudyTab = ({ caseData = null }) => {
   const [cases, setCases] = useState([]);
   const [selectedCase, setSelectedCase] = useState('');
@@ -90,6 +135,8 @@ const CaseStudyTab = ({ caseData = null }) => {
   const [docs, setDocs] = useState([]);
   const [progressLogs, setProgressLogs] = useState([]);
   const [refunds, setRefunds] = useState([]);
+  const [legalProcessHistory, setLegalProcessHistory] = useState([]);
+  const [legalRequests, setLegalRequests] = useState([]);
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [showCommsModal, setShowCommsModal] = useState(false);
 
@@ -166,18 +213,22 @@ const CaseStudyTab = ({ caseData = null }) => {
 
       foundCase.caseStudyGeneratedAt = now;
 
-      const [tlRes, actRes, commRes, docRes, progRes, refundRes] = await Promise.all([
+      const [tlRes, actRes, commRes, docRes, progRes, refundRes, lpRes, lrRes] = await Promise.all([
         api.get(`/timeline?caseId=${targetId}`),
         api.get(`/actions?caseId=${targetId}`),
         api.get(`/communications?caseId=${targetId}`),
         api.get(`/documents?caseId=${targetId}`),
         api.get(`/progress?caseId=${targetId}`),
-        api.get(`/refunds?caseId=${targetId}`)
+        api.get(`/refunds?caseId=${targetId}`),
+        api.get(`/legal-process?caseId=${targetId}`),
+        api.get('/legal-requests')
       ]);
 
       setTimeline(tlRes.data);
       setActions(actRes.data);
       setComms(commRes.data);
+      setLegalProcessHistory(lpRes.data || []);
+      setLegalRequests(lrRes.data || []);
 
       const allDocs = docRes.data || [];
       if (foundCase?.importDocumentLink) {
@@ -218,14 +269,16 @@ const CaseStudyTab = ({ caseData = null }) => {
 
     setLoading(true);
     try {
-      const [caseRes, tlRes, actRes, commRes, docRes, progRes, refundRes] = await Promise.all([
+      const [caseRes, tlRes, actRes, commRes, docRes, progRes, refundRes, lpRes, lrRes] = await Promise.all([
         caseData ? Promise.resolve({ data: caseData }) : api.get(`/cases/${caseId}`),
         api.get(`/timeline?caseId=${caseId}`),
         api.get(`/actions?caseId=${caseId}`),
         api.get(`/communications?caseId=${caseId}`),
         api.get(`/documents?caseId=${caseId}`),
         api.get(`/progress?caseId=${caseId}`),
-        api.get(`/refunds?caseId=${caseId}`)
+        api.get(`/refunds?caseId=${caseId}`),
+        api.get(`/legal-process?caseId=${caseId}`),
+        api.get('/legal-requests')
       ]);
 
       const foundCase = caseData || caseRes.data;
@@ -233,6 +286,8 @@ const CaseStudyTab = ({ caseData = null }) => {
       setTimeline(tlRes.data);
       setActions(actRes.data);
       setComms(commRes.data);
+      setLegalProcessHistory(lpRes.data || []);
+      setLegalRequests(lrRes.data || []);
 
       const fetchedDocs2 = docRes.data || [];
       const combinedDocs2 = [...fetchedDocs2];
@@ -347,15 +402,46 @@ const CaseStudyTab = ({ caseData = null }) => {
     return 'bg-gray-100 text-gray-700 border border-gray-200';
   };
 
-  const ReportContent = ({ data, timeline, actions, comms, docs, progressLogs = [], refunds = [], isMobile = false }) => {
+  const ReportContent = ({ data, timeline, actions, comms, docs, progressLogs = [], refunds = [], legalProcessHistory = [], legalRequests = [], isMobile = false }) => {
     const parseJSON = (val) => {
       if (typeof val === 'string') {
-        try { return JSON.parse(val); } catch(e) { return null; }
+        try { return JSON.parse(val); } catch (e) { return null; }
       }
       return val;
     };
     const services = Array.isArray(parseJSON(data?.servicesSold)) ? parseJSON(data?.servicesSold) : [];
     const bankDetails = parseJSON(data?.bankAccountDetails) || {};
+
+    const combinedLegalHistory = [
+      ...(legalProcessHistory || [])
+        .filter(h => !['Draft', 'Draft Approved', 'Draft Rejected'].includes(h.stage))
+        .map(h => ({
+          date: h.createdAt,
+          stage: h.stage,
+          details: parseLegalProcessSummary(h.summary),
+          submittedBy: h.submittedBy
+        })),
+      ...(legalRequests || [])
+        .filter(r => r.caseId === data?.caseId)
+        .flatMap(r => {
+          const events = [];
+          events.push({
+            date: r.createdAt,
+            stage: 'Draft Request',
+            details: `Draft Request: Doc: ${r.documentName || ''}, Remark: ${r.remark || ''}, Status: ${r.status || ''}`,
+            submittedBy: r.requestedByName || r.requestedBy
+          });
+          if (r.status && r.status !== 'Pending') {
+            events.push({
+              date: r.updatedAt || r.createdAt,
+              stage: r.status === 'Approved' ? 'Draft Approved' : 'Draft Rejected',
+              details: `Draft Status Update: Doc: ${r.documentName || ''}, Status: ${r.status}${r.rejectRemark ? `, Remark: ${r.rejectRemark}` : ''}`,
+              submittedBy: 'Admin'
+            });
+          }
+          return events;
+        })
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
     const totalPaid = services.reduce((sum, s) => sum + (Number(s.serviceAmount) || 0), 0) || 0;
     const totalMou = services.reduce((sum, s) => sum + (Number(s.signedMouAmount) || 0), 0) || 0;
@@ -611,6 +697,36 @@ const CaseStudyTab = ({ caseData = null }) => {
           </div>
         </section>
 
+        {/* Legal notice reply */}
+        {combinedLegalHistory && combinedLegalHistory.length > 0 && (
+          <section className="mb-10 page-break-inside-avoid">
+            <h2 className="text-[#1e3a8a] text-sm font-bold border-b border-[#3b82f6] pb-2 mb-4 uppercase tracking-wider">{sectionNum++}. Legal notice reply</h2>
+            <div className="space-y-3">
+              {combinedLegalHistory.map((h, idx) => (
+                <div key={idx} className="flex gap-6 items-start pb-3 border-b border-gray-50 last:border-0">
+                  <div className="w-24 text-[10px] font-bold text-[#2563eb] pt-1">
+                    {(() => {
+                      try {
+                        const d = new Date(h.date);
+                        return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                      } catch (err) {
+                        return '—';
+                      }
+                    })()}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-[11px] font-bold text-gray-800">{h.stage}</div>
+                    <div className="text-[10px] text-gray-600 mt-1">{h.details}</div>
+                    {h.submittedBy && (
+                      <div className="text-[8px] text-gray-400 font-black uppercase mt-0.5 tracking-widest">Submitted By: {h.submittedBy}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* 8. Recommended Steps */}
         {data?.recommendedNextSteps && (
           <section className="mb-10">
@@ -761,7 +877,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                   </div>
                 </div>
                 <div className="max-w-[1000px] mx-auto shadow-2xl rounded-[2.5rem] overflow-hidden border-8 border-border">
-                  <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} />
+                  <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} legalProcessHistory={legalProcessHistory} legalRequests={legalRequests} />
                 </div>
               </div>
             </div>
@@ -780,7 +896,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                   </div>
                   <div className="flex-1 overflow-y-auto bg-bg-input p-6">
                     <div className="shadow-xl rounded-[2rem] overflow-hidden border-4 border-border">
-                      <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} isMobile={true} />
+                      <ReportContent data={generatedCase || caseData} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} legalProcessHistory={legalProcessHistory} legalRequests={legalRequests} isMobile={true} />
                     </div>
                   </div>
                 </div>
@@ -952,7 +1068,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                         <div className="space-y-1">{renderFormattedText(aiInsights.Summary)}</div>
                       </div>
                     )}
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {aiInsights.RiskAnalysis && (
                         <div className="bg-red-50/50 p-6 rounded-2xl border border-red-100">
@@ -1090,7 +1206,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                 </div>
                 <div className="flex-1 overflow-auto bg-bg-input p-12 scrollbar-thin">
                   <div className="max-w-[850px] mx-auto shadow-2xl rounded-[2.5rem] overflow-hidden border-8 border-border">
-                    <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} />
+                    <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} legalProcessHistory={legalProcessHistory} legalRequests={legalRequests} />
                   </div>
                 </div>
               </div>
@@ -1114,7 +1230,7 @@ const CaseStudyTab = ({ caseData = null }) => {
                 <TabLoader minHeight="400px" text="Assembling Data" />
               ) : (
                 <div className="shadow-xl rounded-[2rem] overflow-hidden border-4 border-border">
-                  <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} isMobile={true} />
+                  <ReportContent data={generatedCase} timeline={timeline} actions={actions} comms={comms} docs={docs} progressLogs={progressLogs} refunds={refunds} legalProcessHistory={legalProcessHistory} legalRequests={legalRequests} isMobile={true} />
                 </div>
               )}
             </div>

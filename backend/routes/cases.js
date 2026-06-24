@@ -764,18 +764,35 @@ router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', '
 
       if (adminEmails) {
         const editorName = req.user.fullName || req.user.email || 'System';
-        const subject = `✏️ Case Details Updated: ${caseId}`;
+        const isAssigneeChanged = req.body.assignedTo !== undefined && req.body.assignedTo !== existingCase.assignedTo;
+        
+        let subject = `✏️ Case Details Updated: ${caseId}`;
+        let headerText = 'Case Details Updated';
+        let messageText = `The details for Case <strong>${caseId}</strong> have been edited and updated by <strong>${editorName}</strong>.`;
+        let borderStyle = 'border: 2px solid #3b82f6;';
+        let headerColor = 'color: #2563eb;';
+        let buttonColor = 'background: #2563eb;';
+
+        if (isAssigneeChanged && updated.assignedTo && updated.assignedTo.trim() !== '') {
+          subject = `🔔 Case Assigned: ${caseId} by ${editorName} to ${updated.assignedTo}`;
+          headerText = 'Case Assigned';
+          messageText = `Case <strong>${caseId}</strong> assigned by <strong>${editorName}</strong> to <strong>${updated.assignedTo}</strong>.`;
+          borderStyle = 'border: 2px solid #10b981;';
+          headerColor = 'color: #059669;';
+          buttonColor = 'background: #059669;';
+        }
+
         const html = `
-          <div style="font-family: sans-serif; padding: 24px; border: 2px solid #3b82f6; border-radius: 12px; max-width: 600px;">
-            <h2 style="color: #2563eb; margin-top: 0; font-size: 18px;">Case Details Updated</h2>
+          <div style="font-family: sans-serif; padding: 24px; ${borderStyle} border-radius: 12px; max-width: 600px;">
+            <h2 style="${headerColor} margin-top: 0; font-size: 18px;">${headerText}</h2>
             <p style="color: #374151;">Hello Admin,</p>
-            <p style="color: #374151;">The details for Case <strong>${caseId}</strong> have been edited and updated by <strong>${editorName}</strong>.</p>
+            <p style="color: #374151;">${messageText}</p>
             <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 8px; margin: 16px 0;">
               <p style="margin: 6px 0; color: #374151;"><strong>Company:</strong> ${updated.companyName || 'N/A'}</p>
               <p style="margin: 6px 0; color: #374151;"><strong>Client:</strong> ${updated.clientName || 'N/A'}</p>
               <p style="margin: 6px 0; color: #374151;"><strong>Status:</strong> ${updated.currentStatus || 'N/A'}</p>
             </div>
-            <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Updated Case</a>
+            <a href="${process.env.FRONTEND_URL || 'https://www.cfi247.com'}/case-master?search=${caseId}" style="display: inline-block; ${buttonColor} color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View Updated Case</a>
           </div>
         `;
         sendEmail(adminEmails, subject, '', html).catch(console.error);

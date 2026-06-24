@@ -191,7 +191,7 @@ router.get('/stats', verifyToken, async (req, res) => {
       }
     }
 
-    const completedStatuses = ['Settled', 'settled', 'Settlement', 'settlement', 'Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed', 'NA', 'na', 'Na', 'nA', 'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'];
+    const completedStatuses = ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed', 'NA', 'na', 'Na', 'nA', 'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'];
     
     const nowForIST = new Date();
     const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
@@ -330,7 +330,7 @@ router.get('/stats', verifyToken, async (req, res) => {
       const isSettled = ['Settled', 'settled', 'Settlement', 'settlement'].includes(c.currentStatus);
       const isClosed = ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved', 'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed'].includes(c.currentStatus);
       const isCompletedStatus = completedStatuses.includes(c.currentStatus);
-      const isOpen = !isCompletedStatus && c.refundStatus !== 'Paid' && !c.isArchived;
+      const isOpen = !isCompletedStatus && !c.isArchived;
 
       if (isOpen) {
         b.openCases++;
@@ -339,10 +339,10 @@ router.get('/stats', verifyToken, async (req, res) => {
       if (isSettled) { b.settledCount++; b.settledAmount += amt; }
       if (isClosed) { b.closedCount++; b.closedAmount += amt; }
 
-      if (c.priority === 'Critical' && !c.isArchived) { b.criticalPriority++; b.criticalPriorityAmount += amt; }
-      if (c.priority === 'High' && !c.isArchived) { b.highPriority++; b.highPriorityAmount += amt; }
-      if (c.priority === 'Medium' && !c.isArchived) { b.mediumPriority++; b.mediumPriorityAmount += amt; }
-      if (c.priority === 'Low' && !c.isArchived) { b.lowPriority++; b.lowPriorityAmount += amt; }
+      if (c.priority === 'Critical' && !c.isArchived && !isClosed) { b.criticalPriority++; b.criticalPriorityAmount += amt; }
+      if (c.priority === 'High' && !c.isArchived && !isClosed) { b.highPriority++; b.highPriorityAmount += amt; }
+      if (c.priority === 'Medium' && !c.isArchived && !isClosed) { b.mediumPriority++; b.mediumPriorityAmount += amt; }
+      if (c.priority === 'Low' && !c.isArchived && !isClosed) { b.lowPriority++; b.lowPriorityAmount += amt; }
 
       if (c.linkedBy) b.linkedByCount++;
       if (new Date(c.createdAt) >= startOfToday) b.createdToday++;

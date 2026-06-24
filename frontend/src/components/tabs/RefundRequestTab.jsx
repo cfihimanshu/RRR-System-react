@@ -74,6 +74,17 @@ const RefundRequestTab = () => {
     }
   };
 
+  const [tours, setTours] = useState([]);
+
+  const fetchTours = async () => {
+    try {
+      const res = await api.get('/tours');
+      setTours(res.data || []);
+    } catch (err) {
+      console.error("Error fetching tours in RefundRequestTab:", err);
+    }
+  };
+
   const handleLegalStatusUpdate = async (id, newStatus) => {
     try {
       const payload = { status: newStatus };
@@ -565,6 +576,7 @@ const RefundRequestTab = () => {
     fetchMyRefunds();
     fetchLeaves();
     fetchLegalRequests();
+    fetchTours();
     if (['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)) {
       fetchAllUsersForCalendar();
     } else if (user?.email) {
@@ -757,6 +769,24 @@ const RefundRequestTab = () => {
     return statusMatch && searchMatch;
   });
 
+  const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role);
+
+  const tourPendingCount = tours.filter(r =>
+    (!r.reimbursementStatus && (r.status === 'Pending Review' || r.status === 'Pending')) ||
+    (r.reimbursementStatus && (r.reimbursementStatus === 'Submitted' || r.reimbursementStatus === 'Pending'))
+  ).length;
+
+  const settlementPendingCount = myRefunds.filter(r => !['Paid', 'Rejected'].includes(r.status)).length;
+  const leavePendingCount = leaves.filter(r => r.status === 'Pending' || r.status === 'Pending Review').length;
+  const legalPendingCount = legalRequests.filter(r => r.status === 'Pending').length;
+
+  const pendingCounts = {
+    Tour: tourPendingCount,
+    Settlement: 0,
+    Leave: leavePendingCount,
+    Legal: legalPendingCount
+  };
+
   return (
     <div ref={containerRef} className="section active w-full pb-10 px-4 md:px-8 bg-bg-primary overflow-y-auto">
       {true && (
@@ -768,25 +798,30 @@ const RefundRequestTab = () => {
               </h2>
             </div>
             <div className="flex items-center justify-start gap-3">
-               {['Tour', 'Settlement', 'Leave', 'Legal'].filter((type) => type !== 'Legal' || ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)).map((type) => (
-                 <button
-                   key={type}
-                   type="button"
-                   onClick={() => {
-                     setActiveRequestType(type);
-                     if (type !== 'Settlement') {
-                       setEditingRefund(null);
-                     }
-                   }}
-                   className={`px-5 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all border-2 cursor-pointer ${activeRequestType === type
-                     ? 'bg-accent border-accent text-white shadow-lg active:scale-95'
-                     : 'bg-bg-card border-border text-text-muted hover:text-text-primary hover:border-text-primary active:scale-95'
-                     }`}
-                 >
-                   {type}
-                 </button>
-               ))}
-             </div>
+              {['Tour', 'Settlement', 'Leave', 'Legal'].filter((type) => type !== 'Legal' || ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    setActiveRequestType(type);
+                    if (type !== 'Settlement') {
+                      setEditingRefund(null);
+                    }
+                  }}
+                  className={`px-5 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all border-2 cursor-pointer flex items-center gap-1.5 ${activeRequestType === type
+                    ? 'bg-accent border-accent text-white shadow-lg active:scale-95'
+                    : 'bg-bg-card border-border text-text-muted hover:text-text-primary hover:border-text-primary active:scale-95'
+                    }`}
+                >
+                  <span>{type}</span>
+                  {isAdmin && pendingCounts[type] > 0 && (
+                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black transition-all ${activeRequestType === type ? 'bg-white text-accent' : 'bg-red text-white'}`}>
+                      {pendingCounts[type]}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
 
           {activeRequestType === 'Settlement' && (
@@ -1084,144 +1119,147 @@ const RefundRequestTab = () => {
           )}
 
           {activeRequestType === 'Tour' && (
-            <TourTab user={user} api={api} />
+            <TourTab user={user} api={api} onToursChange={fetchTours} />
           )}
 
           {activeRequestType === 'Leave' && (
             <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-10 shadow-sm animate-zoom-in">
-              <div className="flex items-center gap-4 mb-8">
-                <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
-                  <CalendarDays size={22} />
-                </div>
-                <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
-                  Submit Leave Request
-                </h3>
-              </div>
-              <form onSubmit={handleLeaveSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Leave Type</label>
-                  <select
-                    required
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] cursor-pointer"
-                    value={leaveFormData.leaveType}
-                    onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value })}
-                  >
-                    <option value="Casual Leave">Casual Leave</option>
-                    <option value="Sick Leave">Sick Leave</option>
-                    <option value="Paid Leave">Paid Leave</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                {leaveFormData.leaveType === 'Other' && (
-                  <div className="flex flex-col gap-3 animate-zoom-in">
-                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Specify Leave Type <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Specify leave type..."
-                      className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                      value={customLeaveType}
-                      onChange={(e) => setCustomLeaveType(e.target.value)}
-                    />
-                  </div>
-                )}
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Start Date</label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                    value={leaveFormData.startDate}
-                    onChange={(e) => setLeaveFormData({ ...leaveFormData, startDate: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">End Date</label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
-                    value={leaveFormData.endDate}
-                    onChange={(e) => setLeaveFormData({ ...leaveFormData, endDate: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-3 md:col-span-2 lg:col-span-3">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Reason for Leave</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Please state the reason for leave..."
-                    className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] placeholder:text-text-muted/50"
-                    value={leaveFormData.reason}
-                    onChange={(e) => setLeaveFormData({ ...leaveFormData, reason: e.target.value })}
-                  />
-                </div>
-                <div className="md:col-span-2 lg:col-span-3 flex justify-end">
-                  <button
-                    type="submit"
-                    className="w-full sm:w-auto bg-accent hover:bg-accent-hover text-white font-black py-4 px-12 rounded-2xl transition-all text-xs uppercase tracking-[0.2em] shadow-lg shadow-orange-950/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Send size={16} /> Submit Leave Request
-                  </button>
-                </div>
-              </form>
-
-              {/* My Leave Requests Section */}
-              <div className="mt-12 border-t-2 border-border pt-10">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
-                    <ClipboardList size={22} />
-                  </div>
-                  <div>
+              {!['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
+                <>
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
+                      <CalendarDays size={22} />
+                    </div>
                     <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
-                      My Leave Requests
+                      Submit Leave Request
                     </h3>
-                    <p className="text-[10px] text-text-muted font-bold mt-0.5">Track the status of your submitted leave requests</p>
                   </div>
-                </div>
-
-                {leaves.filter(l => l.requestedBy === user?.email).length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12 animate-zoom-in">
-                    {leaves.filter(l => l.requestedBy === user?.email).map((l) => (
-                      <div key={l._id} className="bg-bg-input/10 border-2 border-border rounded-3xl p-6 flex flex-col gap-4 relative group hover:border-purple/50 transition-all">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Leave Type</span>
-                            <span className="text-xs font-black text-text-primary mt-0.5 block">{l.leaveType}</span>
-                          </div>
-                          <span className={`status-badge text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${
-                            l.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                            l.status === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
-                            'bg-orange-500/10 text-orange-500 border-orange-500/20'
-                          }`}>
-                            {l.status}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4 bg-bg-card p-3 rounded-2xl border border-border/60">
-                          <div>
-                            <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">Start Date</span>
-                            <span className="text-xs font-bold text-text-primary">{l.startDate}</span>
-                          </div>
-                          <div>
-                            <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">End Date</span>
-                            <span className="text-xs font-bold text-text-primary">{l.endDate}</span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Reason</span>
-                          <p className="text-xs font-medium text-text-secondary leading-relaxed mt-0.5">{l.reason || 'No reason provided'}</p>
-                        </div>
+                  <form onSubmit={handleLeaveSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Leave Type</label>
+                      <select
+                        required
+                        className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] cursor-pointer"
+                        value={leaveFormData.leaveType}
+                        onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value })}
+                      >
+                        <option value="Casual Leave">Casual Leave</option>
+                        <option value="Sick Leave">Sick Leave</option>
+                        <option value="Paid Leave">Paid Leave</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    {leaveFormData.leaveType === 'Other' && (
+                      <div className="flex flex-col gap-3 animate-zoom-in">
+                        <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Specify Leave Type <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Specify leave type..."
+                          className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                          value={customLeaveType}
+                          onChange={(e) => setCustomLeaveType(e.target.value)}
+                        />
                       </div>
-                    ))}
+                    )}
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Start Date</label>
+                      <input
+                        type="date"
+                        required
+                        className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                        value={leaveFormData.startDate}
+                        onChange={(e) => setLeaveFormData({ ...leaveFormData, startDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">End Date</label>
+                      <input
+                        type="date"
+                        required
+                        className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px]"
+                        value={leaveFormData.endDate}
+                        onChange={(e) => setLeaveFormData({ ...leaveFormData, endDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-3 md:col-span-2 lg:col-span-3">
+                      <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-2">Reason for Leave</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Please state the reason for leave..."
+                        className="w-full bg-bg-input border-2 border-border rounded-2xl px-5 py-4 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[52px] placeholder:text-text-muted/50"
+                        value={leaveFormData.reason}
+                        onChange={(e) => setLeaveFormData({ ...leaveFormData, reason: e.target.value })}
+                      />
+                    </div>
+                    <div className="md:col-span-2 lg:col-span-3 flex justify-end">
+                      <button
+                        type="submit"
+                        className="w-full sm:w-auto bg-accent hover:bg-accent-hover text-white font-black py-4 px-12 rounded-2xl transition-all text-xs uppercase tracking-[0.2em] shadow-lg shadow-orange-950/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Send size={16} /> Submit Leave Request
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* My Leave Requests Section */}
+                  <div className="mt-12 border-t-2 border-border pt-10">
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
+                        <ClipboardList size={22} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
+                          My Leave Requests
+                        </h3>
+                        <p className="text-[10px] text-text-muted font-bold mt-0.5">Track the status of your submitted leave requests</p>
+                      </div>
+                    </div>
+
+                    {leaves.filter(l => l.requestedBy === user?.email).length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12 animate-zoom-in">
+                        {leaves.filter(l => l.requestedBy === user?.email).map((l) => (
+                          <div key={l._id} className="bg-bg-input/10 border-2 border-border rounded-3xl p-6 flex flex-col gap-4 relative group hover:border-purple/50 transition-all">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Leave Type</span>
+                                <span className="text-xs font-black text-text-primary mt-0.5 block">{l.leaveType}</span>
+                              </div>
+                              <span className={`status-badge text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${l.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                l.status === 'Rejected' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                                  'bg-orange-500/10 text-orange-500 border-orange-500/20'
+                                }`}>
+                                {l.status}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 bg-bg-card p-3 rounded-2xl border border-border/60">
+                              <div>
+                                <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">Start Date</span>
+                                <span className="text-xs font-bold text-text-primary">{l.startDate}</span>
+                              </div>
+                              <div>
+                                <span className="text-[8px] font-black text-text-muted uppercase tracking-wider block">End Date</span>
+                                <span className="text-xs font-bold text-text-primary">{l.endDate}</span>
+                              </div>
+                            </div>
+
+                            <div>
+                              <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Reason</span>
+                              <p className="text-xs font-medium text-text-secondary leading-relaxed mt-0.5">{l.reason || 'No reason provided'}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-xs text-text-muted font-bold uppercase border-2 border-dashed border-border rounded-3xl mb-12">
+                        You have not submitted any leave requests yet.
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="text-center py-8 text-xs text-text-muted font-bold uppercase border-2 border-dashed border-border rounded-3xl mb-12">
-                    You have not submitted any leave requests yet.
-                  </div>
-                )}
-              </div>
+                </>
+              )}
 
               {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
                 <div className="mt-12 border-t-2 border-border pt-10">
@@ -1233,7 +1271,6 @@ const RefundRequestTab = () => {
                       <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
                         Leave Request Approvals
                       </h3>
-                      <p className="text-[10px] text-text-muted font-bold mt-0.5">Approve or reject pending employee leave requests</p>
                     </div>
                   </div>
 
@@ -1306,173 +1343,6 @@ const RefundRequestTab = () => {
                   )}
                 </div>
               )}
-
-              <div className="mt-12 border-t border-border pt-10">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-purple-soft rounded-2xl border border-purple-soft/30 text-purple">
-                      <CalendarDays size={22} />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black text-text-primary uppercase tracking-[0.2em]">
-                        User Attendance Calendar
-                      </h3>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                    {/* User Selection */}
-                    {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) ? (
-                      <div className="flex flex-col gap-1.5 min-w-[250px]">
-                        <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Select User</span>
-                        <select
-                          className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[42px] cursor-pointer"
-                          value={selectedUserEmail}
-                          onChange={(e) => setSelectedUserEmail(e.target.value)}
-                        >
-                          {allUsers.map((u) => (
-                            <option key={u.email} value={u.email}>
-                              {u.fullName || u.name} ({u.role})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-1.5 min-w-[200px]">
-                        <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">User</span>
-                        <span className="text-sm font-bold text-text-primary h-[42px] flex items-center bg-bg-input/30 px-4 rounded-xl border border-border/40 select-none">
-                          {user?.fullName || user?.name || selectedUserEmail}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Month Navigation */}
-                    <div className="flex items-center gap-3 self-end h-[42px] mt-auto">
-                      <button
-                        type="button"
-                        onClick={handlePrevMonth}
-                        className="p-2 border-2 border-border rounded-xl text-text-primary hover:bg-bg-input hover:border-accent transition-all cursor-pointer flex items-center justify-center"
-                      >
-                        <ChevronRight size={18} className="rotate-180" />
-                      </button>
-                      <span className="text-sm font-black text-text-primary min-w-[140px] text-center select-none capitalize">
-                        {calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleNextMonth}
-                        className="p-2 border-2 border-border rounded-xl text-text-primary hover:bg-bg-input hover:border-accent transition-all cursor-pointer flex items-center justify-center"
-                      >
-                        <ChevronRight size={18} />
-                      </button>
-                    </div>
-
-                    {/* Export Excel Button */}
-                    <button
-                      type="button"
-                      onClick={handleExportAttendance}
-                      className="flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all h-[42px] self-end mt-auto bg-accent hover:bg-accent/80 text-white shadow-md active:scale-95 cursor-pointer border border-accent/20"
-                    >
-                      <Download size={14} /> Export
-                    </button>
-                  </div>
-                </div>
-
-                {/* Calendar Grid */}
-                <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-6 overflow-x-auto">
-                  <div className="min-w-[650px] md:min-w-0">
-                    {/* Days Header */}
-                    <div className="grid grid-cols-7 gap-2 mb-3 text-center border-b border-border pb-3">
-                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                        <div key={day} className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">
-                          {day}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Days Grid */}
-                    <div className="grid grid-cols-7 gap-2.5">
-                      {(() => {
-                        const days = getCalendarDays();
-                        const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
-                        const todayKey = todayIST.toISOString().split('T')[0];
-
-                        return days.map((day, idx) => {
-                          if (!day) {
-                            return <div key={`empty-${idx}`} className="bg-bg-input/20 rounded-xl min-h-[90px] border border-transparent" />;
-                          }
-
-                          const isSunday = day.getDay() === 0;
-                          const yearStr = day.getFullYear();
-                          const monthStr = String(day.getMonth() + 1).padStart(2, '0');
-                          const dateStr = String(day.getDate()).padStart(2, '0');
-                          const dayKey = `${yearStr}-${monthStr}-${dateStr}`;
-
-                          const hasSod = attendanceReports.some(r => r.date === dayKey && r.type === 'SOD');
-                          const hasApprovedLeave = leaves.some(l =>
-                            l.requestedBy === selectedUserEmail &&
-                            l.status === 'Approved' &&
-                            l.startDate <= dayKey &&
-                            dayKey <= l.endDate
-                          );
-
-                          let status = 'Absent';
-                          if (isSunday) {
-                            status = 'Sunday';
-                          } else if (hasApprovedLeave) {
-                            status = 'Leave';
-                          } else if (hasSod) {
-                            status = 'Present';
-                          } else if (dayKey > todayKey) {
-                            status = 'Future';
-                          }
-
-                          return (
-                            <div
-                              key={dayKey}
-                              className={`flex flex-col justify-between p-3 rounded-xl border-2 min-h-[90px] transition-all hover:scale-[1.02] ${dayKey === todayKey ? 'border-accent bg-accent/5' : 'border-border bg-bg-input/10'
-                                }`}
-                            >
-                              <span className="text-xs font-black text-text-primary self-end select-none">
-                                {day.getDate()}
-                              </span>
-
-                              <div className="mt-2">
-                                {status === 'Sunday' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg w-full justify-center border border-blue-500/20 uppercase tracking-wider">
-                                    Off Day
-                                  </span>
-                                )}
-                                {status === 'Leave' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg w-full justify-center border border-purple-500/20 uppercase tracking-wider">
-                                    Leave
-                                  </span>
-                                )}
-                                {status === 'Present' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg w-full justify-center border border-emerald-500/20 uppercase tracking-wider">
-                                    Present
-                                  </span>
-                                )}
-                                {status === 'Absent' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-rose-500 bg-rose-500/10 px-2 py-1 rounded-lg w-full justify-center border border-rose-500/20 uppercase tracking-wider">
-                                    Absent
-                                  </span>
-                                )}
-                                {status === 'Future' && (
-                                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-text-muted/60 bg-bg-input px-2 py-1 rounded-lg w-full justify-center border border-border uppercase tracking-wider select-none">
-                                    Scheduled
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              )
             </div>
           )}
 
@@ -1482,7 +1352,6 @@ const RefundRequestTab = () => {
                 <div className="flex items-center justify-between border-b border-border pb-4 mb-6">
                   <div>
                     <h3 className="text-xl font-bold text-text-primary">Legal Draft Request Approvals</h3>
-                    <p className="text-[10px] text-text-muted font-bold mt-0.5">Approve or reject pending legal draft requests</p>
                   </div>
                 </div>
 
@@ -1572,9 +1441,8 @@ const RefundRequestTab = () => {
                                 </div>
                               ) : (
                                 <div className="flex flex-col items-center justify-center gap-1">
-                                  <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
-                                    r.status === 'Approved' ? 'bg-green-soft text-green' : 'bg-red-soft text-red'
-                                  }`}>
+                                  <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${r.status === 'Approved' ? 'bg-green-soft text-green' : 'bg-red-soft text-red'
+                                    }`}>
                                     {r.status}
                                   </span>
                                   {r.rejectRemark && (
@@ -1627,8 +1495,8 @@ const RefundRequestTab = () => {
                 {showBdaSuggestions && searchQuery.trim() && (
                   (() => {
                     const uniqueBdaNames = [...new Set(myRefunds.map(r => r.bdaName).filter(Boolean))];
-                    const bdaSuggestions = uniqueBdaNames.filter(name => 
-                      name.toLowerCase().includes(searchQuery.toLowerCase()) && 
+                    const bdaSuggestions = uniqueBdaNames.filter(name =>
+                      name.toLowerCase().includes(searchQuery.toLowerCase()) &&
                       name.toLowerCase() !== searchQuery.toLowerCase()
                     );
                     return bdaSuggestions.length > 0 ? (

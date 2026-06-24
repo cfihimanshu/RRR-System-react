@@ -6,6 +6,9 @@ const Case = require('../sql_models/Case');
 const Report = require('../sql_models/Report');
 const Task = require('../sql_models/Task');
 const Timeline = require('../sql_models/Timeline');
+const Progress = require('../sql_models/Progress');
+const Refund = require('../sql_models/Refund');
+const MisReport = require('../sql_models/MisReport');
 const { sequelize } = require('../config/sequelize');
 const { sendEmail } = require('./mailer');
 const { createNotification } = require('./notificationHelper');
@@ -20,19 +23,19 @@ const runDueCaseAlerts = async () => {
     // ==========================================
     // SECTION 1: DAILY ACTION ALERTS
     // ==========================================
-    const allActions = await Action.findAll({ 
-      where: { 
-        nextActionDate: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] } 
-      } 
+    const allActions = await Action.findAll({
+      where: {
+        nextActionDate: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] }
+      }
     });
-    
+
     const overdue = [];
     const dueToday = [];
 
     allActions.forEach(action => {
       const actionDate = new Date(action.nextActionDate);
       if (isNaN(actionDate.getTime())) return;
-      
+
       actionDate.setHours(0, 0, 0, 0);
 
       if (actionDate < today) {
@@ -48,7 +51,7 @@ const runDueCaseAlerts = async () => {
 
       if (adminEmails.length > 0) {
         const subject = `RRR Engine: Daily Action Alerts (${new Date().toLocaleDateString()})`;
-        
+
         let html = `
           <h2>Daily Case Action Alerts</h2>
           <p>Summary for ${new Date().toLocaleDateString()}</p>
@@ -169,7 +172,7 @@ const runDueCaseAlerts = async () => {
 
         message = `Case ${caseItem.caseId} (${caseItem.companyName || 'N/A'}) has pending action: ${dateDesc}. Assigned to: ${caseItem.assignedTo || 'Unassigned'}. Current Status: ${caseItem.currentStatus}.`;
 
-        emailSubject = isAnyOverdue 
+        emailSubject = isAnyOverdue
           ? `🚨 URGENT: Case ${caseItem.caseId} requires attention (${dateDesc})`
           : `⚠️ REMINDER: Case ${caseItem.caseId} has due action today (${dateDesc})`;
 
@@ -488,7 +491,7 @@ const runAssignmentReminders = async () => {
 
         await sendEmail(assigneeEmail, subject, '', html);
         console.log(`Sent assignment reminder to ${assigneeEmail} for case ${caseItem.caseId}`);
-        
+
         await Case.update(
           { lastReminderSentAt: new Date().toISOString() },
           { where: { id: caseItem.id } }
@@ -503,48 +506,70 @@ const runAssignmentReminders = async () => {
 const sendDailyReportsToAdmins = async () => {
   console.log('Generating daily 8:00 PM email reports...');
   try {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const todayStr = `${year}-${month}-${day}`;
+    const nowForIST = new Date();
+    const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
+    const todayStr = istTime.toISOString().split('T')[0];
 
     // Find all admins
-    const admins = await User.findAll({ 
-      where: { 
-        role: ['Admin', 'Super Admin', 'SuperAdmin'] 
-      } 
+    const admins = await User.findAll({
+      where: {
+        role: ['Admin', 'Super Admin', 'SuperAdmin']
+      }
     });
-    const adminEmails = admins.map(a => a.email).join(',');
-    if (!adminEmails) {
-      console.log('No admin emails found to send reports.');
-      return;
-    }
+    const adminEmailsList = admins.map(u => u.email).filter(Boolean);
+    const adminEmails = adminEmailsList.length > 0 ? adminEmailsList.join(', ') : 'cfi.astha@gmail.com';
 
     // ==========================================
     // Part 1: Generate Escalation MIS Report
     // ==========================================
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
+    const startOfPeriod = startOfToday; // To send per day's report
 
-    const caseQuery = { 
+    const caseQuery = {
       isArchived: { [Op.not]: true }
     };
 
     const allCases = await Case.findAll({ where: caseQuery });
     const allUsers = await User.findAll({ attributes: ['id', 'fullName', 'email', 'role', 'monthlyTarget'] });
+    const allProgress = await Progress.findAll();
+    const allRefunds = await Refund.findAll();
 
-    const completedStatuses = ['Settled', 'Closed', 'Closure', 'Resolved'];
+    const progressMap = {};
+    allProgress.forEach(p => {
+      progressMap[p.caseId] = p;
+    });
+
+    const refundsMap = {};
+    allRefunds.forEach(r => {
+      refundsMap[r.caseId] = r;
+    });
+
+    const completedStatuses = [
+      'Settled', 'settled', 'Settlement', 'settlement',
+      'Closure', 'closure', 'Resolution', 'resolution',
+      'Resolved', 'resolved', 'Done', 'done',
+      'Complete', 'complete', 'Completed', 'completed',
+      'Closed', 'closed', 'NA', 'na', 'Na', 'nA',
+      'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'
+    ];
+    const closureStatuses = [
+      'Closure', 'closure', 'Resolution', 'resolution',
+      'Resolved', 'resolved', 'Done', 'done',
+      'Complete', 'complete', 'Completed', 'completed',
+      'Closed', 'closed', 'NA', 'na', 'Na', 'nA',
+      'NA Non Agreement', 'na non agreement', 'Non Agreement', 'non agreement'
+    ];
     const isCompleted = (status) => {
       if (!status) return false;
       return completedStatuses.includes(status.trim());
     };
     const isClosureStatus = (status) => {
       if (!status) return false;
-      return ['Closed', 'Closure'].includes(status.trim());
+      return closureStatuses.includes(status.trim());
     };
 
     const assigneeStatsMap = {};
@@ -572,7 +597,7 @@ const sendDailyReportsToAdmins = async () => {
       const key = assigneeName.trim().toLowerCase();
       let stats = assigneeStatsMap[key];
       if (!stats) {
-        const foundKey = Object.keys(assigneeStatsMap).find(k => 
+        const foundKey = Object.keys(assigneeStatsMap).find(k =>
           assigneeStatsMap[k].email?.trim().toLowerCase() === key
         );
         if (foundKey) {
@@ -589,35 +614,97 @@ const sendDailyReportsToAdmins = async () => {
       }
 
       const amt = c.totalAmtPaid || 0;
-      const saved = c.savedAmount || c.refundedAmount || 0;
-      const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
-      const isCaseClosure = isClosureStatus(c.currentStatus);
-
-      let shouldCount = false;
-      if (!isCaseResolved) {
-        shouldCount = true;
+      let saved = 0;
+      const ref = refundsMap[c.caseId];
+      if (ref && c.refundStatus === 'Paid') {
+        if (ref.savedAmount !== null && ref.savedAmount !== undefined) {
+          saved = Number(ref.savedAmount);
+        } else {
+          saved = Math.max(0, (c.totalAmtPaid || 0) - (c.refundedAmount || 0));
+        }
       } else {
-        const resolvedDate = c.updatedAt ? new Date(c.updatedAt) : (c.createdAt ? new Date(c.createdAt) : null);
-        const isResolvedInPeriod = resolvedDate && resolvedDate >= startOfMonth && resolvedDate <= endOfToday;
-        if (isResolvedInPeriod) {
-          shouldCount = true;
+        saved = 0;
+      }
+      const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
+      const isCaseClosure = isCaseResolved;
+
+      // Determine precise resolution date using Refund and Progress updates
+      let resolvedDate = null;
+
+      // 1. Try to get resolution date from Refund paymentDate if refundStatus is Paid
+      if (c.refundStatus === 'Paid') {
+        const ref = refundsMap[c.caseId];
+        if (ref) {
+          let reqs = ref.requests;
+          if (typeof reqs === 'string') {
+            try { reqs = JSON.parse(reqs); } catch (e) { }
+          }
+          const requestsList = Array.isArray(reqs) && reqs.length > 0 ? reqs : [ref];
+          let refundPaidDate = null;
+          requestsList.forEach(r => {
+            if (r.status && r.status.toLowerCase() === 'paid' && r.paymentDate) {
+              const pDate = new Date(r.paymentDate);
+              if (!isNaN(pDate.getTime())) {
+                if (!refundPaidDate || pDate > refundPaidDate) {
+                  refundPaidDate = pDate;
+                }
+              }
+            }
+          });
+          resolvedDate = refundPaidDate;
         }
       }
 
-      if (!shouldCount) return;
+      // 2. Try to get resolution date from Progress updates if not already set
+      if (!resolvedDate) {
+        const progress = progressMap[c.caseId];
+        if (progress) {
+          let rawUpdates = progress.updates;
+          if (typeof rawUpdates === 'string') {
+            try { rawUpdates = JSON.parse(rawUpdates); } catch (e) { }
+          }
+          if (typeof rawUpdates === 'string') {
+            try { rawUpdates = JSON.parse(rawUpdates); } catch (e) { }
+          }
+          const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
+          const resolutionUpdate = updates.find(u => u.stage && isCompleted(u.stage));
+          if (resolutionUpdate && resolutionUpdate.createdAt) {
+            resolvedDate = new Date(resolutionUpdate.createdAt);
+          }
+        }
+      }
+
+      // 3. Fall back to createdAt rather than updatedAt to prevent shifting resolution dates on edits
+      if (!resolvedDate) {
+        resolvedDate = c.createdAt ? new Date(c.createdAt) : (c.updatedAt ? new Date(c.updatedAt) : null);
+      }
+
+      // Check if it got resolved within the period (between startOfPeriod and endOfToday)
+      const isResolvedInPeriod = isCaseResolved && (!startOfPeriod || resolvedDate >= startOfPeriod) && (!endOfToday || resolvedDate <= endOfToday);
+
+      // Check assignment date to see if case existed for the user in this period (up to endOfToday)
+      const assignedDate = c.assignedAt ? new Date(c.assignedAt) : (c.createdAt ? new Date(c.createdAt) : (c.createdDate ? new Date(c.createdDate) : null));
+      if (endOfToday && assignedDate && assignedDate > endOfToday && !isResolvedInPeriod) {
+        return; // Skip case: was assigned/created after endOfToday
+      }
 
       stats.totalCases++;
       stats.totalAmt += amt;
 
-      if (isCaseResolved) {
+      if (isResolvedInPeriod) {
         if (isCaseClosure) {
           stats.resolvedCases++;
         }
         stats.resolvedAmt += saved;
         stats.saved += saved;
       } else {
-        stats.pendingCases++;
-        stats.pendingAmt += amt;
+        // If not resolved, or resolved after endOfToday, it counts as pending during this period
+        // But if it was resolved BEFORE the start of the period, it should NOT count as pending!
+        const isResolvedBeforeStart = isCaseResolved && startOfPeriod && resolvedDate && resolvedDate < startOfPeriod;
+        if (!isResolvedBeforeStart) {
+          stats.pendingCases++;
+          stats.pendingAmt += amt;
+        }
       }
     });
 
@@ -697,8 +784,9 @@ const sendDailyReportsToAdmins = async () => {
     // ==========================================
     // Part 2: Generate Work Report Excel
     // ==========================================
-    const reportsRaw = await Report.findAll({
-      where: { date: todayStr }
+    let targetDateStr = todayStr;
+    let reportsRaw = await Report.findAll({
+      where: { date: targetDateStr }
     });
 
     const groups = {};
@@ -773,34 +861,36 @@ const sendDailyReportsToAdmins = async () => {
 
     const timelinesToday = await Timeline.findAll({
       where: {
-        eventDate: { [Op.like]: `${todayStr}%` }
+        eventDate: { [Op.like]: `${targetDateStr}%` }
       }
     });
 
+    const startOfTargetDate = new Date(`${targetDateStr}T00:00:00`);
+    const endOfTargetDate = new Date(`${targetDateStr}T23:59:59.999`);
     const tasksToday = await Task.findAll({
       where: {
-        updatedAt: { [Op.between]: [startOfToday, endOfToday] }
+        updatedAt: { [Op.between]: [startOfTargetDate, endOfTargetDate] }
       }
     });
 
     const detailedRows = [];
     for (const r of aggregatedReports) {
-      const userComms = timelinesToday.filter(a => 
+      const userComms = timelinesToday.filter(a =>
         (a.source === r.userName || a.source === r.userEmail) &&
         ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting', 'Communication'].includes(a.eventType)
       );
 
-      const userDocs = timelinesToday.filter(a => 
+      const userDocs = timelinesToday.filter(a =>
         (a.source === r.userName || a.source === r.userEmail) &&
         ['Document Upload', 'Document Uploaded', 'Document Indexed'].includes(a.eventType)
       );
 
-      const userProgress = timelinesToday.filter(a => 
+      const userProgress = timelinesToday.filter(a =>
         (a.source === r.userName || a.source === r.userEmail) &&
         ['Progress Update', 'Status Update', 'Progress Updated'].includes(a.eventType)
       );
 
-      const userTasks = tasksToday.filter(t => 
+      const userTasks = tasksToday.filter(t =>
         t.assignee && (t.assignee.trim().toLowerCase() === (allUsers.find(u => u.email === r.userEmail)?.fullName || r.userName).toLowerCase())
       );
 
@@ -852,7 +942,7 @@ const sendDailyReportsToAdmins = async () => {
     const workRows = [workHeaders, ...detailedRows];
     const workWorkbook = XLSX.utils.book_new();
     const workWorksheet = XLSX.utils.aoa_to_sheet(workRows);
-    
+
     // Set column widths
     const workColWidths = workHeaders.map((h, i) => {
       let maxLen = h.length;
@@ -872,12 +962,12 @@ const sendDailyReportsToAdmins = async () => {
     // ==========================================
     // Part 3: Send Email
     // ==========================================
-    const subject = `📅 RRR System: Daily Reports Summary - ${todayStr}`;
+    const subject = `📅 RRR System: Daily Reports Summary - ${targetDateStr}`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #ddd; border-radius: 12px; padding: 25px;">
         <h2 style="color: #0b72b8; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0;">Daily Reports Summary</h2>
         <p>Hello Admin,</p>
-        <p>Please find attached the daily reports for <strong>${todayStr}</strong>:</p>
+        <p>Please find attached the daily reports for <strong>${targetDateStr}</strong>:</p>
         <ol>
           <li><strong>Escalation MIS Report</strong> (All Specialists Performance Overview)</li>
           <li><strong>Work Report</strong> (Detailed Work Report with SOD/EOD details)</li>
@@ -890,11 +980,11 @@ const sendDailyReportsToAdmins = async () => {
 
     const attachments = [
       {
-        filename: `Escalation_MIS_Report_${todayStr}.xlsx`,
+        filename: `Escalation_MIS_Report_${targetDateStr}.xlsx`,
         content: misBuffer
       },
       {
-        filename: `Detailed_Work_Report_${todayStr}.xlsx`,
+        filename: `Detailed_Work_Report_${targetDateStr}.xlsx`,
         content: workBuffer
       }
     ];

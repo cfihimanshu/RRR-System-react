@@ -53,5 +53,7 @@ module.exports = sequelize.define('Refund', {
   // Legacy fields
   refundAmount: { type: DataTypes.FLOAT },
   reason: { type: DataTypes.TEXT },
-  remarks: { type: DataTypes.TEXT }
+  remarks: { type: DataTypes.TEXT },
+  refundedAmount: { type: DataTypes.DOUBLE, allowNull: true },
+  savedAmount: { type: DataTypes.DOUBLE, allowNull: true }
 }, { tableName: 'refunds', timestamps: true });

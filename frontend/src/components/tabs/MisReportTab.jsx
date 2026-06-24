@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
@@ -94,27 +94,54 @@ const MisReportTab = () => {
 
   // Date and month filters
   const [filterType, setFilterType] = useState('current-month'); // 'current-month', 'last-month', 'custom'
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  
+  // Calculate initial dates for current-month so they don't start empty
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const start = new Date(year, month, 1);
+    const y = start.getFullYear();
+    const m = String(start.getMonth() + 1).padStart(2, '0');
+    const d = String(start.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  });
+  
+  const [endDate, setEndDate] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const end = new Date(year, month + 1, 0);
+    const y = end.getFullYear();
+    const m = String(end.getMonth() + 1).padStart(2, '0');
+    const d = String(end.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  });
+
+  const requestVersionRef = useRef(0);
 
   const fetchData = async (silent = false) => {
+    if (!startDate || !endDate) return;
+    const currentVersion = ++requestVersionRef.current;
     try {
       if (!silent) setLoading(true);
       else setRefreshing(true);
 
-      let url = '/reports/mis';
-      if (startDate && endDate) {
-        url += `?startDate=${startDate}&endDate=${endDate}`;
-      }
-
+      const url = `/reports/mis?startDate=${startDate}&endDate=${endDate}`;
       const res = await api.get(url);
-      setData(res.data);
+      if (currentVersion === requestVersionRef.current) {
+        setData(res.data);
+      }
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load MIS Report data');
+      if (currentVersion === requestVersionRef.current) {
+        toast.error('Failed to load MIS Report data');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (currentVersion === requestVersionRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -881,7 +908,7 @@ const MisReportTab = () => {
                   <div className="text-lg font-black text-black mt-1">{currentSpecialist.resolvedCases}</div>
                 </div>
                 <div
-                  onClick={() => handleMetricClick('Amount Saved', currentSpecialist.resolvedCasesList)}
+                  onClick={() => handleMetricClick('Amount Saved', (currentSpecialist.resolvedCasesList || []).filter(c => (c.savedAmount || 0) > 0))}
                   className="bg-bg-input border border-border rounded-xl p-4 border-green-500/10 cursor-pointer hover:bg-bg-card-hover hover:border-green-500/40 active:scale-95 transition-all duration-200"
                 >
                   <span className="text-[9px] font-black text-black uppercase tracking-wider">Amount saved</span>
@@ -909,7 +936,7 @@ const MisReportTab = () => {
                   <div className="text-lg font-black text-black mt-1">{currentSpecialist.resolvedToday}</div>
                 </div>
                 <div
-                  onClick={() => handleMetricClick('Resolved Amt Today', currentSpecialist.resolvedTodayList)}
+                  onClick={() => handleMetricClick('Resolved Amt Today', (currentSpecialist.resolvedTodayList || []).filter(c => (c.savedAmount || 0) > 0))}
                   className="bg-bg-input border border-border rounded-xl p-4 border-green-500/10 cursor-pointer hover:bg-bg-card-hover hover:border-green-500/40 active:scale-95 transition-all duration-200"
                 >
                   <span className="text-[9px] font-black text-black uppercase tracking-wider">Resolved amt today</span>
@@ -1031,9 +1058,9 @@ const MisReportTab = () => {
                       <th className="px-4 py-3">Role</th>
                       <th className="px-4 py-3 text-center">Total Cases</th>
                       <th className="px-4 py-3 text-right">Total Amt</th>
-                      <th className="px-4 py-3 text-center">Pending</th>
+                      <th className="px-4 py-3 text-center">Pending Cases</th>
                       <th className="px-4 py-3 text-right">Pending Amt</th>
-                      <th className="px-4 py-3 text-center">Resolved</th>
+                      <th className="px-4 py-3 text-center">Resolved Cases</th>
                       <th className="px-4 py-3 text-right">Amt Saved</th>
                       <th className="px-4 py-3 text-right">Monthly Target</th>
                       <th className="px-4 py-3 text-center">Target Progress</th>
@@ -1054,37 +1081,37 @@ const MisReportTab = () => {
                             </div>
                           </td>
                           <td className="px-4 py-3.5 whitespace-nowrap text-text-muted text-[10px] uppercase font-bold">{spec.role || '—'}</td>
-                          
-                          <td 
+
+                          <td
                             onClick={() => handleMetricClick('Total Cases', spec.totalCasesList, spec.name)}
                             className="px-4 py-3.5 text-center cursor-pointer hover:underline text-black font-black"
                           >
                             {spec.totalCases}
                           </td>
                           <td className="px-4 py-3.5 text-right font-black">{formatCurrency(spec.totalAmt)}</td>
-                          
-                          <td 
+
+                          <td
                             onClick={() => handleMetricClick('Pending Cases', spec.pendingCasesList, spec.name)}
                             className="px-4 py-3.5 text-center cursor-pointer hover:underline text-black font-black"
                           >
                             {spec.pendingCases}
                           </td>
                           <td className="px-4 py-3.5 text-right font-black">{formatCurrency(spec.pendingAmt)}</td>
-                          
-                          <td 
+
+                          <td
                             onClick={() => handleMetricClick('Resolved Cases', spec.resolvedCasesList, spec.name)}
                             className="px-4 py-3.5 text-center cursor-pointer hover:underline text-black font-black"
                           >
                             {spec.resolvedCases}
                           </td>
                           <td className="px-4 py-3.5 text-right font-black">{formatCurrency(spec.resolvedAmt)}</td>
-                          
+
                           <td className="px-4 py-3.5 text-right font-black">{formatCurrency(spec.target || 0)}</td>
                           <td className="px-4 py-3.5 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <div className="w-16 bg-border rounded-full h-2 overflow-hidden">
-                                <div 
-                                  className="bg-accent h-full rounded-full" 
+                                <div
+                                  className="bg-accent h-full rounded-full"
                                   style={{ width: `${Math.min(100, targetMetPct)}%` }}
                                 />
                               </div>
@@ -1197,8 +1224,11 @@ const MisReportTab = () => {
                     <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-text-muted">Case ID</th>
                     <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-text-muted">Company</th>
                     <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-text-muted text-right">Amount</th>
-                    {selectedMetricLabel.toLowerCase().includes('saved') && (
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-text-muted text-right text-black">Saved Amt</th>
+                    {(selectedMetricLabel.toLowerCase().includes('saved') || selectedMetricLabel.toLowerCase().includes('resolved amt')) && (
+                      <>
+                        <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-text-muted text-right text-black">Refunded Amt</th>
+                        <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-text-muted text-right text-black">Saved Amt</th>
+                      </>
                     )}
                     <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-text-muted">Priority</th>
                     <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-text-muted">Status</th>
@@ -1211,8 +1241,11 @@ const MisReportTab = () => {
                       <td className="px-4 py-3.5 whitespace-nowrap text-xs font-mono font-bold text-text-secondary">{c.caseId}</td>
                       <td className="px-4 py-3.5 text-xs font-bold text-text-primary max-w-[200px] truncate">{c.companyName}</td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-xs font-black text-text-primary text-right">{formatCurrency(c.totalAmtPaid)}</td>
-                      {selectedMetricLabel.toLowerCase().includes('saved') && (
-                        <td className="px-4 py-3.5 whitespace-nowrap text-xs font-black text-black text-right">{formatCurrency(c.savedAmount)}</td>
+                      {(selectedMetricLabel.toLowerCase().includes('saved') || selectedMetricLabel.toLowerCase().includes('resolved amt')) && (
+                        <>
+                          <td className="px-4 py-3.5 whitespace-nowrap text-xs font-black text-black text-right">{formatCurrency(c.refundedAmount || 0)}</td>
+                          <td className="px-4 py-3.5 whitespace-nowrap text-xs font-black text-black text-right">{formatCurrency(c.savedAmount)}</td>
+                        </>
                       )}
                       <td className="px-4 py-3.5 whitespace-nowrap">{getPriorityBadge(c.priority)}</td>
                       <td className="px-4 py-3.5 whitespace-nowrap">{getStatusBadge(c.currentStatus)}</td>

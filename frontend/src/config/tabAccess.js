@@ -18,7 +18,7 @@ export const TAB_ACCESS = {
   "my-task":              ["Admin", "Operations", "Staff", "Accountant", "Legal", "Advocate", "Super Admin", "SuperAdmin", "Operation Admin", "operation admin", "Operation Review", "Operation Head"],
   "sod-eod-reports":      ["Admin", "Operations", "Staff", "Accountant", "Super Admin", "SuperAdmin", "Operation Review", "Operation Head"],
   "work-report":          ["Admin", "Operations", "Legal", "Advocate", "Super Admin", "SuperAdmin", "Operation Admin", "operation admin", "Operation Review", "Operation Head"],
-  "refund-request":       ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin", "Operation Review", "Operation Head"],
+  "refund-request":       ["Admin", "Operations", "Staff", "Super Admin", "SuperAdmin", "Operation Review", "Operation Head", "Legal", "Advocate", "Operation Admin", "operation admin"],
   "pending-refunds":      ["Admin", "Super Admin", "SuperAdmin"],
   "user-manual":          ["Admin", "Operations", "Staff", "Accountant", "Super Admin", "SuperAdmin", "Reviewer", "Operation Admin", "operation admin", "Operation Review", "Operation Head", "Legal", "Advocate"],
   "faq":                  ["Admin", "Operations", "Staff", "Accountant", "Super Admin", "SuperAdmin", "Reviewer", "Operation Admin", "operation admin", "Operation Review", "Operation Head", "Legal", "Advocate"]

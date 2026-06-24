@@ -7,6 +7,9 @@ const Report = require('../sql_models/Report');
 const Task = require('../sql_models/Task');
 const Case = require('../sql_models/Case');
 const User = require('../sql_models/User');
+const Progress = require('../sql_models/Progress');
+const Refund = require('../sql_models/Refund');
+const MisReport = require('../sql_models/MisReport');
 const { verifyToken } = require('../middleware/auth');
 
 // Get all reports or user-specific reports
@@ -275,6 +278,18 @@ router.get('/mis', verifyToken, async (req, res) => {
 
     const allCases = await Case.findAll({ where: caseQuery });
     const allUsers = await User.findAll({ attributes: ['id', 'fullName', 'email', 'role', 'monthlyTarget'] });
+    const allProgress = await Progress.findAll();
+    const allRefunds = await Refund.findAll();
+    
+    const progressMap = {};
+    allProgress.forEach(p => {
+      progressMap[p.caseId] = p;
+    });
+
+    const refundsMap = {};
+    allRefunds.forEach(r => {
+      refundsMap[r.caseId] = r;
+    });
 
     let totalActiveCases = 0;
     let totalActiveCasesAmount = 0;
@@ -295,8 +310,7 @@ router.get('/mis', verifyToken, async (req, res) => {
     const userEmail = (req.user.email || '').trim().toLowerCase();
 
     allCases.forEach(c => {
-      const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
-      const isCaseActive = !isCaseResolved;
+      const isCaseActive = !c.isArchived && !(c.currentStatus && closureStatuses.includes(c.currentStatus.trim()));
       const createdDate = c.createdAt ? new Date(c.createdAt) : null;
       const isCreatedToday = createdDate && createdDate >= startOfToday;
 
@@ -403,28 +417,85 @@ router.get('/mis', verifyToken, async (req, res) => {
       }
 
       const amt = c.totalAmtPaid || 0;
-      const saved = c.savedAmount || c.refundedAmount || 0;
       const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
-      const isCaseClosure = isClosureStatus(c.currentStatus);
+      const isCaseClosure = isCaseResolved;
 
-      let shouldCount = false;
-      if (!isCaseResolved) {
-        shouldCount = true;
-      } else {
-        const resolvedDate = c.updatedAt ? new Date(c.updatedAt) : (c.createdAt ? new Date(c.createdAt) : null);
-        const isResolvedInPeriod = !start || !end || (resolvedDate && resolvedDate >= start && resolvedDate <= end);
-        if (isResolvedInPeriod) {
-          shouldCount = true;
+      // Determine precise resolution date using Refund and Progress updates
+      let resolvedDate = null;
+
+      // 1. Try to get resolution date from Refund paymentDate if refundStatus is Paid
+      if (c.refundStatus === 'Paid') {
+        const ref = refundsMap[c.caseId];
+        if (ref) {
+          let reqs = ref.requests;
+          if (typeof reqs === 'string') {
+            try { reqs = JSON.parse(reqs); } catch (e) {}
+          }
+          const requestsList = Array.isArray(reqs) && reqs.length > 0 ? reqs : [ref];
+          let refundPaidDate = null;
+          requestsList.forEach(r => {
+            if (r.status && r.status.toLowerCase() === 'paid' && r.paymentDate) {
+              const pDate = new Date(r.paymentDate);
+              if (!isNaN(pDate.getTime())) {
+                if (!refundPaidDate || pDate > refundPaidDate) {
+                  refundPaidDate = pDate;
+                }
+              }
+            }
+          });
+          resolvedDate = refundPaidDate;
         }
       }
 
-      if (!shouldCount) return;
+      // 2. Try to get resolution date from Progress updates if not already set
+      if (!resolvedDate) {
+        const progress = progressMap[c.caseId];
+        if (progress) {
+          let rawUpdates = progress.updates;
+          if (typeof rawUpdates === 'string') {
+            try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+          }
+          if (typeof rawUpdates === 'string') {
+            try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+          }
+          const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
+          const resolutionUpdate = updates.find(u => u.stage && isCompleted(u.stage));
+          if (resolutionUpdate && resolutionUpdate.createdAt) {
+            resolvedDate = new Date(resolutionUpdate.createdAt);
+          }
+        }
+      }
+
+      // 3. Fall back to createdAt rather than updatedAt to prevent shifting resolution dates on edits
+      if (!resolvedDate) {
+        resolvedDate = c.createdAt ? new Date(c.createdAt) : (c.updatedAt ? new Date(c.updatedAt) : null);
+      }
+
+      let saved = 0;
+      const ref = refundsMap[c.caseId];
+      if (ref && c.refundStatus === 'Paid') {
+        if (ref.savedAmount !== null && ref.savedAmount !== undefined) {
+          saved = Number(ref.savedAmount);
+        } else {
+          saved = Math.max(0, (c.totalAmtPaid || 0) - (c.refundedAmount || 0));
+        }
+      } else {
+        saved = 0;
+      }
+
+      // Check if it got resolved within the period, or if it is still pending at the end of the period
+      const isResolvedInPeriod = isCaseResolved && (!start || (resolvedDate && resolvedDate >= start)) && (!end || (resolvedDate && resolvedDate <= end));
+
+      // Check assignment date to see if case existed for the user in this period
+      const assignedDate = c.assignedAt ? new Date(c.assignedAt) : (c.createdAt ? new Date(c.createdAt) : (c.createdDate ? new Date(c.createdDate) : null));
+      if (end && assignedDate && assignedDate > end && !isResolvedInPeriod) {
+        return; // Skip case: was assigned/created after the end of this period
+      }
 
       const createdDate = c.createdAt ? new Date(c.createdAt) : null;
       const isAssignedToday = createdDate && createdDate >= startOfToday;
 
-      const updatedDate = c.updatedAt ? new Date(c.updatedAt) : null;
-      const isResolvedToday = isCaseResolved && isCaseClosure && updatedDate && updatedDate >= startOfToday;
+      const isResolvedToday = isCaseResolved && isCaseClosure && resolvedDate && resolvedDate >= startOfToday;
 
       const caseItem = {
         id: c.id,
@@ -435,6 +506,7 @@ router.get('/mis', verifyToken, async (req, res) => {
         priority: c.priority || 'Medium',
         dueDate: c.dueDate || '—',
         savedAmount: saved,
+        refundedAmount: c.refundedAmount || 0,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt
       };
@@ -443,7 +515,7 @@ router.get('/mis', verifyToken, async (req, res) => {
       stats.totalAmt += amt;
       stats.totalCasesList.push(caseItem);
 
-      if (isCaseResolved) {
+      if (isResolvedInPeriod) {
         if (isCaseClosure) {
           stats.resolvedCases++;
           stats.resolvedCasesList.push(caseItem);
@@ -451,9 +523,14 @@ router.get('/mis', verifyToken, async (req, res) => {
         stats.resolvedAmt += saved;
         stats.saved += saved;
       } else {
-        stats.pendingCases++;
-        stats.pendingAmt += amt;
-        stats.pendingCasesList.push(caseItem);
+        // If not resolved, or resolved after end of period, it counts as pending during this period
+        // But if it was resolved BEFORE this period, it should NOT count as pending!
+        const isResolvedBeforeStart = isCaseResolved && start && resolvedDate && resolvedDate < start;
+        if (!isResolvedBeforeStart) {
+          stats.pendingCases++;
+          stats.pendingAmt += amt;
+          stats.pendingCasesList.push(caseItem);
+        }
       }
 
       if (isAssignedToday) {
@@ -489,6 +566,35 @@ router.get('/mis', verifyToken, async (req, res) => {
           (p.email || '').trim().toLowerCase() === userEmail
         );
       }
+    }
+
+    try {
+      const periodName = startDate && endDate ? `${startDate} to ${endDate}` : 'All Time';
+      const existing = await MisReport.findOne({ where: { period: periodName } });
+      if (existing) {
+        await existing.update({
+          totalActiveCases,
+          totalActiveCasesAmount,
+          pendingOverdueCases,
+          pendingOverdueCasesAmount,
+          totalAmountAtRisk,
+          casesAssignedToday,
+          specialistPerformance: performanceList
+        });
+      } else {
+        await MisReport.create({
+          period: periodName,
+          totalActiveCases,
+          totalActiveCasesAmount,
+          pendingOverdueCases,
+          pendingOverdueCasesAmount,
+          totalAmountAtRisk,
+          casesAssignedToday,
+          specialistPerformance: performanceList
+        });
+      }
+    } catch (dbErr) {
+      console.error('Error saving mis_report to db:', dbErr);
     }
 
     res.json({

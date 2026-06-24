@@ -15,7 +15,7 @@ const router = express.Router();
 router.get('/', verifyToken, async (req, res) => {
   try {
     let query = req.query.caseId ? { caseId: req.query.caseId } : {};
-    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operations', 'Operation Review', 'Operation Head'].includes(req.user.role) && !req.query.caseId) {
+    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operations', 'Operation Review', 'Operation Head', 'Legal', 'Advocate', 'Operation Admin', 'operation admin'].includes(req.user.role) && !req.query.caseId) {
       query.requestedBy = req.user.email;
     }
 
@@ -145,7 +145,7 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
-router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Review', 'Operation Head']), async (req, res) => {
+router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Review', 'Operation Head', 'Operation Admin', 'operation admin']), async (req, res) => {
   try {
     const { 
       caseId, amount, summary, bankName, accHolder, ifsc, 
@@ -255,8 +255,63 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
     }
 
     try {
-      await Case.update({ refundStatus: 'Pending' }, { where: { caseId: doc.caseId } });
-    } catch (e) {}
+      const caseDoc = await Case.findOne({ where: { caseId: doc.caseId } });
+      if (caseDoc) {
+        const existingProgress = await Progress.findOne({ where: { caseId: doc.caseId } });
+        let reqListRaw = doc.requests;
+        if (typeof reqListRaw === 'string') {
+          try { reqListRaw = JSON.parse(reqListRaw); } catch (e) { reqListRaw = []; }
+        }
+        const reqList = Array.isArray(reqListRaw) && reqListRaw.length > 0 ? reqListRaw : [doc];
+
+        let totalPaidAmount = 0;
+        reqList.forEach(r => {
+          if (r.status?.toLowerCase() === 'paid') {
+            totalPaidAmount += Number(r.amount) || 0;
+          } else if (Array.isArray(r.installments) && r.installments.length > 0) {
+            r.installments.forEach(inst => {
+              if (inst.status?.toLowerCase() === 'paid') {
+                totalPaidAmount += Number(inst.amount) || 0;
+              }
+            });
+          }
+        });
+
+        let mappedRefundStatus = 'Pending';
+        const hasPending = reqList.some(r => {
+          const s = r.status?.toLowerCase() || '';
+          return ['pending review', 'pending admin approval', 'pending payment', 'pending'].includes(s);
+        });
+        const allPaid = reqList.every(r => {
+          const s = r.status?.toLowerCase() || '';
+          if (s === 'paid') return true;
+          if (Array.isArray(r.installments) && r.installments.length > 0) {
+            return r.installments.every(inst => inst.status?.toLowerCase() === 'paid');
+          }
+          return r.transactionId && r.paymentDate;
+        });
+
+        if (hasPending) mappedRefundStatus = 'Pending';
+        else if (allPaid) mappedRefundStatus = 'Paid';
+
+        caseDoc.refundStatus = mappedRefundStatus;
+
+        if (mappedRefundStatus === 'Paid') {
+          caseDoc.refundedAmount = totalPaidAmount;
+          caseDoc.savedAmount = Math.max(0, (caseDoc.totalAmtPaid || 0) - totalPaidAmount);
+        } else {
+          caseDoc.refundedAmount = existingProgress ? (existingProgress.refundedAmount || 0) : 0;
+          caseDoc.savedAmount = Math.max(0, (caseDoc.totalAmtPaid || 0) - caseDoc.refundedAmount);
+        }
+
+        doc.refundedAmount = caseDoc.refundedAmount;
+        doc.savedAmount = caseDoc.savedAmount;
+        await doc.save();
+        await caseDoc.save();
+      }
+    } catch (e) {
+      console.error('Error syncing case/refund on creation:', e);
+    }
 
     try {
       const staffToNotify = ['Reviewer', 'Admin'];
@@ -424,6 +479,10 @@ router.put('/:id', verifyToken, async (req, res) => {
           caseDoc.refundedAmount = existingProgress ? (existingProgress.refundedAmount || 0) : 0;
           caseDoc.savedAmount = Math.max(0, (caseDoc.totalAmtPaid || 0) - caseDoc.refundedAmount);
         }
+
+        doc.refundedAmount = caseDoc.refundedAmount;
+        doc.savedAmount = caseDoc.savedAmount;
+        await doc.save();
 
         await caseDoc.save();
 
@@ -652,6 +711,12 @@ router.delete('/:id', verifyToken, roleGuard(['Admin', 'Super Admin', 'SuperAdmi
         } else {
           caseDoc.refundedAmount = existingProgress ? (existingProgress.refundedAmount || 0) : 0;
           caseDoc.savedAmount = Math.max(0, (caseDoc.totalAmtPaid || 0) - caseDoc.refundedAmount);
+        }
+
+        if (remaining) {
+          remaining.refundedAmount = caseDoc.refundedAmount;
+          remaining.savedAmount = caseDoc.savedAmount;
+          await remaining.save();
         }
       }
       await caseDoc.save();

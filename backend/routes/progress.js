@@ -37,11 +37,11 @@ router.get('/', verifyToken, async (req, res) => {
       timelineQuery.createdAt = { [Op.gte]: cutoff };
     }
 
-    let progressDocs = await Progress.findAll({ 
-      where: { caseId }, 
-      order: [['createdAt', 'DESC']] 
+    let progressDocs = await Progress.findAll({
+      where: { caseId },
+      order: [['createdAt', 'DESC']]
     });
-    
+
     let progressDoc = progressDocs.length > 0 ? progressDocs[0] : null;
 
     if (!progressDoc) {
@@ -101,14 +101,14 @@ router.get('/', verifyToken, async (req, res) => {
         createdAt: tEvent.eventDate || tEvent.createdAt
       });
     }
-    
+
     for (const doc of progressDocs) {
       let rawUpdates = doc.updates;
       if (typeof rawUpdates === 'string') {
-        try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+        try { rawUpdates = JSON.parse(rawUpdates); } catch (e) { }
       }
       if (typeof rawUpdates === 'string') {
-        try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+        try { rawUpdates = JSON.parse(rawUpdates); } catch (e) { }
       }
       const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
       if (updates.length > 0) {
@@ -135,13 +135,13 @@ router.get('/', verifyToken, async (req, res) => {
     const uniqueLogsMap = new Map();
     for (const log of logs) {
       if (!log.summary && !log.stage && !log.nextAction) continue; // Filter out empty timeline events
-      
+
       const stageKey = log.stage || 'no-stage';
       const summaryText = log.summary ? log.summary.trim() : 'no-summary';
       const summaryKey = `${stageKey}-${summaryText}`;
       uniqueLogsMap.set(summaryKey, log);
     }
-    
+
     logs = Array.from(uniqueLogsMap.values());
     logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
@@ -154,19 +154,19 @@ router.get('/', verifyToken, async (req, res) => {
           const dateObj = new Date(dateToUse);
           const start = new Date(dateObj.getTime() - 300000);
           const end = new Date(dateObj.getTime() + 300000);
-          
+
           const timelineEvent = await Timeline.findOne({
             where: {
               caseId,
               createdAt: { [Op.between]: [start, end] }
             }
           });
-          
+
           if (timelineEvent && timelineEvent.metadata) {
             log.nextAction = timelineEvent.metadata.nextAction || timelineEvent.metadata.recommendedNextSteps;
           }
         }
-        
+
         if (!log.nextAction && targetCase) {
           if (idx === 0) {
             log.nextAction = targetCase.recommendedNextSteps;
@@ -254,13 +254,13 @@ router.post('/', verifyToken, async (req, res) => {
     } else {
       let rawUpdates = progressDoc.updates;
       if (typeof rawUpdates === 'string') {
-        try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+        try { rawUpdates = JSON.parse(rawUpdates); } catch (e) { }
       }
       if (typeof rawUpdates === 'string') {
-        try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+        try { rawUpdates = JSON.parse(rawUpdates); } catch (e) { }
       }
       let currentUpdates = Array.isArray(rawUpdates) ? rawUpdates : [];
-      
+
       // Archive existing legacy root state if this is the first update
       if (currentUpdates.length === 0 && progressDoc.summary) {
         currentUpdates.push({
@@ -332,7 +332,7 @@ router.post('/', verifyToken, async (req, res) => {
     // Notify Admin on key stage changes
     const notifyStages = ['Analysis', 'Negotiation', 'Closure'];
     const isComplianceDue = stage === 'Closure' && compliancePending === true;
-    
+
     if (stage && (notifyStages.includes(stage) || isComplianceDue)) {
       try {
         const targetCase = await Case.findOne({ where: { caseId } });
@@ -401,10 +401,10 @@ router.post('/', verifyToken, async (req, res) => {
         });
         if (assignee && assignee.email) {
           createNotification(
-            assignee.email, 
-            'Case Forwarded', 
-            `Case ${caseId} has been forwarded to you during a Progress Update by ${req.user.fullName || 'System'}.`, 
-            'Assignment', 
+            assignee.email,
+            'Case Forwarded',
+            `Case ${caseId} has been forwarded to you during a Progress Update by ${req.user.fullName || 'System'}.`,
+            'Assignment',
             `/case-master?search=${caseId}`
           );
         }
@@ -432,10 +432,10 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
 
     let rawUpdates = progressDoc ? progressDoc.updates : [];
     if (typeof rawUpdates === 'string') {
-      try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+      try { rawUpdates = JSON.parse(rawUpdates); } catch (e) { }
     }
     if (typeof rawUpdates === 'string') {
-      try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+      try { rawUpdates = JSON.parse(rawUpdates); } catch (e) { }
     }
     let updates = Array.isArray(rawUpdates) ? rawUpdates : [];
     const updateIndex = updates.findIndex(u => String(u._id) === String(logId));
@@ -457,7 +457,7 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
         await progressDoc.save();
         return res.json({ message: 'Legacy progress updated', id: logId });
       }
-      
+
       // Fallback 2: Timeline event only
       const timelineEvent = await Timeline.findOne({ where: { id: logId, caseId } });
       if (timelineEvent && timelineEvent.eventType === 'Progress Update') {
@@ -481,7 +481,7 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
         await timelineEvent.save();
         return res.json({ message: 'Timeline progress updated', id: logId });
       }
-      
+
       return res.status(404).json({ error: 'Progress log entry not found' });
     }
 
@@ -493,7 +493,7 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
     const isPaid = existingCase && existingCase.refundStatus === 'Paid';
     const finalRefundedAmount = isPaid ? (existingCase.refundedAmount || 0) : 0;
     const finalSavedAmount = isPaid ? Math.max(0, (existingCase ? (existingCase.totalAmtPaid || 0) : 0) - finalRefundedAmount) : 0;
-    
+
     if (stage !== undefined) updates[updateIndex].stage = stage;
     if (percentage !== undefined) updates[updateIndex].percentage = percentage;
     if (summary !== undefined) updates[updateIndex].summary = summary;
@@ -507,7 +507,7 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
     if (finalRefundedAmount !== undefined) updates[updateIndex].refundedAmount = finalRefundedAmount;
     if (finalSavedAmount !== undefined) updates[updateIndex].savedAmount = finalSavedAmount;
     if (attachment !== undefined) updates[updateIndex].attachment = attachment;
-    
+
     const isLatest = updateIndex === updates.length - 1;
     if (isLatest) {
       if (stage !== undefined) progressDoc.stage = stage;
@@ -528,14 +528,14 @@ router.put('/:caseId/update/:logId', verifyToken, async (req, res) => {
       if (stage === 'Closure' && compliancePending !== undefined) {
         caseUpdateFields.compliancePending = compliancePending;
       }
-          
+
       // Notify Admin on Closure
       if (stage === 'Closure') {
         try {
           const targetCase = await Case.findOne({ where: { caseId } });
           const admins = await User.findAll({ where: { role: 'Admin' } });
           const adminEmails = admins.map(u => u.email).filter(Boolean).join(',');
-          
+
           if (adminEmails && targetCase && targetCase.currentStatus !== 'Closure') {
             const subject = `✅ Case Closed: ${caseId}`;
             const html = `

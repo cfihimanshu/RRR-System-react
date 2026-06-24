@@ -33,28 +33,81 @@ const WorkReportTab = () => {
   const [loading, setLoading] = useState(true);
   const [viewingReport, setViewingReport] = useState(null);
   const [filterType, setFilterType] = useState('All');
-  const [filterDate, setFilterDate] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [filterUser, setFilterUser] = useState(location.state?.userEmail || 'All');
+  const [dateFilterPreset, setDateFilterPreset] = useState('All');
+
+  const handlePresetChange = (preset) => {
+    setDateFilterPreset(preset);
+    const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+    const todayStr = todayIST.toISOString().split('T')[0];
+
+    if (preset === 'Today') {
+      setFilterStartDate(todayStr);
+      setFilterEndDate(todayStr);
+    } else if (preset === 'Current Month') {
+      const year = todayIST.getFullYear();
+      const month = String(todayIST.getMonth() + 1).padStart(2, '0');
+      const firstDay = `${year}-${month}-01`;
+      
+      const lastDayObj = new Date(year, todayIST.getMonth() + 1, 0);
+      const lastDay = `${year}-${month}-${String(lastDayObj.getDate()).padStart(2, '0')}`;
+      
+      setFilterStartDate(firstDay);
+      setFilterEndDate(lastDay);
+    } else {
+      setFilterStartDate('');
+      setFilterEndDate('');
+    }
+  };
   const [dayActivities, setDayActivities] = useState([]);
   const [dayTasks, setDayTasks] = useState([]);
   const [fetchingActivities, setFetchingActivities] = useState(false);
   const [previewSelfie, setPreviewSelfie] = useState(null);
 
+  // Calendar Specific States
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [calendarUserEmail, setCalendarUserEmail] = useState('');
+  const [calendarDate, setCalendarDate] = useState(new Date(Date.now() + (5.5 * 60 * 60 * 1000)));
+  const [leaves, setLeaves] = useState([]);
+  const [blockedEmails, setBlockedEmails] = useState([]);
+
+  const calendarUsersList = useMemo(() => {
+    const userRole = (stats?.role || user?.role || '').toLowerCase().trim();
+    const isUserAdmin = ['admin', 'super admin', 'superadmin'].includes(userRole);
+    if (!isUserAdmin) {
+      return users;
+    }
+    const restrictedRoles = ['admin', 'super admin', 'superadmin', 'accountant', 'reviewer', 'operation head', 'operation review'];
+    return users.filter(u => {
+      const roleLower = (u.role || '').toLowerCase().trim();
+      return !restrictedRoles.includes(roleLower);
+    });
+  }, [users, stats?.role, user]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [statsRes, reportsRes] = await Promise.all([
+      const [statsRes, reportsRes, leavesRes] = await Promise.all([
         api.get('/reports/stats'),
-        api.get('/reports')
+        api.get('/reports?limit=1000'),
+        api.get('/leaves').catch(err => ({ data: [] }))
       ]);
       setStats(statsRes.data);
       const reportList = reportsRes.data.reports || (Array.isArray(reportsRes.data) ? reportsRes.data : []);
       setReports(reportList || []);
+      setLeaves(leavesRes.data || []);
 
       if (['Admin', 'Super Admin', 'SuperAdmin'].includes(statsRes.data?.role)) {
         try {
-          const usersRes = await api.get('/auth/users');
+          const [usersRes, missedRes] = await Promise.all([
+            api.get('/auth/users'),
+            api.get('/users/missed-eod').catch(() => ({ data: [] }))
+          ]);
           setUsers(usersRes.data || []);
+          const blockedList = (missedRes.data || []).filter(u => !u.bypassEodCheck).map(u => u._id || u.email);
+          setBlockedEmails(blockedList);
         } catch (userErr) {
           console.error('Failed to fetch users for filter:', userErr);
         }
@@ -69,6 +122,12 @@ const WorkReportTab = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (user && users.length === 0) {
+      setUsers([{ email: user.email, fullName: user.fullName || user.name || user.email }]);
+    }
+  }, [user, users]);
 
   useEffect(() => {
     if (location.state?.userEmail) {
@@ -161,7 +220,8 @@ const WorkReportTab = () => {
     const typeMatch = filterType === 'All'
       || (filterType === 'SOD' && (r.type === 'SOD' || r.type === 'SOD+EOD'))
       || (filterType === 'EOD' && (r.type === 'EOD' || r.type === 'SOD+EOD'));
-    const dateMatch = !filterDate || r.date === filterDate;
+    const dateMatch = (!filterStartDate || r.date >= filterStartDate) &&
+                      (!filterEndDate || r.date <= filterEndDate);
     const userMatch = filterUser === 'All' || r.userEmail === filterUser;
     return typeMatch && dateMatch && userMatch;
   });
@@ -209,74 +269,290 @@ const WorkReportTab = () => {
     }
   };
 
+  const getCalendarDays = () => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+
+    let startDayOfWeek = firstDay.getDay() - 1;
+    if (startDayOfWeek === -1) startDayOfWeek = 6;
+
+    const days = [];
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push(null);
+    }
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      days.push(new Date(year, month, d));
+    }
+    return days;
+  };
+
+  const handleExportCalendar = () => {
+    if (!calendarUserEmail) return;
+    
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    
+    const rows = [];
+    const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+    const todayKey = todayIST.toISOString().split('T')[0];
+
+    for (let d = 1; d <= totalDays; d++) {
+      const dayObj = new Date(year, month, d);
+      const dayOfWeek = dayObj.toLocaleDateString('default', { weekday: 'long' });
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      
+      const dayReports = reports.filter(r => r.date === dateStr && r.userEmail === calendarUserEmail);
+      const hasSod = dayReports.some(r => r.type === 'SOD');
+      const hasEod = dayReports.some(r => r.type === 'EOD');
+      
+      const aggRep = aggregatedReports.find(r => r.date === dateStr && r.userEmail === calendarUserEmail);
+
+      const hasApprovedLeave = leaves.some(l =>
+        l.requestedBy === calendarUserEmail &&
+        l.status === 'Approved' &&
+        l.startDate <= dateStr &&
+        dateStr <= l.endDate
+      );
+
+      const isSunday = dayObj.getDay() === 0;
+
+      let status = 'Absent';
+      let checkIn = '—';
+      let checkOut = '—';
+      let duration = '—';
+
+      if (isSunday) {
+        status = 'Off Day';
+      } else if (hasApprovedLeave) {
+        status = 'Leave';
+      } else if (hasSod && hasEod) {
+        status = 'SOD+EOD';
+      } else if (hasSod) {
+        status = 'SOD';
+      } else if (hasEod) {
+        status = 'EOD';
+      } else if (dateStr > todayKey) {
+        status = 'Scheduled';
+      }
+
+      if (aggRep) {
+        checkIn = aggRep.checkInTime || '—';
+        checkOut = aggRep.checkOutTime || '—';
+        duration = aggRep.duration || '—';
+      }
+
+      rows.push({
+        'Date': dateStr,
+        'Day': dayOfWeek,
+        'Status': status,
+        'Check-In': checkIn,
+        'Check-Out': checkOut,
+        'Duration': duration
+      });
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance Report');
+    
+    // Set column widths
+    worksheet['!cols'] = [
+      { wch: 15 }, // Date
+      { wch: 12 }, // Day
+      { wch: 15 }, // Status
+      { wch: 15 }, // Check-In
+      { wch: 15 }, // Check-Out
+      { wch: 15 }  // Duration
+    ];
+
+    const userObj = users.find(u => u.email === calendarUserEmail);
+    const userName = userObj ? (userObj.fullName || userObj.name) : calendarUserEmail;
+    const monthName = calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+    XLSX.writeFile(workbook, `Attendance_Report_${userName.replace(/\s+/g, '_')}_${monthName.replace(/\s+/g, '_')}.xlsx`);
+  };
+
   // ── Download as CSV with Full Details ──
   const handleDownload = async () => {
-    if (filteredReports.length === 0) return;
-
     setLoading(true);
     try {
       const detailedRows = [];
 
-      for (const r of filteredReports) {
-        const params = new URLSearchParams();
-        if (r.date) params.append('date', r.date);
-        if (r.userEmail) params.append('userEmail', r.userEmail);
+      // 1. Determine date range
+      let start = filterStartDate;
+      let end = filterEndDate;
+      const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+      const todayStr = todayIST.toISOString().split('T')[0];
 
-        const taskParams = new URLSearchParams();
-        if (r.date) taskParams.append('date', r.date);
-        const assigneeName = users.find(u => u.email === r.userEmail)?.fullName || r.userName;
-        if (assigneeName) taskParams.append('assignee', assigneeName);
+      if (!start || !end) {
+        const dates = reports.map(r => r.date).filter(Boolean).sort();
+        if (dates.length > 0) {
+          if (!start) start = dates[0];
+          if (!end) end = todayStr; // Use current day as the end date for All Time/open-ended filters!
+        } else {
+          const past30 = new Date(todayIST.getTime() - 30 * 24 * 60 * 60 * 1000);
+          const past30Str = past30.toISOString().split('T')[0];
+          if (!start) start = past30Str;
+          if (!end) end = todayStr;
+        }
+      }
 
-        // Fetch specific activities for this report row sequentially to avoid overloading the server
-        const [timelineRes, tasksRes] = await Promise.all([
-          api.get(`/timeline?${params.toString()}`),
-          api.get(`/tasks?${taskParams.toString()}`)
-        ]);
+      // 2. Generate all dates in range
+      const dateList = [];
+      let current = new Date(start);
+      const stopDate = new Date(end);
+      current.setHours(0, 0, 0, 0);
+      stopDate.setHours(0, 0, 0, 0);
 
-        const timelineData = timelineRes.data.logs || timelineRes.data.timeline || (Array.isArray(timelineRes.data) ? timelineRes.data : []);
-        const taskData = tasksRes.data.tasks || (Array.isArray(tasksRes.data) ? tasksRes.data : []);
+      while (current <= stopDate) {
+        const yyyy = current.getFullYear();
+        const mm = String(current.getMonth() + 1).padStart(2, '0');
+        const dd = String(current.getDate()).padStart(2, '0');
+        dateList.push(`${yyyy}-${mm}-${dd}`);
+        current.setDate(current.getDate() + 1);
+      }
 
-        const comms = timelineData
-          .filter(a => ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'].includes(a.eventType))
-          .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
-          .join('\n');
+      // 3. Determine target users
+      let targetUsers = [];
+      if (filterUser && filterUser !== 'All') {
+        targetUsers = users.filter(u => u.email === filterUser);
+      } else {
+        targetUsers = calendarUsersList.length > 0 
+          ? calendarUsersList 
+          : users.filter(u => u.role !== 'Admin' && u.role !== 'Super Admin' && u.role !== 'SuperAdmin');
+      }
 
-        const docs = timelineData
-          .filter(a => a.eventType === 'Document Upload')
-          .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
-          .join('\n');
+      // 4. Generate rows
+      for (const u of targetUsers) {
+        const userEmail = u.email;
+        const userName = u.fullName || u.name || u.email;
 
-        const progress = timelineData
-          .filter(a => a.eventType === 'Progress Update')
-          .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
-          .join('\n');
+        for (const dateStr of dateList) {
+          const parts = dateStr.split('-');
+          const dateObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          const dayOfWeek = daysOfWeek[dateObj.getDay()];
 
-        const tasks = taskData
-          .map(t => `• ${t.taskId || 'N/A'}: ${t.title} [${t.status}]`)
-          .join('\n');
+          // Find matching report in aggregated reports and apply type filter
+          let r = aggregatedReports.find(rep => rep.date === dateStr && rep.userEmail === userEmail);
+          if (r) {
+            const matchesType = filterType === 'All'
+              || (filterType === 'SOD' && (r.type === 'SOD' || r.type === 'SOD+EOD'))
+              || (filterType === 'EOD' && (r.type === 'EOD' || r.type === 'SOD+EOD'));
+            if (!matchesType) {
+              r = null;
+            }
+          }
 
-        detailedRows.push([
-          r.date || '',
-          r.type || '',
-          r.userName || '',
-          r.checkInTime || '',
-          r.checkOutTime || '',
-          r.duration || '',
-          r.plannedTasks || '',
-          r.workSummary || '',
-          getCompletionStatus(r) || '',
-          r.progressScore || '',
-          r.moodEnergy || '',
-          comms,
-          docs,
-          progress,
-          tasks,
-          (r.commCount || 0) + (r.docCount || 0) + (r.progressCount || 0) + (r.taskCount || 0)
-        ]);
+          const hasApprovedLeave = leaves.some(l =>
+            l.requestedBy === userEmail &&
+            l.status === 'Approved' &&
+            l.startDate <= dateStr &&
+            dateStr <= l.endDate
+          );
+
+          let status = 'Absent';
+          if (r) {
+            status = 'Present';
+            if (dateObj.getDay() === 0) {
+              status = 'Off Day';
+            } else if (hasApprovedLeave) {
+              status = 'Leave';
+            }
+          } else {
+            if (dateObj.getDay() === 0) {
+              status = 'Off Day';
+            } else if (hasApprovedLeave) {
+              status = 'Leave';
+            } else if (dateStr > todayStr) {
+              status = 'Scheduled';
+            }
+          }
+
+          let comms = '';
+          let docs = '';
+          let progress = '';
+          let tasks = '';
+          let type = r?.type || '—';
+          let checkInTime = r?.checkInTime || '—';
+          let checkOutTime = r?.checkOutTime || '—';
+          let duration = r?.duration || '—';
+          let plannedTasks = r?.plannedTasks || '';
+          let workSummary = r?.workSummary || '';
+          let completionStatus = r ? getCompletionStatus(r) : '—';
+          let progressScore = r?.progressScore || '';
+          let moodEnergy = r?.moodEnergy || '';
+          let totalActivityCount = r ? ((r.commCount || 0) + (r.docCount || 0) + (r.progressCount || 0) + (r.taskCount || 0)) : 0;
+
+          if (r) {
+            // Fetch detailed logs and tasks
+            const params = new URLSearchParams();
+            params.append('date', dateStr);
+            params.append('userEmail', userEmail);
+
+            const taskParams = new URLSearchParams();
+            taskParams.append('date', dateStr);
+            taskParams.append('assignee', userName);
+
+            try {
+              const [timelineRes, tasksRes] = await Promise.all([
+                api.get(`/timeline?${params.toString()}`),
+                api.get(`/tasks?${taskParams.toString()}`)
+              ]);
+
+              const timelineData = timelineRes.data.logs || timelineRes.data.timeline || (Array.isArray(timelineRes.data) ? timelineRes.data : []);
+              const taskData = tasksRes.data.tasks || (Array.isArray(tasksRes.data) ? tasksRes.data : []);
+
+              comms = timelineData
+                .filter(a => ['Call', 'Email', 'Whatsapp', 'WhatsApp', 'Meeting'].includes(a.eventType))
+                .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
+                .join('\n');
+
+              docs = timelineData
+                .filter(a => a.eventType === 'Document Upload')
+                .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
+                .join('\n');
+
+              progress = timelineData
+                .filter(a => a.eventType === 'Progress Update')
+                .map(a => `• ${a.caseId || 'N/A'}: ${a.summary}`)
+                .join('\n');
+
+              tasks = taskData
+                .map(t => `• ${t.taskId || 'N/A'}: ${t.title} [${t.status}]`)
+                .join('\n');
+            } catch (apiErr) {
+              console.error(`Error fetching details for ${userEmail} on ${dateStr}:`, apiErr);
+            }
+          }
+
+          detailedRows.push([
+            dateStr,
+            dayOfWeek,
+            status,
+            type,
+            userName,
+            checkInTime,
+            checkOutTime,
+            duration,
+            plannedTasks,
+            workSummary,
+            completionStatus,
+            progressScore,
+            moodEnergy,
+            comms,
+            docs,
+            progress,
+            tasks,
+            totalActivityCount
+          ]);
+        }
       }
 
       const headers = [
-        'Date', 'Type', 'Submitted By', 'Check-In', 'Check-Out', 'Duration',
+        'Date', 'Day', 'Status', 'Type', 'Submitted By', 'Check-In', 'Check-Out', 'Duration',
         'Planned Tasks', 'Work Summary', 'Completion', 'Progress Score', 'Mood',
         'Communication Details (ID: Summary)', 'Document Details (ID: Summary)',
         'Progress Updates (ID: Summary)', 'Task Details (ID: Title [Status])', 'Total Activity Count'
@@ -335,6 +611,19 @@ const WorkReportTab = () => {
           </div>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
+          <button
+            type="button"
+            onClick={() => {
+              const defaultEmail = calendarUsersList.find(u => u.email === user?.email)
+                ? user?.email
+                : (calendarUsersList[0]?.email || user?.email || '');
+              setCalendarUserEmail(defaultEmail);
+              setShowCalendarModal(true);
+            }}
+            className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-bg-card border-2 border-border text-text-primary hover:bg-bg-input hover:border-accent hover:text-accent shadow-md active:scale-95 cursor-pointer"
+          >
+            <Calendar size={18} className="text-accent" /> Calendar
+          </button>
           {isAdmin && (
             <button
               onClick={handleDownload}
@@ -354,19 +643,57 @@ const WorkReportTab = () => {
             <FileText size={16} className="text-accent" /> Report History
           </h2>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div className="flex items-center gap-2 bg-bg-input border-2 border-border rounded-xl px-4 py-2.5 shadow-inner">
-              <input
-                type="date"
-                className="bg-transparent text-xs font-bold text-text-primary outline-none flex-1"
-                value={filterDate}
-                onChange={e => setFilterDate(e.target.value)}
-              />
-              {filterDate && (
-                <button onClick={() => setFilterDate('')} className="text-gray-400 hover:text-red-400 transition-colors">
-                  <X size={14} />
-                </button>
-              )}
+            {/* Date Preset Dropdown */}
+            <div className="flex items-center gap-2 bg-bg-input border-2 border-border rounded-xl px-3 py-2 shadow-inner">
+              <span className="text-text-secondary">
+                <Calendar size={16} className="text-accent" />
+              </span>
+              <select
+                className="bg-transparent outline-none text-xs font-bold text-text-primary cursor-pointer"
+                value={dateFilterPreset}
+                onChange={e => handlePresetChange(e.target.value)}
+              >
+                <option value="All">All Time</option>
+                <option value="Today">Today</option>
+                <option value="Current Month">Current Month</option>
+                <option value="Custom Range">Custom Range</option>
+              </select>
             </div>
+
+            {/* Custom Range Date Pickers */}
+            {dateFilterPreset === 'Custom Range' && (
+              <>
+                <div className="flex items-center gap-2 bg-bg-input border-2 border-border rounded-xl px-3 py-2 shadow-inner">
+                  <span className="text-[10px] font-black text-text-muted uppercase tracking-wider">From</span>
+                  <input
+                    type="date"
+                    className="bg-transparent text-xs font-bold text-text-primary outline-none"
+                    value={filterStartDate}
+                    onChange={e => setFilterStartDate(e.target.value)}
+                  />
+                  {filterStartDate && (
+                    <button onClick={() => setFilterStartDate('')} className="text-gray-400 hover:text-red-400 transition-colors">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 bg-bg-input border-2 border-border rounded-xl px-3 py-2 shadow-inner">
+                  <span className="text-[10px] font-black text-text-muted uppercase tracking-wider">To</span>
+                  <input
+                    type="date"
+                    className="bg-transparent text-xs font-bold text-text-primary outline-none"
+                    value={filterEndDate}
+                    onChange={e => setFilterEndDate(e.target.value)}
+                  />
+                  {filterEndDate && (
+                    <button onClick={() => setFilterEndDate('')} className="text-gray-400 hover:text-red-400 transition-colors">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
 
             {isAdmin && (
               <div className="flex items-center gap-2 bg-bg-input border-2 border-border rounded-xl px-3 py-2.5 shadow-inner">
@@ -832,6 +1159,195 @@ const WorkReportTab = () => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Calendar Modal */}
+      {showCalendarModal && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/75 backdrop-blur-md animate-in fade-in duration-300 p-4">
+          <div className="relative w-full max-w-[800px] bg-bg-card border-2 border-border rounded-3xl overflow-hidden shadow-[0_25px_60px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-bg-secondary/40">
+              <span className="text-sm font-black text-text-primary uppercase tracking-[0.2em] flex items-center gap-2">
+                <Calendar size={18} className="text-accent" /> Attendance Calendar
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowCalendarModal(false)}
+                className="p-2 text-text-muted hover:text-accent bg-bg-input rounded-xl border border-border hover:border-accent/30 transition-all active:scale-95 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto flex flex-col gap-6 scrollbar-thin">
+              {/* User Selection & Month Navigation */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                
+                {/* User Dropdown & Export Button */}
+                <div className="flex flex-wrap items-end gap-3 min-w-[250px] flex-1">
+                  <div className="flex flex-col gap-1.5 min-w-[220px]">
+                    <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Select User</span>
+                    <select
+                      className="bg-bg-input border-2 border-border rounded-xl px-4 py-2 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all h-[42px] cursor-pointer"
+                      value={calendarUserEmail}
+                      onChange={(e) => setCalendarUserEmail(e.target.value)}
+                    >
+                      {calendarUsersList.map((u) => (
+                        <option key={u.email} value={u.email}>
+                          {u.fullName || u.name || u.email} ({u.role || ''})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                </div>
+
+                {/* Month Navigation */}
+                <div className="flex items-center gap-3 h-[42px] self-end sm:self-center mt-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date(calendarDate);
+                      d.setMonth(d.getMonth() - 1);
+                      setCalendarDate(d);
+                    }}
+                    className="p-2 border-2 border-border rounded-xl text-text-primary hover:bg-bg-input hover:border-accent transition-all cursor-pointer flex items-center justify-center"
+                  >
+                    <ChevronDown size={18} className="rotate-90 text-text-primary" />
+                  </button>
+                  <span className="text-sm font-black text-text-primary min-w-[140px] text-center select-none capitalize">
+                    {calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date(calendarDate);
+                      d.setMonth(d.getMonth() + 1);
+                      setCalendarDate(d);
+                    }}
+                    className="p-2 border-2 border-border rounded-xl text-text-primary hover:bg-bg-input hover:border-accent transition-all cursor-pointer flex items-center justify-center"
+                  >
+                    <ChevronDown size={18} className="-rotate-90 text-text-primary" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-6">
+                {/* Days Header */}
+                <div className="grid grid-cols-7 gap-2 mb-3 text-center border-b border-border pb-3">
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                    <div key={day} className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">
+                      {day}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Days Grid */}
+                <div className="grid grid-cols-7 gap-2.5">
+                  {(() => {
+                    const days = getCalendarDays();
+                    const todayIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+                    const todayKey = todayIST.toISOString().split('T')[0];
+
+                    return days.map((day, idx) => {
+                      if (!day) {
+                        return <div key={`empty-${idx}`} className="bg-bg-input/20 rounded-xl min-h-[80px] border border-transparent" />;
+                      }
+
+                      const isSunday = day.getDay() === 0;
+                      const yearStr = day.getFullYear();
+                      const monthStr = String(day.getMonth() + 1).padStart(2, '0');
+                      const dateStr = String(day.getDate()).padStart(2, '0');
+                      const dayKey = `${yearStr}-${monthStr}-${dateStr}`;
+
+                      // Check if user has submitted SOD/EOD for this date
+                      const dayReports = reports.filter(r => r.date === dayKey && r.userEmail === calendarUserEmail);
+                      const hasSod = dayReports.some(r => r.type === 'SOD');
+                      const hasEod = dayReports.some(r => r.type === 'EOD');
+                      
+                      // Check for approved leaves
+                      const hasApprovedLeave = leaves.some(l =>
+                        l.requestedBy === calendarUserEmail &&
+                        l.status === 'Approved' &&
+                        l.startDate <= dayKey &&
+                        dayKey <= l.endDate
+                      );
+
+                      let status = 'Absent';
+                      if (isSunday) {
+                        status = 'Sunday';
+                      } else if (hasApprovedLeave) {
+                        status = 'Leave';
+                      } else if (hasSod && hasEod) {
+                        status = 'SOD+EOD';
+                      } else if (hasSod) {
+                        status = 'SOD';
+                      } else if (hasEod) {
+                        status = 'EOD';
+                      } else if (dayKey > todayKey) {
+                        status = 'Future';
+                      }
+
+                      return (
+                        <div
+                          key={dayKey}
+                          className={`flex flex-col justify-between p-2 rounded-xl border-2 min-h-[80px] transition-all hover:scale-[1.02] ${dayKey === todayKey ? 'border-accent bg-accent/5' : 'border-border bg-bg-input/10'
+                            }`}
+                        >
+                          <span className="text-[10px] font-black text-text-primary self-end select-none">
+                            {day.getDate()}
+                          </span>
+
+                          <div className="mt-1">
+                            {status === 'Sunday' && (
+                              <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-500 bg-blue-500/10 px-1.5 py-0.5 rounded-lg w-full justify-center border border-blue-500/20 uppercase tracking-wider">
+                                Off Day
+                              </span>
+                            )}
+                            {status === 'Leave' && (
+                              <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-lg w-full justify-center border border-amber-500/20 uppercase tracking-wider">
+                                Leave
+                              </span>
+                            )}
+                            {status === 'SOD+EOD' && (
+                              <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-lg w-full justify-center border border-emerald-500/20 uppercase tracking-wider">
+                                SOD+EOD
+                              </span>
+                            )}
+                            {status === 'SOD' && (
+                              <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-blue-400 bg-blue-500/5 px-1.5 py-0.5 rounded-lg w-full justify-center border border-blue-500/20 uppercase tracking-wider">
+                                SOD
+                              </span>
+                            )}
+                            {status === 'EOD' && (
+                              <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-violet-400 bg-violet-500/5 px-1.5 py-0.5 rounded-lg w-full justify-center border border-violet-500/20 uppercase tracking-wider">
+                                EOD
+                              </span>
+                            )}
+                            {status === 'Absent' && (
+                              <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded-lg w-full justify-center border border-rose-500/20 uppercase tracking-wider">
+                                Absent
+                              </span>
+                            )}
+                            {status === 'Future' && (
+                              <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-text-muted/60 bg-bg-input px-1.5 py-0.5 rounded-lg w-full justify-center border border-border uppercase tracking-wider select-none">
+                                Scheduled
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+            </div>
+
           </div>
         </div>
       )}
