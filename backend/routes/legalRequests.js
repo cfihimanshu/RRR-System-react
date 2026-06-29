@@ -2,7 +2,11 @@ const express = require('express');
 const LegalRequest = require('../sql_models/LegalRequest');
 const LegalProcess = require('../sql_models/LegalProcess');
 const Timeline = require('../sql_models/Timeline');
+const User = require('../sql_models/User');
 const { verifyToken } = require('../middleware/auth');
+const { createNotification } = require('../utils/notificationHelper');
+const { sendEmail } = require('../utils/mailer');
+const { Op } = require('sequelize');
 const router = express.Router();
 
 // Create new legal request
@@ -48,6 +52,60 @@ router.post('/', verifyToken, async (req, res) => {
         remark: reqDoc.remark || ''
       }
     });
+
+    // Send email to Admin users for approval request
+    try {
+      const admins = await User.findAll({
+        where: {
+          role: { [Op.in]: ['Admin', 'Super Admin', 'SuperAdmin'] }
+        }
+      });
+      const adminEmails = admins.map(u => u.email).filter(Boolean);
+      if (adminEmails.length > 0) {
+        const subject = `New Legal Notice Draft Approval Request - Case #${reqDoc.caseId}`;
+        const text = `Hello Admin,
+
+A new legal notice draft has been submitted and is pending your approval.
+
+Details:
+- Case ID: ${reqDoc.caseId}
+- Document Name: ${reqDoc.documentName}
+- Requested By: ${reqDoc.requestedByName} (${reqDoc.requestedBy})
+- Remark: ${reqDoc.remark || 'N/A'}
+- File Link: ${reqDoc.fileLink || 'N/A'}
+
+Please log in to the RRR System to review and approve/reject this request.`;
+
+        const html = `<p>Hello Admin,</p>
+<p>A new legal notice draft has been submitted and is pending your approval.</p>
+<h3>Details:</h3>
+<ul>
+  <li><strong>Case ID:</strong> ${reqDoc.caseId}</li>
+  <li><strong>Document Name:</strong> ${reqDoc.documentName}</li>
+  <li><strong>Requested By:</strong> ${reqDoc.requestedByName} (${reqDoc.requestedBy})</li>
+  <li><strong>Remark:</strong> ${reqDoc.remark || 'N/A'}</li>
+  <li><strong>File Link:</strong> <a href="${reqDoc.fileLink || '#'}">${reqDoc.fileLink || 'N/A'}</a></li>
+</ul>
+<p>Please log in to the RRR System to review and approve/reject this request.</p>`;
+
+        await sendEmail(adminEmails.join(','), subject, text, html);
+      }
+    } catch (err) {
+      console.error('Error sending draft request email to admins:', err);
+    }
+
+    // Send notifications to Admin and Legal users
+    try {
+      await createNotification(
+        ['Admin', 'Legal'],
+        'New Draft Approval Request',
+        `New draft approval request for Case ${reqDoc.caseId} submitted by ${reqDoc.requestedByName}`,
+        'Legal',
+        `/case-master?search=${reqDoc.caseId}`
+      );
+    } catch (err) {
+      console.error('Error creating draft request notification:', err);
+    }
 
     const data = reqDoc.toJSON();
     data._id = data.id;
@@ -128,6 +186,54 @@ router.put('/:id/status', verifyToken, async (req, res) => {
         rejectRemark: rejectRemark || ''
       }
     });
+
+    // Send email to the requesting legal user
+    if (reqDoc.requestedBy) {
+      try {
+        const subject = `Legal Notice Draft Status Update - Case #${reqDoc.caseId} [${status}]`;
+        const text = `Hello ${reqDoc.requestedByName || 'Legal User'},
+
+Your legal notice draft submission has been ${status.toLowerCase()} by the Admin.
+
+Details:
+- Case ID: ${reqDoc.caseId}
+- Document Name: ${reqDoc.documentName}
+- Status: ${status}
+${status === 'Rejected' ? `- Rejection Remark: ${rejectRemark || 'N/A'}` : ''}
+- Action By: ${req.user.fullName || req.user.email}
+
+Please log in to the RRR System to view details.`;
+
+        const html = `<p>Hello ${reqDoc.requestedByName || 'Legal User'},</p>
+<p>Your legal notice draft submission has been <strong>${status.toLowerCase()}</strong> by the Admin.</p>
+<h3>Details:</h3>
+<ul>
+  <li><strong>Case ID:</strong> ${reqDoc.caseId}</li>
+  <li><strong>Document Name:</strong> ${reqDoc.documentName}</li>
+  <li><strong>Status:</strong> ${status}</li>
+  ${status === 'Rejected' ? `<li><strong>Rejection Remark:</strong> ${rejectRemark || 'N/A'}</li>` : ''}
+  <li><strong>Action By:</strong> ${req.user.fullName || req.user.email}</li>
+</ul>
+<p>Please log in to the RRR System to view details.</p>`;
+
+        await sendEmail(reqDoc.requestedBy, subject, text, html);
+      } catch (err) {
+        console.error('Error sending draft status update email to requestor:', err);
+      }
+    }
+
+    // Send notifications to Admin and Legal users
+    try {
+      await createNotification(
+        ['Admin', 'Legal'],
+        `Draft Status Updated: ${status}`,
+        `Legal notice draft for Case ${reqDoc.caseId} has been ${status.toLowerCase()}`,
+        'Legal',
+        `/case-master?search=${reqDoc.caseId}`
+      );
+    } catch (err) {
+      console.error('Error creating draft status update notification:', err);
+    }
 
     const data = reqDoc.toJSON();
     data._id = data.id;

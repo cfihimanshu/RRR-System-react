@@ -1001,6 +1001,9 @@ const initScheduler = () => {
   cron.schedule('0 9 * * *', async () => {
     console.log('Running daily alert scheduler...');
     await runDueCaseAlerts();
+  }, {
+    scheduled: true,
+    timezone: "Asia/Kolkata"
   });
 
   cron.schedule('*/30 * * * *', async () => {
@@ -1011,9 +1014,12 @@ const initScheduler = () => {
   // Daily 8:00 PM report mailer
   cron.schedule('0 20 * * *', async () => {
     await sendDailyReportsToAdmins();
+  }, {
+    scheduled: true,
+    timezone: "Asia/Kolkata"
   });
 
-  console.log('Scheduler initialized with Daily Alerts, 30-Min Assignment Reminders, and Daily 8:00 PM Reports.');
+  console.log('Scheduler initialized with Daily Alerts, 30-Min Assignment Reminders, and Daily 8:00 PM Reports (IST Timezone).');
 };
 
 module.exports = { initScheduler, runDueCaseAlerts, sendUserOverdueAlerts, runAssignmentReminders, sendDailyReportsToAdmins };

@@ -36,6 +36,7 @@ const MisReportTab = () => {
   const [submittingTarget, setSubmittingTarget] = useState(false);
   const [editingTargetType, setEditingTargetType] = useState('');
   const [sendingMail, setSendingMail] = useState(false);
+  const [isOdooFilter, setIsOdooFilter] = useState(false);
 
   const handleSendMailReport = async () => {
     setSendingMail(true);
@@ -93,41 +94,21 @@ const MisReportTab = () => {
   }, [isModalOpen]);
 
   // Date and month filters
-  const [filterType, setFilterType] = useState('current-month'); // 'current-month', 'last-month', 'custom'
+  const [filterType, setFilterType] = useState('overall'); // 'overall', 'current-month', 'last-month', 'custom'
   
-  // Calculate initial dates for current-month so they don't start empty
-  const [startDate, setStartDate] = useState(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const start = new Date(year, month, 1);
-    const y = start.getFullYear();
-    const m = String(start.getMonth() + 1).padStart(2, '0');
-    const d = String(start.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  });
-  
-  const [endDate, setEndDate] = useState(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const end = new Date(year, month + 1, 0);
-    const y = end.getFullYear();
-    const m = String(end.getMonth() + 1).padStart(2, '0');
-    const d = String(end.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  });
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const requestVersionRef = useRef(0);
 
   const fetchData = async (silent = false) => {
-    if (!startDate || !endDate) return;
+    if (filterType !== 'overall' && (!startDate || !endDate)) return;
     const currentVersion = ++requestVersionRef.current;
     try {
       if (!silent) setLoading(true);
       else setRefreshing(true);
 
-      const url = `/reports/mis?startDate=${startDate}&endDate=${endDate}`;
+      const url = `/reports/mis?startDate=${startDate}&endDate=${endDate}&odoo=${isOdooFilter}`;
       const res = await api.get(url);
       if (currentVersion === requestVersionRef.current) {
         setData(res.data);
@@ -150,7 +131,7 @@ const MisReportTab = () => {
     const year = now.getFullYear();
     const month = now.getMonth();
 
-    if (filterType === 'all') {
+    if (filterType === 'overall') {
       setStartDate('');
       setEndDate('');
     } else if (filterType === 'current-month') {
@@ -184,7 +165,7 @@ const MisReportTab = () => {
 
   useEffect(() => {
     fetchData(true);
-  }, [startDate, endDate]);
+  }, [startDate, endDate, isOdooFilter]);
 
   const canViewAllSpecialists = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role);
   const isPersonalScope = data?.scope === 'personal';
@@ -195,14 +176,18 @@ const MisReportTab = () => {
     // Filter out Admin, Operation Head, and Accountant roles
     const filteredPerformance = (data.assigneePerformance || []).filter(p => {
       const roleLower = (p.role || '').toLowerCase().trim();
+      if (isOdooFilter) {
+        return ['operation review', 'operation head'].includes(roleLower);
+      }
       return !['admin', 'super admin', 'superadmin', 'operation head', 'accountant'].includes(roleLower);
     });
 
     if (canViewAllSpecialists) return filteredPerformance;
     if (user?.role?.toLowerCase().trim() === 'operation head') {
-      return filteredPerformance.filter(p =>
-        (p.role || '').toLowerCase().trim() === 'operation review'
-      );
+      return filteredPerformance.filter(p => {
+        const role = (p.role || '').toLowerCase().trim();
+        return role === 'operation review' || (isOdooFilter && role === 'operation head');
+      });
     }
     const userFullName = (user?.fullName || '').trim().toLowerCase();
     const userEmail = (user?.email || '').trim().toLowerCase();
@@ -210,7 +195,7 @@ const MisReportTab = () => {
       (p.name || '').trim().toLowerCase() === userFullName ||
       (p.email || '').trim().toLowerCase() === userEmail
     );
-  }, [data, user, canViewAllSpecialists]);
+  }, [data, user, canViewAllSpecialists, isOdooFilter]);
 
   // Sync selectedSpecialistId when performance data loads/changes
   useEffect(() => {
@@ -722,6 +707,7 @@ const MisReportTab = () => {
                 onChange={(e) => setFilterType(e.target.value)}
                 className="bg-transparent text-xs text-text-primary outline-none font-bold cursor-pointer"
               >
+                <option value="overall" className="bg-bg-card">Overall</option>
                 <option value="current-month" className="bg-bg-card">Current Month</option>
                 <option value="last-month" className="bg-bg-card">Last Month</option>
                 <option value="custom" className="bg-bg-card">Custom Range</option>
@@ -772,6 +758,21 @@ const MisReportTab = () => {
                 </select>
               </div>
             )}
+
+            {/* Odoo Toggle Segment */}
+            <div className="flex items-center px-3.5 py-1">
+              <button
+                type="button"
+                onClick={() => setIsOdooFilter(!isOdooFilter)}
+                className={`text-[10px] font-black uppercase tracking-wider px-3.5 py-1 rounded-lg transition-all active:scale-95 ${
+                  isOdooFilter
+                    ? 'bg-accent text-white shadow-sm'
+                    : 'text-text-muted hover:text-text-primary hover:bg-bg-card-hover'
+                }`}
+              >
+                Odoo
+              </button>
+            </div>
           </div>
         </div>
 
@@ -788,7 +789,7 @@ const MisReportTab = () => {
         {canViewAllSpecialists && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Card 1: Total Active Cases */}
-            <div onClick={() => navigate('/case-master', { state: { misFilter: 'active' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-blue-400/30 transition-all cursor-pointer">
+            <div onClick={() => navigate('/case-master', { state: { misFilter: 'active', excludeOdoo: !isOdooFilter, sourceFilter: isOdooFilter ? 'Odoo' : '' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-blue-400/30 transition-all cursor-pointer">
               <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-bl-[100px] flex items-center justify-center">
                 <Clock size={20} className="text-blue-400/20 translate-x-2 -translate-y-2 group-hover:scale-110 transition-all" />
               </div>
@@ -801,7 +802,7 @@ const MisReportTab = () => {
             </div>
 
             {/* Card 2: Pending/Overdue */}
-            <div onClick={() => navigate('/case-master', { state: { misFilter: 'overdue' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-yellow-400/30 transition-all cursor-pointer">
+            <div onClick={() => navigate('/case-master', { state: { misFilter: 'overdue', excludeOdoo: !isOdooFilter, sourceFilter: isOdooFilter ? 'Odoo' : '' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-yellow-400/30 transition-all cursor-pointer">
               <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/5 rounded-bl-[100px] flex items-center justify-center">
                 <AlertTriangle size={20} className="text-yellow-400/20 translate-x-2 -translate-y-2 group-hover:scale-110 transition-all" />
               </div>
@@ -821,15 +822,15 @@ const MisReportTab = () => {
               <div className="text-[10px] text-text-muted font-bold uppercase tracking-wide mt-2">Linked to Active Cases</div>
             </div>
 
-            {/* Card 4: Cases Assigned Today */}
-            <div onClick={() => navigate('/case-master', { state: { misFilter: 'today' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-green-400/30 transition-all cursor-pointer">
+            {/* Card 4: Closure Cases */}
+            <div onClick={() => navigate('/case-master', { state: { misFilter: 'resolved', excludeOdoo: !isOdooFilter, sourceFilter: isOdooFilter ? 'Odoo' : '' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-green-400/30 transition-all cursor-pointer">
               <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 rounded-bl-[100px] flex items-center justify-center">
                 <CheckCircle2 size={20} className="text-green-400/20 translate-x-2 -translate-y-2 group-hover:scale-110 transition-all" />
               </div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-text-muted">Assigned Today</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-text-muted">Closure Cases</span>
               <div className="text-3xl font-black text-black mt-2">{data.metrics.casesAssignedToday}</div>
               <div className="text-[10px] text-text-muted font-bold uppercase tracking-wide mt-2">
-                {isPersonalScope ? 'Your cases registered today' : 'Newly registered today'}
+                {isPersonalScope ? 'Your cases closed' : 'Total cases closed'}
               </div>
             </div>
           </div>
@@ -908,7 +909,7 @@ const MisReportTab = () => {
                   <div className="text-lg font-black text-black mt-1">{currentSpecialist.resolvedCases}</div>
                 </div>
                 <div
-                  onClick={() => handleMetricClick('Amount Saved', (currentSpecialist.resolvedCasesList || []).filter(c => (c.savedAmount || 0) > 0))}
+                  onClick={() => handleMetricClick('Amount Saved', currentSpecialist.resolvedAmtList || [])}
                   className="bg-bg-input border border-border rounded-xl p-4 border-green-500/10 cursor-pointer hover:bg-bg-card-hover hover:border-green-500/40 active:scale-95 transition-all duration-200"
                 >
                   <span className="text-[9px] font-black text-black uppercase tracking-wider">Amount saved</span>
@@ -1104,7 +1105,12 @@ const MisReportTab = () => {
                           >
                             {spec.resolvedCases}
                           </td>
-                          <td className="px-4 py-3.5 text-right font-black">{formatCurrency(spec.resolvedAmt)}</td>
+                          <td
+                             onClick={() => handleMetricClick('Amount Saved', spec.resolvedAmtList || [], spec.name)}
+                             className="px-4 py-3.5 text-right cursor-pointer hover:underline font-black text-black"
+                           >
+                             {formatCurrency(spec.resolvedAmt)}
+                           </td>
 
                           <td className="px-4 py-3.5 text-right font-black">{formatCurrency(spec.target || 0)}</td>
                           <td className="px-4 py-3.5 text-center">

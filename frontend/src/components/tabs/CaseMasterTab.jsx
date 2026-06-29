@@ -587,15 +587,27 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       }
     };
 
+    const stateExcludeOdoo = location.state?.excludeOdoo;
+    const stateSourceFilter = location.state?.sourceFilter;
+
+    const targetFilters = {
+      ...baseFilters,
+      excludeOdoo: stateExcludeOdoo !== undefined ? stateExcludeOdoo : baseFilters.excludeOdoo,
+      sourceOfComplaint: stateSourceFilter || baseFilters.sourceOfComplaint
+    };
+
     if (misFilter === 'active') {
-      setAppliedFilters({ ...baseFilters, status: ['Active'] });
-      setTempFilters(prev => ({ ...prev, status: ['Active'] }));
+      setAppliedFilters({ ...targetFilters, status: ['Active'] });
+      setTempFilters(prev => ({ ...prev, ...targetFilters, status: ['Active'] }));
     } else if (misFilter === 'overdue') {
-      setAppliedFilters({ ...baseFilters, status: ['Active'] });
-      setTempFilters(prev => ({ ...prev, status: ['Active'] }));
+      setAppliedFilters({ ...targetFilters, status: ['Active'] });
+      setTempFilters(prev => ({ ...prev, ...targetFilters, status: ['Active'] }));
     } else if (misFilter === 'today') {
-      setAppliedFilters({ ...baseFilters, date: today });
-      setTempFilters(prev => ({ ...prev, date: today }));
+      setAppliedFilters({ ...targetFilters, date: today });
+      setTempFilters(prev => ({ ...prev, ...targetFilters, date: today }));
+    } else if (misFilter === 'resolved') {
+      setAppliedFilters({ ...targetFilters, status: ['Closure'] });
+      setTempFilters(prev => ({ ...prev, ...targetFilters, status: ['Closure'] }));
     }
 
     // Clear navigation state so it doesn't re-trigger on re-render

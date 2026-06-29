@@ -10,7 +10,29 @@ const User = require('../sql_models/User');
 const Progress = require('../sql_models/Progress');
 const Refund = require('../sql_models/Refund');
 const MisReport = require('../sql_models/MisReport');
+const Timeline = require('../sql_models/Timeline');
 const { verifyToken } = require('../middleware/auth');
+const { sendDailyReportsToAdmins } = require('../utils/scheduler');
+
+// Route to manually trigger daily reports email (for testing via Postman)
+router.get('/send-daily-email', verifyToken, async (req, res) => {
+  try {
+    await sendDailyReportsToAdmins();
+    res.json({ success: true, message: 'Daily reports summary email triggered successfully.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/send-daily-email', verifyToken, async (req, res) => {
+  try {
+    await sendDailyReportsToAdmins();
+    res.json({ success: true, message: 'Daily reports summary email triggered successfully.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // Get all reports or user-specific reports
 router.get('/', verifyToken, async (req, res) => {
@@ -258,23 +280,52 @@ router.get('/mis', verifyToken, async (req, res) => {
       return closureStatuses.includes(status.trim());
     };
 
+    const isSettlementStatus = (status) => {
+      if (!status) return false;
+      const s = status.trim().toLowerCase();
+      return s === 'settlement' || s === 'settled';
+    };
+
     const nowForIST = new Date();
     const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
     const todayStr = istTime.toISOString().split('T')[0];
     const startOfToday = new Date(`${todayStr}T00:00:00+05:30`);
 
-    const { startDate, endDate } = req.query;
+    const timelineEvents = await Timeline.findAll({
+      where: {
+        createdAt: {
+          [Op.gte]: startOfToday
+        }
+      }
+    });
+
+    const caseIdsWithWorkToday = new Set();
+    const caseIdsImportedToday = new Set();
+
+    timelineEvents.forEach(e => {
+      if (!e.caseId) return;
+      if (e.summary && e.summary.startsWith('Imported: Bulk Import')) {
+        caseIdsImportedToday.add(e.caseId);
+      } else {
+        caseIdsWithWorkToday.add(e.caseId);
+      }
+    });
+
+    const { startDate, endDate, odoo } = req.query;
+    const showOdooOnly = odoo === 'true';
     const isOperationHead = req.user?.role?.toLowerCase().trim() === 'operation head';
     const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
     const isOperationReview = req.user?.role?.toLowerCase().trim() === 'operation review';
     const isOperationAdmin = req.user?.role?.toLowerCase().trim() === 'operation admin';
     const caseQuery = { isArchived: { [Op.not]: true } };
-    if (!isOperationHead && !isAdmin && !isOperationReview && !isOperationAdmin) {
+    if (showOdooOnly) {
+      caseQuery.sourceOfComplaint = { [Op.like]: '%odoo%' };
+    } else if (!isOperationHead && !isAdmin && !isOperationReview && !isOperationAdmin) {
       caseQuery.sourceOfComplaint = { [Op.notLike]: '%odoo%' };
     }
 
-    const start = startDate ? new Date(`${startDate}T00:00:00+05:30`) : null;
-    const end = endDate ? new Date(`${endDate}T23:59:59.999+05:30`) : null;
+    const start = startDate && startDate.trim() !== '' ? new Date(`${startDate}T00:00:00+05:30`) : null;
+    const end = endDate && endDate.trim() !== '' ? new Date(`${endDate}T23:59:59.999+05:30`) : null;
 
     const allCases = await Case.findAll({ where: caseQuery });
     const allUsers = await User.findAll({ attributes: ['id', 'fullName', 'email', 'role', 'monthlyTarget'] });
@@ -322,8 +373,9 @@ router.get('/mis', verifyToken, async (req, res) => {
         ));
 
       const isOdooCase = c.sourceOfComplaint && c.sourceOfComplaint.toLowerCase().includes('odoo');
+      const passOdooCheck = showOdooOnly ? isOdooCase : !isOdooCase;
 
-      if (isCaseActive && !isOdooCase) {
+      if (isCaseActive && passOdooCheck) {
         totalActiveCases++;
         totalActiveCasesAmount += (c.totalAmtPaid || 0);
         totalAmountAtRisk += (c.totalAmtPaid || 0);
@@ -351,8 +403,17 @@ router.get('/mis', verifyToken, async (req, res) => {
         }
       }
 
-      if (isCreatedToday && isOwnCase && !isOdooCase) {
+      const isCaseResolved = !isSettlementStatus(c.currentStatus) && isClosureStatus(c.currentStatus);
+
+      if (isCaseResolved && passOdooCheck) {
         casesAssignedToday++;
+      }
+
+      const isUpdatedToday = c.updatedAt && new Date(c.updatedAt) >= startOfToday;
+      const isSchedulerUpdate = isUpdatedToday && c.lastReminderSentAt && Math.abs(new Date(c.updatedAt) - new Date(c.lastReminderSentAt)) <= 5000;
+      const hasWorkToday = caseIdsWithWorkToday.has(c.caseId) || (isUpdatedToday && !caseIdsImportedToday.has(c.caseId) && !isSchedulerUpdate);
+
+      if (hasWorkToday && isOwnCase && passOdooCheck) {
         todayCasesList.push({
           assignee: c.assignedTo || 'Unassigned',
           caseId: c.caseId,
@@ -388,6 +449,7 @@ router.get('/mis', verifyToken, async (req, res) => {
         totalCasesList: [],
         pendingCasesList: [],
         resolvedCasesList: [],
+        resolvedAmtList: [],
         todayCasesList: [],
         resolvedTodayList: []
       };
@@ -412,12 +474,16 @@ router.get('/mis', verifyToken, async (req, res) => {
 
       const roleLower = (stats.role || '').toLowerCase().trim();
       const isOdooCase = c.sourceOfComplaint && c.sourceOfComplaint.toLowerCase().includes('odoo');
-      if (roleLower !== 'operation review' && isOdooCase) {
-        return; // Skip Odoo cases for non-"Operation Review" specialists
+      if (showOdooOnly) {
+        if (!isOdooCase) return; // Skip non-Odoo cases when filtering by Odoo only
+      } else {
+        if (roleLower !== 'operation review' && isOdooCase) {
+          return; // Skip Odoo cases for non-"Operation Review" specialists in normal mode
+        }
       }
 
       const amt = c.totalAmtPaid || 0;
-      const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
+      const isCaseResolved = !isSettlementStatus(c.currentStatus) && isClosureStatus(c.currentStatus);
       const isCaseClosure = isCaseResolved;
 
       // Determine precise resolution date using Refund and Progress updates
@@ -434,12 +500,26 @@ router.get('/mis', verifyToken, async (req, res) => {
           const requestsList = Array.isArray(reqs) && reqs.length > 0 ? reqs : [ref];
           let refundPaidDate = null;
           requestsList.forEach(r => {
-            if (r.status && r.status.toLowerCase() === 'paid' && r.paymentDate) {
-              const pDate = new Date(r.paymentDate);
-              if (!isNaN(pDate.getTime())) {
-                if (!refundPaidDate || pDate > refundPaidDate) {
-                  refundPaidDate = pDate;
+            if (r.status && r.status.toLowerCase() === 'paid') {
+              if (r.paymentDate) {
+                const pDate = new Date(r.paymentDate);
+                if (!isNaN(pDate.getTime())) {
+                  if (!refundPaidDate || pDate > refundPaidDate) {
+                    refundPaidDate = pDate;
+                  }
                 }
+              }
+              if (Array.isArray(r.installments)) {
+                r.installments.forEach(inst => {
+                  if (inst.status && inst.status.toLowerCase() === 'paid' && inst.paymentDate) {
+                    const instDate = new Date(inst.paymentDate);
+                    if (!isNaN(instDate.getTime())) {
+                      if (!refundPaidDate || instDate > refundPaidDate) {
+                        refundPaidDate = instDate;
+                      }
+                    }
+                  }
+                });
               }
             }
           });
@@ -459,7 +539,7 @@ router.get('/mis', verifyToken, async (req, res) => {
             try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
           }
           const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
-          const resolutionUpdate = updates.find(u => u.stage && isCompleted(u.stage));
+          const resolutionUpdate = updates.find(u => u.stage && isClosureStatus(u.stage));
           if (resolutionUpdate && resolutionUpdate.createdAt) {
             resolvedDate = new Date(resolutionUpdate.createdAt);
           }
@@ -485,6 +565,12 @@ router.get('/mis', verifyToken, async (req, res) => {
 
       // Check if it got resolved within the period, or if it is still pending at the end of the period
       const isResolvedInPeriod = isCaseResolved && (!start || (resolvedDate && resolvedDate >= start)) && (!end || (resolvedDate && resolvedDate <= end));
+
+      // If resolved before start of period, skip entirely
+      const isResolvedBeforeStart = isCaseResolved && start && resolvedDate && resolvedDate < start;
+      if (isResolvedBeforeStart) {
+        return;
+      }
 
       // Check assignment date to see if case existed for the user in this period
       const assignedDate = c.assignedAt ? new Date(c.assignedAt) : (c.createdAt ? new Date(c.createdAt) : (c.createdDate ? new Date(c.createdDate) : null));
@@ -515,14 +601,24 @@ router.get('/mis', verifyToken, async (req, res) => {
       stats.totalAmt += amt;
       stats.totalCasesList.push(caseItem);
 
+      const isPaidInPeriod = (c.refundStatus === 'Paid') && (!start || (resolvedDate && resolvedDate >= start)) && (!end || (resolvedDate && resolvedDate <= end));
+
       if (isResolvedInPeriod) {
         if (isCaseClosure) {
           stats.resolvedCases++;
           stats.resolvedCasesList.push(caseItem);
         }
+      }
+
+      if (isResolvedInPeriod || isPaidInPeriod) {
         stats.resolvedAmt += saved;
         stats.saved += saved;
-      } else {
+        if (saved > 0) {
+          stats.resolvedAmtList.push(caseItem);
+        }
+      }
+
+      if (!isResolvedInPeriod) {
         // If not resolved, or resolved after end of period, it counts as pending during this period
         // But if it was resolved BEFORE this period, it should NOT count as pending!
         const isResolvedBeforeStart = isCaseResolved && start && resolvedDate && resolvedDate < start;
@@ -546,8 +642,203 @@ router.get('/mis', verifyToken, async (req, res) => {
       }
     });
 
+    if (showOdooOnly) {
+      const opHeadKeys = Object.keys(assigneeStatsMap).filter(k => 
+        (assigneeStatsMap[k].role || '').toLowerCase().trim() === 'operation head'
+      );
+
+      if (opHeadKeys.length > 0) {
+        const odooAggregate = {
+          saved: 0,
+          totalCases: 0,
+          totalAmt: 0,
+          pendingCases: 0,
+          pendingAmt: 0,
+          resolvedCases: 0,
+          resolvedAmt: 0,
+          todayCases: 0,
+          todayAmt: 0,
+          resolvedToday: 0,
+          resolvedTodayAmt: 0,
+          totalCasesList: [],
+          pendingCasesList: [],
+          resolvedCasesList: [],
+          resolvedAmtList: [],
+          todayCasesList: [],
+          resolvedTodayList: []
+        };
+
+        allCases.forEach(c => {
+          const isOdooCase = c.sourceOfComplaint && c.sourceOfComplaint.toLowerCase().includes('odoo');
+          if (!isOdooCase) return;
+
+          const amt = c.totalAmtPaid || 0;
+          const isCaseResolved = !isSettlementStatus(c.currentStatus) && isClosureStatus(c.currentStatus);
+          const isCaseClosure = isCaseResolved;
+
+          let resolvedDate = null;
+
+          if (c.refundStatus === 'Paid') {
+            const ref = refundsMap[c.caseId];
+            if (ref) {
+              let reqs = ref.requests;
+              if (typeof reqs === 'string') {
+                try { reqs = JSON.parse(reqs); } catch (e) {}
+              }
+              const requestsList = Array.isArray(reqs) && reqs.length > 0 ? reqs : [ref];
+              let refundPaidDate = null;
+              requestsList.forEach(r => {
+                if (r.status && r.status.toLowerCase() === 'paid') {
+                  if (r.paymentDate) {
+                    const pDate = new Date(r.paymentDate);
+                    if (!isNaN(pDate.getTime())) {
+                      if (!refundPaidDate || pDate > refundPaidDate) {
+                        refundPaidDate = pDate;
+                      }
+                    }
+                  }
+                  if (Array.isArray(r.installments)) {
+                    r.installments.forEach(inst => {
+                      if (inst.status && inst.status.toLowerCase() === 'paid' && inst.paymentDate) {
+                        const instDate = new Date(inst.paymentDate);
+                        if (!isNaN(instDate.getTime())) {
+                          if (!refundPaidDate || instDate > refundPaidDate) {
+                            refundPaidDate = instDate;
+                          }
+                        }
+                      }
+                    });
+                  }
+                }
+              });
+              resolvedDate = refundPaidDate;
+            }
+          }
+
+          if (!resolvedDate) {
+            const progress = progressMap[c.caseId];
+            if (progress) {
+              let rawUpdates = progress.updates;
+              if (typeof rawUpdates === 'string') {
+                try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+              }
+              if (typeof rawUpdates === 'string') {
+                try { rawUpdates = JSON.parse(rawUpdates); } catch(e) {}
+              }
+              const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
+              const resolutionUpdate = updates.find(u => u.stage && isClosureStatus(u.stage));
+              if (resolutionUpdate && resolutionUpdate.createdAt) {
+                resolvedDate = new Date(resolutionUpdate.createdAt);
+              }
+            }
+          }
+
+          if (!resolvedDate) {
+            resolvedDate = c.createdAt ? new Date(c.createdAt) : (c.updatedAt ? new Date(c.updatedAt) : null);
+          }
+
+          let saved = 0;
+          const ref = refundsMap[c.caseId];
+          if (ref && c.refundStatus === 'Paid') {
+            if (ref.savedAmount !== null && ref.savedAmount !== undefined) {
+              saved = Number(ref.savedAmount);
+            } else {
+              saved = Math.max(0, (c.totalAmtPaid || 0) - (c.refundedAmount || 0));
+            }
+          }
+
+          const isResolvedInPeriod = isCaseResolved && (!start || (resolvedDate && resolvedDate >= start)) && (!end || (resolvedDate && resolvedDate <= end));
+
+          // If resolved before start of period, skip entirely
+          const isResolvedBeforeStart = isCaseResolved && start && resolvedDate && resolvedDate < start;
+          if (isResolvedBeforeStart) {
+            return;
+          }
+
+          const assignedDate = c.assignedAt ? new Date(c.assignedAt) : (c.createdAt ? new Date(c.createdAt) : (c.createdDate ? new Date(c.createdDate) : null));
+          if (end && assignedDate && assignedDate > end && !isResolvedInPeriod) {
+            return;
+          }
+
+          const createdDate = c.createdAt ? new Date(c.createdAt) : null;
+          const isAssignedToday = createdDate && createdDate >= startOfToday;
+          const isResolvedToday = isCaseResolved && isCaseClosure && resolvedDate && resolvedDate >= startOfToday;
+
+          const caseItem = {
+            id: c.id,
+            caseId: c.caseId,
+            companyName: c.companyName || '—',
+            totalAmtPaid: amt,
+            currentStatus: c.currentStatus || 'New',
+            priority: c.priority || 'Medium',
+            dueDate: c.dueDate || '—',
+            savedAmount: saved,
+            refundedAmount: c.refundedAmount || 0,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt
+          };
+
+          odooAggregate.totalCases++;
+          odooAggregate.totalAmt += amt;
+          odooAggregate.totalCasesList.push(caseItem);
+
+          const isPaidInPeriod = (c.refundStatus === 'Paid') && (!start || (resolvedDate && resolvedDate >= start)) && (!end || (resolvedDate && resolvedDate <= end));
+
+          if (isResolvedInPeriod) {
+            if (isCaseClosure) {
+              odooAggregate.resolvedCases++;
+              odooAggregate.resolvedCasesList.push(caseItem);
+            }
+          }
+
+          if (isResolvedInPeriod || isPaidInPeriod) {
+            odooAggregate.resolvedAmt += saved;
+            odooAggregate.saved += saved;
+            if (saved > 0) {
+              odooAggregate.resolvedAmtList.push(caseItem);
+            }
+          }
+
+          if (!isResolvedInPeriod) {
+            const isResolvedBeforeStart = isCaseResolved && start && resolvedDate && resolvedDate < start;
+            if (!isResolvedBeforeStart) {
+              odooAggregate.pendingCases++;
+              odooAggregate.pendingAmt += amt;
+              odooAggregate.pendingCasesList.push(caseItem);
+            }
+          }
+
+          if (isResolvedInPeriod && isCaseClosure) {
+            odooAggregate.todayCases++;
+            odooAggregate.todayAmt += amt;
+          }
+
+          const isUpdatedToday = c.updatedAt && new Date(c.updatedAt) >= startOfToday;
+          const isSchedulerUpdate = isUpdatedToday && c.lastReminderSentAt && Math.abs(new Date(c.updatedAt) - new Date(c.lastReminderSentAt)) <= 5000;
+          const hasWorkToday = caseIdsWithWorkToday.has(c.caseId) || (isUpdatedToday && !caseIdsImportedToday.has(c.caseId) && !isSchedulerUpdate);
+
+          if (hasWorkToday) {
+            odooAggregate.todayCasesList.push(caseItem);
+          }
+
+          if (isResolvedToday) {
+            odooAggregate.resolvedToday++;
+            odooAggregate.resolvedTodayAmt += saved;
+            odooAggregate.resolvedTodayList.push(caseItem);
+          }
+        });
+
+        opHeadKeys.forEach(k => {
+          Object.assign(assigneeStatsMap[k], odooAggregate);
+        });
+      }
+    }
+
     let performanceList = Object.values(assigneeStatsMap).filter(stats => {
       const roleLower = (stats.role || '').toLowerCase().trim();
+      if (showOdooOnly) {
+        return ['operation review', 'operation head'].includes(roleLower);
+      }
       const isExcluded = ['admin', 'super admin', 'superadmin', 'operation head', 'accountant'].includes(roleLower);
       if (isExcluded) return false;
 
@@ -557,9 +848,10 @@ router.get('/mis', verifyToken, async (req, res) => {
 
     if (!isAdmin) {
       if (req.user?.role?.toLowerCase().trim() === 'operation head') {
-        performanceList = performanceList.filter(p =>
-          (p.role || '').toLowerCase().trim() === 'operation review'
-        );
+        performanceList = performanceList.filter(p => {
+          const role = (p.role || '').toLowerCase().trim();
+          return role === 'operation review' || (showOdooOnly && role === 'operation head');
+        });
       } else {
         performanceList = performanceList.filter(p =>
           (p.name || '').trim().toLowerCase() === userFullName ||
@@ -568,33 +860,41 @@ router.get('/mis', verifyToken, async (req, res) => {
       }
     }
 
-    try {
-      const periodName = startDate && endDate ? `${startDate} to ${endDate}` : 'All Time';
-      const existing = await MisReport.findOne({ where: { period: periodName } });
-      if (existing) {
-        await existing.update({
-          totalActiveCases,
-          totalActiveCasesAmount,
-          pendingOverdueCases,
-          pendingOverdueCasesAmount,
-          totalAmountAtRisk,
-          casesAssignedToday,
-          specialistPerformance: performanceList
-        });
-      } else {
-        await MisReport.create({
-          period: periodName,
-          totalActiveCases,
-          totalActiveCasesAmount,
-          pendingOverdueCases,
-          pendingOverdueCasesAmount,
-          totalAmountAtRisk,
-          casesAssignedToday,
-          specialistPerformance: performanceList
-        });
+    if (showOdooOnly) {
+      performanceList = performanceList.filter(p =>
+        ['operation review', 'operation head'].includes((p.role || '').toLowerCase().trim())
+      );
+    }
+
+    if (!showOdooOnly) {
+      try {
+        const periodName = startDate && endDate ? `${startDate} to ${endDate}` : 'All Time';
+        const existing = await MisReport.findOne({ where: { period: periodName } });
+        if (existing) {
+          await existing.update({
+            totalActiveCases,
+            totalActiveCasesAmount,
+            pendingOverdueCases,
+            pendingOverdueCasesAmount,
+            totalAmountAtRisk,
+            casesAssignedToday,
+            specialistPerformance: performanceList
+          });
+        } else {
+          await MisReport.create({
+            period: periodName,
+            totalActiveCases,
+            totalActiveCasesAmount,
+            pendingOverdueCases,
+            pendingOverdueCasesAmount,
+            totalAmountAtRisk,
+            casesAssignedToday,
+            specialistPerformance: performanceList
+          });
+        }
+      } catch (dbErr) {
+        console.error('Error saving mis_report to db:', dbErr);
       }
-    } catch (dbErr) {
-      console.error('Error saving mis_report to db:', dbErr);
     }
 
     res.json({
