@@ -133,6 +133,57 @@ const normalizeStatus = (status, assignedTo, initiatedBy) => {
   return normalized;
 };
 
+const isDashboardClosedStatus = (status) => {
+  return ['Closure', 'closure', 'Resolution', 'resolution', 'Resolved', 'resolved',
+    'Done', 'done', 'Complete', 'complete', 'Completed', 'completed', 'Closed', 'closed']
+    .includes(status);
+};
+
+const isDashboardSettledStatus = (status) => {
+  return ['Settled', 'settled', 'Settlement', 'settlement'].includes(status);
+};
+
+const isOdooSourceCase = (c) => String(c.sourceOfComplaint || '').toLowerCase().includes('odoo');
+
+const getDefaultCaseMasterFilters = () => ({
+  status: ['All Status'],
+  priority: ['All Priority'],
+  assignee: ['All Assignees'],
+  typeOfComplaint: ['All Types'],
+  amountSort: '',
+  date: null,
+  state: ['All States'],
+  refundStatus: ['All Refunds'],
+  sourceOfComplaint: '',
+  serviceMode: '',
+  serviceName: '',
+  city: ['All Cities'],
+  lastPaymentStart: '',
+  lastPaymentEnd: '',
+  linkedOnly: false,
+  caseNumbers: '',
+  selectedCaseNumbers: [],
+  showNumberTypes: ['Ack', 'Grievance', 'FIR'],
+  excludeOdoo: false,
+  createdDateStart: '',
+  createdDateEnd: '',
+  dashboardUserFilter: '',
+  dashboardExcludeArchived: false,
+  dashboardExcludeClosed: false,
+  dashboardSettledOnly: false,
+  dashboardClosureOnly: false,
+  customFilters: {
+    companyName: '',
+    clientName: '',
+    clientEmail: '',
+    clientMobile: '',
+    anyDetail: '',
+    selectedField: '',
+    selectedValue: '',
+    conditions: []
+  }
+});
+
 const filterableFields = [
   { label: 'Case ID', key: 'caseId' },
   { label: 'Company Name', key: 'companyName' },
@@ -451,6 +502,14 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
         if (parsed.customFilters.selectedField === undefined) parsed.customFilters.selectedField = '';
         if (parsed.customFilters.selectedValue === undefined) parsed.customFilters.selectedValue = '';
         if (!parsed.customFilters.conditions) parsed.customFilters.conditions = [];
+        if (parsed.excludeOdoo === undefined) parsed.excludeOdoo = false;
+        if (parsed.createdDateStart === undefined) parsed.createdDateStart = '';
+        if (parsed.createdDateEnd === undefined) parsed.createdDateEnd = '';
+        if (parsed.dashboardUserFilter === undefined) parsed.dashboardUserFilter = '';
+        if (parsed.dashboardExcludeArchived === undefined) parsed.dashboardExcludeArchived = false;
+        if (parsed.dashboardExcludeClosed === undefined) parsed.dashboardExcludeClosed = false;
+        if (parsed.dashboardSettledOnly === undefined) parsed.dashboardSettledOnly = false;
+        if (parsed.dashboardClosureOnly === undefined) parsed.dashboardClosureOnly = false;
         return parsed;
       } catch (e) { }
     }
@@ -473,6 +532,14 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       caseNumbers: '',
       selectedCaseNumbers: [],
       showNumberTypes: ['Ack', 'Grievance', 'FIR'],
+      excludeOdoo: false,
+      createdDateStart: '',
+      createdDateEnd: '',
+      dashboardUserFilter: '',
+      dashboardExcludeArchived: false,
+      dashboardExcludeClosed: false,
+      dashboardSettledOnly: false,
+      dashboardClosureOnly: false,
       customFilters: {
         companyName: '',
         clientName: '',
@@ -773,11 +840,12 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     });
 
     const orderMap = {
-      'Assigned': 0,
-      'Analysis': 1,
-      'Negotiation': 2,
-      'Settlement': 3,
-      'Closure': 4
+      'Case Logged': 0,
+      'Assigned': 1,
+      'Analysis': 2,
+      'Negotiation': 3,
+      'Settlement': 4,
+      'Closure': 5
     };
 
     return ['All Status', ...Array.from(statuses).sort((a, b) => {
@@ -1317,74 +1385,121 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   };
 
   useEffect(() => {
-    // Check if we have a special demand filter from dashboard
     const hasDemandFilter = location.state?.hasDemand;
 
-    if (location.state?.linkedOnly) {
-      setAppliedFilters(prev => ({ ...prev, linkedOnly: true }));
-    }
-
-    // Initial data fetch
     fetchCases(!!hasDemandFilter);
     fetchOpsUsers();
     fetchAvailableDates();
     fetchAvailableStates();
     fetchRefundsList();
 
-    // Check for other auto-filters from Dashboard
-    if (location.state?.statusFilter) {
-      const sf = location.state.statusFilter;
-      const statusArray = Array.isArray(sf) ? sf : [sf];
-      setAppliedFilters(prev => ({ ...prev, status: statusArray }));
-      setTempFilters(prev => ({ ...prev, status: statusArray }));
-    }
-    if (location.state?.priorityFilter) {
-      const pf = location.state.priorityFilter;
-      const pfArray = Array.isArray(pf) ? pf : [pf];
-      setAppliedFilters(prev => ({ ...prev, priority: pfArray }));
-      setTempFilters(prev => ({ ...prev, priority: pfArray }));
-    }
-    if (location.state?.searchId) {
-      setSearchTerm(location.state.searchId);
-      setAutoOpenCaseId(location.state.searchId);
-    }
-    if (location.state?.typeFilter) {
-      const tf = location.state.typeFilter;
-      const tfArray = Array.isArray(tf) ? tf : [tf];
-      setAppliedFilters(prev => ({ ...prev, typeOfComplaint: tfArray }));
-      setTempFilters(prev => ({ ...prev, typeOfComplaint: tfArray }));
-    }
-    if (location.state?.unassignedOnly) {
-      setAppliedFilters(prev => ({ ...prev, assignee: ['Unassigned'] }));
-      setTempFilters(prev => ({ ...prev, assignee: ['Unassigned'] }));
-    }
-    if (location.state?.dateFilter) {
-      const df = location.state.dateFilter;
-      setAppliedFilters(prev => ({ ...prev, date: df }));
-      setTempFilters(prev => ({ ...prev, date: df }));
-    }
-    if (location.state?.sourceFilter) {
-      const sf = location.state.sourceFilter;
-      setAppliedFilters(prev => ({ ...prev, sourceOfComplaint: sf }));
-      setTempFilters(prev => ({ ...prev, sourceOfComplaint: sf }));
-    }
-    if (location.state?.refundStatusFilter) {
-      const rf = location.state.refundStatusFilter;
-      const rfArray = Array.isArray(rf) ? rf : [rf];
-      setAppliedFilters(prev => ({ ...prev, refundStatus: rfArray }));
-      setTempFilters(prev => ({ ...prev, refundStatus: rfArray }));
-    }
-    if (location.state?.assigneeFilter) {
-      const af = location.state.assigneeFilter;
-      const afArray = Array.isArray(af) ? af : [af];
-      setAppliedFilters(prev => ({ ...prev, assignee: afArray }));
-      setTempFilters(prev => ({ ...prev, assignee: afArray }));
+    const navState = location.state;
+    if (!navState) {
+      const searchParams = new URLSearchParams(location.search);
+      if (searchParams.has('search')) {
+        setSearchTerm(searchParams.get('search'));
+      }
+      return;
     }
 
-    // Clear state after applying so it doesn't persist on refresh
-    if (location.state) {
-      window.history.replaceState({}, document.title);
+    if (navState.fromDashboard) {
+      let filters = getDefaultCaseMasterFilters();
+
+      if (navState.excludeOdoo) filters.excludeOdoo = true;
+      if (navState.createdDateStart) filters.createdDateStart = navState.createdDateStart;
+      if (navState.createdDateEnd) filters.createdDateEnd = navState.createdDateEnd;
+      if (navState.dashboardUserFilter) filters.dashboardUserFilter = navState.dashboardUserFilter;
+
+      if (navState.statusFilter) {
+        const sf = Array.isArray(navState.statusFilter) ? navState.statusFilter[0] : navState.statusFilter;
+        if (sf === 'Settlement') {
+          filters.dashboardSettledOnly = true;
+        } else if (sf === 'Closure') {
+          filters.dashboardClosureOnly = true;
+          filters.status = ['Closure'];
+        } else {
+          filters.status = Array.isArray(navState.statusFilter) ? navState.statusFilter : [navState.statusFilter];
+          if (sf === 'Active') filters.dashboardExcludeArchived = true;
+        }
+      }
+
+      if (navState.priorityFilter) {
+        filters.priority = Array.isArray(navState.priorityFilter) ? navState.priorityFilter : [navState.priorityFilter];
+        filters.dashboardExcludeArchived = true;
+        filters.dashboardExcludeClosed = true;
+      }
+
+      if (navState.typeFilter) {
+        filters.typeOfComplaint = Array.isArray(navState.typeFilter) ? navState.typeFilter : [navState.typeFilter];
+      }
+      if (navState.unassignedOnly) filters.assignee = ['Unassigned'];
+      if (navState.dateFilter) filters.date = navState.dateFilter;
+      if (navState.sourceFilter) filters.sourceOfComplaint = navState.sourceFilter;
+      if (navState.refundStatusFilter) {
+        filters.refundStatus = Array.isArray(navState.refundStatusFilter) ? navState.refundStatusFilter : [navState.refundStatusFilter];
+      }
+      if (navState.assigneeFilter) {
+        filters.assignee = Array.isArray(navState.assigneeFilter) ? navState.assigneeFilter : [navState.assigneeFilter];
+      }
+      if (navState.linkedOnly) filters.linkedOnly = true;
+
+      setAppliedFilters(filters);
+      setTempFilters(filters);
+    } else {
+      if (navState.linkedOnly) {
+        setAppliedFilters(prev => ({ ...prev, linkedOnly: true }));
+      }
+      if (navState.statusFilter) {
+        const sf = navState.statusFilter;
+        const statusArray = Array.isArray(sf) ? sf : [sf];
+        setAppliedFilters(prev => ({ ...prev, status: statusArray }));
+        setTempFilters(prev => ({ ...prev, status: statusArray }));
+      }
+      if (navState.priorityFilter) {
+        const pf = navState.priorityFilter;
+        const pfArray = Array.isArray(pf) ? pf : [pf];
+        setAppliedFilters(prev => ({ ...prev, priority: pfArray }));
+        setTempFilters(prev => ({ ...prev, priority: pfArray }));
+      }
+      if (navState.searchId) {
+        setSearchTerm(navState.searchId);
+        setAutoOpenCaseId(navState.searchId);
+      }
+      if (navState.typeFilter) {
+        const tf = navState.typeFilter;
+        const tfArray = Array.isArray(tf) ? tf : [tf];
+        setAppliedFilters(prev => ({ ...prev, typeOfComplaint: tfArray }));
+        setTempFilters(prev => ({ ...prev, typeOfComplaint: tfArray }));
+      }
+      if (navState.unassignedOnly) {
+        setAppliedFilters(prev => ({ ...prev, assignee: ['Unassigned'] }));
+        setTempFilters(prev => ({ ...prev, assignee: ['Unassigned'] }));
+      }
+      if (navState.dateFilter) {
+        const df = navState.dateFilter;
+        setAppliedFilters(prev => ({ ...prev, date: df }));
+        setTempFilters(prev => ({ ...prev, date: df }));
+      }
+      if (navState.sourceFilter) {
+        const sf = navState.sourceFilter;
+        setAppliedFilters(prev => ({ ...prev, sourceOfComplaint: sf }));
+        setTempFilters(prev => ({ ...prev, sourceOfComplaint: sf }));
+      }
+      if (navState.refundStatusFilter) {
+        const rf = navState.refundStatusFilter;
+        const rfArray = Array.isArray(rf) ? rf : [rf];
+        setAppliedFilters(prev => ({ ...prev, refundStatus: rfArray }));
+        setTempFilters(prev => ({ ...prev, refundStatus: rfArray }));
+      }
+      if (navState.assigneeFilter) {
+        const af = navState.assigneeFilter;
+        const afArray = Array.isArray(af) ? af : [af];
+        setAppliedFilters(prev => ({ ...prev, assignee: afArray }));
+        setTempFilters(prev => ({ ...prev, assignee: afArray }));
+      }
     }
+
+    window.history.replaceState({}, document.title);
 
     const searchParams = new URLSearchParams(location.search);
     if (searchParams.has('search')) {
@@ -1603,6 +1718,39 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
         return false;
       }
     }
+
+    if (appliedFilters.excludeOdoo && isOdooSourceCase(c)) return false;
+
+    if (appliedFilters.dashboardUserFilter) {
+      const filter = appliedFilters.dashboardUserFilter.toLowerCase().trim();
+      const assignedTo = (c.assignedTo || '').toLowerCase();
+      const initiatedBy = (c.initiatedBy || '').toLowerCase();
+      const isUnassigned = !c.assignedTo || c.assignedTo.trim() === '';
+      const match = assignedTo.includes(filter) || (isUnassigned && initiatedBy.includes(filter));
+      if (!match) return false;
+    }
+
+    if (appliedFilters.createdDateStart || appliedFilters.createdDateEnd) {
+      const rawDate = c.createdDate || c.createdAt;
+      if (!rawDate) return false;
+      const caseCreated = new Date(rawDate);
+      if (Number.isNaN(caseCreated.getTime())) return false;
+      if (appliedFilters.createdDateStart) {
+        const start = new Date(appliedFilters.createdDateStart);
+        start.setHours(0, 0, 0, 0);
+        if (caseCreated < start) return false;
+      }
+      if (appliedFilters.createdDateEnd) {
+        const end = new Date(appliedFilters.createdDateEnd);
+        end.setHours(23, 59, 59, 999);
+        if (caseCreated > end) return false;
+      }
+    }
+
+    if (appliedFilters.dashboardExcludeArchived && c.isArchived) return false;
+    if (appliedFilters.dashboardExcludeClosed && isDashboardClosedStatus(c.currentStatus || c.status)) return false;
+    if (appliedFilters.dashboardSettledOnly && !isDashboardSettledStatus(c.currentStatus || c.status)) return false;
+    if (appliedFilters.dashboardClosureOnly && !isDashboardClosedStatus(c.currentStatus || c.status)) return false;
 
     const matchSearch = (c.caseId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (c.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
@@ -2004,6 +2152,14 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     appliedFilters.lastPaymentEnd ||
     appliedFilters.linkedOnly ||
     appliedFilters.amountSort ||
+    appliedFilters.excludeOdoo ||
+    appliedFilters.createdDateStart ||
+    appliedFilters.createdDateEnd ||
+    appliedFilters.dashboardUserFilter ||
+    appliedFilters.dashboardExcludeArchived ||
+    appliedFilters.dashboardExcludeClosed ||
+    appliedFilters.dashboardSettledOnly ||
+    appliedFilters.dashboardClosureOnly ||
     appliedFilters.caseNumbers ||
     (appliedFilters.selectedCaseNumbers && appliedFilters.selectedCaseNumbers.length > 0) ||
     colSortConfig.key ||
@@ -2017,34 +2173,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   };
 
   const handleResetFilters = () => {
-    const reset = {
-      status: ['All Status'],
-      priority: ['All Priority'],
-      assignee: ['All Assignees'],
-      typeOfComplaint: ['All Types'],
-      amountSort: '',
-      date: null,
-      state: ['All States'],
-      refundStatus: ['All Refunds'],
-      sourceOfComplaint: '',
-      serviceMode: '',
-      serviceName: '',
-      city: ['All Cities'],
-      lastPaymentStart: '',
-      lastPaymentEnd: '',
-      caseNumbers: '',
-      selectedCaseNumbers: [],
-      showNumberTypes: ['Ack', 'Grievance', 'FIR'],
-      customFilters: {
-        companyName: '',
-        clientName: '',
-        clientEmail: '',
-        clientMobile: '',
-        anyDetail: '',
-        selectedField: '',
-        selectedValue: ''
-      }
-    };
+    const reset = getDefaultCaseMasterFilters();
     setTempFilters(reset);
     setAppliedFilters(reset);
     setColumnFilters({});
@@ -2821,14 +2950,14 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
 
     const targetCaseId = caseId || viewCase?.caseId;
 
-    const cycleRequests = requests.filter(r => 
+    const cycleRequests = requests.filter(r =>
       r.caseId === targetCaseId &&
-      new Date(r.createdAt) >= startTime && 
+      new Date(r.createdAt) >= startTime &&
       new Date(r.createdAt) < endTime
     );
 
-    const cycleHistory = history.filter(h => 
-      new Date(h.createdAt) >= startTime && 
+    const cycleHistory = history.filter(h =>
+      new Date(h.createdAt) >= startTime &&
       new Date(h.createdAt) < endTime &&
       h.stage !== 'New Cycle Started'
     );
@@ -3083,7 +3212,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       } else if (item.stage === 'Pack & AD ready') {
         let parsed = {};
         if (item.summary?.startsWith('PACK_AD_READY_JSON:')) {
-          try { parsed = JSON.parse(item.summary.replace('PACK_AD_READY_JSON:', '')); } catch (e) {}
+          try { parsed = JSON.parse(item.summary.replace('PACK_AD_READY_JSON:', '')); } catch (e) { }
         }
         setEditFormPayload({
           receiverName: parsed.receiverName || '',
@@ -3094,7 +3223,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       } else if (item.stage === 'Courier Sent') {
         let parsed = {};
         if (item.summary?.startsWith('COURIER_SENT_JSON:')) {
-          try { parsed = JSON.parse(item.summary.replace('COURIER_SENT_JSON:', '')); } catch (e) {}
+          try { parsed = JSON.parse(item.summary.replace('COURIER_SENT_JSON:', '')); } catch (e) { }
         }
         setEditFormPayload({
           dateTime: parsed.dateTime || '',
@@ -3105,7 +3234,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       } else if (item.stage === 'Reply Received') {
         let parsed = {};
         if (item.summary?.startsWith('REPLY_RECEIVED_JSON:')) {
-          try { parsed = JSON.parse(item.summary.replace('REPLY_RECEIVED_JSON:', '')); } catch (e) {}
+          try { parsed = JSON.parse(item.summary.replace('REPLY_RECEIVED_JSON:', '')); } catch (e) { }
         }
         setEditFormPayload({
           replyDate: parsed.replyDate || '',
@@ -3129,11 +3258,19 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await api.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const UPLOAD_URL = import.meta.env.VITE_UPLOAD_URL || 'https://serenity.herosite.pro/~fmojnedg/uploads/upload.php';
+      const res = await fetch(UPLOAD_URL, {
+        method: 'POST',
+        body: formData
       });
-      setEditFormPayload(prev => ({ ...prev, fileLink: res.data.fileLink }));
-      toast.success('Document uploaded successfully', { id: loadingToast });
+      if (!res.ok) throw new Error('Upload failed');
+      const uploadData = await res.json();
+      if (uploadData && uploadData.success && uploadData.url) {
+        setEditFormPayload(prev => ({ ...prev, fileLink: uploadData.url }));
+        toast.success('Document uploaded successfully', { id: loadingToast });
+      } else {
+        throw new Error(uploadData?.error || 'No URL returned');
+      }
     } catch (err) {
       console.error(err);
       toast.error('Failed to upload document', { id: loadingToast });
@@ -3150,11 +3287,19 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await api.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const UPLOAD_URL = import.meta.env.VITE_UPLOAD_URL || 'https://serenity.herosite.pro/~fmojnedg/uploads/upload.php';
+      const res = await fetch(UPLOAD_URL, {
+        method: 'POST',
+        body: formData
       });
-      setEditFormPayload(prev => ({ ...prev, replyFileLink: res.data.fileLink }));
-      toast.success('Reply document uploaded successfully', { id: loadingToast });
+      if (!res.ok) throw new Error('Upload failed');
+      const uploadData = await res.json();
+      if (uploadData && uploadData.success && uploadData.url) {
+        setEditFormPayload(prev => ({ ...prev, replyFileLink: uploadData.url }));
+        toast.success('Reply document uploaded successfully', { id: loadingToast });
+      } else {
+        throw new Error(uploadData?.error || 'No URL returned');
+      }
     } catch (err) {
       console.error(err);
       toast.error('Failed to upload reply document', { id: loadingToast });
@@ -3162,6 +3307,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
       setEditFormUploading(false);
     }
   };
+
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
@@ -6481,7 +6627,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     {caseProgressLogs.length === 0 ? (
                       <div className="pl-6 opacity-40 italic text-[10px] font-black uppercase tracking-widest">No progress records yet.</div>
                     ) : (
-                      caseProgressLogs.slice().reverse().map((log, idx) => {
+                      caseProgressLogs.map((log, idx) => {
                         const colors = ['bg-orange-500', 'bg-blue-500', 'bg-green-500'];
                         const color = colors[idx % colors.length];
                         return (
@@ -6683,1379 +6829,1380 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
             const isViewingPastCycle = activeCycle !== currentCycle;
             const { cycleRequests, cycleHistory } = getCycleFilteredData(legalProcessHistory, legalRequests, activeCycle);
             const isStageAlreadyFilled = (() => {
-               const stage = legalProcessForm.stage;
-               if (stage === 'Case Study') return cycleHistory.some(h => h.stage === 'Case Study');
-               if (stage === 'Draft') return cycleRequests.length > 0 || cycleHistory.some(h => h.stage === 'Draft');
-               if (stage === 'Pack & AD ready') return cycleHistory.some(h => h.stage === 'Pack & AD ready');
-               if (stage === 'Courier Sent') return cycleHistory.some(h => h.stage === 'Courier Sent');
-               if (stage === 'Reply Received') return cycleHistory.some(h => h.stage === 'Reply Received');
-               return false;
+              const stage = legalProcessForm.stage;
+              if (stage === 'Case Study') return cycleHistory.some(h => h.stage === 'Case Study');
+              if (stage === 'Draft') return cycleRequests.some(r => r.status !== 'Rejected');
+              if (stage === 'Pack & AD ready') return cycleHistory.some(h => h.stage === 'Pack & AD ready');
+              if (stage === 'Courier Sent') return cycleHistory.some(h => h.stage === 'Courier Sent');
+              if (stage === 'Reply Received') return cycleHistory.some(h => h.stage === 'Reply Received');
+              return false;
             })();
             const canEditLegal = ['Admin', 'Super Admin', 'SuperAdmin', 'Legal'].includes(user?.role);
 
             return (
               <>
-              <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-                {/* Stages Visual Progress Bar */}
-                <div className="bg-bg-card rounded-2xl border-2 border-border p-6 shadow-sm relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-accent/[0.02] via-transparent to-purple-500/[0.02] pointer-events-none"></div>
-                  <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-                    <div>
-                      <h4 className="text-xs font-black uppercase tracking-widest text-text-primary">Legal Process Pipeline</h4>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 self-start sm:self-center">
-                      {/* Add New Notice Cycle Button – restricted to Legal & Admin */}
-                      {canEditLegal && getActiveStageOfCase(legalProcessHistory, legalRequests, currentCycle) === 'Reply Received' &&
-                        getStageStatus('Reply Received', 'Reply Received', legalProcessHistory, legalRequests, currentCycle).isCompleted && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const nextCycle = currentCycle + 1;
-                              const loadingToast = toast.loading(`Starting Notice Cycle #${nextCycle}...`);
-                              try {
-                                await api.post('/legal-process', {
-                                  caseId: viewCase.caseId,
-                                  stage: 'New Cycle Started',
-                                  summary: `Notice Cycle ${nextCycle} Started`
-                                });
-                                toast.success(`Notice Cycle #${nextCycle} started successfully!`, { id: loadingToast });
-                                setSelectedCycleToView(nextCycle);
-                                fetchLegalProcessData(viewCase.caseId);
-                              } catch (err) {
-                                console.error('Failed to start new notice cycle:', err);
-                                toast.error('Failed to start new notice cycle', { id: loadingToast });
-                              }
-                            }}
-                            className="px-3 py-1 bg-accent hover:bg-accent-hover text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 flex items-center gap-1.5"
-                          >
-                            <span>+ Add New Notice Cycle</span>
-                          </button>
-                        )}
-
-                      {/* Cycle Selector */}
-                      {currentCycle > 1 && (
-                        <div className="flex items-center gap-1 bg-bg-secondary p-1 border border-border rounded-xl">
-                          {Array.from({ length: currentCycle }, (_, i) => i + 1).map(cNum => {
-                            const isSel = activeCycle === cNum;
-                            return (
-                              <button
-                                type="button"
-                                key={cNum}
-                                onClick={() => setSelectedCycleToView(cNum)}
-                                className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
-                                  isSel
-                                    ? 'bg-accent text-white shadow-sm font-black'
-                                    : 'text-text-muted hover:text-text-primary font-bold'
-                                }`}
-                              >
-                                Cycle {cNum} {cNum === currentCycle && ' (Active)'}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {/* Cancel Current Notice Cycle */}
-                      {!isViewingPastCycle && currentCycle > 1 && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const cycleStartRecord = [...legalProcessHistory].find(h => h.stage === 'New Cycle Started');
-                            if (!cycleStartRecord) return;
-                            
-                            if (window.confirm(`Are you sure you want to cancel Notice Cycle #${currentCycle}? This will revert the pipeline back to the previous cycle.`)) {
-                              const loadingToast = toast.loading(`Canceling Notice Cycle #${currentCycle}...`);
-                              try {
-                                await api.delete(`/legal-process/${cycleStartRecord.id || cycleStartRecord._id}`);
-                                toast.success(`Notice Cycle #${currentCycle} canceled successfully!`, { id: loadingToast });
-                                setSelectedCycleToView(1);
-                                fetchLegalProcessData(viewCase.caseId);
-                              } catch (err) {
-                                console.error('Failed to cancel notice cycle:', err);
-                                toast.error('Failed to cancel notice cycle', { id: loadingToast });
-                              }
-                            }
-                          }}
-                          className="px-3 py-1.5 bg-red-soft/20 text-red border border-red/10 hover:bg-red hover:text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 flex items-center gap-1.5"
-                        >
-                          ❌ Cancel Cycle
-                        </button>
-                      )}
-
-                      <div className="px-3 py-1 bg-accent-soft/10 border border-accent/20 rounded-xl text-[10px] font-black uppercase tracking-wider text-accent">
-                        Current stage: {legalProcessForm.stage}
+                <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+                  {/* Stages Visual Progress Bar */}
+                  <div className="bg-bg-card rounded-2xl border-2 border-border p-6 shadow-sm relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-accent/[0.02] via-transparent to-purple-500/[0.02] pointer-events-none"></div>
+                    <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-widest text-text-primary">Legal Process Pipeline</h4>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="relative z-10">
-                    {/* Connected line progress bar (Desktop) */}
-                    <div className="hidden lg:block absolute top-[28px] left-[8%] right-[8%] h-1 bg-bg-secondary rounded-full -z-10 overflow-hidden">
-                      <div
-                        className="h-full bg-accent transition-all duration-500"
-                        style={{
-                          width: `${getProgressBarWidth(legalProcessHistory, legalRequests, activeCycle)}%`
-                        }}
-                      ></div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 relative">
-                      {[
-                        'Case Study',
-                        'Draft',
-                        'Draft Approved',
-                        'Pack & AD ready',
-                        'Courier Sent',
-                        'Reply Received'
-                      ].map((stageName, idx, arr) => {
-                        const activeCaseStage = getActiveStageOfCase(legalProcessHistory, legalRequests, activeCycle);
-                        const { isCompleted, isActive } = getStageStatus(stageName, activeCaseStage, legalProcessHistory, legalRequests, activeCycle);
-                        const isSelected = legalProcessForm.stage === stageName;
-
-                      return (
-                        <button
-                          type="button"
-                          key={stageName}
-                          onClick={() => setLegalProcessForm(prev => ({ ...prev, stage: stageName }))}
-                          className="flex flex-col items-center text-center focus:outline-none group transition-transform duration-200 active:scale-95"
-                        >
-                          {/* Circle Badge */}
-                          <div
-                            className={`w-12 h-12 rounded-full flex items-center justify-center text-xs font-black border-4 transition-all duration-300 relative ${isSelected
-                              ? 'bg-bg-card border-accent text-accent shadow-md shadow-accent/10 ring-4 ring-accent-soft/10 scale-110 z-10'
-                              : isCompleted
-                                ? 'bg-accent border-accent text-white shadow-sm'
-                                : isActive
-                                  ? 'bg-bg-card border-orange-500 text-orange-500 shadow-md shadow-orange-500/10 scale-105 z-10'
-                                  : 'bg-bg-secondary border-border text-text-muted group-hover:border-text-secondary group-hover:text-text-primary'
-                              }`}
-                          >
-                            {isCompleted ? (
-                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                              </svg>
-                            ) : (
-                              <span>0{idx + 1}</span>
-                            )}
-
-                            {/* Floating radar ring on active/selected stage */}
-                            {isActive && (
-                              <span className="absolute -inset-1 rounded-full border border-orange-500 animate-ping opacity-30"></span>
-                            )}
-                            {isSelected && !isActive && (
-                              <span className="absolute -inset-1 rounded-full border border-accent animate-pulse opacity-30"></span>
-                            )}
-                          </div>
-
-                          {/* Typography labels */}
-                          <div className="mt-3 flex flex-col gap-0.5">
-                            <span
-                              className={`text-[9px] font-black uppercase tracking-widest transition-colors ${isSelected ? 'text-accent' : isCompleted ? 'text-accent' : isActive ? 'text-orange-500' : 'text-text-muted group-hover:text-text-secondary'
-                                }`}
+                      <div className="flex flex-wrap items-center gap-3 self-start sm:self-center">
+                        {/* Add New Notice Cycle Button – restricted to Legal & Admin */}
+                        {canEditLegal && getActiveStageOfCase(legalProcessHistory, legalRequests, currentCycle) === 'Reply Received' &&
+                          getStageStatus('Reply Received', 'Reply Received', legalProcessHistory, legalRequests, currentCycle).isCompleted && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const nextCycle = currentCycle + 1;
+                                const loadingToast = toast.loading(`Starting Notice Cycle #${nextCycle}...`);
+                                try {
+                                  await api.post('/legal-process', {
+                                    caseId: viewCase.caseId,
+                                    stage: 'New Cycle Started',
+                                    summary: `Notice Cycle ${nextCycle} Started`
+                                  });
+                                  toast.success(`Notice Cycle #${nextCycle} started successfully!`, { id: loadingToast });
+                                  setSelectedCycleToView(nextCycle);
+                                  fetchLegalProcessData(viewCase.caseId);
+                                } catch (err) {
+                                  console.error('Failed to start new notice cycle:', err);
+                                  toast.error('Failed to start new notice cycle', { id: loadingToast });
+                                }
+                              }}
+                              className="px-3 py-1 bg-accent hover:bg-accent-hover text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 flex items-center gap-1.5"
                             >
-                              Step {idx + 1}
-                            </span>
-                            <span
-                              className={`text-[10px] font-black uppercase tracking-wider transition-colors ${isSelected ? 'text-text-primary' : isActive ? 'text-orange-500 font-bold' : 'text-text-secondary group-hover:text-text-primary'
-                                }`}
-                            >
-                              {stageName}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
+                              <span>+ Add New Notice Cycle</span>
+                            </button>
+                          )}
 
-              {/* Main Content Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                {/* Left Side: Submit Form / Information */}
-                <div className="lg:col-span-7 bg-bg-card rounded-2xl border-2 border-border p-6 shadow-sm">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-text-primary mb-6 flex items-center gap-2 pb-3 border-b border-border">
-                    <span>📝 Stage:</span>
-                    <span className="text-accent">{legalProcessForm.stage}</span>
-                  </h3>
-
-                  {/* Stage Selector Dropdown - restricted to authorized roles */}
-                  <div className="mb-6">
-                    <label className={labelClass}>Select Stage</label>
-                    <select
-                      value={legalProcessForm.stage}
-                      disabled={!canEditLegal}
-                      onChange={canEditLegal ? (e) => setLegalProcessForm(prev => ({ ...prev, stage: e.target.value })) : undefined}
-                      className={`${inputClass} ${!canEditLegal ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    >
-                      <option value="Case Study">Case Study</option>
-                      <option value="Draft">Draft</option>
-                      <option value="Draft Approved">Draft Approved</option>
-                      <option value="Pack & AD ready">Pack & AD ready</option>
-                      <option value="Courier Sent">Courier Sent</option>
-                      <option value="Reply Received">Reply Received</option>
-                    </select>
-                  </div>
-
-                  {/* View-only notice for non-authorized users */}
-                  {!canEditLegal && (
-                    <div className="p-4 bg-bg-secondary/60 border border-border/80 rounded-xl text-center text-text-muted mb-4">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-text-primary">👁️ View Only</p>
-                      <p className="text-[9px] mt-1 leading-relaxed">Only <span className="text-accent font-bold">Legal</span> and <span className="text-accent font-bold">Admin</span> users can add or update Legal Process stages.</p>
-                    </div>
-                  )}
-
-                  {legalProcessForm.stage === 'Draft' ? (
-                    <div className="space-y-6 animate-in fade-in duration-300">
-                      {/* Submit New Draft Request Form */}
-                      {!canEditLegal ? (
-                        <div className="p-8 text-center bg-bg-secondary/40 border border-dashed border-border/80 rounded-2xl">
-                          <p className="text-[10px] font-black uppercase tracking-wider text-text-muted">View Only</p>
-                          <p className="text-[9px] mt-1 text-text-muted">You do not have permission to submit draft requests.</p>
-                        </div>
-                      ) : isViewingPastCycle ? (
-                        <div className="p-4 bg-bg-secondary/40 border border-border/80 rounded-xl text-center text-text-muted">
-                          <p className="text-[10px] font-black uppercase tracking-wider">Viewing Past Cycle History</p>
-                          <p className="text-[9px] mt-1">Creation of new draft requests is only available in the active cycle.</p>
-                        </div>
-                      ) : isStageAlreadyFilled ? (
-                        <div className="p-8 text-center bg-accent/[0.02] border-2 border-dashed border-accent/20 rounded-2xl animate-in fade-in duration-300">
-                          <div className="w-12 h-12 bg-accent/10 rounded-full flex items-center justify-center text-lg mx-auto mb-3">📝</div>
-                          <h4 className="text-xs font-black uppercase tracking-widest text-text-primary">Stage Already Submitted</h4>
-                          <p className="text-[10px] text-text-muted mt-2 leading-relaxed">
-                            The details for <span className="text-accent font-bold">{legalProcessForm.stage}</span> have already been filled in this cycle.
-                          </p>
-                          <p className="text-[9px] text-text-muted mt-1">
-                            To update the information, please click the <strong className="text-accent">Edit</strong> button next to this stage in the <strong className="text-text-primary">Stage History</strong> section on the right.
-                          </p>
-                        </div>
-                      ) : (
-                        <form
-                          onSubmit={async (e) => {
-                            e.preventDefault();
-                            if (!draftDocName) {
-                              toast.error('Please enter a Document Name');
-                              return;
-                            }
-                            try {
-                              const payload = {
-                                caseId: viewCase.caseId,
-                                documentName: draftDocName,
-                                fileLink: draftFileLink,
-                                remark: draftRemark
-                              };
-                              await api.post('/legal-requests', payload);
-                              toast.success('Legal draft request submitted for approval');
-                              setDraftDocName('');
-                              setDraftFileLink('');
-                              setDraftRemark('');
-                              fetchLegalRequests();
-                              if (viewCase?.caseId) {
-                                fetchLegalProcessData(viewCase.caseId);
-                              }
-                            } catch (err) {
-                              console.error(err);
-                              toast.error('Failed to submit draft request');
-                            }
-                          }}
-                          className="space-y-6"
-                        >
-                          <div className="text-[11px] font-black uppercase tracking-wider text-text-muted mb-4 border-b border-border/50 pb-2">
-                            Submit New Draft Request
-                          </div>
-
-                          <div>
-                            <label className={labelClass}>Document Name</label>
-                            <input
-                              type="text"
-                              required
-                              value={draftDocName}
-                              onChange={(e) => setDraftDocName(e.target.value)}
-                              placeholder="e.g. Legal Notice Draft"
-                              className={inputClass}
-                            />
-                          </div>
-
-                          <div>
-                            <label className={labelClass}>Upload Document</label>
-                            <div className="mt-1">
-                              <input
-                                type="file"
-                                id="legal-draft-file-input-tab"
-                                onChange={handleLegalDraftUpload}
-                                className="hidden"
-                              />
-                              {!draftFileLink && !draftFileUploading && (
+                        {/* Cycle Selector */}
+                        {currentCycle > 1 && (
+                          <div className="flex items-center gap-1 bg-bg-secondary p-1 border border-border rounded-xl">
+                            {Array.from({ length: currentCycle }, (_, i) => i + 1).map(cNum => {
+                              const isSel = activeCycle === cNum;
+                              return (
                                 <button
                                   type="button"
-                                  onClick={() => document.getElementById('legal-draft-file-input-tab').click()}
-                                  className="w-full flex items-center justify-center gap-2.5 px-4 py-6 border-2 border-dashed border-border hover:border-accent bg-bg-secondary hover:bg-bg-secondary/70 text-text-secondary hover:text-accent rounded-2xl transition-all cursor-pointer group"
-                                >
-                                  <UploadCloud size={20} className="text-text-muted group-hover:text-accent transition-colors" />
-                                  <span className="text-xs font-black uppercase tracking-wider">Choose or Upload Document</span>
-                                </button>
-                              )}
-                              {draftFileUploading && (
-                                <div className="w-full flex items-center justify-center gap-3 px-4 py-6 border border-border bg-bg-secondary rounded-2xl animate-pulse">
-                                  <RefreshCw size={20} className="animate-spin text-accent" />
-                                  <span className="text-xs font-black uppercase tracking-wider text-text-muted">Uploading document...</span>
-                                </div>
-                              )}
-                              {draftFileLink && (
-                                <div className="w-full flex items-center justify-between gap-4 p-4 bg-green-500/[0.03] border-2 border-green/20 rounded-2xl shadow-sm">
-                                  <div className="flex items-center gap-3">
-                                    <div className="p-2.5 bg-green-soft text-green rounded-xl">
-                                      <FileText size={18} />
-                                    </div>
-                                    <div className="text-left">
-                                      <span className="text-[10px] font-black uppercase tracking-widest text-green block">Document Uploaded</span>
-                                      <span className="text-xs font-bold text-text-primary">Draft Document Attached</span>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <a
-                                      href={draftFileLink}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="px-3.5 py-1.5 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-sm active:scale-95"
-                                    >
-                                      View File
-                                    </a>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setDraftFileLink('');
-                                        document.getElementById('legal-draft-file-input-tab').value = '';
-                                      }}
-                                      className="px-3.5 py-1.5 bg-red-soft/20 text-red border border-red/10 hover:bg-red hover:text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all active:scale-95"
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className={labelClass}>Remark</label>
-                            <input
-                              type="text"
-                              placeholder="Any remarks..."
-                              value={draftRemark}
-                              onChange={(e) => setDraftRemark(e.target.value)}
-                              className={inputClass}
-                            />
-                          </div>
-
-                          <button
-                            type="submit"
-                            disabled={draftFileUploading}
-                            className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-[0.98]"
-                          >
-                            Submit Request
-                          </button>
-                        </form>
-                      )}
-
-                      {/* Pending Requests Section */}
-                      <div className="mt-8 border-t border-border pt-6 space-y-4">
-                        <button
-                          type="button"
-                          onClick={() => setIsPendingRequestsExpanded(!isPendingRequestsExpanded)}
-                          className="w-full flex items-center justify-between text-left focus:outline-none py-2 hover:opacity-80 transition-all"
-                        >
-                          <h4 className="text-[11px] font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
-                            <span>Pending / Rejected Requests ({legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending' || r.status === 'Rejected')).length})</span>
-                          </h4>
-                          <ChevronDown
-                            size={16}
-                            className={`text-text-muted transition-transform duration-300 ${isPendingRequestsExpanded ? 'rotate-180' : ''}`}
-                          />
-                        </button>
-
-                        {isPendingRequestsExpanded && (
-                          <div className="space-y-4 animate-in fade-in duration-300">
-                            {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending' || r.status === 'Rejected')).length === 0 ? (
-                              <p className="text-[10px] text-text-muted italic">No pending or rejected draft requests for this cycle.</p>
-                            ) : (
-                              <div className="space-y-4">
-                                {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending' || r.status === 'Rejected')).map(r => (
-                                  <div key={r.id || r._id} className="p-4 bg-bg-secondary/40 border border-border rounded-xl space-y-3 shadow-sm">
-                                    <div className="flex items-center justify-between gap-4">
-                                      <span className="font-bold text-text-primary text-xs">{r.documentName}</span>
-                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${r.status === 'Rejected' ? 'bg-red-soft text-red' : 'bg-orange-100 text-orange-600'
-                                        }`}>
-                                        {r.status}
-                                      </span>
-                                    </div>
-                                    {r.remark && <p className="text-[10px] text-text-secondary">Remark: {r.remark}</p>}
-                                    {r.status === 'Rejected' && r.rejectRemark && (
-                                      <p className="text-[10px] text-red font-semibold">Rejection Reason: {r.rejectRemark}</p>
-                                    )}
-                                    {r.fileLink && (
-                                      <a href={r.fileLink} target="_blank" rel="noreferrer" className="text-accent hover:underline text-[10px] font-bold block">
-                                        Download / View File
-                                      </a>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : legalProcessForm.stage === 'Draft Approved' ? (
-                    <div className="space-y-4 animate-in fade-in duration-300">
-                      <h4 className="text-[11px] font-black uppercase tracking-widest text-text-muted">
-                        Approved Drafts ({legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && r.status === 'Approved').length})
-                      </h4>
-                      {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && r.status === 'Approved').length === 0 ? (
-                        <div className="p-8 text-center bg-bg-secondary/40 border border-border border-dashed rounded-xl text-text-muted text-xs">
-                          No approved drafts found.
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && r.status === 'Approved').map(r => (
-                            <div key={r.id || r._id} className="p-5 bg-bg-secondary/40 border-2 border-border rounded-xl space-y-4 shadow-sm">
-                              <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <h5 className="font-bold text-text-primary text-sm">{r.documentName}</h5>
-                                  <p className="text-[9px] text-text-muted mt-1">Requested by: {r.requestedByName || r.requestedBy}</p>
-                                </div>
-                                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-green-soft text-green`}>
-                                  {r.status}
-                                </span>
-                              </div>
-
-                              {r.remark && (
-                                <div className="bg-bg-card p-3 rounded-lg border border-border text-[10px] text-text-secondary">
-                                  <span className="block font-black text-text-muted uppercase tracking-wider mb-1">User Remark:</span>
-                                  {r.remark}
-                                </div>
-                              )}
-
-                              {r.rejectRemark && (
-                                <div className="bg-red-soft/10 p-3 rounded-lg border border-red-soft/20 text-[10px] text-red">
-                                  <span className="block font-black uppercase tracking-wider mb-1">Admin Remark / Rejection Reason:</span>
-                                  {r.rejectRemark}
-                                </div>
-                              )}
-
-                              {r.fileLink && (
-                                <div className="flex items-center gap-2 pt-2">
-                                  <a
-                                    href={r.fileLink}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
-                                  >
-                                    View / Download Document
-                                  </a>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <form onSubmit={handleLegalProcessSubmit} className="space-y-6">
-                      {/* Case Study Specific Checkboxes */}
-                      {legalProcessForm.stage === 'Case Study' && (
-                        <div className="space-y-4 bg-bg-secondary/40 p-5 rounded-xl border border-border">
-                          <label className={labelClass}>Document Review Checklist</label>
-                          <p className="text-[10px] text-text-muted font-semibold uppercase tracking-wider mb-4">
-                            Please verify and check the documents read related to the case:
-                          </p>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {(() => {
-                              const items = [
-                                { key: 'mouDocChecked', label: 'MOU Doc' },
-                                { key: 'invoicesChecked', label: 'Invoices' },
-                                { key: 'caseStudyDocChecked', label: 'Case Study Doc' }
-                              ];
-                              const compType = (viewCase?.typeOfComplaint || '').trim();
-                              if (compType === 'Legal Notice') {
-                                items.push({ key: 'paymentReceiptChecked', label: 'Legal Notice Doc' });
-                              } else if (compType === '1930 Cyber Complaint') {
-                                items.push({ key: 'paymentReceiptChecked', label: '1930 Cyber Complaint Doc' });
-                              } else if (compType === 'Consumer Complaint') {
-                                items.push({ key: 'paymentReceiptChecked', label: 'Consumer Complaint Doc' });
-                              } else if (['Criminal Complaint/FIR', 'FIR'].includes(compType)) {
-                                items.push({ key: 'paymentReceiptChecked', label: 'Criminal Complaint/FIR Doc' });
-                              }
-                              return items;
-                            })().map(item => {
-                              const getPastCaseStudyChecks = () => {
-                                const histItem = cycleHistory.find(h => h.stage === 'Case Study');
-                                return {
-                                  mouDocChecked: histItem ? histItem.mouDocChecked : false,
-                                  invoicesChecked: histItem ? histItem.invoicesChecked : false,
-                                  paymentReceiptChecked: histItem ? histItem.paymentReceiptChecked : false,
-                                  caseStudyDocChecked: histItem ? histItem.caseStudyDocChecked : false
-                                };
-                              };
-                              const checks = isViewingPastCycle ? getPastCaseStudyChecks() : legalProcessForm;
-                              return (
-                                <label
-                                  key={item.key}
-                                  className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${checks[item.key]
-                                    ? 'bg-accent/5 border-accent text-accent'
-                                    : 'bg-bg-input border-border text-text-secondary hover:border-text-primary'
+                                  key={cNum}
+                                  onClick={() => setSelectedCycleToView(cNum)}
+                                  className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${isSel
+                                      ? 'bg-accent text-white shadow-sm font-black'
+                                      : 'text-text-muted hover:text-text-primary font-bold'
                                     }`}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    disabled={isViewingPastCycle}
-                                    checked={checks[item.key] || false}
-                                    onChange={isViewingPastCycle ? undefined : (e) => setLegalProcessForm(prev => ({ ...prev, [item.key]: e.target.checked }))}
-                                    className="w-4 h-4 rounded text-accent focus:ring-accent border-border cursor-pointer accent-accent"
-                                  />
-                                  <span className="text-[11px] font-black uppercase tracking-wider">{item.label}</span>
-                                </label>
+                                  Cycle {cNum} {cNum === currentCycle && ' (Active)'}
+                                </button>
                               );
                             })}
                           </div>
+                        )}
+
+                        {/* Cancel Current Notice Cycle */}
+                        {!isViewingPastCycle && currentCycle > 1 && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const cycleStartRecord = [...legalProcessHistory].find(h => h.stage === 'New Cycle Started');
+                              if (!cycleStartRecord) return;
+
+                              if (window.confirm(`Are you sure you want to cancel Notice Cycle #${currentCycle}? This will revert the pipeline back to the previous cycle.`)) {
+                                const loadingToast = toast.loading(`Canceling Notice Cycle #${currentCycle}...`);
+                                try {
+                                  await api.delete(`/legal-process/${cycleStartRecord.id || cycleStartRecord._id}`);
+                                  toast.success(`Notice Cycle #${currentCycle} canceled successfully!`, { id: loadingToast });
+                                  setSelectedCycleToView(1);
+                                  fetchLegalProcessData(viewCase.caseId);
+                                } catch (err) {
+                                  console.error('Failed to cancel notice cycle:', err);
+                                  toast.error('Failed to cancel notice cycle', { id: loadingToast });
+                                }
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-red-soft/20 text-red border border-red/10 hover:bg-red hover:text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 flex items-center gap-1.5"
+                          >
+                            ❌ Cancel Cycle
+                          </button>
+                        )}
+
+                        <div className="px-3 py-1 bg-accent-soft/10 border border-accent/20 rounded-xl text-[10px] font-black uppercase tracking-wider text-accent">
+                          Current stage: {legalProcessForm.stage}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="relative z-10">
+                      {/* Connected line progress bar (Desktop) */}
+                      <div className="hidden lg:block absolute top-[28px] left-[8%] right-[8%] h-1 bg-bg-secondary rounded-full -z-10 overflow-hidden">
+                        <div
+                          className="h-full bg-accent transition-all duration-500"
+                          style={{
+                            width: `${getProgressBarWidth(legalProcessHistory, legalRequests, activeCycle)}%`
+                          }}
+                        ></div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 relative">
+                        {[
+                          'Case Study',
+                          'Draft',
+                          'Draft Approved',
+                          'Pack & AD ready',
+                          'Courier Sent',
+                          'Reply Received'
+                        ].map((stageName, idx, arr) => {
+                          const activeCaseStage = getActiveStageOfCase(legalProcessHistory, legalRequests, activeCycle);
+                          const { isCompleted, isActive } = getStageStatus(stageName, activeCaseStage, legalProcessHistory, legalRequests, activeCycle);
+                          const isSelected = legalProcessForm.stage === stageName;
+
+                          return (
+                            <button
+                              type="button"
+                              key={stageName}
+                              onClick={() => setLegalProcessForm(prev => ({ ...prev, stage: stageName }))}
+                              className="flex flex-col items-center text-center focus:outline-none group transition-transform duration-200 active:scale-95"
+                            >
+                              {/* Circle Badge */}
+                              <div
+                                className={`w-12 h-12 rounded-full flex items-center justify-center text-xs font-black border-4 transition-all duration-300 relative ${isSelected
+                                  ? 'bg-bg-card border-accent text-accent shadow-md shadow-accent/10 ring-4 ring-accent-soft/10 scale-110 z-10'
+                                  : isCompleted
+                                    ? 'bg-accent border-accent text-white shadow-sm'
+                                    : isActive
+                                      ? 'bg-bg-card border-orange-500 text-orange-500 shadow-md shadow-orange-500/10 scale-105 z-10'
+                                      : 'bg-bg-secondary border-border text-text-muted group-hover:border-text-secondary group-hover:text-text-primary'
+                                  }`}
+                              >
+                                {isCompleted ? (
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                ) : (
+                                  <span>0{idx + 1}</span>
+                                )}
+
+                                {/* Floating radar ring on active/selected stage */}
+                                {isActive && (
+                                  <span className="absolute -inset-1 rounded-full border border-orange-500 animate-ping opacity-30"></span>
+                                )}
+                                {isSelected && !isActive && (
+                                  <span className="absolute -inset-1 rounded-full border border-accent animate-pulse opacity-30"></span>
+                                )}
+                              </div>
+
+                              {/* Typography labels */}
+                              <div className="mt-3 flex flex-col gap-0.5">
+                                <span
+                                  className={`text-[9px] font-black uppercase tracking-widest transition-colors ${isSelected ? 'text-accent' : isCompleted ? 'text-accent' : isActive ? 'text-orange-500' : 'text-text-muted group-hover:text-text-secondary'
+                                    }`}
+                                >
+                                  Step {idx + 1}
+                                </span>
+                                <span
+                                  className={`text-[10px] font-black uppercase tracking-wider transition-colors ${isSelected ? 'text-text-primary' : isActive ? 'text-orange-500 font-bold' : 'text-text-secondary group-hover:text-text-primary'
+                                    }`}
+                                >
+                                  {stageName}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Main Content Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                    {/* Left Side: Submit Form / Information */}
+                    <div className="lg:col-span-7 bg-bg-card rounded-2xl border-2 border-border p-6 shadow-sm">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-text-primary mb-6 flex items-center gap-2 pb-3 border-b border-border">
+                        <span>📝 Stage:</span>
+                        <span className="text-accent">{legalProcessForm.stage}</span>
+                      </h3>
+
+                      {/* Stage Selector Dropdown - restricted to authorized roles */}
+                      <div className="mb-6">
+                        <label className={labelClass}>Select Stage</label>
+                        <select
+                          value={legalProcessForm.stage}
+                          disabled={!canEditLegal}
+                          onChange={canEditLegal ? (e) => setLegalProcessForm(prev => ({ ...prev, stage: e.target.value })) : undefined}
+                          className={`${inputClass} ${!canEditLegal ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        >
+                          <option value="Case Study">Case Study</option>
+                          <option value="Draft">Draft</option>
+                          <option value="Draft Approved">Draft Approved</option>
+                          <option value="Pack & AD ready">Pack & AD ready</option>
+                          <option value="Courier Sent">Courier Sent</option>
+                          <option value="Reply Received">Reply Received</option>
+                        </select>
+                      </div>
+
+                      {/* View-only notice for non-authorized users */}
+                      {!canEditLegal && (
+                        <div className="p-4 bg-bg-secondary/60 border border-border/80 rounded-xl text-center text-text-muted mb-4">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-text-primary">👁️ View Only</p>
+                          <p className="text-[9px] mt-1 leading-relaxed">Only <span className="text-accent font-bold">Legal</span> and <span className="text-accent font-bold">Admin</span> users can add or update Legal Process stages.</p>
                         </div>
                       )}
 
-                      {/* Pack & AD ready stage form inputs */}
-                      {legalProcessForm.stage === 'Pack & AD ready' && (() => {
-                        const pastData = getPastStageData('Pack & AD ready') || {};
-                        return (
-                          <div className="space-y-4 bg-bg-secondary/40 p-5 rounded-xl border border-border">
-                            <h5 className="text-[11px] font-black uppercase tracking-widest text-text-muted mb-2">Stage Details: Pack & AD ready</h5>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className={labelClass}>Receiver Name</label>
-                                <input
-                                  type="text"
-                                  required
-                                  disabled={isViewingPastCycle}
-                                  placeholder="Enter receiver's name"
-                                  value={isViewingPastCycle ? (pastData.receiverName || '') : packReceiverName}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setPackReceiverName(e.target.value)}
-                                  className={inputClass}
-                                />
-                              </div>
-                              <div>
-                                <label className={labelClass}>Receiver Address</label>
-                                <input
-                                  type="text"
-                                  required
-                                  disabled={isViewingPastCycle}
-                                  placeholder="Enter receiver's address"
-                                  value={isViewingPastCycle ? (pastData.receiverAddress || '') : packReceiverAddress}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setPackReceiverAddress(e.target.value)}
-                                  className={inputClass}
-                                />
-                              </div>
-                              <div>
-                                <label className={labelClass}>Prepared By (Login User Name)</label>
-                                <input
-                                  type="text"
-                                  readOnly
-                                  disabled
-                                  value={isViewingPastCycle ? (pastData.preparedBy || '') : (user?.fullName || user?.email || '')}
-                                  className={`${inputClass} bg-bg-secondary cursor-not-allowed`}
-                                />
-                              </div>
-                              <div>
-                                <label className={labelClass}>Company Address</label>
-                                <input
-                                  type="text"
-                                  required
-                                  disabled={isViewingPastCycle}
-                                  placeholder="Enter company address"
-                                  value={isViewingPastCycle ? (pastData.companyAddress || '') : packCompanyAddress}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setPackCompanyAddress(e.target.value)}
-                                  className={inputClass}
-                                />
-                              </div>
-                              <div className="col-span-1 md:col-span-2">
-                                <label className={labelClass}>Remark</label>
-                                <textarea
-                                  placeholder="Any remarks..."
-                                  disabled={isViewingPastCycle}
-                                  value={isViewingPastCycle ? (pastData.remark || '') : packRemark}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setPackRemark(e.target.value)}
-                                  className={`${inputClass} min-h-[80px]`}
-                                />
-                              </div>
+                      {legalProcessForm.stage === 'Draft' ? (
+                        <div className="space-y-6 animate-in fade-in duration-300">
+                          {/* Submit New Draft Request Form */}
+                          {!canEditLegal ? (
+                            <div className="p-8 text-center bg-bg-secondary/40 border border-dashed border-border/80 rounded-2xl">
+                              <p className="text-[10px] font-black uppercase tracking-wider text-text-muted">View Only</p>
+                              <p className="text-[9px] mt-1 text-text-muted">You do not have permission to submit draft requests.</p>
                             </div>
-                          </div>
-                        );
-                      })()}
+                          ) : isViewingPastCycle ? (
+                            <div className="p-4 bg-bg-secondary/40 border border-border/80 rounded-xl text-center text-text-muted">
+                              <p className="text-[10px] font-black uppercase tracking-wider">Viewing Past Cycle History</p>
+                              <p className="text-[9px] mt-1">Creation of new draft requests is only available in the active cycle.</p>
+                            </div>
+                          ) : isStageAlreadyFilled ? (
+                            <div className="p-8 text-center bg-accent/[0.02] border-2 border-dashed border-accent/20 rounded-2xl animate-in fade-in duration-300">
+                              <div className="w-12 h-12 bg-accent/10 rounded-full flex items-center justify-center text-lg mx-auto mb-3">📝</div>
+                              <h4 className="text-xs font-black uppercase tracking-widest text-text-primary">Stage Already Submitted</h4>
+                              <p className="text-[10px] text-text-muted mt-2 leading-relaxed">
+                                The details for <span className="text-accent font-bold">{legalProcessForm.stage}</span> have already been filled in this cycle.
+                              </p>
+                              <p className="text-[9px] text-text-muted mt-1">
+                                To update the information, please click the <strong className="text-accent">Edit</strong> button next to this stage in the <strong className="text-text-primary">Stage History</strong> section on the right.
+                              </p>
+                            </div>
+                          ) : (
+                            <form
+                              onSubmit={async (e) => {
+                                e.preventDefault();
+                                if (!draftDocName) {
+                                  toast.error('Please enter a Document Name');
+                                  return;
+                                }
+                                try {
+                                  const payload = {
+                                    caseId: viewCase.caseId,
+                                    documentName: draftDocName,
+                                    fileLink: draftFileLink,
+                                    remark: draftRemark
+                                  };
+                                  await api.post('/legal-requests', payload);
+                                  toast.success('Legal draft request submitted for approval');
+                                  setDraftDocName('');
+                                  setDraftFileLink('');
+                                  setDraftRemark('');
+                                  fetchLegalRequests();
+                                  if (viewCase?.caseId) {
+                                    fetchLegalProcessData(viewCase.caseId);
+                                  }
+                                } catch (err) {
+                                  console.error(err);
+                                  toast.error('Failed to submit draft request');
+                                }
+                              }}
+                              className="space-y-6"
+                            >
+                              <div className="text-[11px] font-black uppercase tracking-wider text-text-muted mb-4 border-b border-border/50 pb-2">
+                                Submit New Draft Request
+                              </div>
 
-                      {/* Courier Sent stage form inputs */}
-                      {legalProcessForm.stage === 'Courier Sent' && (() => {
-                        const pastData = getPastStageData('Courier Sent') || {};
-                        return (
-                          <div className="space-y-4 bg-bg-secondary/40 p-5 rounded-xl border border-border">
-                            <h5 className="text-[11px] font-black uppercase tracking-widest text-text-muted mb-2">Stage Details: Courier Sent</h5>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className={labelClass}>Date and Time</label>
-                                <input
-                                  type="datetime-local"
-                                  required
-                                  disabled={isViewingPastCycle}
-                                  value={isViewingPastCycle ? (pastData.dateTime || '') : courierDateTime}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setCourierDateTime(e.target.value)}
-                                  className={inputClass}
-                                />
-                              </div>
-                              <div>
-                                <label className={labelClass}>Sender Name</label>
-                                <input
-                                  type="text"
-                                  required
-                                  disabled={isViewingPastCycle}
-                                  placeholder="Enter sender's name"
-                                  value={isViewingPastCycle ? (pastData.senderName || '') : courierSenderName}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setCourierSenderName(e.target.value)}
-                                  className={inputClass}
-                                />
-                              </div>
                               <div>
                                 <label className={labelClass}>Document Name</label>
                                 <input
                                   type="text"
                                   required
-                                  disabled={isViewingPastCycle}
-                                  placeholder="Enter document name"
-                                  value={isViewingPastCycle ? (pastData.documentName || '') : courierDocName}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setCourierDocName(e.target.value)}
+                                  value={draftDocName}
+                                  onChange={(e) => setDraftDocName(e.target.value)}
+                                  placeholder="e.g. Legal Notice Draft"
                                   className={inputClass}
                                 />
                               </div>
-                              <div>
-                                <label className={labelClass}>Sender Company Name</label>
-                                <input
-                                  type="text"
-                                  required
-                                  disabled={isViewingPastCycle}
-                                  placeholder="Enter sender's company name"
-                                  value={isViewingPastCycle ? (pastData.senderCompany || '') : courierSenderCompany}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setCourierSenderCompany(e.target.value)}
-                                  className={inputClass}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
 
-                      {/* Reply Received stage form inputs */}
-                      {legalProcessForm.stage === 'Reply Received' && (() => {
-                        const pastData = getPastStageData('Reply Received') || {};
-                        const activeReplyFileLink = isViewingPastCycle ? (pastData.replyFileLink || '') : replyFileLink;
-                        return (
-                          <div className="space-y-4 bg-bg-secondary/40 p-5 rounded-xl border border-border">
-                            <h5 className="text-[11px] font-black uppercase tracking-widest text-text-muted mb-2">Stage Details: Reply Received</h5>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
-                                <label className={labelClass}>Date of Reply</label>
-                                <input
-                                  type="datetime-local"
-                                  required
-                                  disabled={isViewingPastCycle}
-                                  value={isViewingPastCycle ? (pastData.replyDate || '') : replyDate}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setReplyDate(e.target.value)}
-                                  className={inputClass}
-                                />
-                              </div>
-                              <div>
-                                <label className={labelClass}>Replied By</label>
-                                <input
-                                  type="text"
-                                  required
-                                  disabled={isViewingPastCycle}
-                                  placeholder="Enter replier's name"
-                                  value={isViewingPastCycle ? (pastData.repliedBy || '') : repliedBy}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setRepliedBy(e.target.value)}
-                                  className={inputClass}
-                                />
-                              </div>
-                              <div className="col-span-1 md:col-span-2">
-                                <label className={labelClass}>Reply Remarks</label>
-                                <textarea
-                                  placeholder="Details of the reply received..."
-                                  disabled={isViewingPastCycle}
-                                  value={isViewingPastCycle ? (pastData.remark || '') : replyRemark}
-                                  onChange={isViewingPastCycle ? undefined : (e) => setReplyRemark(e.target.value)}
-                                  className={`${inputClass} min-h-[80px]`}
-                                />
-                              </div>
-                              <div className="col-span-1 md:col-span-2">
-                                <label className={labelClass}>Upload Reply Document</label>
+                                <label className={labelClass}>Upload Document</label>
                                 <div className="mt-1">
                                   <input
                                     type="file"
-                                    id="legal-reply-file-input"
-                                    onChange={handleReplyUpload}
+                                    id="legal-draft-file-input-tab"
+                                    onChange={handleLegalDraftUpload}
+                                    onClick={(e) => (e.target.value = null)}
                                     className="hidden"
                                   />
-                                  {!activeReplyFileLink && !replyFileUploading && !isViewingPastCycle && (
+                                  {!draftFileLink && !draftFileUploading && (
                                     <button
                                       type="button"
-                                      onClick={() => document.getElementById('legal-reply-file-input').click()}
+                                      onClick={() => document.getElementById('legal-draft-file-input-tab').click()}
                                       className="w-full flex items-center justify-center gap-2.5 px-4 py-6 border-2 border-dashed border-border hover:border-accent bg-bg-secondary hover:bg-bg-secondary/70 text-text-secondary hover:text-accent rounded-2xl transition-all cursor-pointer group"
                                     >
                                       <UploadCloud size={20} className="text-text-muted group-hover:text-accent transition-colors" />
-                                      <span className="text-xs font-black uppercase tracking-wider">Choose or Upload Reply PDF/Doc</span>
+                                      <span className="text-xs font-black uppercase tracking-wider">Choose or Upload Document</span>
                                     </button>
                                   )}
-                                  {!activeReplyFileLink && isViewingPastCycle && (
-                                    <div className="p-4 bg-bg-secondary/20 border border-border border-dashed rounded-xl text-center text-text-muted text-[10px] font-black uppercase tracking-wider">
-                                      No Document Uploaded
-                                    </div>
-                                  )}
-                                  {replyFileUploading && (
+                                  {draftFileUploading && (
                                     <div className="w-full flex items-center justify-center gap-3 px-4 py-6 border border-border bg-bg-secondary rounded-2xl animate-pulse">
                                       <RefreshCw size={20} className="animate-spin text-accent" />
-                                      <span className="text-xs font-black uppercase tracking-wider text-text-muted">Uploading reply document...</span>
+                                      <span className="text-xs font-black uppercase tracking-wider text-text-muted">Uploading document...</span>
                                     </div>
                                   )}
-                                  {activeReplyFileLink && (
+                                  {draftFileLink && (
                                     <div className="w-full flex items-center justify-between gap-4 p-4 bg-green-500/[0.03] border-2 border-green/20 rounded-2xl shadow-sm">
                                       <div className="flex items-center gap-3">
                                         <div className="p-2.5 bg-green-soft text-green rounded-xl">
                                           <FileText size={18} />
                                         </div>
                                         <div className="text-left">
-                                          <span className="text-[10px] font-black uppercase tracking-widest text-green block">Reply Document Uploaded</span>
-                                          <span className="text-xs font-bold text-text-primary">Reply Attachment Attached</span>
+                                          <span className="text-[10px] font-black uppercase tracking-widest text-green block">Document Uploaded</span>
+                                          <span className="text-xs font-bold text-text-primary">Draft Document Attached</span>
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <a
-                                          href={activeReplyFileLink}
+                                          href={draftFileLink}
                                           target="_blank"
                                           rel="noreferrer"
                                           className="px-3.5 py-1.5 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-sm active:scale-95"
                                         >
                                           View File
                                         </a>
-                                        {!isViewingPastCycle && (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setReplyFileLink('');
-                                              document.getElementById('legal-reply-file-input').value = '';
-                                            }}
-                                            className="px-3.5 py-1.5 bg-red-soft/20 text-red border border-red/10 hover:bg-red hover:text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all active:scale-95"
-                                          >
-                                            Remove
-                                          </button>
-                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setDraftFileLink('');
+                                            document.getElementById('legal-draft-file-input-tab').value = '';
+                                          }}
+                                          className="px-3.5 py-1.5 bg-red-soft/20 text-red border border-red/10 hover:bg-red hover:text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all active:scale-95"
+                                        >
+                                          Remove
+                                        </button>
                                       </div>
                                     </div>
                                   )}
                                 </div>
                               </div>
-                            </div>
+
+                              <div>
+                                <label className={labelClass}>Remark</label>
+                                <input
+                                  type="text"
+                                  placeholder="Any remarks..."
+                                  value={draftRemark}
+                                  onChange={(e) => setDraftRemark(e.target.value)}
+                                  className={inputClass}
+                                />
+                              </div>
+
+                              <button
+                                type="submit"
+                                disabled={draftFileUploading}
+                                className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-[0.98]"
+                              >
+                                Submit Request
+                              </button>
+                            </form>
+                          )}
+
+                          {/* Pending Requests Section */}
+                          <div className="mt-8 border-t border-border pt-6 space-y-4">
+                            <button
+                              type="button"
+                              onClick={() => setIsPendingRequestsExpanded(!isPendingRequestsExpanded)}
+                              className="w-full flex items-center justify-between text-left focus:outline-none py-2 hover:opacity-80 transition-all"
+                            >
+                              <h4 className="text-[11px] font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
+                                <span>Pending / Rejected Requests ({legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending' || r.status === 'Rejected')).length})</span>
+                              </h4>
+                              <ChevronDown
+                                size={16}
+                                className={`text-text-muted transition-transform duration-300 ${isPendingRequestsExpanded ? 'rotate-180' : ''}`}
+                              />
+                            </button>
+
+                            {isPendingRequestsExpanded && (
+                              <div className="space-y-4 animate-in fade-in duration-300">
+                                {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending' || r.status === 'Rejected')).length === 0 ? (
+                                  <p className="text-[10px] text-text-muted italic">No pending or rejected draft requests for this cycle.</p>
+                                ) : (
+                                  <div className="space-y-4">
+                                    {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending' || r.status === 'Rejected')).map(r => (
+                                      <div key={r.id || r._id} className="p-4 bg-bg-secondary/40 border border-border rounded-xl space-y-3 shadow-sm">
+                                        <div className="flex items-center justify-between gap-4">
+                                          <span className="font-bold text-text-primary text-xs">{r.documentName}</span>
+                                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${r.status === 'Rejected' ? 'bg-red-soft text-red' : 'bg-orange-100 text-orange-600'
+                                            }`}>
+                                            {r.status}
+                                          </span>
+                                        </div>
+                                        {r.remark && <p className="text-[10px] text-text-secondary">Remark: {r.remark}</p>}
+                                        {r.status === 'Rejected' && r.rejectRemark && (
+                                          <p className="text-[10px] text-red font-semibold">Rejection Reason: {r.rejectRemark}</p>
+                                        )}
+                                        {r.fileLink && (
+                                          <a href={r.fileLink} target="_blank" rel="noreferrer" className="text-accent hover:underline text-[10px] font-bold block">
+                                            Download / View File
+                                          </a>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        );
-                      })()}
-
-                      {/* Default Summary Field for other stages */}
-                      {legalProcessForm.stage !== 'Pack & AD ready' && legalProcessForm.stage !== 'Courier Sent' && legalProcessForm.stage !== 'Reply Received' && (
-                        <div>
-                          <label className={labelClass}>Summary / Remarks</label>
-                          <textarea
-                            required
-                            disabled={isViewingPastCycle || isStageAlreadyFilled}
-                            value={isViewingPastCycle ? (cycleHistory.find(h => h.stage === legalProcessForm.stage)?.summary || '') : legalProcessForm.summary}
-                            onChange={(isViewingPastCycle || isStageAlreadyFilled) ? undefined : (e) => setLegalProcessForm(prev => ({ ...prev, summary: e.target.value }))}
-                            placeholder="Provide details or updates regarding this stage..."
-                            className={`${inputClass} min-h-[120px]`}
-                          />
                         </div>
-                      )}
-
-                      {/* Cycle already filled notice for non-Draft stages */}
-                      {isStageAlreadyFilled && !isViewingPastCycle && (
-                        <div className="p-4 bg-accent/[0.03] border border-dashed border-accent/25 rounded-xl text-center animate-in fade-in duration-300">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-text-primary mb-1">Stage Already Submitted</p>
-                          <p className="text-[9px] text-text-muted leading-relaxed">
-                            <span className="text-accent font-bold">{legalProcessForm.stage}</span> has already been recorded this cycle.
-                            Use the <strong className="text-accent">Edit</strong> button in <strong className="text-text-primary">Stage History</strong> to update.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Submit Button */}
-                      <button
-                        type="submit"
-                        disabled={isViewingPastCycle || isLegalProcessSubmitting || isStageAlreadyFilled || !canEditLegal}
-                        className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isViewingPastCycle ? 'Viewing Past Cycle (Read Only)' : !canEditLegal ? 'No Permission — View Only' : isStageAlreadyFilled ? 'Already Submitted — Use Edit' : isLegalProcessSubmitting ? 'Submitting...' : 'Submit Update'}
-                      </button>
-                    </form>
-                  )}
-
-                  {/* Option to start a new notice cycle if current cycle is completed – restricted to Legal & Admin */}
-                  {!isViewingPastCycle && canEditLegal && getActiveStageOfCase(legalProcessHistory, legalRequests, currentCycle) === 'Reply Received' &&
-                    getStageStatus('Reply Received', 'Reply Received', legalProcessHistory, legalRequests, currentCycle).isCompleted && (
-                      <div className="mt-8 p-5 bg-accent/[0.03] border-2 border-dashed border-accent/25 rounded-2xl flex flex-col items-center gap-4 text-center animate-in fade-in duration-300">
-                        <div className="w-12 h-12 bg-accent/10 rounded-full flex items-center justify-center text-xl">🔄</div>
-                        <div>
-                          <h4 className="text-xs font-black uppercase tracking-widest text-text-primary">Notice Cycle #{currentCycle} Completed</h4>
-                          <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider mt-1.5 leading-relaxed max-w-[280px]">
-                            If you received a reply and need to wapas send another notice, you can start a new process cycle.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const nextCycle = currentCycle + 1;
-                            const loadingToast = toast.loading(`Starting Notice Cycle #${nextCycle}...`);
-                            try {
-                              await api.post('/legal-process', {
-                                caseId: viewCase.caseId,
-                                stage: 'New Cycle Started',
-                                summary: `Notice Cycle ${nextCycle} Started`
-                              });
-                              toast.success(`Notice Cycle #${nextCycle} started successfully!`, { id: loadingToast });
-                              setSelectedCycleToView(nextCycle);
-                              fetchLegalProcessData(viewCase.caseId);
-                            } catch (err) {
-                              console.error('Failed to start new notice cycle:', err);
-                              toast.error('Failed to start new notice cycle', { id: loadingToast });
-                            }
-                          }}
-                          className="px-6 py-3 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2"
-                        >
-                          Start Notice Cycle #{currentCycle + 1}
-                        </button>
-                      </div>
-                    )}
-                </div>
-
-                {/* Right Side: History / Submission List */}
-                <div className="lg:col-span-5 bg-bg-card rounded-2xl border-2 border-border p-6 shadow-sm max-h-[600px] flex flex-col">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-text-primary mb-6 pb-3 border-b border-border flex items-center justify-between">
-                    <span>📋 Stage History</span>
-                    <span className="text-[10px] text-text-muted normal-case font-bold">{combinedHistory.length} updates</span>
-                  </h3>
-
-                  <div className="overflow-y-auto pr-2 space-y-6 flex-1 scrollbar-thin">
-                    {isLegalProcessLoading ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-accent border-t-transparent mb-4"></div>
-                        <span className="text-[10px] font-black uppercase tracking-widest">Loading history...</span>
-                      </div>
-                    ) : combinedHistory.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-center text-text-muted gap-4">
-                        <div className="text-4xl opacity-30">⏳</div>
-                        <div>
-                          <div className="text-[11px] font-black uppercase tracking-widest mb-1">No updates yet</div>
-                          <p className="text-[10px] text-text-muted leading-relaxed">Submit the form on the left to start the legal process timeline.</p>
-                        </div>
-                      </div>
-                    ) : (
-                      combinedHistory.map((item, idx) => (
-                        <div
-                          key={item.id}
-                          className="relative pl-6 pb-6 border-l-2 border-border last:border-l-0 last:pb-0"
-                        >
-                          {/* Timeline dot */}
-                          <div className="absolute -left-[7px] top-1.5 w-3 h-3 rounded-full bg-accent border-2 border-bg-card shadow-sm" />
-
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`px-3 py-1 ${item.isRequest ? 'bg-blue-500/10 border border-blue-500/20 text-blue-500' : 'bg-accent/10 border border-accent/20 text-accent'} rounded-full text-[9px] font-black uppercase tracking-wider`}>
-                                  Notice Cycle #{getCycleNumberForItem(item, legalProcessHistory)}: {item.stage}
-                                </span>
-                                {item.isRequest && (
-                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${item.status === 'Approved' ? 'bg-green-soft text-green' :
-                                    item.status === 'Rejected' ? 'bg-red-soft text-red' :
-                                      'bg-orange-100 text-orange-600'
-                                    }`}>
-                                    {item.status}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-[9px] text-text-muted font-bold whitespace-nowrap">
-                                  {(() => {
-                                    try {
-                                      const d = new Date(item.createdAt);
-                                      return isNaN(d.getTime()) ? 'N/A' : format(d, 'dd MMM yyyy, hh:mm a');
-                                    } catch (e) {
-                                      return 'N/A';
-                                    }
-                                  })()}
-                                </span>
-                                {/* Edit button – restricted to Legal & Admin users */}
-                                {!isViewingPastCycle && item.stage !== 'New Cycle Started' && canEditLegal && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleStartEdit(item)}
-                                    className="flex items-center gap-1 px-2 py-1 bg-bg-secondary hover:bg-accent/10 border border-border hover:border-accent text-text-muted hover:text-accent rounded-lg text-[8px] font-black uppercase tracking-wider transition-all active:scale-95"
-                                    title="Edit this stage entry"
-                                  >
-                                    <Edit3 size={9} />
-                                    Edit
-                                  </button>
-                                )}
-                              </div>
+                      ) : legalProcessForm.stage === 'Draft Approved' ? (
+                        <div className="space-y-4 animate-in fade-in duration-300">
+                          <h4 className="text-[11px] font-black uppercase tracking-widest text-text-muted">
+                            Approved Drafts ({legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && r.status === 'Approved').length})
+                          </h4>
+                          {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && r.status === 'Approved').length === 0 ? (
+                            <div className="p-8 text-center bg-bg-secondary/40 border border-border border-dashed rounded-xl text-text-muted text-xs">
+                              No approved drafts found.
                             </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && r.status === 'Approved').map(r => (
+                                <div key={r.id || r._id} className="p-5 bg-bg-secondary/40 border-2 border-border rounded-xl space-y-4 shadow-sm">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                      <h5 className="font-bold text-text-primary text-sm">{r.documentName}</h5>
+                                      <p className="text-[9px] text-text-muted mt-1">Requested by: {r.requestedByName || r.requestedBy}</p>
+                                    </div>
+                                    <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-green-soft text-green`}>
+                                      {r.status}
+                                    </span>
+                                  </div>
 
-                            {/* Checklist values for Case Study stage */}
-                            {!item.isRequest && item.stage === 'Case Study' && (
-                              <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {r.remark && (
+                                    <div className="bg-bg-card p-3 rounded-lg border border-border text-[10px] text-text-secondary">
+                                      <span className="block font-black text-text-muted uppercase tracking-wider mb-1">User Remark:</span>
+                                      {r.remark}
+                                    </div>
+                                  )}
+
+                                  {r.rejectRemark && (
+                                    <div className="bg-red-soft/10 p-3 rounded-lg border border-red-soft/20 text-[10px] text-red">
+                                      <span className="block font-black uppercase tracking-wider mb-1">Admin Remark / Rejection Reason:</span>
+                                      {r.rejectRemark}
+                                    </div>
+                                  )}
+
+                                  {r.fileLink && (
+                                    <div className="flex items-center gap-2 pt-2">
+                                      <a
+                                        href={r.fileLink}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
+                                      >
+                                        View / Download Document
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <form onSubmit={handleLegalProcessSubmit} className="space-y-6">
+                          {/* Case Study Specific Checkboxes */}
+                          {legalProcessForm.stage === 'Case Study' && (
+                            <div className="space-y-4 bg-bg-secondary/40 p-5 rounded-xl border border-border">
+                              <label className={labelClass}>Document Review Checklist</label>
+                              <p className="text-[10px] text-text-muted font-semibold uppercase tracking-wider mb-4">
+                                Please verify and check the documents read related to the case:
+                              </p>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {(() => {
-                                  const docs = [
+                                  const items = [
                                     { key: 'mouDocChecked', label: 'MOU Doc' },
                                     { key: 'invoicesChecked', label: 'Invoices' },
                                     { key: 'caseStudyDocChecked', label: 'Case Study Doc' }
                                   ];
                                   const compType = (viewCase?.typeOfComplaint || '').trim();
                                   if (compType === 'Legal Notice') {
-                                    docs.push({ key: 'paymentReceiptChecked', label: 'Legal Notice Doc' });
+                                    items.push({ key: 'paymentReceiptChecked', label: 'Legal Notice Doc' });
                                   } else if (compType === '1930 Cyber Complaint') {
-                                    docs.push({ key: 'paymentReceiptChecked', label: '1930 Cyber Complaint Doc' });
+                                    items.push({ key: 'paymentReceiptChecked', label: '1930 Cyber Complaint Doc' });
                                   } else if (compType === 'Consumer Complaint') {
-                                    docs.push({ key: 'paymentReceiptChecked', label: 'Consumer Complaint Doc' });
+                                    items.push({ key: 'paymentReceiptChecked', label: 'Consumer Complaint Doc' });
                                   } else if (['Criminal Complaint/FIR', 'FIR'].includes(compType)) {
-                                    docs.push({ key: 'paymentReceiptChecked', label: 'Criminal Complaint/FIR Doc' });
+                                    items.push({ key: 'paymentReceiptChecked', label: 'Criminal Complaint/FIR Doc' });
                                   }
-                                  return docs;
-                                })().map(doc => (
-                                  <span
-                                    key={doc.key}
-                                    className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wide border ${item[doc.key]
-                                      ? 'bg-green-soft/20 text-green border-green/20'
-                                      : 'bg-red-soft/20 text-red border-red/20'
-                                      }`}
-                                  >
-                                    {doc.label}: {item[doc.key] ? 'Checked' : 'Unchecked'}
-                                  </span>
-                                ))}
+                                  return items;
+                                })().map(item => {
+                                  const getPastCaseStudyChecks = () => {
+                                    const histItem = cycleHistory.find(h => h.stage === 'Case Study');
+                                    return {
+                                      mouDocChecked: histItem ? histItem.mouDocChecked : false,
+                                      invoicesChecked: histItem ? histItem.invoicesChecked : false,
+                                      paymentReceiptChecked: histItem ? histItem.paymentReceiptChecked : false,
+                                      caseStudyDocChecked: histItem ? histItem.caseStudyDocChecked : false
+                                    };
+                                  };
+                                  const checks = isViewingPastCycle ? getPastCaseStudyChecks() : legalProcessForm;
+                                  return (
+                                    <label
+                                      key={item.key}
+                                      className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${checks[item.key]
+                                        ? 'bg-accent/5 border-accent text-accent'
+                                        : 'bg-bg-input border-border text-text-secondary hover:border-text-primary'
+                                        }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        disabled={isViewingPastCycle}
+                                        checked={checks[item.key] || false}
+                                        onChange={isViewingPastCycle ? undefined : (e) => setLegalProcessForm(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                                        className="w-4 h-4 rounded text-accent focus:ring-accent border-border cursor-pointer accent-accent"
+                                      />
+                                      <span className="text-[11px] font-black uppercase tracking-wider">{item.label}</span>
+                                    </label>
+                                  );
+                                })}
                               </div>
-                            )}
-
-                            {item.isRequest ? (
-                              <div className="space-y-2 bg-bg-secondary/20 p-3 rounded-xl border border-border/30">
-                                <div className="text-[11px] text-text-primary">
-                                  <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Document Name</span>
-                                  <span className="font-bold">{item.documentName}</span>
-                                </div>
-                                {item.remark && (
-                                  <div className="text-[10px] text-text-secondary">
-                                    <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Remark</span>
-                                    {item.remark}
-                                  </div>
-                                )}
-                                {item.status === 'Rejected' && item.rejectRemark && (
-                                  <div className="text-[10px] text-red font-semibold">
-                                    <span className="font-black uppercase tracking-wider text-[8px] text-red/60 block mb-0.5">Rejection Reason</span>
-                                    {item.rejectRemark}
-                                  </div>
-                                )}
-                                {item.fileLink && (
-                                  <a
-                                    href={item.fileLink}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-accent hover:underline text-[10px] font-bold block pt-1"
-                                  >
-                                    Download / View File
-                                  </a>
-                                )}
-                              </div>
-                            ) : (() => {
-                              if (item.summary?.startsWith('PACK_AD_READY_JSON:')) {
-                                try {
-                                  const data = JSON.parse(item.summary.replace('PACK_AD_READY_JSON:', ''));
-                                  return (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-bg-secondary/40 p-4 rounded-xl border border-border/30 text-[11px] text-left">
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Receiver Name</span>
-                                        <span className="font-bold text-text-primary">{data.receiverName || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Receiver Address</span>
-                                        <span className="font-bold text-text-primary">{data.receiverAddress || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Prepared By</span>
-                                        <span className="font-bold text-text-primary">{data.preparedBy || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Company Address</span>
-                                        <span className="font-bold text-text-primary">{data.companyAddress || '—'}</span>
-                                      </div>
-                                      {data.remark && (
-                                        <div className="col-span-1 sm:col-span-2 mt-1 pt-2 border-t border-border/40">
-                                          <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Remark</span>
-                                          <span className="text-text-secondary">{data.remark}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                } catch (e) {
-                                  // Fallback below
-                                }
-                              } else if (item.summary?.startsWith('COURIER_SENT_JSON:')) {
-                                try {
-                                  const data = JSON.parse(item.summary.replace('COURIER_SENT_JSON:', ''));
-                                  return (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-bg-secondary/40 p-4 rounded-xl border border-border/30 text-[11px] text-left">
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Date & Time</span>
-                                        <span className="font-bold text-text-primary">
-                                          {(() => {
-                                            try {
-                                              const d = new Date(data.dateTime);
-                                              return isNaN(d.getTime()) ? '—' : format(d, 'dd MMM yyyy, hh:mm a');
-                                            } catch (err) {
-                                              return data.dateTime || '—';
-                                            }
-                                          })()}
-                                        </span>
-                                      </div>
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Sender Name</span>
-                                        <span className="font-bold text-text-primary">{data.senderName || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Document Name</span>
-                                        <span className="font-bold text-text-primary">{data.documentName || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Sender Company Name</span>
-                                        <span className="font-bold text-text-primary">{data.senderCompany || '—'}</span>
-                                      </div>
-                                    </div>
-                                  );
-                                } catch (e) {
-                                  // Fallback below
-                                }
-                              } else if (item.summary?.startsWith('REPLY_RECEIVED_JSON:')) {
-                                try {
-                                  const data = JSON.parse(item.summary.replace('REPLY_RECEIVED_JSON:', ''));
-                                  return (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-bg-secondary/40 p-4 rounded-xl border border-border/30 text-[11px] text-left">
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Date of Reply</span>
-                                        <span className="font-bold text-text-primary">
-                                          {(() => {
-                                            try {
-                                              const d = new Date(data.replyDate);
-                                              return isNaN(d.getTime()) ? '—' : format(d, 'dd MMM yyyy, hh:mm a');
-                                            } catch (err) {
-                                              return data.replyDate || '—';
-                                            }
-                                          })()}
-                                        </span>
-                                      </div>
-                                      <div>
-                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Replied By</span>
-                                        <span className="font-bold text-text-primary">{data.repliedBy || '—'}</span>
-                                      </div>
-                                      {data.replyFileLink && (
-                                        <div className="col-span-1 sm:col-span-2">
-                                          <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Reply Document</span>
-                                          <a
-                                            href={data.replyFileLink}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-accent/10 border border-accent/20 rounded-lg text-[9px] font-black uppercase tracking-wider text-accent hover:bg-accent hover:text-white transition-all shadow-sm"
-                                          >
-                                            <FileText size={12} />
-                                            View Reply Document
-                                          </a>
-                                        </div>
-                                      )}
-                                      {data.remark && (
-                                        <div className="col-span-1 sm:col-span-2 mt-1 pt-2 border-t border-border/40">
-                                          <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Reply Remarks</span>
-                                          <span className="text-text-secondary">{data.remark}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                } catch (e) {
-                                  // Fallback below
-                                }
-                              } else if (item.stage === 'New Cycle Started') {
-                                return (
-                                  <div className="flex items-center gap-2.5 p-3 bg-accent/[0.03] border border-accent/15 rounded-xl text-[11px] text-left">
-                                    <span className="text-sm">🔄</span>
-                                    <div>
-                                      <span className="font-black uppercase tracking-wider text-[8px] text-accent block mb-0.5">Process Cycle Restarted</span>
-                                      <span className="font-bold text-text-primary">{item.summary}</span>
-                                    </div>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <p className="text-[11px] text-text-secondary leading-relaxed bg-bg-secondary/40 p-3 rounded-xl border border-border/30 whitespace-pre-wrap break-all text-left">
-                                  {item.summary}
-                                </p>
-                              );
-                            })()}
-
-                            <div className="text-[9px] text-text-muted font-bold flex items-center gap-1">
-                              <span>Submitted by:</span>
-                              <span className="text-text-primary">{item.submittedBy}</span>
                             </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+                          )}
 
-            {/* ─── EDIT MODAL OVERLAY ─────────────────────────────── */}
-            {editingHistoryItem && (
-              <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-bg-card border-2 border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-                  <div className="flex items-center justify-between p-5 border-b border-border">
-                    <div>
-                      <h3 className="text-xs font-black uppercase tracking-widest text-text-primary">
-                        ✏️ Edit Stage Entry
-                      </h3>
-                      <p className="text-[9px] text-accent font-bold uppercase tracking-wider mt-0.5">
-                        {editFormStage}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setEditingHistoryItem(null)}
-                      className="p-2 rounded-xl hover:bg-bg-secondary text-text-muted hover:text-text-primary transition-all"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
+                          {/* Pack & AD ready stage form inputs */}
+                          {legalProcessForm.stage === 'Pack & AD ready' && (() => {
+                            const pastData = getPastStageData('Pack & AD ready') || {};
+                            return (
+                              <div className="space-y-4 bg-bg-secondary/40 p-5 rounded-xl border border-border">
+                                <h5 className="text-[11px] font-black uppercase tracking-widest text-text-muted mb-2">Stage Details: Pack & AD ready</h5>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <label className={labelClass}>Receiver Name</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      disabled={isViewingPastCycle}
+                                      placeholder="Enter receiver's name"
+                                      value={isViewingPastCycle ? (pastData.receiverName || '') : packReceiverName}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setPackReceiverName(e.target.value)}
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={labelClass}>Receiver Address</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      disabled={isViewingPastCycle}
+                                      placeholder="Enter receiver's address"
+                                      value={isViewingPastCycle ? (pastData.receiverAddress || '') : packReceiverAddress}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setPackReceiverAddress(e.target.value)}
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={labelClass}>Prepared By (Login User Name)</label>
+                                    <input
+                                      type="text"
+                                      readOnly
+                                      disabled
+                                      value={isViewingPastCycle ? (pastData.preparedBy || '') : (user?.fullName || user?.email || '')}
+                                      className={`${inputClass} bg-bg-secondary cursor-not-allowed`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={labelClass}>Company Address</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      disabled={isViewingPastCycle}
+                                      placeholder="Enter company address"
+                                      value={isViewingPastCycle ? (pastData.companyAddress || '') : packCompanyAddress}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setPackCompanyAddress(e.target.value)}
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div className="col-span-1 md:col-span-2">
+                                    <label className={labelClass}>Remark</label>
+                                    <textarea
+                                      placeholder="Any remarks..."
+                                      disabled={isViewingPastCycle}
+                                      value={isViewingPastCycle ? (pastData.remark || '') : packRemark}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setPackRemark(e.target.value)}
+                                      className={`${inputClass} min-h-[80px]`}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
 
-                  <form onSubmit={handleSaveEdit} className="p-5 space-y-4">
-                    {/* Draft Request fields */}
-                    {editingHistoryItem.isRequest && (
-                      <>
-                        <div>
-                          <label className={labelClass}>Document Name</label>
-                          <input
-                            type="text"
-                            required
-                            value={editFormPayload.documentName || ''}
-                            onChange={(e) => setEditFormPayload(prev => ({ ...prev, documentName: e.target.value }))}
-                            className={inputClass}
-                            placeholder="e.g. Legal Notice Draft"
-                          />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Remark</label>
-                          <input
-                            type="text"
-                            value={editFormPayload.remark || ''}
-                            onChange={(e) => setEditFormPayload(prev => ({ ...prev, remark: e.target.value }))}
-                            className={inputClass}
-                            placeholder="Any remarks..."
-                          />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Document</label>
-                          <input type="file" id="edit-draft-file" onChange={handleEditDraftUpload} className="hidden" />
-                          {!editFormPayload.fileLink && !editFormUploading && (
+                          {/* Courier Sent stage form inputs */}
+                          {legalProcessForm.stage === 'Courier Sent' && (() => {
+                            const pastData = getPastStageData('Courier Sent') || {};
+                            return (
+                              <div className="space-y-4 bg-bg-secondary/40 p-5 rounded-xl border border-border">
+                                <h5 className="text-[11px] font-black uppercase tracking-widest text-text-muted mb-2">Stage Details: Courier Sent</h5>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <label className={labelClass}>Date and Time</label>
+                                    <input
+                                      type="datetime-local"
+                                      required
+                                      disabled={isViewingPastCycle}
+                                      value={isViewingPastCycle ? (pastData.dateTime || '') : courierDateTime}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setCourierDateTime(e.target.value)}
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={labelClass}>Sender Name</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      disabled={isViewingPastCycle}
+                                      placeholder="Enter sender's name"
+                                      value={isViewingPastCycle ? (pastData.senderName || '') : courierSenderName}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setCourierSenderName(e.target.value)}
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={labelClass}>Document Name</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      disabled={isViewingPastCycle}
+                                      placeholder="Enter document name"
+                                      value={isViewingPastCycle ? (pastData.documentName || '') : courierDocName}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setCourierDocName(e.target.value)}
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={labelClass}>Sender Company Name</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      disabled={isViewingPastCycle}
+                                      placeholder="Enter sender's company name"
+                                      value={isViewingPastCycle ? (pastData.senderCompany || '') : courierSenderCompany}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setCourierSenderCompany(e.target.value)}
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Reply Received stage form inputs */}
+                          {legalProcessForm.stage === 'Reply Received' && (() => {
+                            const pastData = getPastStageData('Reply Received') || {};
+                            const activeReplyFileLink = isViewingPastCycle ? (pastData.replyFileLink || '') : replyFileLink;
+                            return (
+                              <div className="space-y-4 bg-bg-secondary/40 p-5 rounded-xl border border-border">
+                                <h5 className="text-[11px] font-black uppercase tracking-widest text-text-muted mb-2">Stage Details: Reply Received</h5>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <label className={labelClass}>Date of Reply</label>
+                                    <input
+                                      type="datetime-local"
+                                      required
+                                      disabled={isViewingPastCycle}
+                                      value={isViewingPastCycle ? (pastData.replyDate || '') : replyDate}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setReplyDate(e.target.value)}
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={labelClass}>Replied By</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      disabled={isViewingPastCycle}
+                                      placeholder="Enter replier's name"
+                                      value={isViewingPastCycle ? (pastData.repliedBy || '') : repliedBy}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setRepliedBy(e.target.value)}
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div className="col-span-1 md:col-span-2">
+                                    <label className={labelClass}>Reply Remarks</label>
+                                    <textarea
+                                      placeholder="Details of the reply received..."
+                                      disabled={isViewingPastCycle}
+                                      value={isViewingPastCycle ? (pastData.remark || '') : replyRemark}
+                                      onChange={isViewingPastCycle ? undefined : (e) => setReplyRemark(e.target.value)}
+                                      className={`${inputClass} min-h-[80px]`}
+                                    />
+                                  </div>
+                                  <div className="col-span-1 md:col-span-2">
+                                    <label className={labelClass}>Upload Reply Document</label>
+                                    <div className="mt-1">
+                                      <input
+                                        type="file"
+                                        id="legal-reply-file-input"
+                                        onChange={handleReplyUpload}
+                                        onClick={(e) => (e.target.value = null)}
+                                        className="hidden"
+                                      />
+                                      {!activeReplyFileLink && !replyFileUploading && !isViewingPastCycle && (
+                                        <button
+                                          type="button"
+                                          onClick={() => document.getElementById('legal-reply-file-input').click()}
+                                          className="w-full flex items-center justify-center gap-2.5 px-4 py-6 border-2 border-dashed border-border hover:border-accent bg-bg-secondary hover:bg-bg-secondary/70 text-text-secondary hover:text-accent rounded-2xl transition-all cursor-pointer group"
+                                        >
+                                          <UploadCloud size={20} className="text-text-muted group-hover:text-accent transition-colors" />
+                                          <span className="text-xs font-black uppercase tracking-wider">Choose or Upload Reply PDF/Doc</span>
+                                        </button>
+                                      )}
+                                      {!activeReplyFileLink && isViewingPastCycle && (
+                                        <div className="p-4 bg-bg-secondary/20 border border-border border-dashed rounded-xl text-center text-text-muted text-[10px] font-black uppercase tracking-wider">
+                                          No Document Uploaded
+                                        </div>
+                                      )}
+                                      {replyFileUploading && (
+                                        <div className="w-full flex items-center justify-center gap-3 px-4 py-6 border border-border bg-bg-secondary rounded-2xl animate-pulse">
+                                          <RefreshCw size={20} className="animate-spin text-accent" />
+                                          <span className="text-xs font-black uppercase tracking-wider text-text-muted">Uploading reply document...</span>
+                                        </div>
+                                      )}
+                                      {activeReplyFileLink && (
+                                        <div className="w-full flex items-center justify-between gap-4 p-4 bg-green-500/[0.03] border-2 border-green/20 rounded-2xl shadow-sm">
+                                          <div className="flex items-center gap-3">
+                                            <div className="p-2.5 bg-green-soft text-green rounded-xl">
+                                              <FileText size={18} />
+                                            </div>
+                                            <div className="text-left">
+                                              <span className="text-[10px] font-black uppercase tracking-widest text-green block">Reply Document Uploaded</span>
+                                              <span className="text-xs font-bold text-text-primary">Reply Attachment Attached</span>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <a
+                                              href={activeReplyFileLink}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="px-3.5 py-1.5 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-sm active:scale-95"
+                                            >
+                                              View File
+                                            </a>
+                                            {!isViewingPastCycle && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setReplyFileLink('');
+                                                  document.getElementById('legal-reply-file-input').value = '';
+                                                }}
+                                                className="px-3.5 py-1.5 bg-red-soft/20 text-red border border-red/10 hover:bg-red hover:text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all active:scale-95"
+                                              >
+                                                Remove
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Default Summary Field for other stages */}
+                          {legalProcessForm.stage !== 'Pack & AD ready' && legalProcessForm.stage !== 'Courier Sent' && legalProcessForm.stage !== 'Reply Received' && (
+                            <div>
+                              <label className={labelClass}>Summary / Remarks</label>
+                              <textarea
+                                required
+                                disabled={isViewingPastCycle || isStageAlreadyFilled}
+                                value={isViewingPastCycle ? (cycleHistory.find(h => h.stage === legalProcessForm.stage)?.summary || '') : legalProcessForm.summary}
+                                onChange={(isViewingPastCycle || isStageAlreadyFilled) ? undefined : (e) => setLegalProcessForm(prev => ({ ...prev, summary: e.target.value }))}
+                                placeholder="Provide details or updates regarding this stage..."
+                                className={`${inputClass} min-h-[120px]`}
+                              />
+                            </div>
+                          )}
+
+                          {/* Cycle already filled notice for non-Draft stages */}
+                          {isStageAlreadyFilled && !isViewingPastCycle && (
+                            <div className="p-4 bg-accent/[0.03] border border-dashed border-accent/25 rounded-xl text-center animate-in fade-in duration-300">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-text-primary mb-1">Stage Already Submitted</p>
+                              <p className="text-[9px] text-text-muted leading-relaxed">
+                                <span className="text-accent font-bold">{legalProcessForm.stage}</span> has already been recorded this cycle.
+                                Use the <strong className="text-accent">Edit</strong> button in <strong className="text-text-primary">Stage History</strong> to update.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Submit Button */}
+                          <button
+                            type="submit"
+                            disabled={isViewingPastCycle || isLegalProcessSubmitting || isStageAlreadyFilled || !canEditLegal}
+                            className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isViewingPastCycle ? 'Viewing Past Cycle (Read Only)' : !canEditLegal ? 'No Permission — View Only' : isStageAlreadyFilled ? 'Already Submitted — Use Edit' : isLegalProcessSubmitting ? 'Submitting...' : 'Submit Update'}
+                          </button>
+                        </form>
+                      )}
+
+                      {/* Option to start a new notice cycle if current cycle is completed – restricted to Legal & Admin */}
+                      {!isViewingPastCycle && canEditLegal && getActiveStageOfCase(legalProcessHistory, legalRequests, currentCycle) === 'Reply Received' &&
+                        getStageStatus('Reply Received', 'Reply Received', legalProcessHistory, legalRequests, currentCycle).isCompleted && (
+                          <div className="mt-8 p-5 bg-accent/[0.03] border-2 border-dashed border-accent/25 rounded-2xl flex flex-col items-center gap-4 text-center animate-in fade-in duration-300">
+                            <div className="w-12 h-12 bg-accent/10 rounded-full flex items-center justify-center text-xl">🔄</div>
+                            <div>
+                              <h4 className="text-xs font-black uppercase tracking-widest text-text-primary">Notice Cycle #{currentCycle} Completed</h4>
+                              <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider mt-1.5 leading-relaxed max-w-[280px]">
+                                If you received a reply and need to wapas send another notice, you can start a new process cycle.
+                              </p>
+                            </div>
                             <button
                               type="button"
-                              onClick={() => document.getElementById('edit-draft-file').click()}
-                              className="w-full flex items-center justify-center gap-2 px-4 py-4 border-2 border-dashed border-border hover:border-accent bg-bg-secondary hover:bg-bg-secondary/70 text-text-secondary hover:text-accent rounded-xl transition-all text-xs font-black uppercase tracking-wider"
+                              onClick={async () => {
+                                const nextCycle = currentCycle + 1;
+                                const loadingToast = toast.loading(`Starting Notice Cycle #${nextCycle}...`);
+                                try {
+                                  await api.post('/legal-process', {
+                                    caseId: viewCase.caseId,
+                                    stage: 'New Cycle Started',
+                                    summary: `Notice Cycle ${nextCycle} Started`
+                                  });
+                                  toast.success(`Notice Cycle #${nextCycle} started successfully!`, { id: loadingToast });
+                                  setSelectedCycleToView(nextCycle);
+                                  fetchLegalProcessData(viewCase.caseId);
+                                } catch (err) {
+                                  console.error('Failed to start new notice cycle:', err);
+                                  toast.error('Failed to start new notice cycle', { id: loadingToast });
+                                }
+                              }}
+                              className="px-6 py-3 bg-accent hover:bg-accent-hover text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2"
                             >
-                              <UploadCloud size={16} /> Replace Document
+                              Start Notice Cycle #{currentCycle + 1}
                             </button>
-                          )}
-                          {editFormUploading && (
-                            <div className="flex items-center justify-center gap-2 py-4 text-text-muted text-xs animate-pulse">
-                              <RefreshCw size={14} className="animate-spin" /> Uploading...
-                            </div>
-                          )}
-                          {editFormPayload.fileLink && !editFormUploading && (
-                            <div className="flex items-center justify-between gap-3 p-3 bg-green-500/[0.03] border border-green/20 rounded-xl">
-                              <div className="flex items-center gap-2">
-                                <FileText size={14} className="text-green" />
-                                <span className="text-[10px] font-bold text-green">Document Attached</span>
-                              </div>
-                              <div className="flex gap-2">
-                                <a href={editFormPayload.fileLink} target="_blank" rel="noreferrer" className="text-accent text-[9px] font-black uppercase tracking-wider hover:underline">View</a>
-                                <button type="button" onClick={() => setEditFormPayload(prev => ({ ...prev, fileLink: '' }))} className="text-red text-[9px] font-black uppercase tracking-wider hover:underline">Remove</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-
-                    {/* Case Study fields */}
-                    {!editingHistoryItem.isRequest && editFormStage === 'Case Study' && (
-                      <>
-                        <div className="space-y-2">
-                          <label className={labelClass}>Document Review Checklist</label>
-                          {[
-                            { key: 'mouDocChecked', label: 'MOU Doc' },
-                            { key: 'invoicesChecked', label: 'Invoices' },
-                            { key: 'caseStudyDocChecked', label: 'Case Study Doc' },
-                            { key: 'paymentReceiptChecked', label: 'Additional Doc' }
-                          ].map(doc => (
-                            <label key={doc.key} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${editFormPayload[doc.key] ? 'bg-accent/5 border-accent text-accent' : 'bg-bg-input border-border text-text-secondary'}`}>
-                              <input
-                                type="checkbox"
-                                checked={!!editFormPayload[doc.key]}
-                                onChange={(e) => setEditFormPayload(prev => ({ ...prev, [doc.key]: e.target.checked }))}
-                                className="w-4 h-4 accent-accent"
-                              />
-                              <span className="text-[11px] font-black uppercase tracking-wider">{doc.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                        <div>
-                          <label className={labelClass}>Summary / Remarks</label>
-                          <textarea
-                            value={editFormPayload.summary || ''}
-                            onChange={(e) => setEditFormPayload(prev => ({ ...prev, summary: e.target.value }))}
-                            className={`${inputClass} min-h-[80px]`}
-                            placeholder="Provide summary..."
-                          />
-                        </div>
-                      </>
-                    )}
-
-                    {/* Pack & AD Ready fields */}
-                    {!editingHistoryItem.isRequest && editFormStage === 'Pack & AD ready' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className={labelClass}>Receiver Name</label>
-                          <input type="text" value={editFormPayload.receiverName || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, receiverName: e.target.value }))} className={inputClass} placeholder="Receiver's name" />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Receiver Address</label>
-                          <input type="text" value={editFormPayload.receiverAddress || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, receiverAddress: e.target.value }))} className={inputClass} placeholder="Receiver's address" />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Company Address</label>
-                          <input type="text" value={editFormPayload.companyAddress || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, companyAddress: e.target.value }))} className={inputClass} placeholder="Company address" />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Remark</label>
-                          <input type="text" value={editFormPayload.remark || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, remark: e.target.value }))} className={inputClass} placeholder="Any remarks..." />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Courier Sent fields */}
-                    {!editingHistoryItem.isRequest && editFormStage === 'Courier Sent' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className={labelClass}>Date and Time</label>
-                          <input type="datetime-local" value={editFormPayload.dateTime || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, dateTime: e.target.value }))} className={inputClass} />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Sender Name</label>
-                          <input type="text" value={editFormPayload.senderName || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, senderName: e.target.value }))} className={inputClass} placeholder="Sender's name" />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Document Name</label>
-                          <input type="text" value={editFormPayload.documentName || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, documentName: e.target.value }))} className={inputClass} placeholder="Document name" />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Sender Company</label>
-                          <input type="text" value={editFormPayload.senderCompany || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, senderCompany: e.target.value }))} className={inputClass} placeholder="Sender's company" />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Reply Received fields */}
-                    {!editingHistoryItem.isRequest && editFormStage === 'Reply Received' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className={labelClass}>Date of Reply</label>
-                          <input type="datetime-local" value={editFormPayload.replyDate || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, replyDate: e.target.value }))} className={inputClass} />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Replied By</label>
-                          <input type="text" value={editFormPayload.repliedBy || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, repliedBy: e.target.value }))} className={inputClass} placeholder="Replier's name" />
-                        </div>
-                        <div className="col-span-1 sm:col-span-2">
-                          <label className={labelClass}>Reply Remarks</label>
-                          <textarea value={editFormPayload.remark || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, remark: e.target.value }))} className={`${inputClass} min-h-[70px]`} placeholder="Details of reply..." />
-                        </div>
-                        <div className="col-span-1 sm:col-span-2">
-                          <label className={labelClass}>Reply Document</label>
-                          <input type="file" id="edit-reply-file" onChange={handleEditReplyUpload} className="hidden" />
-                          {!editFormPayload.replyFileLink && !editFormUploading && (
-                            <button type="button" onClick={() => document.getElementById('edit-reply-file').click()} className="w-full flex items-center justify-center gap-2 px-4 py-4 border-2 border-dashed border-border hover:border-accent bg-bg-secondary hover:bg-bg-secondary/70 text-text-secondary hover:text-accent rounded-xl transition-all text-xs font-black uppercase tracking-wider">
-                              <UploadCloud size={16} /> Replace Reply Document
-                            </button>
-                          )}
-                          {editFormUploading && (
-                            <div className="flex items-center justify-center gap-2 py-4 text-text-muted text-xs animate-pulse">
-                              <RefreshCw size={14} className="animate-spin" /> Uploading...
-                            </div>
-                          )}
-                          {editFormPayload.replyFileLink && !editFormUploading && (
-                            <div className="flex items-center justify-between gap-3 p-3 bg-green-500/[0.03] border border-green/20 rounded-xl">
-                              <div className="flex items-center gap-2">
-                                <FileText size={14} className="text-green" />
-                                <span className="text-[10px] font-bold text-green">Reply Document Attached</span>
-                              </div>
-                              <div className="flex gap-2">
-                                <a href={editFormPayload.replyFileLink} target="_blank" rel="noreferrer" className="text-accent text-[9px] font-black uppercase tracking-wider hover:underline">View</a>
-                                <button type="button" onClick={() => setEditFormPayload(prev => ({ ...prev, replyFileLink: '' }))} className="text-red text-[9px] font-black uppercase tracking-wider hover:underline">Remove</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Generic summary for other stages */}
-                    {!editingHistoryItem.isRequest && !['Case Study', 'Pack & AD ready', 'Courier Sent', 'Reply Received'].includes(editFormStage) && (
-                      <div>
-                        <label className={labelClass}>Summary / Remarks</label>
-                        <textarea
-                          value={editFormPayload.summary || ''}
-                          onChange={(e) => setEditFormPayload(prev => ({ ...prev, summary: e.target.value }))}
-                          className={`${inputClass} min-h-[100px]`}
-                          placeholder="Provide summary or remarks..."
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex gap-3 pt-2 border-t border-border">
-                      <button
-                        type="button"
-                        onClick={() => setEditingHistoryItem(null)}
-                        className="flex-1 py-3 bg-bg-secondary hover:bg-bg-input border border-border text-text-primary font-black text-xs uppercase tracking-widest rounded-xl transition-all"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={editFormUploading}
-                        className="flex-1 py-3 bg-accent hover:bg-accent-hover text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg disabled:opacity-50"
-                      >
-                        {editFormUploading ? 'Uploading...' : 'Save Changes'}
-                      </button>
+                          </div>
+                        )}
                     </div>
-                  </form>
+
+                    {/* Right Side: History / Submission List */}
+                    <div className="lg:col-span-5 bg-bg-card rounded-2xl border-2 border-border p-6 shadow-sm max-h-[600px] flex flex-col">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-text-primary mb-6 pb-3 border-b border-border flex items-center justify-between">
+                        <span>📋 Stage History</span>
+                        <span className="text-[10px] text-text-muted normal-case font-bold">{combinedHistory.length} updates</span>
+                      </h3>
+
+                      <div className="overflow-y-auto pr-2 space-y-6 flex-1 scrollbar-thin">
+                        {isLegalProcessLoading ? (
+                          <div className="flex flex-col items-center justify-center py-20 text-text-muted">
+                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-accent border-t-transparent mb-4"></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest">Loading history...</span>
+                          </div>
+                        ) : combinedHistory.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-20 text-center text-text-muted gap-4">
+                            <div className="text-4xl opacity-30">⏳</div>
+                            <div>
+                              <div className="text-[11px] font-black uppercase tracking-widest mb-1">No updates yet</div>
+                              <p className="text-[10px] text-text-muted leading-relaxed">Submit the form on the left to start the legal process timeline.</p>
+                            </div>
+                          </div>
+                        ) : (
+                          combinedHistory.map((item, idx) => (
+                            <div
+                              key={item.id}
+                              className="relative pl-6 pb-6 border-l-2 border-border last:border-l-0 last:pb-0"
+                            >
+                              {/* Timeline dot */}
+                              <div className="absolute -left-[7px] top-1.5 w-3 h-3 rounded-full bg-accent border-2 border-bg-card shadow-sm" />
+
+                              <div className="space-y-3">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`px-3 py-1 ${item.isRequest ? 'bg-blue-500/10 border border-blue-500/20 text-blue-500' : 'bg-accent/10 border border-accent/20 text-accent'} rounded-full text-[9px] font-black uppercase tracking-wider`}>
+                                      Notice Cycle #{getCycleNumberForItem(item, legalProcessHistory)}: {item.stage}
+                                    </span>
+                                    {item.isRequest && (
+                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${item.status === 'Approved' ? 'bg-green-soft text-green' :
+                                        item.status === 'Rejected' ? 'bg-red-soft text-red' :
+                                          'bg-orange-100 text-orange-600'
+                                        }`}>
+                                        {item.status}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-[9px] text-text-muted font-bold whitespace-nowrap">
+                                      {(() => {
+                                        try {
+                                          const d = new Date(item.createdAt);
+                                          return isNaN(d.getTime()) ? 'N/A' : format(d, 'dd MMM yyyy, hh:mm a');
+                                        } catch (e) {
+                                          return 'N/A';
+                                        }
+                                      })()}
+                                    </span>
+                                    {/* Edit button – restricted to Legal & Admin users */}
+                                    {!isViewingPastCycle && item.stage !== 'New Cycle Started' && canEditLegal && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEdit(item)}
+                                        className="flex items-center gap-1 px-2 py-1 bg-bg-secondary hover:bg-accent/10 border border-border hover:border-accent text-text-muted hover:text-accent rounded-lg text-[8px] font-black uppercase tracking-wider transition-all active:scale-95"
+                                        title="Edit this stage entry"
+                                      >
+                                        <Edit3 size={9} />
+                                        Edit
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Checklist values for Case Study stage */}
+                                {!item.isRequest && item.stage === 'Case Study' && (
+                                  <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {(() => {
+                                      const docs = [
+                                        { key: 'mouDocChecked', label: 'MOU Doc' },
+                                        { key: 'invoicesChecked', label: 'Invoices' },
+                                        { key: 'caseStudyDocChecked', label: 'Case Study Doc' }
+                                      ];
+                                      const compType = (viewCase?.typeOfComplaint || '').trim();
+                                      if (compType === 'Legal Notice') {
+                                        docs.push({ key: 'paymentReceiptChecked', label: 'Legal Notice Doc' });
+                                      } else if (compType === '1930 Cyber Complaint') {
+                                        docs.push({ key: 'paymentReceiptChecked', label: '1930 Cyber Complaint Doc' });
+                                      } else if (compType === 'Consumer Complaint') {
+                                        docs.push({ key: 'paymentReceiptChecked', label: 'Consumer Complaint Doc' });
+                                      } else if (['Criminal Complaint/FIR', 'FIR'].includes(compType)) {
+                                        docs.push({ key: 'paymentReceiptChecked', label: 'Criminal Complaint/FIR Doc' });
+                                      }
+                                      return docs;
+                                    })().map(doc => (
+                                      <span
+                                        key={doc.key}
+                                        className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wide border ${item[doc.key]
+                                          ? 'bg-green-soft/20 text-green border-green/20'
+                                          : 'bg-red-soft/20 text-red border-red/20'
+                                          }`}
+                                      >
+                                        {doc.label}: {item[doc.key] ? 'Checked' : 'Unchecked'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {item.isRequest ? (
+                                  <div className="space-y-2 bg-bg-secondary/20 p-3 rounded-xl border border-border/30">
+                                    <div className="text-[11px] text-text-primary">
+                                      <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Document Name</span>
+                                      <span className="font-bold">{item.documentName}</span>
+                                    </div>
+                                    {item.remark && (
+                                      <div className="text-[10px] text-text-secondary">
+                                        <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Remark</span>
+                                        {item.remark}
+                                      </div>
+                                    )}
+                                    {item.status === 'Rejected' && item.rejectRemark && (
+                                      <div className="text-[10px] text-red font-semibold">
+                                        <span className="font-black uppercase tracking-wider text-[8px] text-red/60 block mb-0.5">Rejection Reason</span>
+                                        {item.rejectRemark}
+                                      </div>
+                                    )}
+                                    {item.fileLink && (
+                                      <a
+                                        href={item.fileLink}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-accent hover:underline text-[10px] font-bold block pt-1"
+                                      >
+                                        Download / View File
+                                      </a>
+                                    )}
+                                  </div>
+                                ) : (() => {
+                                  if (item.summary?.startsWith('PACK_AD_READY_JSON:')) {
+                                    try {
+                                      const data = JSON.parse(item.summary.replace('PACK_AD_READY_JSON:', ''));
+                                      return (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-bg-secondary/40 p-4 rounded-xl border border-border/30 text-[11px] text-left">
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Receiver Name</span>
+                                            <span className="font-bold text-text-primary">{data.receiverName || '—'}</span>
+                                          </div>
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Receiver Address</span>
+                                            <span className="font-bold text-text-primary">{data.receiverAddress || '—'}</span>
+                                          </div>
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Prepared By</span>
+                                            <span className="font-bold text-text-primary">{data.preparedBy || '—'}</span>
+                                          </div>
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Company Address</span>
+                                            <span className="font-bold text-text-primary">{data.companyAddress || '—'}</span>
+                                          </div>
+                                          {data.remark && (
+                                            <div className="col-span-1 sm:col-span-2 mt-1 pt-2 border-t border-border/40">
+                                              <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Remark</span>
+                                              <span className="text-text-secondary">{data.remark}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    } catch (e) {
+                                      // Fallback below
+                                    }
+                                  } else if (item.summary?.startsWith('COURIER_SENT_JSON:')) {
+                                    try {
+                                      const data = JSON.parse(item.summary.replace('COURIER_SENT_JSON:', ''));
+                                      return (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-bg-secondary/40 p-4 rounded-xl border border-border/30 text-[11px] text-left">
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Date & Time</span>
+                                            <span className="font-bold text-text-primary">
+                                              {(() => {
+                                                try {
+                                                  const d = new Date(data.dateTime);
+                                                  return isNaN(d.getTime()) ? '—' : format(d, 'dd MMM yyyy, hh:mm a');
+                                                } catch (err) {
+                                                  return data.dateTime || '—';
+                                                }
+                                              })()}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Sender Name</span>
+                                            <span className="font-bold text-text-primary">{data.senderName || '—'}</span>
+                                          </div>
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Document Name</span>
+                                            <span className="font-bold text-text-primary">{data.documentName || '—'}</span>
+                                          </div>
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Sender Company Name</span>
+                                            <span className="font-bold text-text-primary">{data.senderCompany || '—'}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    } catch (e) {
+                                      // Fallback below
+                                    }
+                                  } else if (item.summary?.startsWith('REPLY_RECEIVED_JSON:')) {
+                                    try {
+                                      const data = JSON.parse(item.summary.replace('REPLY_RECEIVED_JSON:', ''));
+                                      return (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-bg-secondary/40 p-4 rounded-xl border border-border/30 text-[11px] text-left">
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Date of Reply</span>
+                                            <span className="font-bold text-text-primary">
+                                              {(() => {
+                                                try {
+                                                  const d = new Date(data.replyDate);
+                                                  return isNaN(d.getTime()) ? '—' : format(d, 'dd MMM yyyy, hh:mm a');
+                                                } catch (err) {
+                                                  return data.replyDate || '—';
+                                                }
+                                              })()}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Replied By</span>
+                                            <span className="font-bold text-text-primary">{data.repliedBy || '—'}</span>
+                                          </div>
+                                          {data.replyFileLink && (
+                                            <div className="col-span-1 sm:col-span-2">
+                                              <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Reply Document</span>
+                                              <a
+                                                href={data.replyFileLink}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-accent/10 border border-accent/20 rounded-lg text-[9px] font-black uppercase tracking-wider text-accent hover:bg-accent hover:text-white transition-all shadow-sm"
+                                              >
+                                                <FileText size={12} />
+                                                View Reply Document
+                                              </a>
+                                            </div>
+                                          )}
+                                          {data.remark && (
+                                            <div className="col-span-1 sm:col-span-2 mt-1 pt-2 border-t border-border/40">
+                                              <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Reply Remarks</span>
+                                              <span className="text-text-secondary">{data.remark}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    } catch (e) {
+                                      // Fallback below
+                                    }
+                                  } else if (item.stage === 'New Cycle Started') {
+                                    return (
+                                      <div className="flex items-center gap-2.5 p-3 bg-accent/[0.03] border border-accent/15 rounded-xl text-[11px] text-left">
+                                        <span className="text-sm">🔄</span>
+                                        <div>
+                                          <span className="font-black uppercase tracking-wider text-[8px] text-accent block mb-0.5">Process Cycle Restarted</span>
+                                          <span className="font-bold text-text-primary">{item.summary}</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+
+                                  return (
+                                    <p className="text-[11px] text-text-secondary leading-relaxed bg-bg-secondary/40 p-3 rounded-xl border border-border/30 whitespace-pre-wrap break-all text-left">
+                                      {item.summary}
+                                    </p>
+                                  );
+                                })()}
+
+                                <div className="text-[9px] text-text-muted font-bold flex items-center gap-1">
+                                  <span>Submitted by:</span>
+                                  <span className="text-text-primary">{item.submittedBy}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+
+                {/* ─── EDIT MODAL OVERLAY ─────────────────────────────── */}
+                {editingHistoryItem && (
+                  <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-bg-card border-2 border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                      <div className="flex items-center justify-between p-5 border-b border-border">
+                        <div>
+                          <h3 className="text-xs font-black uppercase tracking-widest text-text-primary">
+                            ✏️ Edit Stage Entry
+                          </h3>
+                          <p className="text-[9px] text-accent font-bold uppercase tracking-wider mt-0.5">
+                            {editFormStage}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditingHistoryItem(null)}
+                          className="p-2 rounded-xl hover:bg-bg-secondary text-text-muted hover:text-text-primary transition-all"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      <form onSubmit={handleSaveEdit} className="p-5 space-y-4">
+                        {/* Draft Request fields */}
+                        {editingHistoryItem.isRequest && (
+                          <>
+                            <div>
+                              <label className={labelClass}>Document Name</label>
+                              <input
+                                type="text"
+                                required
+                                value={editFormPayload.documentName || ''}
+                                onChange={(e) => setEditFormPayload(prev => ({ ...prev, documentName: e.target.value }))}
+                                className={inputClass}
+                                placeholder="e.g. Legal Notice Draft"
+                              />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Remark</label>
+                              <input
+                                type="text"
+                                value={editFormPayload.remark || ''}
+                                onChange={(e) => setEditFormPayload(prev => ({ ...prev, remark: e.target.value }))}
+                                className={inputClass}
+                                placeholder="Any remarks..."
+                              />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Document</label>
+                              <input type="file" id="edit-draft-file" onChange={handleEditDraftUpload} onClick={(e) => (e.target.value = null)} className="hidden" />
+                              {!editFormPayload.fileLink && !editFormUploading && (
+                                <button
+                                  type="button"
+                                  onClick={() => document.getElementById('edit-draft-file').click()}
+                                  className="w-full flex items-center justify-center gap-2 px-4 py-4 border-2 border-dashed border-border hover:border-accent bg-bg-secondary hover:bg-bg-secondary/70 text-text-secondary hover:text-accent rounded-xl transition-all text-xs font-black uppercase tracking-wider"
+                                >
+                                  <UploadCloud size={16} /> Replace Document
+                                </button>
+                              )}
+                              {editFormUploading && (
+                                <div className="flex items-center justify-center gap-2 py-4 text-text-muted text-xs animate-pulse">
+                                  <RefreshCw size={14} className="animate-spin" /> Uploading...
+                                </div>
+                              )}
+                              {editFormPayload.fileLink && !editFormUploading && (
+                                <div className="flex items-center justify-between gap-3 p-3 bg-green-500/[0.03] border border-green/20 rounded-xl">
+                                  <div className="flex items-center gap-2">
+                                    <FileText size={14} className="text-green" />
+                                    <span className="text-[10px] font-bold text-green">Document Attached</span>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <a href={editFormPayload.fileLink} target="_blank" rel="noreferrer" className="text-accent text-[9px] font-black uppercase tracking-wider hover:underline">View</a>
+                                    <button type="button" onClick={() => setEditFormPayload(prev => ({ ...prev, fileLink: '' }))} className="text-red text-[9px] font-black uppercase tracking-wider hover:underline">Remove</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+
+                        {/* Case Study fields */}
+                        {!editingHistoryItem.isRequest && editFormStage === 'Case Study' && (
+                          <>
+                            <div className="space-y-2">
+                              <label className={labelClass}>Document Review Checklist</label>
+                              {[
+                                { key: 'mouDocChecked', label: 'MOU Doc' },
+                                { key: 'invoicesChecked', label: 'Invoices' },
+                                { key: 'caseStudyDocChecked', label: 'Case Study Doc' },
+                                { key: 'paymentReceiptChecked', label: 'Additional Doc' }
+                              ].map(doc => (
+                                <label key={doc.key} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${editFormPayload[doc.key] ? 'bg-accent/5 border-accent text-accent' : 'bg-bg-input border-border text-text-secondary'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!editFormPayload[doc.key]}
+                                    onChange={(e) => setEditFormPayload(prev => ({ ...prev, [doc.key]: e.target.checked }))}
+                                    className="w-4 h-4 accent-accent"
+                                  />
+                                  <span className="text-[11px] font-black uppercase tracking-wider">{doc.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                            <div>
+                              <label className={labelClass}>Summary / Remarks</label>
+                              <textarea
+                                value={editFormPayload.summary || ''}
+                                onChange={(e) => setEditFormPayload(prev => ({ ...prev, summary: e.target.value }))}
+                                className={`${inputClass} min-h-[80px]`}
+                                placeholder="Provide summary..."
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {/* Pack & AD Ready fields */}
+                        {!editingHistoryItem.isRequest && editFormStage === 'Pack & AD ready' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className={labelClass}>Receiver Name</label>
+                              <input type="text" value={editFormPayload.receiverName || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, receiverName: e.target.value }))} className={inputClass} placeholder="Receiver's name" />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Receiver Address</label>
+                              <input type="text" value={editFormPayload.receiverAddress || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, receiverAddress: e.target.value }))} className={inputClass} placeholder="Receiver's address" />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Company Address</label>
+                              <input type="text" value={editFormPayload.companyAddress || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, companyAddress: e.target.value }))} className={inputClass} placeholder="Company address" />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Remark</label>
+                              <input type="text" value={editFormPayload.remark || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, remark: e.target.value }))} className={inputClass} placeholder="Any remarks..." />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Courier Sent fields */}
+                        {!editingHistoryItem.isRequest && editFormStage === 'Courier Sent' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className={labelClass}>Date and Time</label>
+                              <input type="datetime-local" value={editFormPayload.dateTime || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, dateTime: e.target.value }))} className={inputClass} />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Sender Name</label>
+                              <input type="text" value={editFormPayload.senderName || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, senderName: e.target.value }))} className={inputClass} placeholder="Sender's name" />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Document Name</label>
+                              <input type="text" value={editFormPayload.documentName || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, documentName: e.target.value }))} className={inputClass} placeholder="Document name" />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Sender Company</label>
+                              <input type="text" value={editFormPayload.senderCompany || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, senderCompany: e.target.value }))} className={inputClass} placeholder="Sender's company" />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Reply Received fields */}
+                        {!editingHistoryItem.isRequest && editFormStage === 'Reply Received' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className={labelClass}>Date of Reply</label>
+                              <input type="datetime-local" value={editFormPayload.replyDate || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, replyDate: e.target.value }))} className={inputClass} />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Replied By</label>
+                              <input type="text" value={editFormPayload.repliedBy || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, repliedBy: e.target.value }))} className={inputClass} placeholder="Replier's name" />
+                            </div>
+                            <div className="col-span-1 sm:col-span-2">
+                              <label className={labelClass}>Reply Remarks</label>
+                              <textarea value={editFormPayload.remark || ''} onChange={(e) => setEditFormPayload(prev => ({ ...prev, remark: e.target.value }))} className={`${inputClass} min-h-[70px]`} placeholder="Details of reply..." />
+                            </div>
+                            <div className="col-span-1 sm:col-span-2">
+                              <label className={labelClass}>Reply Document</label>
+                              <input type="file" id="edit-reply-file" onChange={handleEditReplyUpload} onClick={(e) => (e.target.value = null)} className="hidden" />
+                              {!editFormPayload.replyFileLink && !editFormUploading && (
+                                <button type="button" onClick={() => document.getElementById('edit-reply-file').click()} className="w-full flex items-center justify-center gap-2 px-4 py-4 border-2 border-dashed border-border hover:border-accent bg-bg-secondary hover:bg-bg-secondary/70 text-text-secondary hover:text-accent rounded-xl transition-all text-xs font-black uppercase tracking-wider">
+                                  <UploadCloud size={16} /> Replace Reply Document
+                                </button>
+                              )}
+                              {editFormUploading && (
+                                <div className="flex items-center justify-center gap-2 py-4 text-text-muted text-xs animate-pulse">
+                                  <RefreshCw size={14} className="animate-spin" /> Uploading...
+                                </div>
+                              )}
+                              {editFormPayload.replyFileLink && !editFormUploading && (
+                                <div className="flex items-center justify-between gap-3 p-3 bg-green-500/[0.03] border border-green/20 rounded-xl">
+                                  <div className="flex items-center gap-2">
+                                    <FileText size={14} className="text-green" />
+                                    <span className="text-[10px] font-bold text-green">Reply Document Attached</span>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <a href={editFormPayload.replyFileLink} target="_blank" rel="noreferrer" className="text-accent text-[9px] font-black uppercase tracking-wider hover:underline">View</a>
+                                    <button type="button" onClick={() => setEditFormPayload(prev => ({ ...prev, replyFileLink: '' }))} className="text-red text-[9px] font-black uppercase tracking-wider hover:underline">Remove</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Generic summary for other stages */}
+                        {!editingHistoryItem.isRequest && !['Case Study', 'Pack & AD ready', 'Courier Sent', 'Reply Received'].includes(editFormStage) && (
+                          <div>
+                            <label className={labelClass}>Summary / Remarks</label>
+                            <textarea
+                              value={editFormPayload.summary || ''}
+                              onChange={(e) => setEditFormPayload(prev => ({ ...prev, summary: e.target.value }))}
+                              className={`${inputClass} min-h-[100px]`}
+                              placeholder="Provide summary or remarks..."
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex gap-3 pt-2 border-t border-border">
+                          <button
+                            type="button"
+                            onClick={() => setEditingHistoryItem(null)}
+                            className="flex-1 py-3 bg-bg-secondary hover:bg-bg-input border border-border text-text-primary font-black text-xs uppercase tracking-widest rounded-xl transition-all"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={editFormUploading}
+                            className="flex-1 py-3 bg-accent hover:bg-accent-hover text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg disabled:opacity-50"
+                          >
+                            {editFormUploading ? 'Uploading...' : 'Save Changes'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
               </>
             );
-        })() : activeDetailTab === 'Case Study' ? (
+          })() : activeDetailTab === 'Case Study' ? (
             <CaseStudyTab caseData={viewCase} />
           ) : (
             <div className="bg-bg-card rounded-2xl border-2 border-border p-20 flex flex-col items-center justify-center gap-6 text-center animate-in zoom-in-95 duration-300 pb-20 mb-20">
@@ -8115,8 +8262,28 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     const isSorted = colSortConfig.key === col.key;
 
                     let uniqueVals = col.key && col.getVal
-                      ? [...new Set(cases.map(col.getVal).filter(v => v))].sort()
+                      ? [...new Set(cases.map(col.getVal).filter(v => v))]
                       : [];
+
+                    if (col.key === 'status') {
+                      const statusOrder = [
+                        'Case Logged',
+                        'Assigned',
+                        'Analysis',
+                        'Negotiation',
+                        'Settlement',
+                        'Closure'
+                      ];
+                      uniqueVals.sort((a, b) => {
+                        const idxA = statusOrder.indexOf(a);
+                        const idxB = statusOrder.indexOf(b);
+                        const orderA = idxA === -1 ? 999 : idxA;
+                        const orderB = idxB === -1 ? 999 : idxB;
+                        return orderA - orderB;
+                      });
+                    } else if (uniqueVals.length > 0) {
+                      uniqueVals.sort();
+                    }
 
                     if (col.key === 'assignedTo' && user?.role === 'Operations' && user?.fullName) {
                       uniqueVals = uniqueVals.filter(v => v.toLowerCase() === user.fullName.toLowerCase());
@@ -8510,6 +8677,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                     id="legal-draft-file-input"
                     className="hidden"
                     onChange={handleLegalDraftUpload}
+                    onClick={(e) => (e.target.value = null)}
                   />
                   {!draftFileLink && (
                     <button

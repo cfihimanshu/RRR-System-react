@@ -202,15 +202,57 @@ const DashboardTab = () => {
   const location = useLocation();
    const isOperationAdmin = user?.role?.toLowerCase().trim() === 'operation admin';
   const isOperationReview = user?.role?.toLowerCase().trim() === 'operation review';
-  // Helper: navigate to case-master, auto-adding assigneeFilter for Operation Admin and Operation Review
-  const navigateCases = (extraState = {}) => {
-    let state = extraState;
-    if (isOperationAdmin) {
-      state = { ...extraState, assigneeFilter: user?.fullName };
-    } else if (isOperationReview) {
-      state = { ...extraState, assigneeFilter: user?.fullName, sourceFilter: 'Odoo' };
+  const getDashboardDateRangeForNav = () => {
+    if (startDate && endDate) {
+      return { createdDateStart: startDate, createdDateEnd: endDate };
     }
-    navigate('/case-master', Object.keys(state).length > 0 ? { state } : undefined);
+    if (teamFilter === '7days') {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - 7);
+      return { createdDateStart: d.toISOString().split('T')[0], createdDateEnd: '' };
+    }
+    if (teamFilter === '1month') {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setMonth(d.getMonth() - 1);
+      return { createdDateStart: d.toISOString().split('T')[0], createdDateEnd: '' };
+    }
+    if (teamFilter === '3months') {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(1);
+      const end = new Date(d);
+      d.setMonth(d.getMonth() - 3);
+      return { createdDateStart: d.toISOString().split('T')[0], createdDateEnd: end.toISOString().split('T')[0] };
+    }
+    return { createdDateStart: '', createdDateEnd: '' };
+  };
+
+  // Helper: navigate to case-master with dashboard filters so counts match My Cases list
+  const navigateCases = (extraState = {}) => {
+    const roleLower = user?.role?.toLowerCase().trim() || '';
+    const isAdminRole = ['admin', 'super admin', 'superadmin'].includes(roleLower);
+
+    let state = {
+      fromDashboard: true,
+      ...getDashboardDateRangeForNav(),
+      dashboardUserFilter: userFilter || '',
+      ...extraState,
+    };
+
+    if (isAdminRole) {
+      const sourceFilter = extraState.sourceFilter || '';
+      if (!String(sourceFilter).toLowerCase().includes('odoo')) {
+        state.excludeOdoo = true;
+      }
+    }
+
+    if (isOperationAdmin || isOperationReview) {
+      state = { ...state, assigneeFilter: user?.fullName, sourceFilter: 'Odoo' };
+    }
+
+    navigate('/case-master', { state });
   };
 
   useEffect(() => {
@@ -1701,7 +1743,7 @@ const DashboardTab = () => {
                           <div
                             key={index}
                             className="flex flex-col flex-1 min-w-[100px] 2xl:border-r border-border last:border-r-0 2xl:pr-2 cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-2 2xl:p-0"
-                            onClick={() => navigate('/case-master', { state: { typeFilter: item.type } })}
+                            onClick={() => navigateCases({ typeFilter: item.type })}
                           >
                             <div className="flex items-center gap-1.5 mb-2">
                               <div className={`p-1 ${item.bg} rounded ${item.color}`}>
@@ -1721,7 +1763,7 @@ const DashboardTab = () => {
                   <div className="xl:col-span-4 2xl:col-span-3 bg-bg-card rounded-2xl p-5 shadow-sm border border-border/50">
                     <div className="text-[10px] font-black uppercase text-text-muted tracking-widest mb-4">MY KEY NUMBERS (TODAY)</div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 h-full items-center">
-                      <div className="text-center cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}>
+                      <div className="text-center cursor-pointer hover:bg-bg-secondary/30 transition-all rounded-lg p-1" onClick={() => navigateCases({ statusFilter: 'Active' })}>
                         <div className="text-[9px] font-black text-text-muted uppercase tracking-tight">Active Cases</div>
                         <div className="text-xl font-black text-text-primary mt-2">{stats?.openCases || 0}</div>
                       </div>
@@ -2636,7 +2678,7 @@ const DashboardTab = () => {
                     <div className="text-lg font-black text-text-primary">{stats?.linkedByCount || 0}</div>
                     <div className="text-[10px] font-bold text-text-muted mt-0.5">Linked Cases</div>
                   </div>
-                  <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master', { state: { linkedOnly: true } })}>
+                  <div className="mt-2 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigateCases({ linkedOnly: true })}>
                     View Details <ArrowRight size={12} />
                   </div>
                 </div>
@@ -2926,7 +2968,7 @@ const DashboardTab = () => {
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-4 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}>
+                <div className="mt-4 text-[10px] font-black text-blue hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-widest" onClick={() => navigateCases({ priorityFilter: 'High' })}>
                   View All Urgent Cases <ArrowRight size={12} />
                 </div>
               </div>
@@ -3081,7 +3123,7 @@ const DashboardTab = () => {
                     <div
                       key={idx}
                       className={`bg-bg-card border-2 border-border rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between group hover:border-${item.color}/30 transition-all cursor-pointer shadow-sm`}
-                      onClick={() => navigate('/case-master', { state: { typeFilter: item.type } })}
+                      onClick={() => navigateCases({ typeFilter: item.type })}
                     >
                       <div className="space-y-0.5 sm:space-y-1">
                         <div className="text-[10px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">{item.label}</div>
@@ -3155,7 +3197,7 @@ const DashboardTab = () => {
                     {stats?.highPriorityCases?.length > 5 && (
                       <div className="bg-bg-secondary/50 p-4 border-t border-border flex justify-center">
                         <button
-                          onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}
+                          onClick={() => navigateCases({ priorityFilter: 'High' })}
                           className="px-6 py-2 bg-accent hover:bg-accent-hover text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm shadow-orange-900/10 active:scale-95"
                         >
                           View More <ArrowRight size={14} />
@@ -3195,7 +3237,7 @@ const DashboardTab = () => {
                           else if (sourceLower.includes('social')) { Icon = MessageCircle; colorClass = 'text-green-500'; bgClass = 'bg-green-500/10'; }
 
                           return (
-                            <tr key={idx} className="hover:bg-bg-input/50 transition-all cursor-pointer" onClick={() => navigate('/case-master', { state: { sourceFilter: item.source } })}>
+                            <tr key={idx} className="hover:bg-bg-input/50 transition-all cursor-pointer" onClick={() => navigateCases({ sourceFilter: item.source })}>
                               <td className="px-4 py-2 flex items-center gap-3">
                                 <div className={`p-2 rounded-lg ${bgClass} ${colorClass}`}>
                                   <Icon size={16} />

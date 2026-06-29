@@ -112,7 +112,16 @@ router.get('/', verifyToken, async (req, res) => {
       }
       const updates = Array.isArray(rawUpdates) ? rawUpdates : [];
       if (updates.length > 0) {
-        logs.push(...updates);
+        const mappedUpdates = updates.map(u => {
+          if (!u.createdAt) {
+            return {
+              ...u,
+              createdAt: targetCase ? (targetCase.createdAt || targetCase.createdDate) : (doc.createdAt || new Date())
+            };
+          }
+          return u;
+        });
+        logs.push(...mappedUpdates);
       } else if (doc.summary) {
         logs.push({
           _id: doc.id,

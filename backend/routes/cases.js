@@ -627,11 +627,13 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
     });
 
     const initialLog = {
+      _id: Date.now().toString() + Math.random().toString(36).substring(7),
       stage: currentStatus,
       percentage: 0,
       summary: 'Case initiated.',
       nextAction: req.body.nextActionPlanned || '',
-      updatedBy: req.user.fullName
+      updatedBy: req.user.fullName,
+      createdAt: new Date().toISOString()
     };
     await Progress.create({
       caseId,
