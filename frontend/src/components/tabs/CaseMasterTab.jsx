@@ -608,6 +608,9 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
     } else if (misFilter === 'resolved') {
       setAppliedFilters({ ...targetFilters, status: ['Closure'] });
       setTempFilters(prev => ({ ...prev, ...targetFilters, status: ['Closure'] }));
+    } else if (misFilter === 'all') {
+      setAppliedFilters(targetFilters);
+      setTempFilters(prev => ({ ...prev, ...targetFilters }));
     }
 
     // Clear navigation state so it doesn't re-trigger on re-render
@@ -636,6 +639,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   const [expandedRequestId, setExpandedRequestId] = useState(null);
   const [draftRemark, setDraftRemark] = useState('');
   const [draftFileUploading, setDraftFileUploading] = useState(false);
+  const [isDraftSubmitting, setIsDraftSubmitting] = useState(false);
   const [isPendingRequestsExpanded, setIsPendingRequestsExpanded] = useState(true);
 
   // Pack & AD ready stage form states
@@ -823,7 +827,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   const canEditCase = useMemo(() => {
     if (!user || !viewCase) return false;
     const role = user.role;
-    if (role === 'Admin' || role === 'Super Admin' || role === 'SuperAdmin' || role === 'Operations' || role === 'Operation Head') {
+    if (role === 'Admin' || role === 'Super Admin' || role === 'SuperAdmin' || role === 'Operations' || role === 'Operation Head' || role === 'BD Head') {
       return true;
     }
     const assignedName = (viewCase.assignedTo || '').trim().toLowerCase();
@@ -1343,7 +1347,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   };
 
   const fetchOpsUsers = async () => {
-    if (!user || (!['Admin', 'Operations', 'Super Admin', 'Legal', 'Operation Head'].includes(user.role))) {
+    if (!user || (!['Admin', 'Operations', 'Super Admin', 'Legal', 'Operation Head', 'BD Head'].includes(user.role))) {
       return;
     }
     try {
@@ -1570,6 +1574,10 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   };
 
   const handleExportExcel = () => {
+    if (user?.role === 'BD Head') {
+      toast.error('Export is disabled for your role.');
+      return;
+    }
     if (filteredCases.length === 0) return toast.error('No data to export');
 
     const columnDefs = [
@@ -3908,7 +3916,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                   </button>
                 </div>
               )}
-              {!isArchiveMode && (
+              {!isArchiveMode && user?.role !== 'Legal' && (
                 <div className="relative overflow-hidden cursor-pointer flex-1 sm:flex-none">
                   <button
                     onClick={() => navigate('/new-case')}
@@ -4708,7 +4716,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
               )}
             </div>
 
-            {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin' || user?.role === 'Operation Head') && (
+            {!isArchiveMode && (user?.role === 'Admin' || user?.role === 'Super Admin' || user?.role === 'Operation Head' || user?.role === 'BD Head') && (
               <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full md:w-auto md:ml-auto">
                 <select
                   className={`border-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-widest outline-none shadow-sm min-w-[200px] transition-all ${bulkAssignUser ? 'border-accent bg-accent-soft text-accent' : 'border-border bg-bg-card text-text-secondary'}`}
@@ -4721,7 +4729,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                   }}
                 >
                   <option value="">Bulk Assign Mode...</option>
-                  {opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review', 'legal', 'advocate'].includes(u.role?.toLowerCase()?.trim())).map(u => (
+                  {opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review', 'legal', 'advocate', 'bd head'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`bulk-${u._id || u.email}`} value={u.fullName}>Assign: {u.fullName}</option>
                   ))}
                 </select>
@@ -4761,7 +4769,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
               </div>
             )}
 
-            {user?.role?.toLowerCase()?.trim() === 'legal' && (
+            {false && user?.role?.toLowerCase()?.trim() === 'legal' && (
               <button
                 onClick={() => {
                   setIsAddDraftOpen(true);
@@ -4847,12 +4855,14 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                 <div className="text-[10px] font-black text-text-muted uppercase tracking-widest">{format(new Date(), 'eee hh:mm aaa')}</div>
 
               </div>
+              {user?.role !== 'Legal' && (
               <button
                 onClick={() => navigate('/new-case', { state: { clear: true } })}
                 className="bg-accent text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-orange-900/20 active:scale-95 transition-all"
               >
                 + New Case
               </button>
+              )}
             </div>
           </div>
 
@@ -5848,31 +5858,31 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                                 <div className="mt-3 flex items-center justify-between border-t border-border pt-3 transition-all">
                                   <span className="text-[9px] font-black text-accent uppercase tracking-widest">{comm.mode} via {comm.fromTo || 'Client'}</span>
                                   <div className="flex gap-2 items-center">
+                                    {['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(user?.role) && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleStartEditComm(comm);
+                                        }}
+                                        className="text-text-primary hover:text-accent bg-bg-secondary hover:bg-accent/10 p-1.5 rounded-md border border-border hover:border-accent transition-all flex items-center gap-1"
+                                        title="Edit Signal"
+                                      >
+                                        <Edit3 size={10} /> <span className="text-[8px] font-bold">EDIT</span>
+                                      </button>
+                                    )}
                                     {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleStartEditComm(comm);
-                                          }}
-                                          className="text-text-primary hover:text-accent bg-bg-secondary hover:bg-accent/10 p-1.5 rounded-md border border-border hover:border-accent transition-all flex items-center gap-1"
-                                          title="Edit Signal"
-                                        >
-                                          <Edit3 size={10} /> <span className="text-[8px] font-bold">EDIT</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteComm(comm.id || comm._id);
-                                          }}
-                                          className="text-red hover:text-white bg-red/10 hover:bg-red p-1.5 rounded-md border border-red/20 hover:border-red transition-all flex items-center gap-1"
-                                          title="Delete Signal"
-                                        >
-                                          <Trash2 size={10} /> <span className="text-[8px] font-bold">DELETE</span>
-                                        </button>
-                                      </>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteComm(comm.id || comm._id);
+                                        }}
+                                        className="text-red hover:text-white bg-red/10 hover:bg-red p-1.5 rounded-md border border-red/20 hover:border-red transition-all flex items-center gap-1"
+                                        title="Delete Signal"
+                                      >
+                                        <Trash2 size={10} /> <span className="text-[8px] font-bold">DELETE</span>
+                                      </button>
                                     )}
                                     {comm.fileLink ? (
                                       <button
@@ -6200,25 +6210,25 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                                       >
                                         <Eye size={12} />
                                       </button>
+                                      {['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(user?.role) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditDoc(doc)}
+                                          className="bg-bg-secondary hover:bg-accent-soft text-text-primary hover:text-accent p-2 rounded-lg border border-border hover:border-accent-soft transition-all inline-flex items-center justify-center"
+                                          title="Edit Document"
+                                        >
+                                          <Edit3 size={12} />
+                                        </button>
+                                      )}
                                       {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleStartEditDoc(doc)}
-                                            className="bg-bg-secondary hover:bg-accent-soft text-text-primary hover:text-accent p-2 rounded-lg border border-border hover:border-accent-soft transition-all inline-flex items-center justify-center"
-                                            title="Edit Document"
-                                          >
-                                            <Edit3 size={12} />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDeleteDocument(doc.id || doc._id)}
-                                            className="bg-red-soft hover:bg-red text-red hover:text-white p-2 rounded-lg border border-transparent transition-all inline-flex items-center justify-center"
-                                            title="Delete Document"
-                                          >
-                                            <Trash2 size={12} />
-                                          </button>
-                                        </>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteDocument(doc.id || doc._id)}
+                                          className="bg-red-soft hover:bg-red text-red hover:text-white p-2 rounded-lg border border-transparent transition-all inline-flex items-center justify-center"
+                                          title="Delete Document"
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
                                       )}
                                     </div>
                                   </td>
@@ -6580,7 +6590,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                         className="w-full bg-bg-input border-2 border-border rounded-xl px-5 py-3.5 text-xs font-black text-text-primary outline-none focus:border-accent uppercase tracking-widest"
                       >
                         <option value="">-- NO ESCALATION --</option>
-                        {opsUsers.filter(u => ['operations', 'admin', 'legal', 'advocate', 'operation admin', 'operation review'].includes(u.role?.toLowerCase()?.trim())).map(u => (
+                        {opsUsers.filter(u => ['operations', 'admin', 'legal', 'advocate', 'operation admin', 'operation review', 'bd head'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                           <option key={`escalate-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                         ))}
                       </select>
@@ -7094,6 +7104,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                                   toast.error('Please enter a Document Name');
                                   return;
                                 }
+                                if (isDraftSubmitting) return;
+                                setIsDraftSubmitting(true);
                                 try {
                                   const payload = {
                                     caseId: viewCase.caseId,
@@ -7113,6 +7125,8 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                                 } catch (err) {
                                   console.error(err);
                                   toast.error('Failed to submit draft request');
+                                } finally {
+                                  setIsDraftSubmitting(false);
                                 }
                               }}
                               className="space-y-6"
@@ -7208,10 +7222,12 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
 
                               <button
                                 type="submit"
-                                disabled={draftFileUploading}
-                                className="w-full bg-accent hover:bg-accent-hover text-white font-black py-4 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-[0.98]"
+                                disabled={draftFileUploading || isDraftSubmitting}
+                                className={`w-full bg-accent text-white font-black py-4 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-[0.98] ${
+                                  isDraftSubmitting ? 'opacity-60 cursor-not-allowed' : 'hover:bg-accent-hover'
+                                }`}
                               >
-                                Submit Request
+                                {isDraftSubmitting ? 'Submitting...' : 'Submit Request'}
                               </button>
                             </form>
                           )}
@@ -7224,7 +7240,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                               className="w-full flex items-center justify-between text-left focus:outline-none py-2 hover:opacity-80 transition-all"
                             >
                               <h4 className="text-[11px] font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
-                                <span>Pending / Rejected Requests ({legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending' || r.status === 'Rejected')).length})</span>
+                                <span>Pending / Rejected Requests ({legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending BD Head' || r.status === 'Pending' || r.status === 'Rejected')).length})</span>
                               </h4>
                               <ChevronDown
                                 size={16}
@@ -7234,17 +7250,20 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
 
                             {isPendingRequestsExpanded && (
                               <div className="space-y-4 animate-in fade-in duration-300">
-                                {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending' || r.status === 'Rejected')).length === 0 ? (
+                                {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending BD Head' || r.status === 'Pending' || r.status === 'Rejected')).length === 0 ? (
                                   <p className="text-[10px] text-text-muted italic">No pending or rejected draft requests for this cycle.</p>
                                 ) : (
                                   <div className="space-y-4">
-                                    {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending' || r.status === 'Rejected')).map(r => (
+                                    {legalRequests.filter(r => r.caseId === viewCase.caseId && getCycleNumberForItem(r, legalProcessHistory) === activeCycle && (r.status === 'Pending BD Head' || r.status === 'Pending' || r.status === 'Rejected')).map(r => (
                                       <div key={r.id || r._id} className="p-4 bg-bg-secondary/40 border border-border rounded-xl space-y-3 shadow-sm">
                                         <div className="flex items-center justify-between gap-4">
                                           <span className="font-bold text-text-primary text-xs">{r.documentName}</span>
-                                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${r.status === 'Rejected' ? 'bg-red-soft text-red' : 'bg-orange-100 text-orange-600'
-                                            }`}>
-                                            {r.status}
+                                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                            r.status === 'Rejected' ? 'bg-red-soft text-red' : 
+                                            r.status === 'Pending' ? 'bg-blue-soft text-blue' : 
+                                            'bg-orange-100 text-orange-600'
+                                          }`}>
+                                            {r.status === 'Pending' ? 'Forwarded to Admin' : r.status}
                                           </span>
                                         </div>
                                         {r.remark && <p className="text-[10px] text-text-secondary">Remark: {r.remark}</p>}
@@ -7939,6 +7958,81 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                                               <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Reply Remarks</span>
                                               <span className="text-text-secondary">{data.remark}</span>
                                             </div>
+                                          )}
+                                        </div>
+                                      );
+                                    } catch (e) {
+                                      // Fallback below
+                                    }
+                                  } else if (item.summary?.startsWith('DRAFT_JSON:')) {
+                                    try {
+                                      const data = JSON.parse(item.summary.replace('DRAFT_JSON:', ''));
+                                      return (
+                                        <div className="space-y-2 bg-bg-secondary/20 p-3 rounded-xl border border-border/30">
+                                          <div className="text-[11px] text-text-primary">
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Document Name</span>
+                                            <span className="font-bold">{data.documentName || '—'}</span>
+                                          </div>
+                                          <div className="text-[11px]">
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Status</span>
+                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                              data.status === 'Pending BD Head' ? 'bg-orange-100 text-orange-600' : 'bg-blue-soft text-blue'
+                                            }`}>{data.status === 'Pending BD Head' ? 'Pending BD Head Review' : 'Forwarded to Admin'}</span>
+                                          </div>
+                                          {data.remark && (
+                                            <div className="text-[10px] text-text-secondary">
+                                              <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Remark</span>
+                                              {data.remark}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    } catch (e) {
+                                      // Fallback below
+                                    }
+                                  } else if (item.summary?.startsWith('DRAFT_STATUS_JSON:')) {
+                                    try {
+                                      const data = JSON.parse(item.summary.replace('DRAFT_STATUS_JSON:', ''));
+                                      const isDraftRecommended = data.status === 'Pending';
+                                      const isDraftRejected = data.status === 'Rejected';
+                                      const isDraftApproved = data.status === 'Approved';
+                                      return (
+                                        <div className="space-y-2 bg-bg-secondary/20 p-3 rounded-xl border border-border/30">
+                                          <div className="text-[11px] text-text-primary">
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Document Name</span>
+                                            <span className="font-bold">{data.documentName || '—'}</span>
+                                          </div>
+                                          <div className="text-[11px]">
+                                            <span className="font-black uppercase tracking-wider text-[8px] text-text-muted block mb-0.5">Decision</span>
+                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                              isDraftApproved ? 'bg-green-soft text-green' :
+                                              isDraftRejected ? 'bg-red-soft text-red' :
+                                              'bg-blue-soft text-blue'
+                                            }`}>
+                                              {isDraftApproved ? 'Approved' : isDraftRejected ? 'Rejected' : 'Recommended by BD Head → Forwarded to Admin'}
+                                            </span>
+                                          </div>
+                                          {isDraftRecommended && data.remark && (
+                                            <div className="text-[10px] text-text-secondary">
+                                              <span className="font-black uppercase tracking-wider text-[8px] text-accent/80 block mb-0.5">BD Head Recommendation</span>
+                                              <span className="text-text-primary font-semibold">{data.remark}</span>
+                                            </div>
+                                          )}
+                                          {isDraftRejected && data.rejectRemark && (
+                                            <div className="text-[10px] text-red font-semibold">
+                                              <span className="font-black uppercase tracking-wider text-[8px] text-red/60 block mb-0.5">Rejection Reason</span>
+                                              {data.rejectRemark}
+                                            </div>
+                                          )}
+                                          {data.fileLink && (
+                                            <a
+                                              href={data.fileLink}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="text-accent hover:underline text-[10px] font-bold block pt-1"
+                                            >
+                                              Download / View File
+                                            </a>
                                           )}
                                         </div>
                                       );
@@ -9105,7 +9199,7 @@ const CaseRow = memo(({
           </div>
 
           {/* Bottom Row: Assignment Section */}
-          {['Admin', 'Operations', 'Super Admin', 'Operation Head'].includes(user?.role) && !c.isArchived && (
+          {['Admin', 'Operations', 'Super Admin', 'Operation Head', 'BD Head'].includes(user?.role) && !c.isArchived && (
             <div className="flex gap-2 w-full">
               <select
                 className="flex-1 bg-bg-input border-2 border-border rounded-xl text-[9px] px-2 py-2.5 outline-none focus:border-accent shadow-sm min-w-0 text-text-primary font-black uppercase tracking-widest cursor-pointer"
@@ -9113,8 +9207,8 @@ const CaseRow = memo(({
                 onChange={(e) => handleAssignmentInputChange(c.caseId, e.target.value)}
               >
                 <option value="">Assign</option>
-                {['admin', 'super admin', 'operation head'].includes(user?.role?.toLowerCase())
-                  ? opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review', 'legal', 'advocate'].includes(u.role?.toLowerCase()?.trim())).map(u => (
+                {['admin', 'super admin', 'operation head', 'bd head'].includes(user?.role?.toLowerCase())
+                  ? opsUsers.filter(u => ['operations', 'admin', 'operation admin', 'operation review', 'legal', 'advocate', 'bd head'].includes(u.role?.toLowerCase()?.trim())).map(u => (
                     <option key={`row-assign-${u._id || u.email}`} value={u.fullName}>{u.fullName}</option>
                   ))
                   : (user?.fullName && (

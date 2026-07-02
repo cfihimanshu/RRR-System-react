@@ -256,7 +256,7 @@ router.post('/create-user', verifyToken, roleGuard(['Admin']), async (req, res) 
   }
 });
 
-router.get('/users', verifyToken, roleGuard(['Admin', 'Operations', 'Legal', 'Operation Review', 'Operation Head']), async (req, res) => {
+router.get('/users', verifyToken, roleGuard(['Admin', 'Operations', 'Legal', 'Operation Review', 'Operation Head', 'BD Head']), async (req, res) => {
   try {
     const users = await User.findAll({
       attributes: ['id', 'fullName', 'email', 'role', 'canAccessRecords'],

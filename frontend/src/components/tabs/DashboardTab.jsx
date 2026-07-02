@@ -197,7 +197,7 @@ const DashboardTab = () => {
   const [activePeriod, setActivePeriod] = useState('7 Days');
   const [allUsers, setAllUsers] = useState([]);
   const { user } = useContext(AuthContext);
-  const isExemptFromSodEod = ['admin', 'super admin', 'superadmin', 'accountant', 'reviewer', 'operation head', 'operation review'].includes(user?.role?.toLowerCase().trim());
+  const isExemptFromSodEod = ['super admin', 'superadmin'].includes(user?.role?.toLowerCase().trim());
   const navigate = useNavigate();
   const location = useLocation();
    const isOperationAdmin = user?.role?.toLowerCase().trim() === 'operation admin';
@@ -232,7 +232,7 @@ const DashboardTab = () => {
   // Helper: navigate to case-master with dashboard filters so counts match My Cases list
   const navigateCases = (extraState = {}) => {
     const roleLower = user?.role?.toLowerCase().trim() || '';
-    const isAdminRole = ['admin', 'super admin', 'superadmin'].includes(roleLower);
+    const isAdminRole = ['admin', 'super admin', 'superadmin', 'bd head'].includes(roleLower);
 
     let state = {
       fromDashboard: true,
@@ -3618,7 +3618,7 @@ const DashboardTab = () => {
                                   const isExpanded = !!expandedRefundIds[r.id || r._id];
 
                                   return (
-                                    <React.Fragment key={r.id || r._id}>
+                                    <React.Fragment key={r._id || r.id}>
                                       <tr
                                         onClick={() => toggleRefundExpand(r.id || r._id)}
                                         className="hover:bg-bg-input/30 transition-all border-b border-border/50 cursor-pointer"

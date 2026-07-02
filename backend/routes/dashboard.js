@@ -137,7 +137,7 @@ router.get('/stats', verifyToken, async (req, res) => {
       }
     } else if (['operation admin'].includes(req.user.role?.toLowerCase().trim())) {
       ownershipQuery = { assignedTo: { [Op.like]: `%${userName}%` } };
-    } else if (req.user.role !== 'Admin') {
+    } else if (req.user.role !== 'Admin' && req.user.role !== 'BD Head') {
       ownershipQuery = {
         [Op.or]: [
           { assignedTo: { [Op.like]: `%${userName}%` } },
@@ -173,7 +173,7 @@ router.get('/stats', verifyToken, async (req, res) => {
     const bypassEodCheck = dbUser?.bypassEodCheck || false;
     let isEodMissed = false;
 
-    if (!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(req.user.role)) {
+    if (!['Super Admin', 'SuperAdmin'].includes(req.user.role)) {
       const nowForIST = new Date();
       const istTime = new Date(nowForIST.getTime() + (5.5 * 60 * 60 * 1000));
       const todayStr = istTime.toISOString().split('T')[0];

@@ -211,6 +211,7 @@ async function buildCaseQuery(req) {
     req.user.role !== 'Reviewer' &&
     req.user.role !== 'Super Admin' &&
     req.user.role !== 'SuperAdmin' &&
+    req.user.role !== 'BD Head' &&
     !['operation admin'].includes(req.user.role?.toLowerCase().trim())
   ) {
     const dbUser = await User.findByPk(req.user.id);
@@ -458,7 +459,7 @@ router.get('/:caseId', verifyToken, async (req, res) => {
   }
 });
 
-router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head']), async (req, res) => {
+router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head', 'BD Head']), async (req, res) => {
   try {
     const companyName = req.body.companyName?.trim();
     
@@ -647,7 +648,7 @@ router.post('/', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operat
   }
 });
 
-router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations', 'Operation Review', 'Operation Head']), async (req, res) => {
+router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations', 'Operation Review', 'Operation Head', 'BD Head']), async (req, res) => {
   try {
     const { caseIds, assignedTo } = req.body;
     const isAssigned = assignedTo && assignedTo.trim() !== '';
@@ -673,7 +674,7 @@ router.put('/bulk-assign', verifyToken, roleGuard(['Admin', 'Operations', 'Opera
   }
 });
 
-router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head']), async (req, res) => {
+router.put('/:caseId', verifyToken, roleGuard(['Admin', 'Operations', 'Staff', 'Operation Admin', 'operation admin', 'Operation Review', 'Operation Head', 'BD Head']), async (req, res) => {
   try {
     const caseId = req.params.caseId;
     const existingCase = await Case.findOne({ where: { caseId } });

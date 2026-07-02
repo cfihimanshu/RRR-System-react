@@ -171,6 +171,7 @@ export default function TourTab({ user, onToursChange }) {
 
   useEffect(() => {
     const fetchUsers = async () => {
+      if (!isAdmin) return;
       try {
         const res = await api.get('/auth/users');
         if (Array.isArray(res.data)) {
@@ -187,7 +188,7 @@ export default function TourTab({ user, onToursChange }) {
       }
     };
     fetchUsers();
-  }, []);
+  }, [isAdmin]);
 
   const [travelMode, setTravelMode] = useState('Flight');
   const [bookingRef, setBookingRef] = useState('');

@@ -95,7 +95,7 @@ const MisReportTab = () => {
 
   // Date and month filters
   const [filterType, setFilterType] = useState('overall'); // 'overall', 'current-month', 'last-month', 'custom'
-  
+
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -125,6 +125,12 @@ const MisReportTab = () => {
       }
     }
   };
+
+  useEffect(() => {
+    if (user?.role?.toLowerCase()?.trim() === 'operation head') {
+      setIsOdooFilter(true);
+    }
+  }, [user]);
 
   useEffect(() => {
     const now = new Date();
@@ -167,7 +173,7 @@ const MisReportTab = () => {
     fetchData(true);
   }, [startDate, endDate, isOdooFilter]);
 
-  const canViewAllSpecialists = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role);
+  const canViewAllSpecialists = ['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(user?.role);
   const isPersonalScope = data?.scope === 'personal';
 
   const visibleAssigneePerformance = useMemo(() => {
@@ -179,10 +185,73 @@ const MisReportTab = () => {
       if (isOdooFilter) {
         return ['operation review', 'operation head'].includes(roleLower);
       }
-      return !['admin', 'super admin', 'superadmin', 'operation head', 'accountant'].includes(roleLower);
+      return !['admin', 'super admin', 'superadmin', 'operation head', 'accountant', 'operation review'].includes(roleLower);
     });
 
-    if (canViewAllSpecialists) return filteredPerformance;
+    if (canViewAllSpecialists) {
+      // Find all excluded specialists to group under "Other Users"
+      const excludedPerformance = (data.assigneePerformance || []).filter(p => {
+        const roleLower = (p.role || '').toLowerCase().trim();
+        if (isOdooFilter) {
+          return !['operation review', 'operation head'].includes(roleLower);
+        }
+        return ['admin', 'super admin', 'superadmin', 'operation head', 'accountant'].includes(roleLower);
+      });
+
+      const otherTotalCasesList = [];
+      const otherPendingCasesList = [];
+      const otherResolvedCasesList = [];
+      const otherResolvedAmtList = [];
+      const otherTodayCasesList = [];
+      const otherResolvedTodayList = [];
+      let otherTotalCases = 0;
+      let otherTotalAmt = 0;
+      let otherPendingCases = 0;
+      let otherPendingAmt = 0;
+      let otherResolvedCases = 0;
+      let otherResolvedAmt = 0;
+
+      excludedPerformance.forEach(spec => {
+        otherTotalCases += (spec.totalCases || 0);
+        otherTotalAmt += (spec.totalAmt || 0);
+        otherPendingCases += (spec.pendingCases || 0);
+        otherPendingAmt += (spec.pendingAmt || 0);
+        otherResolvedCases += (spec.resolvedCases || 0);
+        otherResolvedAmt += (spec.resolvedAmt || 0);
+
+        if (Array.isArray(spec.totalCasesList)) otherTotalCasesList.push(...spec.totalCasesList);
+        if (Array.isArray(spec.pendingCasesList)) otherPendingCasesList.push(...spec.pendingCasesList);
+        if (Array.isArray(spec.resolvedCasesList)) otherResolvedCasesList.push(...spec.resolvedCasesList);
+        if (Array.isArray(spec.resolvedAmtList)) otherResolvedAmtList.push(...spec.resolvedAmtList);
+        if (Array.isArray(spec.todayCasesList)) otherTodayCasesList.push(...spec.todayCasesList);
+        if (Array.isArray(spec.resolvedTodayList)) otherResolvedTodayList.push(...spec.resolvedTodayList);
+      });
+
+      if (otherTotalCases > 0) {
+        filteredPerformance.push({
+          userId: 'other_users',
+          name: 'Other Users (Admins/Others)',
+          role: '—',
+          totalCases: otherTotalCases,
+          totalAmt: otherTotalAmt,
+          pendingCases: otherPendingCases,
+          pendingAmt: otherPendingAmt,
+          resolvedCases: otherResolvedCases,
+          resolvedAmt: otherResolvedAmt,
+          target: 0,
+          saved: otherResolvedAmt, // sum of resolvedAmt serves as saved target
+          totalCasesList: otherTotalCasesList,
+          pendingCasesList: otherPendingCasesList,
+          resolvedCasesList: otherResolvedCasesList,
+          resolvedAmtList: otherResolvedAmtList,
+          todayCasesList: otherTodayCasesList,
+          resolvedTodayList: otherResolvedTodayList
+        });
+      }
+
+      return filteredPerformance;
+    }
+
     if (user?.role?.toLowerCase().trim() === 'operation head') {
       return filteredPerformance.filter(p => {
         const role = (p.role || '').toLowerCase().trim();
@@ -256,6 +325,10 @@ const MisReportTab = () => {
   };
 
   const handleExportExcel = () => {
+    if (user?.role === 'BD Head') {
+      toast.error('Export is disabled for your role.');
+      return;
+    }
     if (!data) {
       toast.error('No report data loaded to export');
       return;
@@ -278,13 +351,18 @@ const MisReportTab = () => {
         let sumTarget = 0;
 
         visibleAssigneePerformance.forEach(spec => {
-          sumTotalCases += (spec.totalCases || 0);
-          sumTotalAmt += (spec.totalAmt || 0);
-          sumPendingCases += (spec.pendingCases || 0);
-          sumPendingAmt += (spec.pendingAmt || 0);
-          sumResolvedCases += (spec.resolvedCases || 0);
-          sumResolvedAmt += (spec.resolvedAmt || 0);
-          sumTarget += (spec.target || 0);
+          const isOpHead = (spec.role || '').toLowerCase().trim() === 'operation head';
+          if (!isOpHead) {
+            sumTotalCases += (spec.totalCases || 0);
+            sumTotalAmt += (spec.totalAmt || 0);
+            sumPendingCases += (spec.pendingCases || 0);
+            sumPendingAmt += (spec.pendingAmt || 0);
+            sumResolvedCases += (spec.resolvedCases || 0);
+            sumResolvedAmt += (spec.resolvedAmt || 0);
+            sumTarget += (spec.target || 0);
+          } else {
+            sumTarget += (spec.target || 0);
+          }
 
           rows.push([
             spec.name,
@@ -310,6 +388,31 @@ const MisReportTab = () => {
           sumResolvedCases,
           sumResolvedAmt,
           sumTarget
+        ]);
+
+        // Add Page Metrics
+        rows.push([
+          'Total Cases (Page Metric)',
+          '',
+          totalCasesCount,
+          totalCasesAmount,
+          '',
+          '',
+          '',
+          '',
+          ''
+        ]);
+
+        rows.push([
+          'Total Active Cases (Page Metric)',
+          '',
+          '',
+          '',
+          data.metrics.totalActiveCases,
+          data.metrics.totalActiveCasesAmount || data.metrics.totalAmountAtRisk,
+          '',
+          '',
+          ''
         ]);
 
         const workbook = XLSX.utils.book_new();
@@ -364,7 +467,7 @@ const MisReportTab = () => {
             return `${y}-${m}-${d}`;
           };
           start = formatLocal(minDate);
-          end = formatLocal(maxDate);
+          end = formatLocal(new Date());
         } else {
           const now = new Date();
           const year = now.getFullYear();
@@ -423,8 +526,9 @@ const MisReportTab = () => {
 
         // Find cases resolved on this date
         const casesResolvedToday = (currentSpecialist.resolvedCasesList || []).filter(c => {
-          if (!c.updatedAt) return false;
-          const resolvedDateStr = new Date(c.updatedAt).toISOString().split('T')[0];
+          const checkDate = c.resolvedDate || c.updatedAt;
+          if (!checkDate) return false;
+          const resolvedDateStr = new Date(checkDate).toISOString().split('T')[0];
           return resolvedDateStr === dateStr;
         });
 
@@ -633,6 +737,12 @@ const MisReportTab = () => {
   const barColor = targetMetPct >= 80 ? 'bg-[#4ACE8A]' : targetMetPct >= 50 ? 'bg-[#E8A84A]' : 'bg-[#E85B5B]';
   const textColor = 'text-black';
 
+  const totalCasesCount = (data?.metrics?.totalActiveCases || 0) + (data?.metrics?.casesAssignedToday || 0);
+  const totalClosedAmount = (visibleAssigneePerformance || [])
+    .filter(spec => (spec.role || '').toLowerCase().trim() !== 'operation head')
+    .reduce((sum, spec) => sum + ((spec.totalAmt || 0) - (spec.pendingAmt || 0)), 0);
+  const totalCasesAmount = (data?.metrics?.totalActiveCasesAmount || 0) + totalClosedAmount;
+
   return (
     <div className="flex flex-col bg-bg-primary min-h-screen">
       {/* HEADER SECTION */}
@@ -672,11 +782,13 @@ const MisReportTab = () => {
             <RefreshCw size={18} className={refreshing ? 'animate-spin text-accent' : ''} />
           </button>
 
-          <button
-            onClick={handleExportExcel}
-            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95"
-          >
-            <Download size={18} /> Export          </button>
+          {user?.role !== 'BD Head' && (
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95"
+            >
+              <Download size={18} /> Export </button>
+          )}
 
           {['admin', 'super admin', 'superadmin'].includes(user?.role?.toLowerCase()) && (
             <button
@@ -764,11 +876,10 @@ const MisReportTab = () => {
               <button
                 type="button"
                 onClick={() => setIsOdooFilter(!isOdooFilter)}
-                className={`text-[10px] font-black uppercase tracking-wider px-3.5 py-1 rounded-lg transition-all active:scale-95 ${
-                  isOdooFilter
-                    ? 'bg-accent text-white shadow-sm'
-                    : 'text-text-muted hover:text-text-primary hover:bg-bg-card-hover'
-                }`}
+                className={`text-[10px] font-black uppercase tracking-wider px-3.5 py-1 rounded-lg transition-all active:scale-95 ${isOdooFilter
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-primary hover:bg-bg-card-hover'
+                  }`}
               >
                 Odoo
               </button>
@@ -788,7 +899,18 @@ const MisReportTab = () => {
       <div className="p-6 md:p-8 space-y-8">
         {canViewAllSpecialists && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Card 1: Total Active Cases */}
+            {/* Card 1: Total Cases */}
+            <div onClick={() => navigate('/case-master', { state: { misFilter: 'all', excludeOdoo: !isOdooFilter, sourceFilter: isOdooFilter ? 'Odoo' : '' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-yellow-400/30 transition-all cursor-pointer">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/5 rounded-bl-[100px] flex items-center justify-center">
+                <Briefcase size={20} className="text-yellow-400/20 translate-x-2 -translate-y-2 group-hover:scale-110 transition-all" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-text-muted">Total Cases</span>
+              <div className="text-3xl font-black text-black mt-2">{totalCasesCount}</div>
+              <div className="text-xs font-black text-black/75 mt-1">{formatLargeCurrency(totalCasesAmount)}</div>
+              <div className="text-[10px] text-text-muted font-bold uppercase tracking-wide mt-1">All Cases Tracked</div>
+            </div>
+
+            {/* Card 2: Total Active Cases */}
             <div onClick={() => navigate('/case-master', { state: { misFilter: 'active', excludeOdoo: !isOdooFilter, sourceFilter: isOdooFilter ? 'Odoo' : '' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-blue-400/30 transition-all cursor-pointer">
               <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-bl-[100px] flex items-center justify-center">
                 <Clock size={20} className="text-blue-400/20 translate-x-2 -translate-y-2 group-hover:scale-110 transition-all" />
@@ -801,18 +923,20 @@ const MisReportTab = () => {
               </div>
             </div>
 
-            {/* Card 2: Pending/Overdue */}
-            <div onClick={() => navigate('/case-master', { state: { misFilter: 'overdue', excludeOdoo: !isOdooFilter, sourceFilter: isOdooFilter ? 'Odoo' : '' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-yellow-400/30 transition-all cursor-pointer">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/5 rounded-bl-[100px] flex items-center justify-center">
-                <AlertTriangle size={20} className="text-yellow-400/20 translate-x-2 -translate-y-2 group-hover:scale-110 transition-all" />
+            {/* Card 3: Closure Cases */}
+            <div onClick={() => navigate('/case-master', { state: { misFilter: 'resolved', excludeOdoo: !isOdooFilter, sourceFilter: isOdooFilter ? 'Odoo' : '' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-green-400/30 transition-all cursor-pointer">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 rounded-bl-[100px] flex items-center justify-center">
+                <CheckCircle2 size={20} className="text-green-400/20 translate-x-2 -translate-y-2 group-hover:scale-110 transition-all" />
               </div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-text-muted">Pending / Overdue</span>
-              <div className="text-3xl font-black text-black mt-2">{data.metrics.pendingOverdueCases}</div>
-              <div className="text-xs font-black text-black/75 mt-1">{formatLargeCurrency(data.metrics.pendingOverdueCasesAmount || 0)}</div>
-              <div className="text-[10px] text-text-muted font-bold uppercase tracking-wide mt-1">Attention Required</div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-text-muted">Closure Cases</span>
+              <div className="text-3xl font-black text-black mt-2">{data.metrics.casesAssignedToday}</div>
+              <div className="text-xs font-black text-black/75 mt-1">{formatLargeCurrency(totalClosedAmount)}</div>
+              <div className="text-[10px] text-text-muted font-bold uppercase tracking-wide mt-1">
+                {isPersonalScope ? 'Your cases closed' : 'Total cases closed'}
+              </div>
             </div>
 
-            {/* Card 3: Total Amount at Risk */}
+            {/* Card 4: Total Amount at Risk */}
             <div className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md transition-all">
               <div className="absolute top-0 right-0 w-24 h-24 bg-red/5 rounded-bl-[100px] flex items-center justify-center">
                 <Coins size={20} className="text-red/20 translate-x-2 -translate-y-2 group-hover:scale-110 transition-all" />
@@ -820,18 +944,6 @@ const MisReportTab = () => {
               <span className="text-[10px] font-black uppercase tracking-wider text-text-muted">Total Amount at Risk</span>
               <div className="text-3xl font-black text-black mt-2">{formatLargeCurrency(data.metrics.totalAmountAtRisk)}</div>
               <div className="text-[10px] text-text-muted font-bold uppercase tracking-wide mt-2">Linked to Active Cases</div>
-            </div>
-
-            {/* Card 4: Closure Cases */}
-            <div onClick={() => navigate('/case-master', { state: { misFilter: 'resolved', excludeOdoo: !isOdooFilter, sourceFilter: isOdooFilter ? 'Odoo' : '' } })} className="bg-bg-card border-2 border-border rounded-2xl p-6 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-green-400/30 transition-all cursor-pointer">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 rounded-bl-[100px] flex items-center justify-center">
-                <CheckCircle2 size={20} className="text-green-400/20 translate-x-2 -translate-y-2 group-hover:scale-110 transition-all" />
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-text-muted">Closure Cases</span>
-              <div className="text-3xl font-black text-black mt-2">{data.metrics.casesAssignedToday}</div>
-              <div className="text-[10px] text-text-muted font-bold uppercase tracking-wide mt-2">
-                {isPersonalScope ? 'Your cases closed' : 'Total cases closed'}
-              </div>
             </div>
           </div>
         )}
@@ -1064,7 +1176,6 @@ const MisReportTab = () => {
                       <th className="px-4 py-3 text-center">Resolved Cases</th>
                       <th className="px-4 py-3 text-right">Amt Saved</th>
                       <th className="px-4 py-3 text-right">Monthly Target</th>
-                      <th className="px-4 py-3 text-center">Target Progress</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1106,24 +1217,13 @@ const MisReportTab = () => {
                             {spec.resolvedCases}
                           </td>
                           <td
-                             onClick={() => handleMetricClick('Amount Saved', spec.resolvedAmtList || [], spec.name)}
-                             className="px-4 py-3.5 text-right cursor-pointer hover:underline font-black text-black"
-                           >
-                             {formatCurrency(spec.resolvedAmt)}
-                           </td>
+                            onClick={() => handleMetricClick('Amount Saved', spec.resolvedAmtList || [], spec.name)}
+                            className="px-4 py-3.5 text-right cursor-pointer hover:underline font-black text-black"
+                          >
+                            {formatCurrency(spec.resolvedAmt)}
+                          </td>
 
                           <td className="px-4 py-3.5 text-right font-black">{formatCurrency(spec.target || 0)}</td>
-                          <td className="px-4 py-3.5 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              <div className="w-16 bg-border rounded-full h-2 overflow-hidden">
-                                <div
-                                  className="bg-accent h-full rounded-full"
-                                  style={{ width: `${Math.min(100, targetMetPct)}%` }}
-                                />
-                              </div>
-                              <span className="text-[10px] font-black text-black">{targetMetPct}%</span>
-                            </div>
-                          </td>
                         </tr>
                       );
                     })}

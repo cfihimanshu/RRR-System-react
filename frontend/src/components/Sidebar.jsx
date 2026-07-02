@@ -32,6 +32,7 @@ import {
 import { TAB_ACCESS } from '../config/tabAccess';
 
 const tabsConfig = [
+  { id: 'legal-dashboard', label: 'Legal Dashboard', path: '/legal-dashboard', icon: Scale },
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard },
   { id: 'mis-report', label: 'MIS Report', path: '/mis-report', icon: BarChart },
   { id: 'new-case', label: 'New Case', path: '/new-case', icon: PlusCircle },
@@ -46,7 +47,6 @@ const tabsConfig = [
   { id: 'internal-search', label: 'Records', path: '/internal-search', icon: Search },
   { id: 'reviewer-panel', label: 'Reviewer Dashboard', path: '/reviewer-panel', icon: ClipboardEdit },
   { id: 'accountant-dashboard', label: 'Accountant Dashboard', path: '/accountant-dashboard', icon: CircleDollarSign },
-  { id: 'legal-dashboard', label: 'Legal Dashboard', path: '/legal-dashboard', icon: Scale },
   { id: 'agreement-gen', label: 'Agreement Generation', path: '/agreement-gen', icon: FileText },
   { id: 'my-task', label: 'My Tasks', path: '/my-task', icon: CheckSquare },
   // { id: 'sod-eod-reports', label: 'Reports', path: '/sod-eod-reports', icon: ClipboardList },
@@ -88,7 +88,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
 
   useEffect(() => {
     const fetchApprovalCounts = async () => {
-      if (!user || !['Admin', 'Super Admin', 'SuperAdmin'].includes(user.role)) return;
+      if (!user || !['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(user.role)) return;
       try {
         const [toursRes, leavesRes, legalRes] = await Promise.all([
           api.get('/tours'),
@@ -106,7 +106,7 @@ const Sidebar = ({ isOpen, setSidebarOpen, isCollapsed, setIsCollapsed, onLogout
         ).length;
 
         const leavePending = leaves.filter(r => r.status === 'Pending' || r.status === 'Pending Review').length;
-        const legalPending = legals.filter(r => r.status === 'Pending').length;
+        const legalPending = legals.filter(r => user.role === 'BD Head' ? r.status === 'Pending BD Head' : r.status === 'Pending').length;
 
         setApprovalCounts({
           tour: tourPending,

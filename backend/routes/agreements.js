@@ -127,6 +127,9 @@ router.get('/', verifyToken, async (req, res) => {
 // DELETE /api/agreements/:id - Delete an agreement record
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
+    if (req.user.role === 'BD Head') {
+      return res.status(403).json({ error: 'Access denied: BD Head is not authorized to delete agreements.' });
+    }
     const agreement = await Agreement.findByPk(req.params.id);
     if (!agreement) return res.status(404).json({ error: 'Agreement not found' });
 

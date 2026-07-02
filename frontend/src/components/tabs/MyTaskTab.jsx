@@ -127,10 +127,21 @@ const MyTaskTab = () => {
       const taskList = res.data.tasks || (Array.isArray(res.data) ? res.data : []);
       const prevCount = tasks.length;
 
+      const filteredTaskList = user?.role === 'BD Head'
+        ? taskList.filter(t => {
+            const myName = (user.fullName || user.name || '').trim().toLowerCase();
+            const myEmail = (user.email || '').trim().toLowerCase();
+            const taskAssignee = (t.assignee || '').trim().toLowerCase();
+            const taskCreatedBy = (t.createdBy || '').trim().toLowerCase();
+            return (taskAssignee !== '' && (taskAssignee === myName || taskAssignee === myEmail)) ||
+                   (taskCreatedBy !== '' && taskCreatedBy === myEmail);
+          })
+        : taskList;
+
       if (pageNum === 1) {
-        setTasks(taskList);
+        setTasks(filteredTaskList);
       } else {
-        setTasks(prev => [...prev, ...taskList]);
+        setTasks(prev => [...prev, ...filteredTaskList]);
       }
 
       setTotalPages(res.data.pages || 1);
@@ -308,6 +319,13 @@ const MyTaskTab = () => {
   }, []);
 
   useEffect(() => {
+    const privilegedRoles = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Review', 'Operation Head'];
+    if (user && (!privilegedRoles.includes(user?.role) || user?.role === 'BD Head')) {
+      setSelectedUser(user.fullName || user.name || '');
+    }
+  }, [user]);
+
+  useEffect(() => {
     fetchTasks();
     fetchUsers();
   }, [selectedUser]);
@@ -402,6 +420,10 @@ const MyTaskTab = () => {
   });
 
   const handleExportTasks = () => {
+    if (user?.role === 'BD Head') {
+      toast.error('Export is disabled for your role.');
+      return;
+    }
     if (filteredTasks.length === 0) return toast.error('No tasks to export');
 
     const getDurationStr = (task) => {
@@ -521,9 +543,11 @@ const MyTaskTab = () => {
             </select>
           )}
           <div className="flex items-center gap-3">
-            <button onClick={handleExportTasks} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-bg-card border-2 border-border text-text-secondary px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-bg-card-hover transition-all shadow-sm active:scale-95">
-              <Download size={18} /> Export
-            </button>
+            {user?.role !== 'BD Head' && (
+              <button onClick={handleExportTasks} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-bg-card border-2 border-border text-text-secondary px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-bg-card-hover transition-all shadow-sm active:scale-95">
+                <Download size={18} /> Export
+              </button>
+            )}
             <button onClick={() => setIsModalOpen(true)} className="btn btn-primary !py-2.5 !px-6 !rounded-xl shadow-lg shadow-orange-900/20">
               <Plus size={20} /> New Task
             </button>

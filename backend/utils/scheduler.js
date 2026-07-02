@@ -9,6 +9,7 @@ const Timeline = require('../sql_models/Timeline');
 const Progress = require('../sql_models/Progress');
 const Refund = require('../sql_models/Refund');
 const MisReport = require('../sql_models/MisReport');
+const LegalRequest = require('../sql_models/LegalRequest');
 const { sequelize } = require('../config/sequelize');
 const { sendEmail } = require('./mailer');
 const { createNotification } = require('./notificationHelper');
@@ -571,6 +572,11 @@ const sendDailyReportsToAdmins = async () => {
       if (!status) return false;
       return closureStatuses.includes(status.trim());
     };
+    const isSettlementStatus = (status) => {
+      if (!status) return false;
+      const s = status.trim().toLowerCase();
+      return s === 'settlement' || s === 'settled';
+    };
 
     const assigneeStatsMap = {};
     allUsers.forEach(u => {
@@ -625,7 +631,7 @@ const sendDailyReportsToAdmins = async () => {
       } else {
         saved = 0;
       }
-      const isCaseResolved = isCompleted(c.currentStatus) || c.refundStatus === 'Paid';
+      const isCaseResolved = !isSettlementStatus(c.currentStatus) && isClosureStatus(c.currentStatus);
       const isCaseClosure = isCaseResolved;
 
       // Determine precise resolution date using Refund and Progress updates
@@ -997,6 +1003,78 @@ const sendDailyReportsToAdmins = async () => {
   }
 };
 
+const sendPendingLegalRequestsReminder = async () => {
+  console.log('Running scheduled pending legal requests reminder...');
+  try {
+    const pendingRequests = await LegalRequest.findAll({
+      where: {
+        status: 'Pending'
+      }
+    });
+
+    if (pendingRequests.length === 0) {
+      console.log('No pending legal draft requests found.');
+      return;
+    }
+
+    // Find all admins
+    const admins = await User.findAll({
+      where: {
+        role: ['Admin', 'Super Admin', 'SuperAdmin']
+      }
+    });
+    const adminEmailsList = admins.map(u => u.email).filter(Boolean);
+    if (adminEmailsList.length === 0) {
+      console.log('No admin email addresses found.');
+      return;
+    }
+    const adminEmails = adminEmailsList.join(', ');
+
+    const subject = `⚠️ Reminder: ${pendingRequests.length} Pending Legal Draft Request Approvals`;
+    
+    let tableRows = '';
+    pendingRequests.forEach(req => {
+      tableRows += `
+        <tr style="border-bottom: 1px solid #ddd;">
+          <td style="padding: 10px; font-weight: bold;">${req.caseId}</td>
+          <td style="padding: 10px;">${req.documentName}</td>
+          <td style="padding: 10px;">${req.requestedByName || req.requestedBy || '—'}</td>
+          <td style="padding: 10px;">${new Date(req.createdAt).toLocaleString('en-IN')}</td>
+        </tr>
+      `;
+    });
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #ddd; border-radius: 12px; padding: 25px;">
+        <h2 style="color: #d97706; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0;">Pending Legal Draft Approvals</h2>
+        <p>Hello Admin,</p>
+        <p>There are <strong>${pendingRequests.length}</strong> legal draft approval requests pending review:</p>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+          <thead>
+            <tr style="background: #f3f4f6; text-align: left; font-weight: bold;">
+              <th style="padding: 10px; border-bottom: 2px solid #ddd;">Case ID</th>
+              <th style="padding: 10px; border-bottom: 2px solid #ddd;">Document Name</th>
+              <th style="padding: 10px; border-bottom: 2px solid #ddd;">Requested By</th>
+              <th style="padding: 10px; border-bottom: 2px solid #ddd;">Requested At</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+        <p style="margin-top: 20px;">Please log in to the RRR System and go to the <strong>Approvals</strong> page to approve or reject these requests.</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="font-size: 12px; color: #666;">This is an automated notification from the RRR System.</p>
+      </div>
+    `;
+
+    await sendEmail(adminEmails, subject, '', htmlContent);
+    console.log(`Sent pending legal requests reminder to admins: ${adminEmails}`);
+  } catch (error) {
+    console.error('Error running pending legal requests reminder:', error);
+  }
+};
+
 const initScheduler = () => {
   cron.schedule('0 9 * * *', async () => {
     console.log('Running daily alert scheduler...');
@@ -1019,7 +1097,15 @@ const initScheduler = () => {
     timezone: "Asia/Kolkata"
   });
 
-  console.log('Scheduler initialized with Daily Alerts, 30-Min Assignment Reminders, and Daily 8:00 PM Reports (IST Timezone).');
+  // Daily Morning (10:00 AM) and Evening (6:00 PM) Pending Legal Requests Reminder
+  cron.schedule('0 10,18 * * *', async () => {
+    await sendPendingLegalRequestsReminder();
+  }, {
+    scheduled: true,
+    timezone: "Asia/Kolkata"
+  });
+
+  console.log('Scheduler initialized with Daily Alerts, 30-Min Assignment Reminders, Daily 8:00 PM Reports, and Twice-Daily Pending Legal Requests Reminders (IST Timezone).');
 };
 
-module.exports = { initScheduler, runDueCaseAlerts, sendUserOverdueAlerts, runAssignmentReminders, sendDailyReportsToAdmins };
+module.exports = { initScheduler, runDueCaseAlerts, sendUserOverdueAlerts, runAssignmentReminders, sendDailyReportsToAdmins, sendPendingLegalRequestsReminder };

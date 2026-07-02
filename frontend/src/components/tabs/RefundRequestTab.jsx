@@ -29,6 +29,72 @@ import TourTab from './TourTab';
 import * as XLSX from 'xlsx';
 import FilePreviewModal from '../shared/FilePreviewModal';
 
+const formatDateTime = (dateStr) => {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  }) + ', ' + d.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
+const DraftTimer = ({ createdAt, status, updatedAt }) => {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    if (status !== 'Pending') return;
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [status]);
+
+  const createdTime = new Date(createdAt);
+  if (isNaN(createdTime.getTime())) return <span>—</span>;
+
+  let diff = 0;
+  if (status === 'Pending') {
+    diff = now.getTime() - createdTime.getTime();
+  } else {
+    const updatedTime = new Date(updatedAt || createdAt);
+    diff = updatedTime.getTime() - createdTime.getTime();
+  }
+
+  if (diff < 0) diff = 0;
+
+  const seconds = Math.floor((diff / 1000) % 60);
+  const minutes = Math.floor((diff / (1000 * 60)) % 60);
+  const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  parts.push(`${seconds}s`);
+
+  const durationStr = parts.join(' ');
+
+  if (status === 'Pending') {
+    return (
+      <span className="font-mono text-rose-600 bg-rose-50 px-2 py-1 rounded border border-rose-200 animate-pulse text-[10px] font-bold">
+        ⏳ {durationStr}
+      </span>
+    );
+  }
+
+  return (
+    <span className="font-mono text-text-muted text-[10px]">
+      {durationStr} (Done)
+    </span>
+  );
+};
+
 const RefundRequestTab = () => {
   const location = useLocation();
   const [statusFilter, setStatusFilter] = useState('All');
@@ -64,6 +130,11 @@ const RefundRequestTab = () => {
   const [legalRequests, setLegalRequests] = useState([]);
   const [rejectingRequestId, setRejectingRequestId] = useState(null);
   const [rejectRemark, setRejectRemark] = useState('');
+  const [bdRecommendationMap, setBdRecommendationMap] = useState({});
+  const [expandedRejectRemarks, setExpandedRejectRemarks] = useState({});
+  const toggleRejectRemark = (id) => {
+    setExpandedRejectRemarks(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const fetchLegalRequests = async () => {
     try {
@@ -169,6 +240,10 @@ const RefundRequestTab = () => {
   };
 
   const handleExportAttendance = () => {
+    if (user?.role === 'BD Head') {
+      toast.error('Export is disabled for your role.');
+      return;
+    }
     const userName = ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)
       ? (allUsers.find(u => u.email === selectedUserEmail)?.fullName || selectedUserEmail)
       : (user?.fullName || user?.name || user?.email);
@@ -250,6 +325,10 @@ const RefundRequestTab = () => {
   };
 
   const handleExportRefunds = () => {
+    if (user?.role === 'BD Head') {
+      toast.error('Export is disabled for your role.');
+      return;
+    }
     if (filteredRefunds.length === 0) {
       toast.error('No data available to export');
       return;
@@ -778,7 +857,7 @@ const RefundRequestTab = () => {
 
   const settlementPendingCount = myRefunds.filter(r => !['Paid', 'Rejected'].includes(r.status)).length;
   const leavePendingCount = leaves.filter(r => r.status === 'Pending' || r.status === 'Pending Review').length;
-  const legalPendingCount = legalRequests.filter(r => r.status === 'Pending').length;
+  const legalPendingCount = legalRequests.filter(r => user?.role === 'BD Head' ? r.status === 'Pending BD Head' : r.status === 'Pending').length;
 
   const pendingCounts = {
     Tour: tourPendingCount,
@@ -798,7 +877,7 @@ const RefundRequestTab = () => {
               </h2>
             </div>
             <div className="flex items-center justify-start gap-3">
-              {['Tour', 'Settlement', 'Leave', 'Legal'].filter((type) => type !== 'Legal' || ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role)).map((type) => (
+              {['Tour', 'Settlement', 'Leave', 'Legal'].filter((type) => type !== 'Legal' || ['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(user?.role)).map((type) => (
                 <button
                   key={type}
                   type="button"
@@ -1346,7 +1425,7 @@ const RefundRequestTab = () => {
             </div>
           )}
 
-          {activeRequestType === 'Legal' && ['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
+          {activeRequestType === 'Legal' && ['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(user?.role) && (
             <div className="space-y-6 animate-zoom-in">
               <div className="bg-bg-card border-2 border-border rounded-2xl p-4 sm:p-10 shadow-sm">
                 <div className="flex items-center justify-between border-b border-border pb-4 mb-6">
@@ -1355,7 +1434,7 @@ const RefundRequestTab = () => {
                   </div>
                 </div>
 
-                {legalRequests.length > 0 ? (
+                {legalRequests.filter(r => user?.role !== 'BD Head' || r.status === 'Pending BD Head').length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead>
@@ -1365,6 +1444,8 @@ const RefundRequestTab = () => {
                           <th className="py-3 px-4">Document Name</th>
                           <th className="py-3 px-4">Document</th>
                           <th className="py-3 px-4">Remark</th>
+                          <th className="py-3 px-4">Requested At</th>
+                          <th className="py-3 px-4 text-center">Timer</th>
                           <th className="py-3 px-4 text-center">Actions</th>
                         </tr>
                       </thead>
@@ -1391,10 +1472,44 @@ const RefundRequestTab = () => {
                               )}
                             </td>
                             <td className="py-4 px-4 text-text-secondary">{r.remark || '-'}</td>
+                            <td className="py-4 px-4 text-text-secondary whitespace-nowrap">
+                              {formatDateTime(r.createdAt)}
+                            </td>
+                            <td className="py-4 px-4 text-center">
+                              <DraftTimer createdAt={r.createdAt} status={r.status} updatedAt={r.updatedAt} />
+                            </td>
                             <td className="py-4 px-4">
-                              {r.status === 'Pending' ? (
+                              {((user?.role === 'BD Head' && r.status === 'Pending BD Head') || (['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && r.status === 'Pending')) ? (
                                 <div className="flex flex-col gap-2 items-center justify-center">
-                                  {rejectingRequestId === (r._id || r.id) ? (
+                                  {user?.role === 'BD Head' ? (
+                                    <div className="flex flex-col gap-2 w-full max-w-[200px]">
+                                      <input
+                                        type="text"
+                                        placeholder="Recommend changes..."
+                                        value={bdRecommendationMap[r._id || r.id] || ''}
+                                        onChange={(e) => setBdRecommendationMap(prev => ({ ...prev, [r._id || r.id]: e.target.value }))}
+                                        className="bg-bg-input border border-border rounded-lg px-2.5 py-1 text-xs outline-none focus:border-accent w-full"
+                                      />
+                                      <button
+                                        onClick={async () => {
+                                          try {
+                                            await api.put(`/legal-requests/${r._id || r.id}/status`, { 
+                                              status: 'Pending', 
+                                              remark: bdRecommendationMap[r._id || r.id] || ''
+                                            });
+                                            toast.success("Draft request recommended & forwarded to Admin!");
+                                            setBdRecommendationMap(prev => ({ ...prev, [r._id || r.id]: '' }));
+                                            fetchLegalRequests();
+                                          } catch (err) {
+                                            toast.error(err.response?.data?.error || "Failed to forward request");
+                                          }
+                                        }}
+                                        className="bg-green text-white py-1 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-green-600 transition-all shadow-sm"
+                                      >
+                                        Recommend & Forward
+                                      </button>
+                                    </div>
+                                  ) : rejectingRequestId === (r._id || r.id) ? (
                                     <div className="flex flex-col gap-2 w-full max-w-[200px]">
                                       <input
                                         type="text"
@@ -1441,12 +1556,37 @@ const RefundRequestTab = () => {
                                 </div>
                               ) : (
                                 <div className="flex flex-col items-center justify-center gap-1">
-                                  <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${r.status === 'Approved' ? 'bg-green-soft text-green' : 'bg-red-soft text-red'
-                                    }`}>
-                                    {r.status}
+                                  <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                                    r.status === 'Approved' ? 'bg-green-soft text-green' : 
+                                    r.status === 'Pending' ? 'bg-blue-soft text-blue' :
+                                    r.status === 'Pending BD Head' ? 'bg-orange-100 text-orange-600' :
+                                    'bg-red-soft text-red'
+                                  }`}>
+                                    {r.status === 'Pending' ? 'Forwarded to Admin' : r.status}
                                   </span>
+                                  {r.remark && (
+                                    <div className="mt-1 flex flex-col items-center max-w-[200px]">
+                                      <span className="text-[9px] text-text-muted font-bold uppercase tracking-wider">BD Recommendation:</span>
+                                      <div className="mt-0.5 p-2 bg-accent/5 border border-accent/20 rounded-lg text-left text-[10px] text-text-primary font-bold break-words w-full">
+                                        {r.remark}
+                                      </div>
+                                    </div>
+                                  )}
                                   {r.rejectRemark && (
-                                    <span className="text-[9px] text-text-muted italic">Reason: {r.rejectRemark}</span>
+                                    <div className="mt-1 flex flex-col items-center max-w-[200px]">
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleRejectRemark(r._id || r.id)}
+                                        className="text-[9px] text-accent hover:underline font-bold flex items-center gap-1 focus:outline-none"
+                                      >
+                                        <span>{expandedRejectRemarks[r._id || r.id] ? 'Hide Reason ▴' : 'Show Reason ▾'}</span>
+                                      </button>
+                                      {expandedRejectRemarks[r._id || r.id] && (
+                                        <div className="mt-1 p-2 bg-red-soft/5 border border-red-soft/20 rounded-lg text-left text-xs text-text-primary font-bold break-words w-full">
+                                          {r.rejectRemark}
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               )}

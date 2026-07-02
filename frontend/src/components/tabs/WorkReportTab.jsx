@@ -75,9 +75,9 @@ const WorkReportTab = () => {
 
   const calendarUsersList = useMemo(() => {
     const userRole = (stats?.role || user?.role || '').toLowerCase().trim();
-    const isUserAdmin = ['admin', 'super admin', 'superadmin'].includes(userRole);
+    const isUserAdmin = ['admin', 'super admin', 'superadmin'].includes(userRole) && user?.role !== 'BD Head';
     if (!isUserAdmin) {
-      return users;
+      return [{ email: user?.email, fullName: user?.fullName || user?.name || 'Me', role: user?.role }];
     }
     const restrictedRoles = ['admin', 'super admin', 'superadmin', 'accountant', 'reviewer', 'operation head', 'operation review'];
     return users.filter(u => {
@@ -96,7 +96,16 @@ const WorkReportTab = () => {
       ]);
       setStats(statsRes.data);
       const reportList = reportsRes.data.reports || (Array.isArray(reportsRes.data) ? reportsRes.data : []);
-      setReports(reportList || []);
+      if (user?.role === 'BD Head') {
+        const myEmail = (user.email || '').trim().toLowerCase();
+        const myName = (user.fullName || user.name || '').trim().toLowerCase();
+        setReports(reportList.filter(r => 
+          (r.userEmail && r.userEmail.trim().toLowerCase() === myEmail) ||
+          (r.userName && r.userName.trim().toLowerCase() === myName)
+        ) || []);
+      } else {
+        setReports(reportList || []);
+      }
       setLeaves(leavesRes.data || []);
 
       if (['Admin', 'Super Admin', 'SuperAdmin'].includes(statsRes.data?.role)) {
@@ -376,6 +385,10 @@ const WorkReportTab = () => {
 
   // ── Download as CSV with Full Details ──
   const handleDownload = async () => {
+    if (user?.role === 'BD Head') {
+      toast.error('Export is disabled for your role.');
+      return;
+    }
     setLoading(true);
     try {
       const detailedRows = [];
@@ -593,7 +606,7 @@ const WorkReportTab = () => {
     </div>
   );
 
-  const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(stats?.role);
+  const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(stats?.role) && user?.role !== 'BD Head';
 
   return (
     <div className="flex flex-col h-full bg-bg-primary p-4 md:p-8 overflow-hidden">

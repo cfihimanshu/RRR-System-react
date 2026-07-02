@@ -140,7 +140,7 @@ router.post('/', verifyToken, async (req, res) => {
       data: req.body
     };
 
-    const isExempt = ['admin', 'super admin', 'superadmin', 'reviewer', 'accountant', 'operation head', 'operation review'].includes(req.user.role?.toLowerCase().trim());
+    const isExempt = ['super admin', 'superadmin'].includes(req.user.role?.toLowerCase().trim());
 
     if ((reportData.type === 'SOD' || reportData.type === 'EOD') && !isExempt) {
       if (!reportData.selfieUrl) {
@@ -314,7 +314,7 @@ router.get('/mis', verifyToken, async (req, res) => {
     const { startDate, endDate, odoo } = req.query;
     const showOdooOnly = odoo === 'true';
     const isOperationHead = req.user?.role?.toLowerCase().trim() === 'operation head';
-    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
+    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(req.user.role);
     const isOperationReview = req.user?.role?.toLowerCase().trim() === 'operation review';
     const isOperationAdmin = req.user?.role?.toLowerCase().trim() === 'operation admin';
     const caseQuery = { isArchived: { [Op.not]: true } };
@@ -568,9 +568,6 @@ router.get('/mis', verifyToken, async (req, res) => {
 
       // If resolved before start of period, skip entirely
       const isResolvedBeforeStart = isCaseResolved && start && resolvedDate && resolvedDate < start;
-      if (isResolvedBeforeStart) {
-        return;
-      }
 
       // Check assignment date to see if case existed for the user in this period
       const assignedDate = c.assignedAt ? new Date(c.assignedAt) : (c.createdAt ? new Date(c.createdAt) : (c.createdDate ? new Date(c.createdDate) : null));
@@ -594,7 +591,8 @@ router.get('/mis', verifyToken, async (req, res) => {
         savedAmount: saved,
         refundedAmount: c.refundedAmount || 0,
         createdAt: c.createdAt,
-        updatedAt: c.updatedAt
+        updatedAt: c.updatedAt,
+        resolvedDate: resolvedDate ? resolvedDate.toISOString() : null
       };
 
       stats.totalCases++;
@@ -775,7 +773,8 @@ router.get('/mis', verifyToken, async (req, res) => {
             savedAmount: saved,
             refundedAmount: c.refundedAmount || 0,
             createdAt: c.createdAt,
-            updatedAt: c.updatedAt
+            updatedAt: c.updatedAt,
+            resolvedDate: resolvedDate ? resolvedDate.toISOString() : null
           };
 
           odooAggregate.totalCases++;
@@ -842,7 +841,7 @@ router.get('/mis', verifyToken, async (req, res) => {
       const isExcluded = ['admin', 'super admin', 'superadmin', 'operation head', 'accountant'].includes(roleLower);
       if (isExcluded) return false;
 
-      const isSpecialist = ['operations', 'staff', 'operation admin', 'operation review', 'reviewer'].includes(roleLower);
+      const isSpecialist = ['operations', 'staff', 'operation admin', 'operation review', 'reviewer', 'bd head'].includes(roleLower);
       return stats.totalCases > 0 || isSpecialist;
     });
 

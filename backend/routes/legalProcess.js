@@ -97,6 +97,9 @@ router.put('/:id', verifyToken, async (req, res) => {
 // Delete legal process entry
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
+    if (req.user.role === 'BD Head') {
+      return res.status(403).json({ error: 'Access denied: BD Head is not authorized to delete legal process entries.' });
+    }
     const { id } = req.params;
     const record = await LegalProcess.findByPk(id);
     if (!record) {
