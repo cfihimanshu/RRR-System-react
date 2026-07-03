@@ -127,7 +127,8 @@ const MisReportTab = () => {
   };
 
   useEffect(() => {
-    if (user?.role?.toLowerCase()?.trim() === 'operation head') {
+    const roleLower = user?.role?.toLowerCase()?.trim();
+    if (roleLower === 'operation head' || roleLower === 'operation review') {
       setIsOdooFilter(true);
     }
   }, [user]);

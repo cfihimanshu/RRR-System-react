@@ -75,7 +75,7 @@ const WorkReportTab = () => {
 
   const calendarUsersList = useMemo(() => {
     const userRole = (stats?.role || user?.role || '').toLowerCase().trim();
-    const isUserAdmin = ['admin', 'super admin', 'superadmin'].includes(userRole) && user?.role !== 'BD Head';
+    const isUserAdmin = ['admin', 'super admin', 'superadmin', 'bd head'].includes(userRole);
     if (!isUserAdmin) {
       return [{ email: user?.email, fullName: user?.fullName || user?.name || 'Me', role: user?.role }];
     }
@@ -96,23 +96,18 @@ const WorkReportTab = () => {
       ]);
       setStats(statsRes.data);
       const reportList = reportsRes.data.reports || (Array.isArray(reportsRes.data) ? reportsRes.data : []);
-      if (user?.role === 'BD Head') {
-        const myEmail = (user.email || '').trim().toLowerCase();
-        const myName = (user.fullName || user.name || '').trim().toLowerCase();
-        setReports(reportList.filter(r => 
-          (r.userEmail && r.userEmail.trim().toLowerCase() === myEmail) ||
-          (r.userName && r.userName.trim().toLowerCase() === myName)
-        ) || []);
-      } else {
-        setReports(reportList || []);
-      }
+      setReports(reportList || []);
       setLeaves(leavesRes.data || []);
 
-      if (['Admin', 'Super Admin', 'SuperAdmin'].includes(statsRes.data?.role)) {
+      const userRole = statsRes.data?.role || user?.role;
+      const isAdminOrSuper = ['Admin', 'Super Admin', 'SuperAdmin'].includes(userRole);
+      if (['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(userRole)) {
         try {
           const [usersRes, missedRes] = await Promise.all([
             api.get('/auth/users'),
-            api.get('/users/missed-eod').catch(() => ({ data: [] }))
+            isAdminOrSuper 
+              ? api.get('/users/missed-eod').catch(() => ({ data: [] }))
+              : Promise.resolve({ data: [] })
           ]);
           setUsers(usersRes.data || []);
           const blockedList = (missedRes.data || []).filter(u => !u.bypassEodCheck).map(u => u._id || u.email);
@@ -606,7 +601,7 @@ const WorkReportTab = () => {
     </div>
   );
 
-  const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(stats?.role) && user?.role !== 'BD Head';
+  const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(stats?.role) || user?.role === 'BD Head';
 
   return (
     <div className="flex flex-col h-full bg-bg-primary p-4 md:p-8 overflow-hidden">
@@ -637,7 +632,7 @@ const WorkReportTab = () => {
           >
             <Calendar size={18} className="text-accent" /> Calendar
           </button>
-          {isAdmin && (
+          {isAdmin && user?.role !== 'BD Head' && (
             <button
               onClick={handleDownload}
               className="btn btn-primary !py-3 !px-6 !rounded-xl shadow-lg shadow-blue-900/20"

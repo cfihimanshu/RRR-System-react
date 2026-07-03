@@ -38,7 +38,7 @@ router.post('/send-daily-email', verifyToken, async (req, res) => {
 router.get('/', verifyToken, async (req, res) => {
   try {
     let matchQuery = {};
-    if (!['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
+    if (!['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(req.user.role)) {
       matchQuery.userEmail = req.user.email;
     } else if (req.query.userEmail) {
       matchQuery.userEmail = req.query.userEmail;
@@ -195,7 +195,7 @@ router.get('/stats', verifyToken, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role);
+    const isAdmin = ['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(req.user.role);
     let query = {};
     let taskQuery = {};
     let caseQuery = {};

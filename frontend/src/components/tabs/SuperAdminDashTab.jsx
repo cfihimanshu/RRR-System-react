@@ -138,6 +138,16 @@ const SuperAdminDashTab = () => {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
 
+  const navigateCases = (extraState = {}) => {
+    navigate('/case-master', {
+      state: {
+        fromDashboard: true,
+        excludeOdoo: true,
+        ...extraState
+      }
+    });
+  };
+
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalCases: 0,
@@ -345,7 +355,7 @@ const SuperAdminDashTab = () => {
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
         {/* Total Cases */}
         <div
-          onClick={() => navigate('/case-master')}
+          onClick={() => navigateCases()}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-accent hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
@@ -361,7 +371,7 @@ const SuperAdminDashTab = () => {
 
         {/* Active Cases */}
         <div
-          onClick={() => navigate('/case-master', { state: { statusFilter: 'Active' } })}
+          onClick={() => navigateCases({ statusFilter: 'Active' })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-blue-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
@@ -377,7 +387,7 @@ const SuperAdminDashTab = () => {
 
         {/* High Risk Cases */}
         <div
-          onClick={() => navigate('/case-master', { state: { priorityFilter: 'High' } })}
+          onClick={() => navigateCases({ priorityFilter: 'High' })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-red-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
@@ -393,7 +403,7 @@ const SuperAdminDashTab = () => {
 
         {/* Critical Priority */}
         <div
-          onClick={() => navigate('/case-master', { state: { priorityFilter: 'Critical' } })}
+          onClick={() => navigateCases({ priorityFilter: 'Critical' })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-red-600/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
@@ -409,7 +419,7 @@ const SuperAdminDashTab = () => {
 
         {/* Closure Cases */}
         <div
-          onClick={() => navigate('/case-master', { state: { statusFilter: 'Closure' } })}
+          onClick={() => navigateCases({ statusFilter: 'Closure' })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-purple-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
@@ -425,7 +435,7 @@ const SuperAdminDashTab = () => {
 
         {/* Medium Priority */}
         <div
-          onClick={() => navigate('/case-master', { state: { priorityFilter: 'Medium' } })}
+          onClick={() => navigateCases({ priorityFilter: 'Medium' })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-yellow-600/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
@@ -441,7 +451,7 @@ const SuperAdminDashTab = () => {
 
         {/* Low Priority */}
         <div
-          onClick={() => navigate('/case-master', { state: { priorityFilter: 'Low' } })}
+          onClick={() => navigateCases({ priorityFilter: 'Low' })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-green-500/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
@@ -457,7 +467,7 @@ const SuperAdminDashTab = () => {
 
         {/* Settlement Stage Cases */}
         <div
-          onClick={() => navigate('/case-master', { state: { statusFilter: 'Settlement' } })}
+          onClick={() => navigateCases({ statusFilter: 'Settlement' })}
           className="bg-bg-card border-2 border-border rounded-2xl p-4 shadow-sm hover:border-green-600/40 hover:shadow-md cursor-pointer transition-all active:scale-98 group"
         >
           <div className="flex justify-between items-center mb-3">
@@ -490,7 +500,7 @@ const SuperAdminDashTab = () => {
               {stats.caseTypeWiseData.slice(0, 8).map((item, index) => (
                 <div
                   key={index}
-                  onClick={() => navigate('/case-master', { state: { typeFilter: item.caseType } })}
+                  onClick={() => navigateCases({ typeFilter: item.caseType })}
                   className="bg-bg-input border border-border p-4 rounded-2xl flex flex-col justify-between hover:border-accent hover:shadow-md cursor-pointer transition-all active:scale-98"
                 >
                   <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider block truncate mb-2">

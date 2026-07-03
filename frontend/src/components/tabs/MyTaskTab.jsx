@@ -127,16 +127,7 @@ const MyTaskTab = () => {
       const taskList = res.data.tasks || (Array.isArray(res.data) ? res.data : []);
       const prevCount = tasks.length;
 
-      const filteredTaskList = user?.role === 'BD Head'
-        ? taskList.filter(t => {
-            const myName = (user.fullName || user.name || '').trim().toLowerCase();
-            const myEmail = (user.email || '').trim().toLowerCase();
-            const taskAssignee = (t.assignee || '').trim().toLowerCase();
-            const taskCreatedBy = (t.createdBy || '').trim().toLowerCase();
-            return (taskAssignee !== '' && (taskAssignee === myName || taskAssignee === myEmail)) ||
-                   (taskCreatedBy !== '' && taskCreatedBy === myEmail);
-          })
-        : taskList;
+      const filteredTaskList = taskList;
 
       if (pageNum === 1) {
         setTasks(filteredTaskList);
@@ -172,7 +163,7 @@ const MyTaskTab = () => {
   };
 
   const fetchUsers = async () => {
-    const privilegedRoles = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Review', 'Operation Head'];
+    const privilegedRoles = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Review', 'Operation Head', 'BD Head'];
     if (!privilegedRoles.includes(user?.role)) {
       if (user?.fullName) {
         setUsers([{ _id: 'current-user', fullName: user.fullName, role: user.role }]);
@@ -319,8 +310,8 @@ const MyTaskTab = () => {
   }, []);
 
   useEffect(() => {
-    const privilegedRoles = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Review', 'Operation Head'];
-    if (user && (!privilegedRoles.includes(user?.role) || user?.role === 'BD Head')) {
+    const privilegedRoles = ['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Review', 'Operation Head', 'BD Head'];
+    if (user && !privilegedRoles.includes(user?.role)) {
       setSelectedUser(user.fullName || user.name || '');
     }
   }, [user]);
@@ -530,7 +521,7 @@ const MyTaskTab = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          {user?.role === 'Admin' && (
+          {['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Review', 'Operation Head', 'BD Head'].includes(user?.role) && (
             <select
               className="bg-bg-input border-2 border-border rounded-xl px-4 py-2.5 text-sm font-bold text-text-primary outline-none focus:border-accent transition-all cursor-pointer shadow-sm"
               value={selectedUser}

@@ -13,7 +13,7 @@ router.get('/', verifyToken, async (req, res) => {
     const { assignee } = req.query;
     
     let query = {};
-    if (['Admin', 'Super Admin', 'SuperAdmin'].includes(req.user.role)) {
+    if (['Admin', 'Super Admin', 'SuperAdmin', 'BD Head'].includes(req.user.role)) {
       if (req.query.isLegalDashboard === 'true') {
         const legalUsers = await User.findAll({ where: { role: 'Legal' } });
         const legalNames = legalUsers.map(u => (u.fullName || u.name || '').trim()).filter(Boolean);

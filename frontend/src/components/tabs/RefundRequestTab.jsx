@@ -47,7 +47,7 @@ const DraftTimer = ({ createdAt, status, updatedAt }) => {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
-    if (status !== 'Pending') return;
+    if (status !== 'Pending BD Head') return;
     const interval = setInterval(() => {
       setNow(new Date());
     }, 1000);
@@ -58,7 +58,7 @@ const DraftTimer = ({ createdAt, status, updatedAt }) => {
   if (isNaN(createdTime.getTime())) return <span>—</span>;
 
   let diff = 0;
-  if (status === 'Pending') {
+  if (status === 'Pending BD Head') {
     diff = now.getTime() - createdTime.getTime();
   } else {
     const updatedTime = new Date(updatedAt || createdAt);
@@ -80,7 +80,7 @@ const DraftTimer = ({ createdAt, status, updatedAt }) => {
 
   const durationStr = parts.join(' ');
 
-  if (status === 'Pending') {
+  if (status === 'Pending BD Head') {
     return (
       <span className="font-mono text-rose-600 bg-rose-50 px-2 py-1 rounded border border-rose-200 animate-pulse text-[10px] font-bold">
         ⏳ {durationStr}
@@ -1446,7 +1446,7 @@ const RefundRequestTab = () => {
                           <th className="py-3 px-4">Remark</th>
                           <th className="py-3 px-4">Requested At</th>
                           <th className="py-3 px-4 text-center">Timer</th>
-                          <th className="py-3 px-4 text-center">Actions</th>
+                          <th className="py-3 px-4 text-center min-w-[240px]">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1478,36 +1478,61 @@ const RefundRequestTab = () => {
                             <td className="py-4 px-4 text-center">
                               <DraftTimer createdAt={r.createdAt} status={r.status} updatedAt={r.updatedAt} />
                             </td>
-                            <td className="py-4 px-4">
+                            <td className="py-4 px-4 min-w-[240px]">
                               {((user?.role === 'BD Head' && r.status === 'Pending BD Head') || (['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && r.status === 'Pending')) ? (
                                 <div className="flex flex-col gap-2 items-center justify-center">
                                   {user?.role === 'BD Head' ? (
-                                    <div className="flex flex-col gap-2 w-full max-w-[200px]">
+                                    <div className="flex flex-col gap-2 w-full max-w-[220px]">
                                       <input
                                         type="text"
-                                        placeholder="Recommend changes..."
+                                        placeholder="Recommend/Reject remark..."
                                         value={bdRecommendationMap[r._id || r.id] || ''}
                                         onChange={(e) => setBdRecommendationMap(prev => ({ ...prev, [r._id || r.id]: e.target.value }))}
-                                        className="bg-bg-input border border-border rounded-lg px-2.5 py-1 text-xs outline-none focus:border-accent w-full"
+                                        className="bg-bg-input border-2 border-border/80 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-accent w-full font-semibold text-text-primary placeholder:text-text-muted"
                                       />
-                                      <button
-                                        onClick={async () => {
-                                          try {
-                                            await api.put(`/legal-requests/${r._id || r.id}/status`, { 
-                                              status: 'Pending', 
-                                              remark: bdRecommendationMap[r._id || r.id] || ''
-                                            });
-                                            toast.success("Draft request recommended & forwarded to Admin!");
-                                            setBdRecommendationMap(prev => ({ ...prev, [r._id || r.id]: '' }));
-                                            fetchLegalRequests();
-                                          } catch (err) {
-                                            toast.error(err.response?.data?.error || "Failed to forward request");
-                                          }
-                                        }}
-                                        className="bg-green text-white py-1 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-green-600 transition-all shadow-sm"
-                                      >
-                                        Recommend & Forward
-                                      </button>
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={async () => {
+                                            try {
+                                              await api.put(`/legal-requests/${r._id || r.id}/status`, { 
+                                                status: 'Pending', 
+                                                remark: bdRecommendationMap[r._id || r.id] || ''
+                                              });
+                                              toast.success("Draft request recommended & forwarded to Admin!");
+                                              setBdRecommendationMap(prev => ({ ...prev, [r._id || r.id]: '' }));
+                                              fetchLegalRequests();
+                                            } catch (err) {
+                                              toast.error(err.response?.data?.error || "Failed to forward request");
+                                            }
+                                          }}
+                                          className="flex-1 bg-green hover:bg-green-600 text-white py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all shadow-md active:scale-95 cursor-pointer"
+                                        >
+                                          Recommend
+                                        </button>
+                                        <button
+                                          onClick={async () => {
+                                            const remarkVal = bdRecommendationMap[r._id || r.id] || '';
+                                            if (!remarkVal.trim()) {
+                                              toast.error("Please enter a remark to reject");
+                                              return;
+                                            }
+                                            try {
+                                              await api.put(`/legal-requests/${r._id || r.id}/status`, { 
+                                                status: 'Rejected', 
+                                                rejectRemark: remarkVal
+                                              });
+                                              toast.success("Draft request rejected");
+                                              setBdRecommendationMap(prev => ({ ...prev, [r._id || r.id]: '' }));
+                                              fetchLegalRequests();
+                                            } catch (err) {
+                                              toast.error(err.response?.data?.error || "Failed to reject request");
+                                            }
+                                          }}
+                                          className="flex-1 bg-red hover:bg-red-600 text-white py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all shadow-md active:scale-95 cursor-pointer"
+                                        >
+                                          Reject
+                                        </button>
+                                      </div>
                                     </div>
                                   ) : rejectingRequestId === (r._id || r.id) ? (
                                     <div className="flex flex-col gap-2 w-full max-w-[200px]">
@@ -1555,8 +1580,8 @@ const RefundRequestTab = () => {
                                   )}
                                 </div>
                               ) : (
-                                <div className="flex flex-col items-center justify-center gap-1">
-                                  <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                                <div className="flex flex-col gap-1.5 w-full max-w-[220px] mx-auto text-center">
+                                  <span className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider self-center ${
                                     r.status === 'Approved' ? 'bg-green-soft text-green' : 
                                     r.status === 'Pending' ? 'bg-blue-soft text-blue' :
                                     r.status === 'Pending BD Head' ? 'bg-orange-100 text-orange-600' :
@@ -1565,24 +1590,24 @@ const RefundRequestTab = () => {
                                     {r.status === 'Pending' ? 'Forwarded to Admin' : r.status}
                                   </span>
                                   {r.remark && (
-                                    <div className="mt-1 flex flex-col items-center max-w-[200px]">
-                                      <span className="text-[9px] text-text-muted font-bold uppercase tracking-wider">BD Recommendation:</span>
-                                      <div className="mt-0.5 p-2 bg-accent/5 border border-accent/20 rounded-lg text-left text-[10px] text-text-primary font-bold break-words w-full">
+                                    <div className="mt-1 w-full text-left">
+                                      <span className="text-[8px] text-text-muted font-black uppercase tracking-widest block mb-0.5 text-center">BD Recommendation</span>
+                                      <div className="bg-bg-input border-2 border-border/40 rounded-xl px-2.5 py-2 text-[10px] text-text-primary font-bold break-words whitespace-pre-wrap shadow-sm">
                                         {r.remark}
                                       </div>
                                     </div>
                                   )}
                                   {r.rejectRemark && (
-                                    <div className="mt-1 flex flex-col items-center max-w-[200px]">
+                                    <div className="mt-1 w-full text-center">
                                       <button
                                         type="button"
                                         onClick={() => toggleRejectRemark(r._id || r.id)}
-                                        className="text-[9px] text-accent hover:underline font-bold flex items-center gap-1 focus:outline-none"
+                                        className="text-[9px] text-accent hover:underline font-black uppercase tracking-wider flex items-center gap-1 mx-auto focus:outline-none"
                                       >
                                         <span>{expandedRejectRemarks[r._id || r.id] ? 'Hide Reason ▴' : 'Show Reason ▾'}</span>
                                       </button>
                                       {expandedRejectRemarks[r._id || r.id] && (
-                                        <div className="mt-1 p-2 bg-red-soft/5 border border-red-soft/20 rounded-lg text-left text-xs text-text-primary font-bold break-words w-full">
+                                        <div className="mt-1.5 bg-red-soft/5 border-2 border-red-soft/20 rounded-xl px-2.5 py-2 text-left text-[10px] text-text-primary font-bold break-words whitespace-pre-wrap shadow-sm">
                                           {r.rejectRemark}
                                         </div>
                                       )}
