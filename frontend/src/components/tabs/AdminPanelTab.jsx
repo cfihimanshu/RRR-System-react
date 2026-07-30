@@ -13,7 +13,7 @@ const AdminPanelTab = () => {
   const [roleUpdates, setRoleUpdates] = useState({});
   const [selectedRefund, setSelectedRefund] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [missedEodUsers, setMissedEodUsers] = useState([]);
+
   const [auditLogs, setAuditLogs] = useState([]);
   const [logPage, setLogPage] = useState(1);
   const [totalLogPages, setTotalLogPages] = useState(1);
@@ -82,14 +82,7 @@ const AdminPanelTab = () => {
     }
   };
 
-  const fetchMissedEodUsers = async () => {
-    try {
-      const res = await api.get('/users/missed-eod');
-      setMissedEodUsers(res.data);
-    } catch (err) {
-      console.error('Failed to fetch missed EOD users', err);
-    }
-  };
+
 
   const fetchAuditLogs = async (page = 1) => {
     try {
@@ -103,21 +96,13 @@ const AdminPanelTab = () => {
     }
   };
 
-  const handleGrantSodAccess = async (email) => {
-    try {
-      await api.post(`/users/${email}/grant-sod-access`);
-      toast.success(`Access granted to ${email}`);
-      fetchMissedEodUsers();
-    } catch (err) {
-      toast.error('Failed to grant access');
-    }
-  };
+
 
   useEffect(() => {
     fetchPendingRefunds();
     fetchAllRefunds();
     fetchUsers();
-    fetchMissedEodUsers();
+
     fetchAuditLogs(1);
 
     if (window.location.hash === '#refund-actions') {
@@ -220,7 +205,7 @@ const AdminPanelTab = () => {
                 fetchPendingRefunds(),
                 fetchAllRefunds(),
                 fetchUsers(),
-                fetchMissedEodUsers()
+
               ]);
               toast.success('System database successfully synced!', { id: loadToast });
             } catch (err) {
@@ -397,82 +382,6 @@ const AdminPanelTab = () => {
           </div>
         </div>
       </div>
-
-      {/* SECTION: Missed EOD Users */}
-      <div className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border mb-10 max-w-full overflow-hidden mt-10">
-        <div className="p-6 border-b border-border flex items-center gap-3 bg-bg-card">
-          <div className="w-10 h-10 bg-red-soft rounded-2xl flex items-center justify-center text-red">
-            <span className="font-black text-lg">⚠️</span>
-          </div>
-          <h2 className="text-lg font-black text-text-primary tracking-tight uppercase">Missed EOD Users</h2>
-        </div>
-
-        <div className="overflow-y-auto max-h-[300px] scrollbar-thin border-b border-border">
-          <table className="w-full text-left border-collapse min-w-[600px]">
-            <thead className="sticky top-0 z-10 bg-bg-card shadow-sm">
-              <tr className="bg-bg-input text-text-muted text-[10px] font-black tracking-[0.2em] uppercase border-b border-border">
-                <th className="px-4 py-5 whitespace-nowrap">User Name</th>
-                <th className="px-4 py-5 whitespace-nowrap">Email</th>
-                <th className="px-4 py-5">Missed Dates</th>
-                <th className="px-4 py-5 text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody className="text-[11px] text-text-secondary divide-y divide-border/50">
-              {missedEodUsers.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-12 text-center text-text-muted italic">No users have missed EOD.</td>
-                </tr>
-              ) : (
-                missedEodUsers.map((u, index) => {
-                  let missedList = [];
-                  try {
-                    missedList = Array.isArray(u.missedDates) ? u.missedDates : (typeof u.missedDates === 'string' ? JSON.parse(u.missedDates) : []);
-                  } catch(e) {
-                    missedList = [];
-                  }
-                  return (
-                  <tr key={u.id || u._id || index} className="hover:bg-bg-input/30 transition-all">
-                    <td className="px-4 py-5 font-black text-text-primary uppercase tracking-tighter">{u.name || u.fullName || u.email}</td>
-                    <td className="px-4 py-5 font-bold text-text-muted">{u.email || u._id}</td>
-                    <td className="px-4 py-5">
-                      <div className="flex flex-wrap gap-1">
-                        {missedList.map((d, dIdx) => (
-                          <span key={dIdx} className="bg-red-soft text-red px-2 py-0.5 rounded-md text-[9px] font-black">{d}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-5 text-center">
-                      {u.bypassEodCheck ? (
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="bg-green-soft text-green border border-green-soft text-[9px] font-black px-3 py-1.5 rounded-xl uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap">
-                            ✨ ACCESS GRANTED
-                          </span>
-                          {u.sodAccessGrantedAt && (
-                            <span className="text-[8px] text-green font-black uppercase tracking-wider opacity-85 whitespace-nowrap">
-                              {new Date(u.sodAccessGrantedAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleGrantSodAccess(u.id || u._id || u.email)}
-                          className="bg-accent hover:bg-accent-hover text-white text-[9px] font-black py-2 px-4 rounded-xl shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all active:scale-95 whitespace-nowrap"
-                        >
-                          Grant Access
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-
-
 
       {/* SECTION 3: Global Refund Audit Trail */}
       <div id="refund-actions" className="bg-bg-secondary rounded-[2.5rem] shadow-sm border-2 border-border max-w-full overflow-hidden mt-10">

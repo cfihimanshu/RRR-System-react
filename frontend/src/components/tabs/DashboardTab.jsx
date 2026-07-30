@@ -197,7 +197,7 @@ const DashboardTab = () => {
   const [activePeriod, setActivePeriod] = useState('7 Days');
   const [allUsers, setAllUsers] = useState([]);
   const { user } = useContext(AuthContext);
-  const isExemptFromSodEod = ['super admin', 'superadmin'].includes(user?.role?.toLowerCase().trim());
+  const isExemptFromSodEod = ['admin', 'super admin', 'superadmin'].includes(user?.role?.toLowerCase().trim());
   const navigate = useNavigate();
   const location = useLocation();
    const isOperationAdmin = user?.role?.toLowerCase().trim() === 'operation admin';
