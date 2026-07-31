@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import { Badge } from '../shared/Badge';
 import TabLoader from '../shared/TabLoader';
@@ -199,7 +199,6 @@ const DashboardTab = () => {
   const { user } = useContext(AuthContext);
   const isExemptFromSodEod = ['admin', 'super admin', 'superadmin'].includes(user?.role?.toLowerCase().trim());
   const navigate = useNavigate();
-  const location = useLocation();
    const isOperationAdmin = user?.role?.toLowerCase().trim() === 'operation admin';
   const isOperationReview = user?.role?.toLowerCase().trim() === 'operation review';
   const getDashboardDateRangeForNav = () => {
@@ -254,14 +253,6 @@ const DashboardTab = () => {
 
     navigate('/case-master', { state });
   };
-
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    if (searchParams.get('openSod') === 'true') {
-      setIsReportModalOpen(true);
-      setReportType('SOD');
-    }
-  }, [location.search]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -558,11 +549,6 @@ const DashboardTab = () => {
 
       setHasSodToday(!!todaysSod);
 
-      if (!todaysSod && !isExemptFromSodEod) {
-        setTimeout(() => {
-          openReportModal('SOD');
-        }, 800);
-      }
     } catch (err) {
       console.error('Error checking SOD status:', err);
       setHasSodToday(false);
@@ -1112,35 +1098,6 @@ const DashboardTab = () => {
         </div>
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full lg:w-auto">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
-            {!hasSodToday && !isExemptFromSodEod && (
-              <div className="flex items-center justify-center gap-2 px-6 py-3 bg-red text-white border-none rounded-2xl text-[11px] font-black uppercase tracking-widest animate-bounce shadow-xl shadow-red-900/40">
-                <AlertTriangle size={16} /> Pending SOD Submission
-              </div>
-            )}
-            {!isExemptFromSodEod && (
-              <div className="grid grid-cols-2 sm:flex items-center gap-3 w-full sm:w-auto">
-                <button
-                  onClick={() => openReportModal('SOD')}
-                  disabled={hasSodToday}
-                  className={`px-4 sm:px-8 py-3.5 rounded-2xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-2 uppercase tracking-[0.15em] border-2 shadow-sm ${hasSodToday
-                    ? 'bg-bg-input border-border text-text-muted cursor-not-allowed opacity-50'
-                    : 'bg-bg-card border-accent text-accent hover:bg-accent-soft shadow-lg shadow-orange-900/10 active:scale-95'
-                    }`}
-                >
-                  <Send size={16} className="rotate-[-20deg]" /> Fill SOD
-                </button>
-                <button
-                  onClick={() => openReportModal('EOD')}
-                  disabled={!hasSodToday}
-                  className={`px-4 sm:px-8 py-3.5 rounded-2xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-2 uppercase tracking-[0.15em] shadow-xl active:scale-95 ${!hasSodToday
-                    ? 'bg-bg-input text-text-muted cursor-not-allowed border-2 border-border opacity-50'
-                    : 'bg-accent text-white hover:bg-accent-hover shadow-orange-900/20'
-                    }`}
-                >
-                  <FileText size={16} /> Fill EOD
-                </button>
-              </div>
-            )}
             {['Admin', 'Super Admin', 'SuperAdmin'].includes(user?.role) && (
               <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                 <button
@@ -3853,4 +3810,3 @@ const DashboardTab = () => {
 };
 
 export default DashboardTab;
-

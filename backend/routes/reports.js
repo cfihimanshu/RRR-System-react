@@ -132,6 +132,10 @@ router.get('/', verifyToken, async (req, res) => {
 // Create a new report (SOD or EOD)
 router.post('/', verifyToken, async (req, res) => {
   try {
+    if (req.body.type === 'SOD' || req.body.type === 'EOD') {
+      return res.status(403).json({ error: 'SOD/EOD submissions are currently disabled for all users.' });
+    }
+
     const reportData = {
       ...req.body,
       userId: req.user.id,

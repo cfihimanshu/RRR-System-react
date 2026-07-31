@@ -230,11 +230,6 @@ const LegalDashboardTab = () => {
         console.error('Failed to fetch report stats', e);
       }
 
-      if (!todaysSod && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(user?.role)) {
-        setTimeout(() => {
-          openReportModal('SOD');
-        }, 800);
-      }
     } catch (err) {
       console.error('Error checking SOD status:', err);
       setHasSodToday(false);
@@ -523,40 +518,6 @@ const LegalDashboardTab = () => {
           </div>
         </div>
 
-        {/* SOD/EOD Action Buttons */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full lg:w-auto">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
-            {!hasSodToday && !['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(user?.role) && (
-              <div className="flex items-center justify-center gap-2 px-6 py-3 bg-red text-white border-none rounded-2xl text-[11px] font-black uppercase tracking-widest animate-bounce shadow-xl shadow-red-900/40">
-                <AlertTriangle size={16} /> Pending SOD Submission
-              </div>
-            )}
-            {!['Admin', 'Super Admin', 'SuperAdmin', 'Reviewer', 'Accountant', 'Operation Head', 'Operation Review'].includes(user?.role) && (
-              <div className="grid grid-cols-2 sm:flex items-center gap-3 w-full sm:w-auto">
-                <button
-                  onClick={() => openReportModal('SOD')}
-                  disabled={hasSodToday}
-                  className={`px-4 sm:px-8 py-3.5 rounded-2xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-2 uppercase tracking-[0.15em] border-2 shadow-sm ${hasSodToday
-                    ? 'bg-bg-input border-border text-text-muted cursor-not-allowed opacity-50'
-                    : 'bg-bg-card border-accent text-accent hover:bg-accent-soft shadow-lg shadow-orange-900/10 active:scale-95'
-                    }`}
-                >
-                  <Send size={16} className="rotate-[-20deg]" /> Fill SOD
-                </button>
-                <button
-                  onClick={() => openReportModal('EOD')}
-                  disabled={!hasSodToday}
-                  className={`px-4 sm:px-8 py-3.5 rounded-2xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-2 uppercase tracking-[0.15em] shadow-xl active:scale-95 ${!hasSodToday
-                    ? 'bg-bg-input text-text-muted cursor-not-allowed border-2 border-border opacity-50'
-                    : 'bg-accent text-white hover:bg-accent-hover shadow-orange-900/20'
-                    }`}
-                >
-                  <FileText size={16} /> Fill EOD
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Main Content Layout */}
