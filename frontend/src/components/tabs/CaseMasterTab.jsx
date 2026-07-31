@@ -347,6 +347,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
   }, [openColFilter]);
 
   const [caseComms, setCaseComms] = useState([]);
+  const [showAllCaseComms, setShowAllCaseComms] = useState(false);
   const [caseDocs, setCaseDocs] = useState([]);
   const [previewFileUrl, setPreviewFileUrl] = useState(null);
   const [previewFileName, setPreviewFileName] = useState('');
@@ -5844,7 +5845,7 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                               <div className="text-[10px] font-black uppercase tracking-widest">No Signals Recorded</div>
                             </div>
                           ) : (
-                            caseComms.slice(0, 5).map((comm) => (
+                            (showAllCaseComms ? caseComms : caseComms.slice(0, 5)).map((comm) => (
                               <div key={comm.id || comm._id} className="bg-bg-card p-5 rounded-xl border border-border shadow-sm group hover:border-accent transition-all cursor-pointer">
                                 <div className="flex justify-between items-center mb-3">
                                   <span className="text-[9px] font-black text-text-muted uppercase tracking-widest">
@@ -5907,7 +5908,13 @@ const CaseMasterTab = ({ isArchiveMode = false }) => {
                         </div>
                         {caseComms.length > 5 && (
                           <div className="text-center pt-6 border-t border-border mt-4">
-                            <button className="text-[9px] font-black text-text-muted uppercase tracking-widest hover:text-accent transition-colors underline decoration-dashed">Load Entire Transmission History</button>
+                            <button
+                              type="button"
+                              onClick={() => setShowAllCaseComms((current) => !current)}
+                              className="text-[9px] font-black text-text-muted uppercase tracking-widest hover:text-accent transition-colors underline decoration-dashed"
+                            >
+                              {showAllCaseComms ? 'Show Recent Signals' : `Load Entire Transmission History (${caseComms.length})`}
+                            </button>
                           </div>
                         )}
                       </div>
